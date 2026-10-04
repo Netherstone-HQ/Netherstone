@@ -1,0 +1,277 @@
+@import "tailwindcss";
+
+@plugin "tailwind-scrollbar-hide";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/newsreader";
+@import "@infolektuell/noto-color-emoji";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-reading: var(--reading-font);
+    --font-sans:
+        "Geist Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable Display", "Segoe UI", Helvetica, Arial, sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+        "Noto Color Emoji";
+    --font-mono:
+        "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco,
+        Consolas, "Liberation Mono", "Courier New", monospace;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+    --color-brand: var(--brand);
+    --color-highlight: var(--highlight);
+}
+
+/* Reading preferences (Settings > Appearance), set on <html> by ThemeProvider. */
+:root {
+    --reading-font:
+        "Newsreader Variable", "Iowan Old Style", Georgia, "Times New Roman",
+        serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+    --reading-size: 1.0625rem;
+    /* Half the reading column, so the editor can pad to center it. */
+    --reading-half-width: 350px;
+}
+
+:root[data-reading-font="geist"] {
+    --reading-font:
+        "Geist Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+}
+
+:root[data-reading-font="system"] {
+    --reading-font:
+        system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji",
+        "Segoe UI Emoji", "Noto Color Emoji";
+}
+
+:root[data-text-size="small"] { --reading-size: 0.9375rem; }
+:root[data-text-size="large"] { --reading-size: 1.1875rem; }
+:root[data-content-width="narrow"] { --reading-half-width: 290px; }
+:root[data-content-width="wide"] { --reading-half-width: 460px; }
+
+/* Basalt, the default theme: warm mineral neutrals with one verdigris
+   accent. Scales and usage rules live in the brand guide. */
+:root {
+    --background: #f6f5f2;
+    --foreground: #141516;
+    --card: #ffffff;
+    --card-foreground: #141516;
+    --popover: #ffffff;
+    --popover-foreground: #141516;
+    --primary: #141516;
+    --primary-foreground: #f6f5f2;
+    --secondary: #eeebe5;
+    --secondary-foreground: #141516;
+    --muted: #eeebe5;
+    --muted-foreground: #6b6862;
+    --accent: #e8e4dd;
+    --accent-foreground: #141516;
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: #e3dfd8;
+    --input: #dcd8d0;
+    --ring: #4fa38e;
+    --chart-1: #c4ebdf;
+    --chart-2: #8fd1be;
+    --chart-3: #4fa38e;
+    --chart-4: #2b6a5b;
+    --chart-5: #1f4f44;
+    --radius: 0.45rem;
+    --sidebar: #efece6;
+    --sidebar-foreground: #141516;
+    --sidebar-primary: #2b6a5b;
+    --sidebar-primary-foreground: #f6f5f2;
+    --sidebar-accent: #e4e0d8;
+    --sidebar-accent-foreground: #141516;
+    --sidebar-border: #e3dfd8;
+    --sidebar-ring: #4fa38e;
+    --brand: #2b6a5b;
+    --highlight: oklch(0.852 0.199 91.936);
+    --scrollbar-thumb: #cfcbc3;
+    --scrollbar-thumb-hover: #a8a49c;
+}
+
+.dark {
+    --background: #141516;
+    --foreground: #eeebe5;
+    --card: #1c1d1f;
+    --card-foreground: #eeebe5;
+    --popover: #1c1d1f;
+    --popover-foreground: #eeebe5;
+    --primary: #eeebe5;
+    --primary-foreground: #141516;
+    --secondary: #2a2c2e;
+    --secondary-foreground: #eeebe5;
+    --muted: #2a2c2e;
+    --muted-foreground: #a8a49c;
+    --accent: #2a2c2e;
+    --accent-foreground: #eeebe5;
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: rgb(238 235 229 / 10%);
+    --input: rgb(238 235 229 / 15%);
+    --ring: #4fa38e;
+    --chart-1: #c4ebdf;
+    --chart-2: #8fd1be;
+    --chart-3: #4fa38e;
+    --chart-4: #2b6a5b;
+    --chart-5: #1f4f44;
+    --sidebar: #0f1011;
+    --sidebar-foreground: #eeebe5;
+    --sidebar-primary: #4fa38e;
+    --sidebar-primary-foreground: #141516;
+    --sidebar-accent: #222325;
+    --sidebar-accent-foreground: #eeebe5;
+    --sidebar-border: rgb(238 235 229 / 8%);
+    --sidebar-ring: #4fa38e;
+    --brand: #8fd1be;
+    --highlight: oklch(0.852 0.199 91.936);
+    --scrollbar-thumb: #3a3c3f;
+    --scrollbar-thumb-hover: #5a5856;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    html,
+    body,
+    #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+
+    *[data-tauri-drag-region] {
+        app-region: drag;
+    }
+
+    .tauri-no-drag {
+        app-region: no-drag;
+    }
+    html {
+        @apply font-sans;
+    }
+
+    /* Shard text reads in Newsreader; controls drawn inside the editor
+       (code block language, file cards, menus) stay in the UI font. */
+    [data-slate-editor] [contenteditable="false"] {
+        @apply font-sans;
+    }
+
+    /* Custom scrollbar styling */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+
+    *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    *::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 4px;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+        background: var(--scrollbar-thumb-hover);
+    }
+}
+
+@layer base {
+    :where(button, [role="button"]):not([disabled]) {
+        cursor: pointer;
+    }
+
+    [data-slot="alert-dialog-overlay"],
+    [data-slot="dialog-overlay"],
+    [data-slot="sheet-overlay"] {
+        animation-duration: 80ms !important;
+    }
+
+    [data-slot="alert-dialog-content"],
+    [data-slot="context-menu-content"],
+    [data-slot="context-menu-sub-content"],
+    [data-slot="dialog-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
+    [data-slot="popover-content"],
+    [data-slot="select-content"],
+    [data-slot="sheet-content"] {
+        animation-duration: 90ms !important;
+        transition-duration: 90ms !important;
+    }
+
+    [data-slot="sidebar-gap"],
+    [data-slot="sidebar-container"] {
+        transition-duration: 120ms !important;
+    }
+
+    /* Editor chunks (100 blocks) use `content-visibility: auto`; off-screen
+       chunks need a placeholder height until they're measured in the
+       background (see chunk-heights.ts) or rendered, instead of collapsing
+       to zero. */
+    [data-slate-chunk] {
+        contain-intrinsic-size: auto 5000px;
+    }
+}
+
+@keyframes editor-loading {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(300%);
+    }
+}

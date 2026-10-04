@@ -1,0 +1,158 @@
+name: Release
+
+# Pushing a version tag builds the installers for every platform and publishes
+# a GitHub Release with them attached:
+#
+#   v0.2.0          stable release
+#   v0.2.0-beta.1   pre-release (anything with a "-" suffix)
+#
+# The tag must match the version in package.json, src-tauri/tauri.conf.json and
+# src-tauri/Cargo.toml, otherwise the run stops before building anything.
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  # The frontend build needs more than Node's default heap on the 7 GB macOS
+  # runners.
+  NODE_OPTIONS: --max-old-space-size=6144
+
+jobs:
+  check-version:
+    name: Check tag matches app version
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(jq -r .version package.json)
+          conf=$(jq -r .version src-tauri/tauri.conf.json)
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          echo "tag=$tag package.json=$pkg tauri.conf.json=$conf Cargo.toml=$cargo"
+          if [ "$tag" != "$pkg" ] || [ "$tag" != "$conf" ] || [ "$tag" != "$cargo" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the app version in every file."
+            exit 1
+          fi
+          if [[ "$tag" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
+          - name: macOS Intel
+            platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+          - name: Linux
+            platform: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+          # NSIS only: MSI cannot carry a pre-release version like 0.2.0-beta.1.
+          - name: Windows
+            platform: windows-latest
+            args: --bundles nsis
+            rust-targets: ""
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.rust-targets }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update files so installed apps can trust them.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Ad-hoc signing until there is an Apple Developer ID certificate.
+          # To sign and notarize, add the secrets APPLE_CERTIFICATE,
+          # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID,
+          # APPLE_PASSWORD and APPLE_TEAM_ID, and pass them through here.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Netherstone ${{ github.ref_name }}
+          releaseBody: Download the installer for your system from the assets below.
+          releaseDraft: true
+          prerelease: ${{ needs.check-version.outputs.prerelease == 'true' }}
+          args: ${{ matrix.args }}
+
+  # The release stays a draft until every platform has uploaded its installer,
+  # so a failed build never leaves a half-empty public release. Then the
+  # update channels move to it: beta follows every release, stable only
+  # releases without a pre-release suffix.
+  publish:
+    name: Publish release
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      PRERELEASE: ${{ needs.check-version.outputs.prerelease }}
+    steps:
+      - name: Publish the release
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+
+      - name: Update the release channels
+        run: |
+          gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir channels
+          if ! gh release view updates >/dev/null 2>&1; then
+            gh release create updates --prerelease --latest=false \
+              --title "Update channels" \
+              --notes "Used by Netherstone to find updates. Nothing to download here."
+          fi
+          cp channels/latest.json channels/beta.json
+          files=(channels/beta.json)
+          if [ "$PRERELEASE" = "false" ]; then
+            cp channels/latest.json channels/stable.json
+            files+=(channels/stable.json)
+          fi
+          gh release upload updates "${files[@]}" --clobber

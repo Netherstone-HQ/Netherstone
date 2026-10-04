@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+<mask id="inset"><path d="M10 0.5 L19 5 L17 16 L10 19.5 L5 17 L1.5 10.5 L1 5Z" fill="#fff" stroke="#000"/></mask>
+<path d="M10 0.5 L19 5 L17 16 L10 19.5 L5 17 L1.5 10.5 L1 5Z" fill="#4FA38E" mask="url(#inset)"/>
+<path d="M1 5 L7 8 L10 12 L10 19.5 L5 17 L1.5 10.5Z" fill="#4FA38E"/>
+<path d="M19 5 L17 16 L10 19.5 L10 12 L13 8Z" fill="#2B6A5B"/>
+<path d="M10 0.5 L19 5 L13 8 L10 12 L7 8 L1 5Z" fill="#8FD1BE"/>
+<path d="M7 8 L13 8 L10 12Z" fill="#C4EBDF"/>
+</svg>

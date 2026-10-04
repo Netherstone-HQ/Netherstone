@@ -1,0 +1,10 @@
+export { useUIStore } from "./ui";
+export type { RecentFileEntry } from "./ui";
+export { useVaultStore } from "./vault";
+export { useEditorStore } from "./editor";
+export { useSettingsStore } from "./settings";
+export type { Preferences, ThemePreference } from "./settings";
+export type { FileTreeNode } from "./vault";
+export { useAttachmentReportStore } from "./attachments";
+export { useGitHubStore } from "./github";
+export { useSyncStore } from "./sync";

@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { isPathWithin } from "@/lib/drawing-files";
+import { isPathWithin, resolveVaultRelativePath } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store/editor";
 import { useSettingsStore } from "@/store/settings";
 import { useVaultStore } from "@/store/vault";
@@ -54,7 +54,12 @@ export function NewShardDialog({ open, onOpenChange }: NewShardDialogProps) {
         ? shardName
         : `${shardName}.md`;
 
-      const filePath = `${getNewShardFolder(currentVaultPath)}/${fileName}`;
+      // Match the folder's separators so the new path equals the one the
+      // sidebar lists for it.
+      const filePath = resolveVaultRelativePath(
+        fileName,
+        getNewShardFolder(currentVaultPath),
+      );
 
       // Create empty file with basic template
       const initialContent = `# ${shardName.replace(/\.md$/, "")}\n\n`;

@@ -7,7 +7,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getVaultFileDisplayName, isDrawingPath } from "@/lib/drawing-files";
+import {
+  getVaultFileDisplayName,
+  isDrawingPath,
+  isSamePath,
+} from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useUIStore } from "@/store";
@@ -46,7 +50,10 @@ export function CollapsedNode({ node }: CollapsedNodeProps) {
             onClick={isFile ? handleClick : undefined}
             className={cn(
               "h-8 w-full",
-              isFile && node.path === currentFilePath && "bg-accent",
+              isFile &&
+                currentFilePath &&
+                isSamePath(node.path, currentFilePath) &&
+                "bg-accent",
             )}
             aria-label={displayName}
             title={displayName}

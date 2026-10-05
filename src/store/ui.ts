@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { isPathWithin, isSamePath } from "@/lib/drawing-files";
 import { renamedLocalStorage } from "./renamed-storage";
 
 type NavItem = "notes" | "search" | "tags" | "settings" | null;
@@ -138,13 +139,15 @@ export const useUIStore = create<UIState>()(
         set((state) => ({
           recentFiles: [
             file,
-            ...state.recentFiles.filter((entry) => entry.path !== file.path),
+            ...state.recentFiles.filter(
+              (entry) => !isSamePath(entry.path, file.path),
+            ),
           ].slice(0, MAX_RECENT_FILES_HISTORY),
         })),
       updateRecentFilePath: (previousPath, nextPath) =>
         set((state) => ({
           recentFiles: state.recentFiles.map((entry) =>
-            entry.path === previousPath
+            isSamePath(entry.path, previousPath)
               ? {
                   ...entry,
                   path: nextPath,
@@ -153,9 +156,12 @@ export const useUIStore = create<UIState>()(
               : entry,
           ),
         })),
+      // Removing a folder also removes the recent files inside it.
       removeRecentFile: (path) =>
         set((state) => ({
-          recentFiles: state.recentFiles.filter((entry) => entry.path !== path),
+          recentFiles: state.recentFiles.filter(
+            (entry) => !isPathWithin(entry.path, path),
+          ),
         })),
       clearRecentFiles: () => set({ recentFiles: [] }),
 

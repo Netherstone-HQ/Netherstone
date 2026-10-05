@@ -47,6 +47,18 @@ function normalizePath(filePath: string) {
   return filePath.replace(/\\/g, "/");
 }
 
+/**
+ * True when both paths name the same file. Paths reach the app with either
+ * separator (the tree uses the OS's, links and new shards use `/`), so plain
+ * string equality misses matches on Windows.
+ */
+export function isSamePath(a: string, b: string) {
+  return (
+    normalizePath(a).replace(/\/+$/, "") ===
+    normalizePath(b).replace(/\/+$/, "")
+  );
+}
+
 /** True when `filePath` is `parentPath` itself or lies inside it. */
 export function isPathWithin(filePath: string, parentPath: string) {
   const file = normalizePath(filePath);

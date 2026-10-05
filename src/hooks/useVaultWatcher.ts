@@ -1,10 +1,16 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { scanVault, startVaultWatcher, stopVaultWatcher } from "@/lib/commands";
+import {
+  fileExists,
+  scanVault,
+  startVaultWatcher,
+  stopVaultWatcher,
+} from "@/lib/commands";
+import { isPathWithin } from "@/lib/drawing-files";
 import { deleteAstCache } from "@/lib/editor-ast-cache";
 import { invalidateAstWarmPaths } from "@/lib/editor-ast-warm-state";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
-import { useVaultStore } from "@/store";
+import { useEditorStore, useVaultStore } from "@/store";
 
 type VaultChangedPayload = {
   paths?: string[];
@@ -14,6 +20,9 @@ type VaultChangedPayload = {
  * Starts a native file watcher on the current vault whenever it changes.
  * When the Rust backend emits `vault:changed` (debounced 500ms), the vault
  * is rescanned and the file tree is updated.
+ *
+ * If the open shard was deleted or moved outside the app, it is closed, so
+ * the next edit doesn't write it back to its old path.
  *
  * Cleans up the watcher and the event listener when the vault changes or
  * the component unmounts.
@@ -62,6 +71,7 @@ export function useVaultWatcher() {
         }
 
         if (unsuppressedPaths.length > 0) {
+          await closeOpenFileIfRemoved(unsuppressedPaths);
           invalidateAstWarmPaths(unsuppressedPaths);
 
           await Promise.allSettled(
@@ -102,4 +112,21 @@ export function useVaultWatcher() {
       stopVaultWatcher().catch(console.error);
     };
   }, [currentVaultPath, setFileTree]);
+}
+
+async function closeOpenFileIfRemoved(changedPaths: string[]) {
+  const openPath = useEditorStore.getState().currentFilePath;
+  if (!openPath) return;
+  if (!changedPaths.some((path) => isPathWithin(openPath, path))) return;
+
+  try {
+    if (await fileExists(openPath)) return;
+  } catch (err) {
+    console.error("[Netherstone] Couldn't check the open shard:", err);
+    return;
+  }
+
+  // Another shard may have been opened while the check ran.
+  const editor = useEditorStore.getState();
+  if (editor.currentFilePath === openPath) editor.closeFile();
 }

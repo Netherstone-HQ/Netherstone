@@ -45,14 +45,20 @@ const ModeAwareLeftSidebar = React.memo(function ModeAwareLeftSidebar({
   );
 });
 
-// Only mounted in canvas mode: Excalidraw redraws on every frame for as long
-// as it is mounted, even hidden.
+// Mounted the first time canvas mode opens, then kept so a drawing keeps its
+// view and undo history while notes are shown.
 const ModeAwareCanvas = React.memo(function ModeAwareCanvas() {
   const appMode = useUIStore((s) => s.appMode);
-  if (appMode !== "canvas") return null;
+  const [hasOpened, setHasOpened] = useState(appMode === "canvas");
+  if (appMode === "canvas" && !hasOpened) setHasOpened(true);
+  if (!hasOpened) return null;
 
   return (
-    <main className="min-h-0 flex-1">
+    <main
+      className={
+        appMode === "canvas" ? "min-h-0 flex-1" : "hidden min-h-0 flex-1"
+      }
+    >
       <ExcalidrawView />
     </main>
   );

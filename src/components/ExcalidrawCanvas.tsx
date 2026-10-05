@@ -98,6 +98,14 @@ function parseDrawing(json: string) {
   );
 }
 
+type Viewport = Partial<Pick<AppState, "scrollX" | "scrollY" | "zoom">>;
+
+/**
+ * Where each drawing was last scrolled and zoomed to. The canvas unmounts
+ * when the user leaves canvas mode, and the view isn't saved to the file.
+ */
+const lastViewports = new Map<string, Viewport>();
+
 /**
  * Identifies the saved parts of a scene. Scroll, zoom and selection are not
  * saved, so changing only those does not trigger a write.
@@ -162,7 +170,10 @@ function useDrawingPersistence(drawingPath: string | null) {
 
         const restored = parseDrawing(json);
         lastSavedKeyRef.current = getSceneSaveKey(restored);
-        setInitialData(restored);
+        setInitialData({
+          ...restored,
+          appState: { ...restored.appState, ...lastViewports.get(initialPath) },
+        });
       })
       .catch((error) => {
         if (cancelled) return;
@@ -313,15 +324,15 @@ function useDrawingPersistence(drawingPath: string | null) {
     return () => {
       unregister();
       void finish();
+
+      const path = pathRef.current;
+      const appState = latestSceneRef.current?.appState;
+      if (path && appState) {
+        const { scrollX, scrollY, zoom } = appState;
+        lastViewports.set(path, { scrollX, scrollY, zoom });
+      }
     };
   }, [finish, flush]);
-
-  // The canvas stays mounted while notes are shown, so leaving canvas mode
-  // does not unmount it.
-  const appMode = useUIStore((s) => s.appMode);
-  useEffect(() => {
-    if (appMode !== "canvas") void finish();
-  }, [appMode, finish]);
 
   const onSceneChange = useCallback(
     (elements: SceneElements, appState: AppState, files: BinaryFiles) => {

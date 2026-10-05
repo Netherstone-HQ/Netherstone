@@ -1,4 +1,3 @@
-import { exportToBlob } from "@excalidraw/excalidraw";
 import type {
   AppState,
   BinaryFiles,
@@ -48,6 +47,8 @@ export async function persistScenePng(
   name?: string,
 ) {
   const exportScale = Math.max(Number(appState.exportScale) || 1, 2);
+  // Excalidraw is large; load it only when there is a drawing to export.
+  const { exportToBlob } = await import("@excalidraw/excalidraw");
   const blob = await exportToBlob({
     appState: { ...appState, exportScale },
     elements: elements.filter((element) => !element.isDeleted),

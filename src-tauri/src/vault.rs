@@ -73,8 +73,9 @@ pub fn is_vault_document_path(path: &Path) -> bool {
 /// - Hidden entries (names starting with `.`) are skipped.
 /// - Entries in [`IGNORED_NAMES`] are skipped.
 /// - Only `.md` shards and `.excalidraw` drawings are included.
-/// - A directory node is only emitted if it contains at least one of those
-///   (directly or transitively), keeping the tree free of empty folders.
+/// - A directory node is emitted if it contains at least one of those
+///   (directly or transitively), or nothing at all, so a folder just made in
+///   the app shows up while folders of only images or other files stay out.
 /// - Results are sorted: directories first, then files, both case-insensitively.
 pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
     let mut entries = match std::fs::read_dir(dir) {
@@ -113,8 +114,7 @@ pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
 
         if file_type.is_dir() {
             let children = scan_dir(&path);
-            // Only emit the directory if it has visible shards or drawings.
-            if !children.is_empty() {
+            if !children.is_empty() || is_empty_dir(&path) {
                 nodes.push(FileNode {
                     name,
                     path: path.to_string_lossy().to_string(),
@@ -133,6 +133,10 @@ pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
     }
 
     nodes
+}
+
+fn is_empty_dir(path: &Path) -> bool {
+    std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
 }
 
 // ── Importer ─────────────────────────────────────────────────────────────────
@@ -221,6 +225,17 @@ pub const VAULT_NAME_INVALID: &str = "vault-name-invalid";
 pub const VAULT_FOLDER_NOT_EMPTY: &str = "vault-folder-not-empty";
 pub const VAULT_LOCATION_MISSING: &str = "vault-location-missing";
 
+/// Whether `name` (already trimmed) can name a folder on every platform.
+fn is_valid_folder_name(name: &str) -> bool {
+    // Characters no folder name may hold on Windows, which is the strictest.
+    name != "."
+        && name != ".."
+        && !name.ends_with('.')
+        && !name
+            .chars()
+            .any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'))
+}
+
 /// Creates the folder `parent/name` for a new vault and returns its path.
 /// An empty folder that is already there is reused; one with anything in it
 /// is refused, so a new vault never takes over someone's existing files.
@@ -229,14 +244,7 @@ pub fn create_vault_folder(parent: &Path, name: &str) -> Result<PathBuf, String>
     if name.is_empty() {
         return Err(VAULT_NAME_EMPTY.to_string());
     }
-    // Characters no folder name may hold on Windows, which is the strictest.
-    let invalid = name == "."
-        || name == ".."
-        || name.ends_with('.')
-        || name
-            .chars()
-            .any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'));
-    if invalid {
+    if !is_valid_folder_name(name) {
         return Err(VAULT_NAME_INVALID.to_string());
     }
     if !parent.is_dir() {
@@ -255,6 +263,29 @@ pub fn create_vault_folder(parent: &Path, name: &str) -> Result<PathBuf, String>
     }
 
     std::fs::create_dir(&folder).map_err(|e| e.to_string())?;
+    Ok(folder)
+}
+
+/// Creates the folder `parent/name` inside a vault and returns its path.
+/// Unlike a new vault, an existing folder of that name is never reused.
+pub fn create_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+    if !is_valid_folder_name(name) {
+        return Err(format!("'{}' can't be used as a folder name", name));
+    }
+    if !parent.is_dir() {
+        return Err(format!("Not a directory: {}", parent.display()));
+    }
+
+    let folder = parent.join(name);
+    if folder.exists() {
+        return Err(format!("A folder with name '{}' already exists", name));
+    }
+
+    std::fs::create_dir(&folder).map_err(|e| format!("Failed to create folder: {}", e))?;
     Ok(folder)
 }
 
@@ -324,11 +355,29 @@ mod tests {
         std::fs::create_dir_all(vault.join("drawings")).unwrap();
         std::fs::write(vault.join("drawings/board.excalidraw"), EMPTY_DRAWING).unwrap();
         std::fs::create_dir_all(vault.join("empty")).unwrap();
+        std::fs::create_dir_all(vault.join("images")).unwrap();
+        std::fs::write(vault.join("images/photo.png"), [0u8]).unwrap();
 
         let nodes = scan_dir(&vault);
         let names: Vec<_> = nodes.iter().map(|node| node.name.as_str()).collect();
 
-        assert_eq!(names, vec!["drawings", "note.md", "sketch.excalidraw"]);
+        assert_eq!(names, vec!["drawings", "empty", "note.md", "sketch.excalidraw"]);
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn create_folder_makes_a_new_folder_only() {
+        let vault = temp_vault("new-folder");
+
+        let folder = create_folder(&vault, "  Projects ").unwrap();
+        assert_eq!(folder, vault.join("Projects"));
+        assert!(folder.is_dir());
+
+        assert!(create_folder(&vault, "Projects").is_err());
+        assert!(create_folder(&vault, " ").is_err());
+        assert!(create_folder(&vault, "a/b").is_err());
+        assert!(create_folder(&vault, "..").is_err());
+        assert!(create_folder(&vault.join("missing"), "Projects").is_err());
         std::fs::remove_dir_all(&vault).unwrap();
     }
 

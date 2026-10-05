@@ -119,6 +119,24 @@ describe("code and empty notes", () => {
     ];
     expect(saveValue(value)).toBe("a\n\n\u200B\n\nb\n");
   });
+
+  // The editor always ends a shard with an empty line to type into.
+  it("drops empty paragraphs at the end", () => {
+    const value = [
+      { type: "p", children: [{ text: "a" }] },
+      { type: "p", children: [{ text: "" }] },
+      { type: "p", children: [{ text: "" }] },
+    ];
+    expect(saveValue(value)).toBe("a\n");
+  });
+
+  it("keeps an empty list item at the end", () => {
+    const value = [
+      { type: "p", indent: 1, listStyleType: "disc", children: [{ text: "a" }] },
+      { type: "p", indent: 1, listStyleType: "disc", children: [{ text: "" }] },
+    ];
+    expect(saveValue(value)).toBe("- a\n-\n");
+  });
 });
 
 describe("conversions by design", () => {

@@ -45,8 +45,13 @@ const ModeAwareLeftSidebar = React.memo(function ModeAwareLeftSidebar({
   );
 });
 
+// Mounted the first time canvas mode opens, then kept so a drawing keeps its
+// view and undo history while notes are shown.
 const ModeAwareCanvas = React.memo(function ModeAwareCanvas() {
   const appMode = useUIStore((s) => s.appMode);
+  const [hasOpened, setHasOpened] = useState(appMode === "canvas");
+  if (appMode === "canvas" && !hasOpened) setHasOpened(true);
+  if (!hasOpened) return null;
 
   return (
     <main

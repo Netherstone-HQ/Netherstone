@@ -83,15 +83,8 @@ export interface DeserializeMarkdownInWorkerOptions {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_REQUEST_KEY = "__default__";
-/**
- * The worker holds its own copy of the editor's markdown stack, tens of MB,
- * so it shuts down once nothing has used it for this long. Editing keeps it
- * alive: autosave serializes every few seconds.
- */
-const WORKER_IDLE_SHUTDOWN_MS = 30_000;
 
 let workerInstance: Worker | null = null;
-let idleShutdownTimer: number | null = null;
 let nextRequestId = 1;
 let lastLegacyRequestId: number | null = null;
 
@@ -194,7 +187,6 @@ function cleanupRequest(requestId: number) {
   if (!pending) return;
 
   pendingRequests.delete(requestId);
-  if (pendingRequests.size === 0) scheduleIdleShutdown();
 
   if (latestRequestIdByKey.get(pending.requestKey) === requestId) {
     latestRequestIdByKey.delete(pending.requestKey);
@@ -241,23 +233,7 @@ function rejectSupersededRequestsForKey(
   }
 }
 
-function cancelIdleShutdown() {
-  if (idleShutdownTimer === null) return;
-  window.clearTimeout(idleShutdownTimer);
-  idleShutdownTimer = null;
-}
-
-function scheduleIdleShutdown() {
-  if (!workerInstance) return;
-  cancelIdleShutdown();
-  idleShutdownTimer = window.setTimeout(() => {
-    idleShutdownTimer = null;
-    if (pendingRequests.size === 0) resetWorkerInstance();
-  }, WORKER_IDLE_SHUTDOWN_MS);
-}
-
 function resetWorkerInstance() {
-  cancelIdleShutdown();
   if (workerInstance) {
     workerInstance.terminate();
     workerInstance = null;
@@ -332,7 +308,6 @@ function handleWorkerFailure(error: Error) {
 }
 
 function getWorker(): Worker {
-  cancelIdleShutdown();
   if (workerInstance) {
     return workerInstance;
   }
@@ -498,7 +473,6 @@ export function preloadEditorMarkdownWorker() {
 
   try {
     getWorker();
-    scheduleIdleShutdown();
   } catch {
     // Ignore preload failures. Callers can still use the fallback path later.
   }

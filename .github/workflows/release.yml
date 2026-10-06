@@ -156,3 +156,16 @@ jobs:
             files+=(channels/stable.json)
           fi
           gh release upload updates "${files[@]}" --clobber
+
+      # The website reads releases at build time, so rebuild it to put this
+      # release on the changelog and download page. Skipped until the
+      # SITE_DEPLOY_HOOK secret (a Cloudflare Workers Builds deploy hook) is set.
+      - name: Rebuild the website
+        env:
+          SITE_DEPLOY_HOOK: ${{ secrets.SITE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$SITE_DEPLOY_HOOK" ]; then
+            echo "::warning::SITE_DEPLOY_HOOK is not set, so the website was not rebuilt."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$SITE_DEPLOY_HOOK"

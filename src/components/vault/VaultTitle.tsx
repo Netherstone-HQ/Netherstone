@@ -6,6 +6,7 @@ import { useShallow } from "zustand/shallow";
 import {
   CaretRightIcon,
   DotsThreeIcon,
+  ExportIcon,
   FloppyDiskIcon,
   XIcon,
   PencilSimpleIcon,
@@ -24,6 +25,7 @@ import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { applyOpenEditorSessionPathChange } from "@/lib/open-editor-session-path-change";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
+import { openExportDialog } from "@/lib/export";
 
 function getCloseLifecycleNowMs(): number {
   return typeof window !== "undefined" && "performance" in window
@@ -411,6 +413,12 @@ export function VaultTitle() {
           <DropdownMenuItem onClick={startRename}>
             <PencilSimpleIcon className="mr-2 h-4 w-4" />
             Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => currentFilePath && openExportDialog(currentFilePath)}
+          >
+            <ExportIcon className="mr-2 h-4 w-4" />
+            Export…
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleClose}>
             <XIcon className="mr-2 h-4 w-4" />

@@ -42,6 +42,23 @@ vault open, files whose modified time changed are re-parsed with
 and links into their own tables for the outline, tag view and link checks.
 Links to other shards are `@` mentions, saved as `[label](mention:target)`.
 
+## Exports
+
+A shard exports as a web page, a PDF or a Word document from the export
+window (`src/components/export/`), which loads only when it first opens.
+
+- `src/lib/export/build.ts` reads the editor's Plate value once into a plain
+  model (lists, toggles, code tokens, dates), so all three formats agree on
+  what the shard says. `theme.ts` holds the colors and sizes they share.
+- HTML embeds the app's own fonts, KaTeX and images in one file.
+- PDF prints that HTML through the platform webview
+  (`src-tauri/src/export/`): a hidden window loads it, waits for fonts and
+  images, and prints to a file with WebView2, WebKit (macOS) or WebKitGTK.
+- Word is built with the `docx` library: heading styles, real lists and
+  checkboxes, equations as Office Math. Fonts are named, not embedded.
+- The preview loads once and restyles itself in place when options change.
+  Pages are laid out as CSS columns, so they break the way the PDF prints.
+
 ## Subsystems with their own docs
 
 - [Attachments](ATTACHMENTS_ARCHITECTURE.md): the `_attachments/` folder,

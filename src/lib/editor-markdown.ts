@@ -337,6 +337,28 @@ function markdownEscapedMarker(marker: string): string {
   return marker.replace(/_/g, "\\_");
 }
 
+/**
+ * A plain paragraph (not a list item) with no text: the editor's trailing
+ * line when it ends the document.
+ */
+export function isBlankParagraph(node: unknown): boolean {
+  if (!node || typeof node !== "object") return false;
+
+  const record = node as Record<string, unknown>;
+
+  return (
+    record.type === "p" &&
+    !record.listStyleType &&
+    Array.isArray(record.children) &&
+    record.children.every(
+      (child) =>
+        !!child &&
+        typeof child === "object" &&
+        (child as Record<string, unknown>).text === "",
+    )
+  );
+}
+
 export function prepareSerializableMarkdownValue(
   nodes: unknown,
 ): SerializableMarkdownPreparation {
@@ -409,12 +431,18 @@ export function prepareSerializableMarkdownValue(
   };
 
   const result = walk(nodes);
+  const value = Array.isArray(result.value)
+    ? (result.value as SerializableEditorValue)
+    : [];
+
+  // Blank lines at the end of a shard (the editor always keeps one there)
+  // aren't content, so they don't reach the file.
+  let end = value.length;
+  while (end > 0 && isBlankParagraph(value[end - 1])) end -= 1;
 
   return {
     replacements,
-    value: Array.isArray(result.value)
-      ? (result.value as SerializableEditorValue)
-      : [],
+    value: end === value.length ? value : value.slice(0, end),
   };
 }
 

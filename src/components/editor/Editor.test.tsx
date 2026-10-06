@@ -93,6 +93,13 @@ async function openNote(content: string, plateValue: any[] | null = null) {
   return editor;
 }
 
+/** Index of the top-level block whose text includes `text`. */
+function blockIndexOf(editor: SlateEditor, text: string) {
+  return editor.children.findIndex((_, index) =>
+    editor.api.string([index]).includes(text),
+  );
+}
+
 /** Places the cursor at the end of the top-level block at `index`. */
 function selectEndOf(editor: SlateEditor, index: number) {
   editor.tf.select(editor.api.end([index])!);
@@ -186,10 +193,9 @@ describe("Editor", () => {
 
   it("marks the note dirty on an edit and saves it with nothing else lost", async () => {
     const editor = await openNote(NOTE);
-    const lastIndex = editor.children.length - 1;
 
     await act(async () => {
-      selectEndOf(editor, lastIndex);
+      selectEndOf(editor, blockIndexOf(editor, "Last paragraph."));
       editor.tf.insertText(" Added later.");
     });
 
@@ -209,8 +215,7 @@ describe("Editor", () => {
       editor.tf.insertText("Inserted line.");
 
       // Bold the last word of the last paragraph.
-      const lastIndex = editor.children.length - 1;
-      const end = editor.api.end([lastIndex])!;
+      const end = editor.api.end([blockIndexOf(editor, "Last paragraph.")])!;
       editor.tf.select({
         anchor: { path: end.path, offset: end.offset - "paragraph.".length },
         focus: end,
@@ -218,10 +223,7 @@ describe("Editor", () => {
       editor.tf.toggleMark("bold");
 
       // Remove the second list item.
-      const secondItem = editor.children.findIndex((node: any) =>
-        editor.api.string([editor.children.indexOf(node)]).includes("second item"),
-      );
-      editor.tf.removeNodes({ at: [secondItem] });
+      editor.tf.removeNodes({ at: [blockIndexOf(editor, "second item")] });
     });
 
     expect(await save(editor)).toBe(
@@ -254,6 +256,61 @@ describe("Editor", () => {
 
     const fromCache = await openNote(NOTE, cachedValue);
     expect(await save(fromCache)).toBe(NOTE);
+  });
+
+  describe("the empty line at the end", () => {
+    const isBlankLine = (node: any) =>
+      node.type === "p" && !node.listStyleType && node.children[0].text === "";
+
+    it("ends every shard and never reaches the file", async () => {
+      const editor = await openNote(NOTE);
+
+      expect(isBlankLine(editor.children.at(-1))).toBe(true);
+      expect(editor.api.string([editor.children.length - 2])).toBe(
+        "Last paragraph.",
+      );
+      expect(await save(editor)).toBe(NOTE);
+    });
+
+    it("moves down once something is typed into it", async () => {
+      const editor = await openNote(NOTE);
+      const lineIndex = editor.children.length - 1;
+
+      await act(async () => {
+        selectEndOf(editor, lineIndex);
+        editor.tf.insertText("New line.");
+      });
+
+      expect(editor.api.string([lineIndex])).toBe("New line.");
+      expect(editor.children).toHaveLength(lineIndex + 2);
+      expect(isBlankLine(editor.children.at(-1))).toBe(true);
+      expect(await save(editor)).toBe(`${NOTE}\nNew line.\n`);
+    });
+
+    // Ctrl+A selects every block, and Delete removes them all at once. With
+    // no block left, the shard had nowhere to type until it was reopened.
+    it("is still there to type into after every block is deleted", async () => {
+      const editor = await openNote(NOTE);
+
+      await act(async () => {
+        editor.tf.withoutNormalizing(() => {
+          for (let index = editor.children.length - 1; index >= 0; index -= 1) {
+            editor.tf.removeNodes({ at: [index] });
+          }
+        });
+      });
+
+      expect(editor.children).toHaveLength(1);
+      expect(isBlankLine(editor.children[0])).toBe(true);
+      expect(await save(editor)).toBe("");
+
+      await act(async () => {
+        selectEndOf(editor, 0);
+        editor.tf.insertText("Fresh start.");
+      });
+
+      expect(await save(editor)).toBe("Fresh start.\n");
+    });
   });
 
   describe("links", () => {

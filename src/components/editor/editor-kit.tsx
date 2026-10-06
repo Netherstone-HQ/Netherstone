@@ -27,11 +27,11 @@ import { SuggestionKit } from "./kits/suggestion-kit";
 import { TableKit } from "./kits/table-kit";
 import { TocKit } from "./kits/toc-kit";
 import { ToggleKit } from "./kits/toggle-kit";
+import { TrailingLineKit } from "./kits/trailing-line-kit";
 
 import { AutoformatKit } from "./kits/autoformat-kit";
 
 export const EditorKit = [
-  // TrailingBlockPlugin, // handles trailing but is redundant
   ...AlignKit,
   ...AutoformatKit, // enables markdown formatting
   ...BasicBlocksKit, // for headings, blockquote and diviers
@@ -62,4 +62,5 @@ export const EditorKit = [
   ...TableKit,
   ...TocKit,
   ...ToggleKit, // tested and it works
+  ...TrailingLineKit, // an empty line always ends the shard
 ];

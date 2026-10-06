@@ -6,6 +6,7 @@ import { RightSidebar } from "./sidebar/RightSidebar";
 import { LeftSidebar } from "./sidebar/LeftSidebar";
 import { TagBrowser } from "./tags/TagBrowser";
 import { SettingsPage } from "./settings/SettingsPage";
+import { ExportDialogHost } from "./export/ExportDialogHost";
 import { NewShardDialog } from "./vault/NewShardDialog";
 import { XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -211,6 +212,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             open={isNewShardDialogOpen}
             onOpenChange={setIsNewShardDialogOpen}
           />
+          <ExportDialogHost />
         </div>
       </div>
     </SidebarProvider>

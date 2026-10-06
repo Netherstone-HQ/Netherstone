@@ -1,5 +1,6 @@
 mod browser;
 mod db;
+mod export;
 mod github;
 mod splash;
 mod sync;
@@ -1133,6 +1134,7 @@ pub fn run() {
         .plugin(browser::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .register_asynchronous_uri_scheme_protocol(export::pdf::SCHEME, export::pdf::serve)
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(browser::BrowserState::default())
         .manage(watcher::WatcherState::new())
@@ -1216,7 +1218,12 @@ pub fn run() {
             get_backlinks,
             rename_file,
             move_file,
-            delete_vault_path
+            delete_vault_path,
+            export::choose_export_path,
+            export::write_export_file,
+            export::read_export_asset,
+            export::fetch_export_asset,
+            export::export_pdf
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

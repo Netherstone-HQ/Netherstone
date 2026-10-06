@@ -5,6 +5,7 @@ import {
   ArrowsDownUpIcon,
   CaretRightIcon,
   DotsThreeVerticalIcon,
+  ExportIcon,
   FilePlusIcon,
   FolderOpenIcon,
   FolderSimplePlusIcon,
@@ -54,6 +55,7 @@ import {
   remapPathAfterMove,
 } from "@/lib/drawing-files";
 import { relinkDrawingReferences } from "@/lib/drawing-exports";
+import { openExportDialog } from "@/lib/export";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { openVaultFile } from "@/lib/open-vault-file";
 import {
@@ -532,6 +534,15 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             icon: FolderOpenIcon,
             onSelect: () => void handleOpenFileLocation(),
           },
+          ...(isDrawingPath(node.path)
+            ? []
+            : [
+                {
+                  label: "Export…",
+                  icon: ExportIcon,
+                  onSelect: () => openExportDialog(node.path),
+                },
+              ]),
           {
             label: "Move to Trash",
             icon: TrashIcon,

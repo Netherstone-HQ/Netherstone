@@ -36,7 +36,7 @@ urlencoding = "2.1"
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 keyring = "4.2"
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "native-tls"] }
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "sync"] }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
@@ -48,6 +48,10 @@ windows = { version = "0.61", features = ["Win32_System_LibraryLoader", "Win32_U
 # runtime, and the Intel build is cross-compiled on Apple Silicon.
 git2 = { version = "0.21", default-features = false, features = ["vendored-openssl"] }
 objc2-web-kit = "0.3"
+# PDF export prints the webview through AppKit's print system.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPrintInfo", "NSPrintOperation", "NSWindow", "NSResponder", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSDictionary", "NSGeometry"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
 gtk = "0.18"

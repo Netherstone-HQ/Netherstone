@@ -45,6 +45,11 @@ export function useBrowserWebview({
   const webviewRef = useRef<Webview | null>(null);
   const hasCreatedWebviewRef = useRef(false);
   const operationIdRef = useRef(0);
+  // Read at creation time only. The panel saves each visited URL back into
+  // initialUrl, so depending on it would restart (and orphan) a webview
+  // that is still being created.
+  const initialUrlRef = useRef(initialUrl);
+  initialUrlRef.current = initialUrl;
 
   const isReady = status === "ready";
 
@@ -104,7 +109,7 @@ export function useBrowserWebview({
 
         const rect = viewportElement.getBoundingClientRect();
         const webview = new Webview(getCurrentWindow(), label, {
-          url: initialUrl,
+          url: initialUrlRef.current,
           x: Math.round(rect.left),
           y: Math.round(rect.top),
           width: Math.max(1, Math.round(rect.width)),
@@ -114,13 +119,17 @@ export function useBrowserWebview({
         webviewRef.current = webview;
         hasCreatedWebviewRef.current = true;
 
+        // Once created, the webview belongs to this hook until it is closed,
+        // even if the effect re-ran in the meantime.
+        const isCurrent = () => webviewRef.current === webview;
+
         await Promise.all([
           webview.once("tauri://created", () => {
-            if (cancelled || operationId !== operationIdRef.current) return;
+            if (!isCurrent()) return;
             setStatus("ready");
           }),
           webview.once("tauri://error", (event) => {
-            if (cancelled || operationId !== operationIdRef.current) return;
+            if (!isCurrent()) return;
             console.error("Failed to create browser webview:", event.payload);
             setStatus("unavailable");
             setError("Failed to create the native browser webview.");
@@ -144,7 +153,7 @@ export function useBrowserWebview({
     return () => {
       cancelled = true;
     };
-  }, [initialUrl, isOpen, label, viewportElement]);
+  }, [isOpen, label, viewportElement]);
 
   useEffect(() => {
     return () => {

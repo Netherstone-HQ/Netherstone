@@ -8,7 +8,7 @@ export type ThemePreference = "light" | "dark" | "system";
 export type MediaInsertionPreference = "vault-import" | "local-reference";
 export type ReadingFont = "newsreader" | "geist" | "system";
 export type TextSize = "small" | "default" | "large";
-export type ContentWidth = "narrow" | "default" | "wide";
+export type ContentWidth = "narrow" | "default" | "wide" | "full";
 export type NewShardLocation = "vault-root" | "current-folder";
 /** Minutes between automatic syncs. */
 export type SyncInterval = 5 | 15 | 30 | 60;

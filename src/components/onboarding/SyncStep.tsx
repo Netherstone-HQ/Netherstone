@@ -24,29 +24,32 @@ export function SyncStep({
   const loadAccount = useGitHubStore((s) => s.load);
   const signInError = useGitHubStore((s) => s.error);
   const installed = useGitHubStore((s) => s.installation?.installed ?? false);
-  const syncOn = useSyncStore(
+  const syncEnabled = useSyncStore(
     (s) => s.vaultPath === vaultPath && (s.record?.syncEnabled ?? false),
   );
+  // The vault's record can still say on after GitHub was disconnected, or
+  // when it was set up on an earlier install. It only syncs once connected.
+  const syncOn = syncEnabled && account !== null;
   const isWorking = useSyncStore((s) => s.vaultPath === vaultPath && s.isWorking);
   const syncError = useSyncStore((s) => (s.vaultPath === vaultPath ? s.error : null));
   const turnOn = useSyncStore((s) => s.turnOn);
   // A restored vault, or one that was already open, may sync already.
-  const [wasOnAlready] = useState(syncOn);
+  const [wasOnAlready] = useState(syncEnabled);
 
   useEffect(() => {
     if (!accountLoaded) void loadAccount();
   }, [accountLoaded, loadAccount]);
 
   let body: React.ReactNode;
-  if (syncOn) {
+  if (!accountLoaded) {
+    body = <div className="h-9" />;
+  } else if (syncOn) {
     body = (
       <p className="onboarding-fade flex items-center gap-3 rounded-xl border bg-card p-4 text-sm">
         <CheckCircleIcon weight="fill" className="size-5" />
         {wasOnAlready ? copy.sync.alreadyOn : copy.sync.done}
       </p>
     );
-  } else if (!accountLoaded) {
-    body = <div className="h-9" />;
   } else if (!account) {
     body = <GitHubSignIn />;
   } else {

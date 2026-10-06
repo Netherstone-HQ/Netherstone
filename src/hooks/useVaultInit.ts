@@ -36,12 +36,17 @@ export function useVaultInit() {
     // Opening a shard doesn't need the tree, so don't wait for the scan.
     void reopenLastShard(currentVaultPath);
 
+    // The welcome tour may open another vault before this scan finishes.
+    const stillOpen = () =>
+      useVaultStore.getState().currentVaultPath === currentVaultPath;
+
     scanVault(currentVaultPath)
       .then((tree) => {
-        setFileTree(tree);
+        if (stillOpen()) setFileTree(tree);
       })
       .catch(() => {
         initializedVaultPaths.delete(currentVaultPath);
+        if (!stillOpen()) return;
         console.warn(
           `[Netherstone] Persisted vault "${currentVaultPath}" is no longer accessible. Clearing.`,
         );

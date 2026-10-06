@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { openEditorFile } from "@/lib/open-editor-file";
-import { useVaultStore } from "@/store";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
@@ -141,5 +141,39 @@ describe("Onboarding", () => {
       content: startHere,
     });
     expect(openEditorFile).toHaveBeenCalledWith("/vaults/Research/Start here.md");
+  });
+
+  it("closes a shard and drawing left open from another vault", async () => {
+    useVaultStore.setState({ currentVaultPath: "/vaults/My Vault" });
+    useEditorStore.setState({ currentFilePath: "/vaults/My Vault/Ideas.md", isDirty: false });
+    useUIStore.setState({ activeDrawingPath: "/vaults/My Vault/Sketch.excalidraw" });
+    mockCommands({ ...baseCommands, open_vault_dialog: () => "/vaults/Research" });
+    await renderOnboarding();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open a folder/ }));
+
+    await screen.findByText(copy.appearance.title);
+    expect(useVaultStore.getState().currentVaultPath).toBe("/vaults/Research");
+    expect(useEditorStore.getState().currentFilePath).toBeNull();
+    expect(useUIStore.getState().activeDrawingPath).toBeNull();
+  });
+
+  it("doesn't say sync is on until GitHub is connected", async () => {
+    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    mockCommands({
+      ...baseCommands,
+      sync_get_vault_record: () => ({ vaultPath: "/vaults/Research", syncEnabled: true }),
+    });
+    await renderOnboarding();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(copy.vault.keep.title("Research")) }),
+    );
+    await screen.findByText(copy.appearance.title);
+    fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
+
+    await screen.findByText(copy.sync.later);
+    expect(screen.queryByText(copy.sync.alreadyOn)).toBeNull();
+    expect(screen.getByRole("button", { name: copy.common.skip })).toBeTruthy();
   });
 });

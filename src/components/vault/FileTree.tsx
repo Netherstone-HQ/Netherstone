@@ -25,6 +25,7 @@ import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { TreeNode } from "@/components/vault/TreeNode";
+import { useMenuAction } from "@/lib/use-menu-action";
 
 interface FileTreeProps {
   onNewShard: () => void;
@@ -39,6 +40,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
   const [isCreatingRootShard, setIsCreatingRootShard] = useState(false);
+  const menuAction = useMenuAction();
 
   if (!currentVaultPath) return null;
 
@@ -111,12 +113,14 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           <ContextMenuTrigger asChild>
             <div aria-hidden="true" className="min-h-8 flex-1" />
           </ContextMenuTrigger>
-          <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
-            <ContextMenuItem onSelect={() => setIsCreatingRootShard(true)}>
+          <ContextMenuContent onCloseAutoFocus={menuAction.onCloseAutoFocus}>
+            <ContextMenuItem
+              onSelect={menuAction.defer(() => setIsCreatingRootShard(true))}
+            >
               <FilePlusIcon />
               New Shard
             </ContextMenuItem>
-            <ContextMenuItem onSelect={startRootFolder}>
+            <ContextMenuItem onSelect={menuAction.defer(startRootFolder)}>
               <FolderSimplePlusIcon />
               New Folder
             </ContextMenuItem>

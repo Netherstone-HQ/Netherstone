@@ -138,6 +138,37 @@ jobs:
       GH_REPO: ${{ github.repository }}
       PRERELEASE: ${{ needs.check-version.outputs.prerelease }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The notes come from release-notes/<tag>.md when that file exists,
+      # otherwise from the commit subjects since the previous version, leaving
+      # out merges, reverts and release commits. The website's changelog shows
+      # them; the download line is only for the GitHub release page.
+      - name: Write the release notes
+        run: |
+          file="release-notes/$GITHUB_REF_NAME.md"
+          if [ -f "$file" ]; then
+            cp "$file" notes.md
+          else
+            previous=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+            range="${previous:+$previous..}$GITHUB_REF_NAME"
+            subjects=$(git log --no-merges --format='%s' "$range")
+            # grep exits 1 when it filters out every line, which is fine here.
+            set +o pipefail
+            # A reverted change never shipped, so drop it along with its revert.
+            reverted=$(printf '%s\n' "$subjects" | sed -n 's/^Revert "\(.*\)"$/\1/p')
+            printf '%s\n' "$subjects" \
+              | grep -vE '^(Revert |Release |Netherstone )' \
+              | grep -vxF -f <(printf '%s\n' "$reverted" | grep .) \
+              | awk 'NF && !seen[$0]++' \
+              | sed -E "s|\(#([0-9]+)\)|([#\1](https://github.com/$GH_REPO/pull/\1))|; s|^|- |" > notes.md
+          fi
+          printf '\nDownload the installer for your system from the assets below.\n' >> notes.md
+          cat notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+
       - name: Publish the release
         run: gh release edit "$GITHUB_REF_NAME" --draft=false
 

@@ -3,6 +3,7 @@ import {
   buildDrawingImageTag,
   getDrawingLinkNeedles,
   isPathWithin,
+  isSamePath,
   relinkDrawingImages,
   remapPathAfterMove,
   replaceLinkedDrawingImages,
@@ -30,6 +31,11 @@ describe("vault paths", () => {
     expect(resolveVaultRelativePath("d/Flow.excalidraw", "/vault")).toBe(
       "/vault/d/Flow.excalidraw",
     );
+  });
+
+  it("matches the same path written with either separator", () => {
+    expect(isSamePath("C:\\v\\a.md", "C:\\v/a.md")).toBe(true);
+    expect(isSamePath("C:\\v\\a.md", "C:\\v\\b.md")).toBe(false);
   });
 
   it("remaps a drawing inside a renamed folder", () => {

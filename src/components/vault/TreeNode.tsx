@@ -50,9 +50,11 @@ import {
   getVaultFileDisplayName,
   isDrawingPath,
   isPathWithin,
+  isSamePath,
   remapPathAfterMove,
 } from "@/lib/drawing-files";
 import { relinkDrawingReferences } from "@/lib/drawing-exports";
+import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { openVaultFile } from "@/lib/open-vault-file";
 import {
   applyOpenEditorSessionPathChange,
@@ -244,8 +246,8 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   } | null> => {
     if (
       node.kind !== "file" ||
-      node.path !== currentFilePath ||
-      !currentFilePath
+      !currentFilePath ||
+      !isSamePath(node.path, currentFilePath)
     ) {
       return null;
     }
@@ -367,8 +369,14 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   };
 
   const handleDelete = async () => {
+    const deletesOpenFile =
+      !!currentFilePath && isPathWithin(currentFilePath, node.path);
+
     try {
       await flushDrawingAffectedBy(node.path);
+      // Let a save that is already running finish first, so it can't write
+      // the shard back after it has gone to the trash.
+      if (deletesOpenFile) await flushPendingAutosave();
 
       await invoke("delete_vault_path", {
         targetPath: node.path,
@@ -379,21 +387,9 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
         openDrawing(null);
       }
 
-      if (node.kind === "file") {
-        removeRecentFile(node.path);
-      }
+      removeRecentFile(node.path);
 
-      if (node.kind === "file" && node.path === currentFilePath) {
-        closeFile();
-      }
-
-      if (
-        node.kind === "directory" &&
-        currentFilePath &&
-        (currentFilePath === node.path ||
-          currentFilePath.startsWith(`${node.path}\\`) ||
-          currentFilePath.startsWith(`${node.path}/`))
-      ) {
+      if (deletesOpenFile) {
         closeFile();
       }
 
@@ -559,7 +555,8 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       className={cn(
         "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm transition-colors hover:bg-accent/70 data-[state=open]:bg-accent/70",
         node.kind === "file" &&
-          node.path === currentFilePath &&
+          !!currentFilePath &&
+          isSamePath(node.path, currentFilePath) &&
           "bg-accent text-accent-foreground hover:bg-accent",
       )}
       style={{ paddingLeft: `${rowIndent}px` }}

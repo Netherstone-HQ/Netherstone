@@ -43,6 +43,7 @@ const WIDTHS: Option<ContentWidth>[] = [
   { value: "narrow", label: "Narrow" },
   { value: "default", label: "Default" },
   { value: "wide", label: "Wide" },
+  { value: "full", label: "Full" },
 ];
 
 export function AppearanceSettings() {

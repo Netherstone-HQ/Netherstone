@@ -71,6 +71,8 @@
     --reading-size: 1.0625rem;
     /* Half the reading column, so the editor can pad to center it. */
     --reading-half-width: 350px;
+    /* The least the editor pads each side; the left side holds drag handles. */
+    --editor-gutter: 4rem;
 }
 
 :root[data-reading-font="geist"] {
@@ -91,6 +93,10 @@
 :root[data-text-size="large"] { --reading-size: 1.1875rem; }
 :root[data-content-width="narrow"] { --reading-half-width: 290px; }
 :root[data-content-width="wide"] { --reading-half-width: 460px; }
+:root[data-content-width="full"] {
+    --reading-half-width: 50%;
+    --editor-gutter: 2rem;
+}
 
 /* Basalt, the default theme: warm mineral neutrals with one verdigris
    accent. Scales and usage rules live in the brand guide. */

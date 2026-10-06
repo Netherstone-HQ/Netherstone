@@ -60,6 +60,11 @@ pub fn is_drawing_path(path: &Path) -> bool {
     has_extension(path, DRAWING_EXTENSION)
 }
 
+/// False for hidden entries and known noise, which scanning skips.
+pub fn is_scanned_name(name: &str) -> bool {
+    !name.starts_with('.') && !IGNORED_NAMES.contains(&name)
+}
+
 /// Files shown in the vault tree: shards and drawings.
 pub fn is_vault_document_path(path: &Path) -> bool {
     is_markdown_path(path) || is_drawing_path(path)
@@ -101,8 +106,7 @@ pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
     for entry in entries {
         let name = entry.file_name().to_string_lossy().to_string();
 
-        // Skip hidden entries and known noise.
-        if name.starts_with('.') || IGNORED_NAMES.contains(&name.as_str()) {
+        if !is_scanned_name(&name) {
             continue;
         }
 

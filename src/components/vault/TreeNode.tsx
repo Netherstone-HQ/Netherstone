@@ -87,6 +87,10 @@ import {
   getRowIndent,
 } from "@/components/vault/tree-layout";
 
+// Rows draw their own hover and focus; the button inside only takes clicks.
+const ROW_BUTTON_CLASS =
+  "flex h-full min-w-0 flex-1 cursor-default items-center gap-1 text-left outline-none";
+
 function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
 }
@@ -170,10 +174,6 @@ function renderRowActions(
 function preventFocusReturn(event: Event) {
   event.preventDefault();
 }
-
-// Rows draw their own hover and focus; the button inside only takes clicks.
-const ROW_BUTTON_CLASS =
-  "flex h-full min-w-0 flex-1 cursor-default items-center gap-1 text-left outline-none";
 
 type TreeNodeProps = {
   node: FileTreeNode;

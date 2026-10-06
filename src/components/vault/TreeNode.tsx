@@ -185,6 +185,10 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const [isCreatingShard, setIsCreatingShard] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  // Enter commits the rename, and the input then loses focus (the editor
+  // takes it back, or the row remounts under its new path), which commits
+  // again. The second call would rename a path that no longer exists.
+  const isRenameSubmittingRef = useRef(false);
 
   const currentFilePath = useEditorStore((s) => s.currentFilePath);
   const markdownContent = useEditorStore((s) => s.markdownContent);
@@ -292,12 +296,16 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   };
 
   const handleRename = async () => {
+    if (isRenameSubmittingRef.current) return;
+
     const trimmedName = newName.trim();
 
     if (!trimmedName || trimmedName === displayName) {
       cancelRename();
       return;
     }
+
+    isRenameSubmittingRef.current = true;
 
     try {
       const persistedOpenFile = await persistOpenFileBeforePathChange("rename");
@@ -353,6 +361,8 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       console.error("Failed to rename:", error);
       alert(error instanceof Error ? error.message : String(error));
       cancelRename();
+    } finally {
+      isRenameSubmittingRef.current = false;
     }
   };
 

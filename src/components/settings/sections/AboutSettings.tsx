@@ -104,7 +104,7 @@ function UpdateRow() {
     return (
       <SettingRow
         label="Updates"
-        description="Updates are only available in the installed app."
+        description="Updates are turned off in development builds."
       />
     );
   }

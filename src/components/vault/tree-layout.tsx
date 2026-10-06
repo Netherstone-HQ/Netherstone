@@ -5,7 +5,7 @@ const INDENT_STEP_PX = 16;
 const BASE_INDENT_PX = 6;
 export const DISCLOSURE_SLOT_PX = 16;
 export const FILE_DISCLOSURE_SLOT_PX = 12;
-export const ACTION_SLOT_PX = 20;
+export const ACTION_SLOT_PX = 24;
 
 export function getRowIndent(depth: number) {
   return BASE_INDENT_PX + depth * INDENT_STEP_PX;

@@ -664,7 +664,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <DotsThreeVerticalIcon className="h-4 w-4" />
+                <DotsThreeVerticalIcon weight="bold" className="size-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent

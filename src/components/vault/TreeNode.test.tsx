@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {
   act,
+  waitFor,
   cleanup,
   fireEvent,
   render,
@@ -57,15 +58,31 @@ describe("TreeNode right-click menu", () => {
     }
   });
 
-  it("names a new folder inside the folder it was opened on", () => {
+  it("names a new folder inside the folder it was opened on", async () => {
     render(<TreeNode node={FOLDER} />);
 
     openMenuOn("Work");
     fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
 
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByLabelText("Folder name")),
+    );
     expect(useVaultStore.getState().newFolderParent).toBe(FOLDER.path);
-    expect(screen.getByLabelText("Folder name")).toBeTruthy();
     expect(screen.getByText("Plan")).toBeTruthy();
+  });
+
+  it("keeps focus in the rename field once the menu has closed", async () => {
+    render(<TreeNode node={FOLDER.children![0]} />);
+
+    openMenuOn("Plan");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+
+    const input = await screen.findByDisplayValue("Plan");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    // The menu has finished closing and nothing takes focus back.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(document.activeElement).toBe(input);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("offers moving, not creating, on a shard", () => {

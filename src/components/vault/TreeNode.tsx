@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
@@ -77,6 +77,7 @@ import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
 import { refreshVault } from "@/lib/refresh-vault";
+import { useMenuAction } from "@/lib/use-menu-action";
 import {
   ACTION_SLOT_PX,
   DISCLOSURE_SLOT_PX,
@@ -143,11 +144,11 @@ type RowAction = {
 
 /**
  * The row's actions, for both its "more" button and its right-click menu.
- * Each action opens an input or a dialog that takes focus itself, so the
- * menu must not hand focus back to the row as it closes.
+ * Each runs once the menu has closed (see `useMenuAction`).
  */
 function renderRowActions(
   actions: RowAction[],
+  defer: (action: () => void) => () => void,
   Item: typeof DropdownMenuItem | typeof ContextMenuItem,
   Separator: typeof DropdownMenuSeparator | typeof ContextMenuSeparator,
 ) {
@@ -156,7 +157,7 @@ function renderRowActions(
       <Fragment key={label}>
         {separated ? <Separator /> : null}
         <Item
-          onSelect={onSelect}
+          onSelect={defer(onSelect)}
           variant={destructive ? "destructive" : "default"}
         >
           <Icon />
@@ -165,10 +166,6 @@ function renderRowActions(
       </Fragment>
     ),
   );
-}
-
-function preventFocusReturn(event: Event) {
-  event.preventDefault();
 }
 
 type TreeNodeProps = {
@@ -187,6 +184,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const [isCreatingShard, setIsCreatingShard] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuAction = useMenuAction();
   // Enter commits the rename, and the input then loses focus (the editor
   // takes it back, or the row remounts under its new path), which commits
   // again. The second call would rename a path that no longer exists.
@@ -228,8 +226,13 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const startRename = () => {
     setNewName(displayName);
     setIsRenaming(true);
-    setTimeout(() => inputRef.current?.select(), 0);
   };
+
+  useEffect(() => {
+    if (!isRenaming) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [isRenaming]);
 
   const cancelRename = () => {
     setIsRenaming(false);
@@ -677,10 +680,11 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             <DropdownMenuContent
               align="end"
               onClick={(e) => e.stopPropagation()}
-              onCloseAutoFocus={preventFocusReturn}
+              onCloseAutoFocus={menuAction.onCloseAutoFocus}
             >
               {renderRowActions(
                 actions,
+                menuAction.defer,
                 DropdownMenuItem,
                 DropdownMenuSeparator,
               )}
@@ -698,9 +702,14 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       </ContextMenuTrigger>
       <ContextMenuContent
         onClick={(e) => e.stopPropagation()}
-        onCloseAutoFocus={preventFocusReturn}
+        onCloseAutoFocus={menuAction.onCloseAutoFocus}
       >
-        {renderRowActions(actions, ContextMenuItem, ContextMenuSeparator)}
+        {renderRowActions(
+          actions,
+          menuAction.defer,
+          ContextMenuItem,
+          ContextMenuSeparator,
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

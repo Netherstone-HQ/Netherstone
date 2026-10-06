@@ -80,6 +80,11 @@ describe("Onboarding", () => {
     });
     expect(useVaultStore.getState().currentVaultPath).toBe(`${DOCUMENTS}/My Vault`);
 
+    expect(screen.queryByRole("radio", { name: copy.appearance.options.citadel })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: copy.appearance.moreThemes }));
+    fireEvent.click(screen.getByRole("radio", { name: copy.appearance.options.citadel }));
+    expect(useSettingsStore.getState().theme).toBe("citadel");
+
     fireEvent.click(screen.getByRole("radio", { name: copy.appearance.options.light }));
     expect(useSettingsStore.getState().theme).toBe("light");
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));

@@ -53,9 +53,9 @@ export const THEMES: ThemeOption[] = [
     value: "bloodline",
     label: "Bloodline",
     swatch: {
-      background: "#2a1a18",
-      panel: "#120808",
-      line: "#4a302d",
+      background: "#120808",
+      panel: "#2e1416",
+      line: "#4a2a2d",
       accent: "#b3333f",
     },
   },

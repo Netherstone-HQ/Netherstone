@@ -88,6 +88,10 @@ import {
   getRowIndent,
 } from "@/components/vault/tree-layout";
 
+// Rows draw their own hover and focus; the button inside only takes clicks.
+const ROW_BUTTON_CLASS =
+  "flex h-full min-w-0 flex-1 cursor-default items-center gap-1 text-left outline-none";
+
 function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
 }
@@ -556,7 +560,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const row = (
     <div
       className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm transition-colors hover:bg-accent/70 data-[state=open]:bg-accent/70",
+        "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm text-sidebar-foreground/85 transition-colors hover:bg-accent/40 has-[button:focus-visible]:bg-accent/40 data-[state=open]:bg-accent/40",
         node.kind === "file" &&
           !!currentFilePath &&
           isSamePath(node.path, currentFilePath) &&
@@ -590,11 +594,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           </div>
         ) : (
           <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-auto min-w-0 flex-1 justify-start gap-1 px-0 py-0 text-left font-normal"
-            >
+            <button type="button" className={ROW_BUTTON_CLASS}>
               <span
                 aria-hidden="true"
                 className="flex h-4 shrink-0 items-center justify-center"
@@ -608,7 +608,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 />
               </span>
               <span className="block min-w-0 flex-1 truncate">{node.name}</span>
-            </Button>
+            </button>
           </CollapsibleTrigger>
         )
       ) : isRenaming ? (
@@ -630,11 +630,10 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           />
         </div>
       ) : (
-        <Button
+        <button
           type="button"
-          variant="ghost"
           onClick={() => void handleFileClick()}
-          className="h-auto min-w-0 flex-1 justify-start gap-1 px-0 py-0 text-left font-normal"
+          className={ROW_BUTTON_CLASS}
         >
           <span
             aria-hidden="true"
@@ -648,7 +647,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             />
           ) : null}
           <span className="block min-w-0 flex-1 truncate">{displayName}</span>
-        </Button>
+        </button>
       )}
 
       <div
@@ -667,7 +666,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="rounded-sm"
+                className="rounded-sm text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -789,7 +788,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             {showChildrenGuide ? (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 w-px bg-sidebar-border/40"
+                className="pointer-events-none absolute inset-y-0 w-px bg-sidebar-border/30"
                 style={{ left: `${getGuideLeft(depth)}px` }}
               />
             ) : null}

@@ -7,7 +7,8 @@ import type { ThemePreference } from "@/store/settings";
 import { copy } from "./copy";
 import { Step } from "./StepLayout";
 
-const THEMES: ThemePreference[] = ["light", "dark", "system"];
+// Onboarding offers the basics; the named themes live in Settings.
+const THEMES = ["light", "dark", "system"] as const satisfies ThemePreference[];
 
 // Basalt surfaces, fixed so each preview shows its own theme whatever the
 // app is currently in.

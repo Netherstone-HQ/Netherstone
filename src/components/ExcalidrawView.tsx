@@ -7,6 +7,7 @@ import {
   type LibraryReturnPayload,
 } from "@/components/browser/browserCommands";
 import { useTheme } from "@/components/theme/theme-provider";
+import { resolveThemeMode } from "@/components/theme/themes";
 import { isPathWithin } from "@/lib/drawing-files";
 import { useUIStore, useVaultStore } from "@/store";
 
@@ -15,15 +16,6 @@ const ExcalidrawCanvas = lazy(() =>
     default: mod.ExcalidrawCanvas,
   })),
 );
-
-function resolveExcalidrawTheme(theme: string): "light" | "dark" {
-  if (theme === "dark") return "dark";
-  if (theme === "light") return "light";
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
 
 function isLibraryReturnUrl(url: string) {
   try {
@@ -51,13 +43,16 @@ export function ExcalidrawView() {
   const openDrawing = useUIStore((s) => s.openDrawing);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
   const [excalidrawTheme, setExcalidrawTheme] = useState<"light" | "dark">(() =>
-    resolveExcalidrawTheme(theme),
+    resolveThemeMode(
+      theme,
+      window.matchMedia("(prefers-color-scheme: dark)").matches,
+    ),
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (theme !== "system") {
-      setExcalidrawTheme(theme as "light" | "dark");
+      setExcalidrawTheme(resolveThemeMode(theme, false));
       return;
     }
 

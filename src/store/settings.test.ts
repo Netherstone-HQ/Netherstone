@@ -104,6 +104,22 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().theme).toBe("system");
   });
 
+  it("keeps a named theme and drops one it doesn't know", async () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ state: { theme: "citadel" }, version: 2 }),
+    );
+    const named = await loadStore();
+    expect(named.useSettingsStore.getState().theme).toBe("citadel");
+
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ state: { theme: "sepia" }, version: 2 }),
+    );
+    const { useSettingsStore, DEFAULT_PREFERENCES } = await loadStore();
+    expect(useSettingsStore.getState().theme).toBe(DEFAULT_PREFERENCES.theme);
+  });
+
   it("resets preferences without showing onboarding again", async () => {
     const { useSettingsStore, DEFAULT_PREFERENCES } = await loadStore();
     const state = useSettingsStore.getState();

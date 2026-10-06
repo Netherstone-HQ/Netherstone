@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "@/components/theme/theme-provider";
+import { isNamedTheme } from "@/components/theme/themes";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 function Toaster({ ...props }: ToasterProps) {
@@ -8,7 +9,8 @@ function Toaster({ ...props }: ToasterProps) {
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      // Sonner knows light, dark and system; the named themes are dark.
+      theme={isNamedTheme(theme) ? "dark" : theme}
       className="toaster group"
       toastOptions={{
         classNames: {

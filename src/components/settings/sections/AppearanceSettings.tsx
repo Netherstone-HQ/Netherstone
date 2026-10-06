@@ -4,20 +4,19 @@ import {
   PreferenceSelect,
   SettingsGroup,
 } from "@/components/settings/settings-ui";
+import {
+  DARK_SWATCH,
+  LIGHT_SWATCH,
+  THEMES,
+  type ThemeSwatchColors,
+} from "@/components/theme/themes";
 import { cn } from "@/lib/utils";
 import {
   type ContentWidth,
   type ReadingFont,
   type TextSize,
-  type ThemePreference,
   useSettingsStore,
 } from "@/store/settings";
-
-const THEMES: { value: ThemePreference; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "Match system" },
-];
 
 const FONTS: Option<ReadingFont>[] = [
   {
@@ -97,7 +96,7 @@ function ThemePicker() {
             className="group space-y-2 text-left outline-none"
           >
             <ThemeSwatch
-              value={option.value}
+              swatch={option.swatch}
               className={cn(
                 "ring-offset-2 ring-offset-card transition-shadow group-focus-visible:ring-2 group-focus-visible:ring-ring",
                 checked
@@ -122,31 +121,14 @@ function ThemePicker() {
   );
 }
 
-/** A tiny window drawn in the theme's own colors. */
+/** A tiny window drawn in the theme's own colors; none splits light and dark. */
 function ThemeSwatch({
-  value,
+  swatch,
   className,
 }: {
-  value: ThemePreference;
+  swatch?: ThemeSwatchColors;
   className?: string;
 }) {
-  const light = (
-    <Window
-      background="#f6f5f2"
-      panel="#eeebe5"
-      line="#d6d2ca"
-      accent="#2b6a5b"
-    />
-  );
-  const dark = (
-    <Window
-      background="#141516"
-      panel="#1c1d1f"
-      line="#34363a"
-      accent="#4fa38e"
-    />
-  );
-
   return (
     <div
       className={cn(
@@ -154,16 +136,16 @@ function ThemeSwatch({
         className,
       )}
     >
-      {value === "light" ? light : null}
-      {value === "dark" ? dark : null}
-      {value === "system" ? (
+      {swatch ? (
+        <Window {...swatch} />
+      ) : (
         <>
-          {light}
+          <Window {...LIGHT_SWATCH} />
           <div className="absolute inset-0 [clip-path:polygon(100%_0,100%_100%,0_100%)]">
-            {dark}
+            <Window {...DARK_SWATCH} />
           </div>
         </>
-      ) : null}
+      )}
     </div>
   );
 }

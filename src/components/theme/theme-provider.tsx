@@ -2,10 +2,11 @@ import { useEffect } from "react";
 
 import { useSettingsStore } from "@/store/settings";
 import type { ThemePreference } from "@/store/settings";
+import { isNamedTheme, resolveThemeMode } from "./themes";
 
 /**
  * Keeps the document in step with the Appearance settings: the light/dark
- * class, and the reading font, size and width the editor reads from CSS.
+ * class, the named theme (`data-theme`), and the reading font, size and width the editor reads from CSS.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useSettingsStore((s) => s.theme);
@@ -27,15 +28,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.classList.add(resolved);
     };
 
+    // Named themes are dark themes that recolor the dark tokens.
+    if (isNamedTheme(theme)) root.dataset.theme = theme;
+    else delete root.dataset.theme;
+
     if (theme !== "system") {
-      apply(theme);
+      apply(resolveThemeMode(theme, false));
       return;
     }
 
     const query = window.matchMedia("(prefers-color-scheme: dark)");
-    apply(query.matches ? "dark" : "light");
+    apply(resolveThemeMode(theme, query.matches));
     const onChange = (e: MediaQueryListEvent) =>
-      apply(e.matches ? "dark" : "light");
+      apply(resolveThemeMode(theme, e.matches));
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, [theme]);

@@ -4,7 +4,15 @@ import { renamedLocalStorage } from "./renamed-storage";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type ThemePreference = "light" | "dark" | "system";
+export const THEME_PREFERENCES = [
+  "light",
+  "dark",
+  "system",
+  "tyrant",
+  "bloodline",
+  "citadel",
+] as const;
+export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 export type MediaInsertionPreference = "vault-import" | "local-reference";
 export type ReadingFont = "newsreader" | "geist" | "system";
 export type TextSize = "small" | "default" | "large";
@@ -135,6 +143,10 @@ function normalize<K extends keyof Preferences>(
   return value;
 }
 
+function isThemePreference(value: unknown): value is ThemePreference {
+  return (THEME_PREFERENCES as readonly unknown[]).includes(value);
+}
+
 function readLegacyTheme(): ThemePreference | undefined {
   try {
     const value = localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
@@ -201,7 +213,11 @@ export const useSettingsStore = create<SettingsState>()(
       },
       // First launch with no saved settings at all: still honor the old key.
       merge: (persisted, current) => {
-        const saved = (persisted ?? {}) as Partial<SettingsState>;
+        const saved = { ...((persisted ?? {}) as Partial<SettingsState>) };
+        // A theme this version doesn't know falls back to the default.
+        if (saved.theme !== undefined && !isThemePreference(saved.theme)) {
+          delete saved.theme;
+        }
         const theme =
           saved.theme ?? (persisted ? undefined : readLegacyTheme());
         return { ...current, ...saved, ...(theme ? { theme } : {}) };

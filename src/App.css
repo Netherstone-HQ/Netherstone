@@ -177,6 +177,128 @@
     --scrollbar-thumb-hover: #5a5856;
 }
 
+/* Tyrant: cold green-black with an emerald accent and hard corners. A dark theme: ThemeProvider sets it with the dark class. */
+:root[data-theme="tyrant"] {
+    --background: #0b100d;
+    --foreground: #e6ece8;
+    --card: #121a15;
+    --card-foreground: #e6ece8;
+    --popover: #121a15;
+    --popover-foreground: #e6ece8;
+    --primary: #3ecf7a;
+    --primary-foreground: #06110a;
+    --secondary: #1c2a21;
+    --secondary-foreground: #e6ece8;
+    --muted: #1c2a21;
+    --muted-foreground: #93a69a;
+    --accent: #1c2a21;
+    --accent-foreground: #e6ece8;
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: rgb(79 220 138 / 16%);
+    --input: rgb(79 220 138 / 24%);
+    --ring: #3ecf7a;
+    --chart-1: #c3f2d5;
+    --chart-2: #7fe3a8;
+    --chart-3: #3ecf7a;
+    --chart-4: #2fae63;
+    --chart-5: #1d6e40;
+    --radius: 0.15rem;
+    --sidebar: #0d1f15;
+    --sidebar-foreground: #e6ece8;
+    --sidebar-primary: #2fae63;
+    --sidebar-primary-foreground: #06110a;
+    --sidebar-accent: #173826;
+    --sidebar-accent-foreground: #e6ece8;
+    --sidebar-border: rgb(79 220 138 / 14%);
+    --sidebar-ring: #3ecf7a;
+    --brand: #4fdc8a;
+    --highlight: #3ecf7a;
+    --scrollbar-thumb: #24402f;
+    --scrollbar-thumb-hover: #3a6049;
+}
+
+/* Bloodline: near-black editor framed by a dark oxblood sidebar, with a
+   crimson accent. Borders are solid so seams read the same over any
+   surface. Destructive is orange so it never reads as the accent. */
+:root[data-theme="bloodline"] {
+    --background: #120808;
+    --foreground: #f3e6e2;
+    --card: #1f1112;
+    --card-foreground: #f3e6e2;
+    --popover: #1f1112;
+    --popover-foreground: #f3e6e2;
+    --primary: #b3333f;
+    --primary-foreground: #fff3f1;
+    --secondary: #2b1a1a;
+    --secondary-foreground: #f3e6e2;
+    --muted: #2b1a1a;
+    --muted-foreground: #c2a8a3;
+    --accent: #4a2226;
+    --accent-foreground: #f3e6e2;
+    --destructive: #f39a4a;
+    --border: #4a2a2d;
+    --input: #5a3438;
+    --ring: #e9727b;
+    --chart-1: #f7c6ca;
+    --chart-2: #ef959c;
+    --chart-3: #e9727b;
+    --chart-4: #b3333f;
+    --chart-5: #6e1d25;
+    --radius: 0.375rem;
+    --sidebar: #2e1416;
+    --sidebar-foreground: #f3e6e2;
+    --sidebar-primary: #c23a45;
+    --sidebar-primary-foreground: #fff3f1;
+    --sidebar-accent: #3e1c1f;
+    --sidebar-accent-foreground: #f3e6e2;
+    --sidebar-border: #4a2a2d;
+    --sidebar-ring: #e9727b;
+    --brand: #ff8a92;
+    --highlight: #f0aa50;
+    --scrollbar-thumb: #3e2224;
+    --scrollbar-thumb-hover: #5a3438;
+}
+
+/* Citadel: flat charcoal and bone, soft corners and barely-there borders. */
+:root[data-theme="citadel"] {
+    --background: #2a2a2a;
+    --foreground: #e8e3d6;
+    --card: #303030;
+    --card-foreground: #e8e3d6;
+    --popover: #303030;
+    --popover-foreground: #e8e3d6;
+    --primary: #d8d2c2;
+    --primary-foreground: #1a1a1a;
+    --secondary: #363634;
+    --secondary-foreground: #e8e3d6;
+    --muted: #363634;
+    --muted-foreground: #aaa498;
+    --accent: #3c3c3a;
+    --accent-foreground: #e8e3d6;
+    --destructive: #ff8078;
+    --border: rgb(232 227 214 / 6%);
+    --input: rgb(232 227 214 / 12%);
+    --ring: #d8d2c2;
+    --chart-1: #f2eee4;
+    --chart-2: #d8d2c2;
+    --chart-3: #aaa498;
+    --chart-4: #7a766d;
+    --chart-5: #4e4b45;
+    --radius: 0.75rem;
+    --sidebar: #2e2e2e;
+    --sidebar-foreground: #e8e3d6;
+    --sidebar-primary: #d8d2c2;
+    --sidebar-primary-foreground: #1a1a1a;
+    --sidebar-accent: #3c3c3a;
+    --sidebar-accent-foreground: #e8e3d6;
+    --sidebar-border: rgb(232 227 214 / 5%);
+    --sidebar-ring: #d8d2c2;
+    --brand: #f2eee4;
+    --highlight: #d8d2c2;
+    --scrollbar-thumb: #45453f;
+    --scrollbar-thumb-hover: #65635b;
+}
+
 @layer base {
     * {
         @apply border-border outline-ring/50;

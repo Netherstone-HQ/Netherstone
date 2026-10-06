@@ -74,7 +74,12 @@ export const copy = {
       light: "Light",
       dark: "Dark",
       system: "Match system",
+      tyrant: "Tyrant",
+      bloodline: "Bloodline",
+      citadel: "Citadel",
     },
+    moreThemes: "More themes",
+    fewerThemes: "Fewer themes",
   },
 
   sync: {

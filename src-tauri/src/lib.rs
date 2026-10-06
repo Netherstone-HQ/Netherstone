@@ -717,6 +717,12 @@ fn find_shards_containing(vault_path: String, needles: Vec<String>) -> Result<Ve
         .collect())
 }
 
+/// Creates the folder `name` inside `parent` and returns its path.
+#[tauri::command(async)]
+fn create_folder(parent: String, name: String) -> Result<String, String> {
+    vault::create_folder(Path::new(&parent), &name).map(|p| p.to_string_lossy().into_owned())
+}
+
 /// Creates an empty drawing named `name` in `directory` and returns its path.
 #[tauri::command(async)]
 fn create_drawing_file(directory: String, name: String) -> Result<String, String> {
@@ -1193,6 +1199,7 @@ pub fn run() {
             read_drawing_file,
             save_drawing_file,
             create_drawing_file,
+            create_folder,
             reconcile_attachments,
             describe_missing_attachment,
             clean_up_attachments,

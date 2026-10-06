@@ -24,6 +24,11 @@ interface VaultState {
   // ── Loading State ──────────────────────────────────────────────────────────
   isVaultLoading: boolean;
   setVaultLoading: (loading: boolean) => void;
+
+  // ── New Folder ─────────────────────────────────────────────────────────────
+  /** The folder a new folder is being named in, shown as a row in the tree. */
+  newFolderParent: string | null;
+  setNewFolderParent: (path: string | null) => void;
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -43,6 +48,10 @@ export const useVaultStore = create<VaultState>()(
       // ── Loading State ──────────────────────────────────────────────────────────
       isVaultLoading: false,
       setVaultLoading: (loading) => set({ isVaultLoading: loading }),
+
+      // ── New Folder ─────────────────────────────────────────────────────────────
+      newFolderParent: null,
+      setNewFolderParent: (path) => set({ newFolderParent: path }),
     }),
     {
       name: "netherstone-vault",

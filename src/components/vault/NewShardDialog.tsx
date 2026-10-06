@@ -20,6 +20,8 @@ import { openEditorFile } from "@/lib/open-editor-file";
 interface NewShardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Where the shard goes. Without it, Settings decides. */
+  folder?: string;
 }
 
 /** The vault root, or the open shard's folder when Settings asks for it. */
@@ -36,7 +38,11 @@ function getNewShardFolder(vaultPath: string): string {
   return folder || vaultPath;
 }
 
-export function NewShardDialog({ open, onOpenChange }: NewShardDialogProps) {
+export function NewShardDialog({
+  open,
+  onOpenChange,
+  folder,
+}: NewShardDialogProps) {
   const [shardName, setShardName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +64,7 @@ export function NewShardDialog({ open, onOpenChange }: NewShardDialogProps) {
       // sidebar lists for it.
       const filePath = resolveVaultRelativePath(
         fileName,
-        getNewShardFolder(currentVaultPath),
+        folder ?? getNewShardFolder(currentVaultPath),
       );
 
       // Create empty file with basic template

@@ -1,11 +1,13 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   ArrowsDownUpIcon,
   CaretRightIcon,
   DotsThreeVerticalIcon,
+  FilePlusIcon,
   FolderOpenIcon,
+  FolderSimplePlusIcon,
   PencilSimpleIcon,
   ScribbleIcon,
   TrashIcon,
@@ -18,9 +20,17 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -63,25 +73,19 @@ import {
 import type { FileTreeNode } from "@/store";
 
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
+import { NewFolderRow } from "@/components/vault/NewFolderRow";
+import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
-
-const MAX_INDENT_DEPTH = 6;
-const INDENT_STEP_PX = 16;
-const BASE_INDENT_PX = 6;
-const DISCLOSURE_SLOT_PX = 16;
-const FILE_DISCLOSURE_SLOT_PX = 12;
-const ACTION_SLOT_PX = 20;
-
-function getGuideLeft(depth: number) {
-  return BASE_INDENT_PX + depth * INDENT_STEP_PX + DISCLOSURE_SLOT_PX / 2;
-}
-
-function getAncestorGuideDepths(depth: number) {
-  return Array.from(
-    { length: Math.min(depth, MAX_INDENT_DEPTH) },
-    (_, index) => index,
-  );
-}
+import { refreshVault } from "@/lib/refresh-vault";
+import {
+  ACTION_SLOT_PX,
+  DISCLOSURE_SLOT_PX,
+  FILE_DISCLOSURE_SLOT_PX,
+  MAX_INDENT_DEPTH,
+  TreeGuides,
+  getGuideLeft,
+  getRowIndent,
+} from "@/components/vault/tree-layout";
 
 function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -128,15 +132,43 @@ async function relinkMovedDrawings(
   }
 }
 
-async function refreshVault(currentVaultPath: string | null) {
-  if (!currentVaultPath) return;
+type RowAction = {
+  label: string;
+  icon: React.ComponentType;
+  onSelect: () => void;
+  destructive?: boolean;
+  /** Starts a new group in the menu. */
+  separated?: boolean;
+};
 
-  const fileTree = await invoke<FileTreeNode[]>("scan_vault", {
-    vaultPath: currentVaultPath,
-  });
+/**
+ * The row's actions, for both its "more" button and its right-click menu.
+ * Each action opens an input or a dialog that takes focus itself, so the
+ * menu must not hand focus back to the row as it closes.
+ */
+function renderRowActions(
+  actions: RowAction[],
+  Item: typeof DropdownMenuItem | typeof ContextMenuItem,
+  Separator: typeof DropdownMenuSeparator | typeof ContextMenuSeparator,
+) {
+  return actions.map(
+    ({ label, icon: Icon, onSelect, destructive, separated }) => (
+      <Fragment key={label}>
+        {separated ? <Separator /> : null}
+        <Item
+          onSelect={onSelect}
+          variant={destructive ? "destructive" : "default"}
+        >
+          <Icon />
+          {label}
+        </Item>
+      </Fragment>
+    ),
+  );
+}
 
-  useVaultStore.getState().setFileTree(fileTree);
-  await invoke("index_vault", { vaultPath: currentVaultPath });
+function preventFocusReturn(event: Event) {
+  event.preventDefault();
 }
 
 type TreeNodeProps = {
@@ -152,8 +184,13 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const [isMoving, setIsMoving] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isConfirmingTrash, setIsConfirmingTrash] = useState(false);
+  const [isCreatingShard, setIsCreatingShard] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  // Enter commits the rename, and the input then loses focus (the editor
+  // takes it back, or the row remounts under its new path), which commits
+  // again. The second call would rename a path that no longer exists.
+  const isRenameSubmittingRef = useRef(false);
 
   const currentFilePath = useEditorStore((s) => s.currentFilePath);
   const markdownContent = useEditorStore((s) => s.markdownContent);
@@ -165,6 +202,8 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const removeRecentFile = useUIStore((s) => s.removeRecentFile);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
   const fileTree = useVaultStore((s) => s.fileTree);
+  const newFolderParent = useVaultStore((s) => s.newFolderParent);
+  const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
 
   const displayName = getDisplayName(node);
 
@@ -259,12 +298,16 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   };
 
   const handleRename = async () => {
+    if (isRenameSubmittingRef.current) return;
+
     const trimmedName = newName.trim();
 
     if (!trimmedName || trimmedName === displayName) {
       cancelRename();
       return;
     }
+
+    isRenameSubmittingRef.current = true;
 
     try {
       const persistedOpenFile = await persistOpenFileBeforePathChange("rename");
@@ -320,6 +363,8 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       console.error("Failed to rename:", error);
       alert(error instanceof Error ? error.message : String(error));
       cancelRename();
+    } finally {
+      isRenameSubmittingRef.current = false;
     }
   };
 
@@ -427,6 +472,68 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     }
   };
 
+  const handleTrash = () => {
+    if (useSettingsStore.getState().confirmBeforeDelete) {
+      setIsConfirmingTrash(true);
+    } else {
+      void handleDelete();
+    }
+  };
+
+  const handleNewFolder = () => {
+    setIsOpen(true);
+    setNewFolderParent(node.path);
+  };
+
+  const actions: RowAction[] =
+    node.kind === "directory"
+      ? [
+          {
+            label: "New Shard",
+            icon: FilePlusIcon,
+            onSelect: () => setIsCreatingShard(true),
+          },
+          {
+            label: "New Folder",
+            icon: FolderSimplePlusIcon,
+            onSelect: handleNewFolder,
+          },
+          {
+            label: "Rename",
+            icon: PencilSimpleIcon,
+            onSelect: startRename,
+            separated: true,
+          },
+          {
+            label: "Open location",
+            icon: FolderOpenIcon,
+            onSelect: () => void handleOpenFileLocation(),
+          },
+          {
+            label: "Move to Trash",
+            icon: TrashIcon,
+            onSelect: handleTrash,
+            destructive: true,
+            separated: true,
+          },
+        ]
+      : [
+          { label: "Rename", icon: PencilSimpleIcon, onSelect: startRename },
+          { label: "Move", icon: ArrowsDownUpIcon, onSelect: handleMove },
+          {
+            label: "Open location",
+            icon: FolderOpenIcon,
+            onSelect: () => void handleOpenFileLocation(),
+          },
+          {
+            label: "Move to Trash",
+            icon: TrashIcon,
+            onSelect: handleTrash,
+            destructive: true,
+            separated: true,
+          },
+        ];
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -437,25 +544,16 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     }
   };
 
-  const rowIndent = BASE_INDENT_PX + depth * INDENT_STEP_PX;
-  const childIndent = BASE_INDENT_PX + (depth + 1) * INDENT_STEP_PX;
-  const guideDepths = getAncestorGuideDepths(depth);
+  const rowIndent = getRowIndent(depth);
   const showChildrenGuide =
     node.kind === "directory" && depth < MAX_INDENT_DEPTH;
 
-  const rowGuides = guideDepths.map((guideDepth) => (
-    <div
-      key={`${node.path}-guide-${guideDepth}`}
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 w-px bg-sidebar-border/40"
-      style={{ left: `${getGuideLeft(guideDepth)}px` }}
-    />
-  ));
+  const rowGuides = <TreeGuides depth={depth} />;
 
-  const rowContent = (
+  const row = (
     <div
       className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm transition-colors hover:bg-accent/70",
+        "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm transition-colors hover:bg-accent/70 data-[state=open]:bg-accent/70",
         node.kind === "file" &&
           !!currentFilePath &&
           isSamePath(node.path, currentFilePath) &&
@@ -573,45 +671,38 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <DotsThreeVerticalIcon className="h-4 w-4" />
+                <DotsThreeVerticalIcon weight="bold" className="size-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
               onClick={(e) => e.stopPropagation()}
+              onCloseAutoFocus={preventFocusReturn}
             >
-              <DropdownMenuItem onClick={startRename}>
-                <PencilSimpleIcon className="mr-2 h-4 w-4" />
-                Rename
-              </DropdownMenuItem>
-              {node.kind === "file" ? (
-                <DropdownMenuItem onClick={handleMove}>
-                  <ArrowsDownUpIcon className="mr-2 h-4 w-4" />
-                  Move
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem onClick={() => void handleOpenFileLocation()}>
-                <FolderOpenIcon className="mr-2 h-4 w-4" />
-                Open location
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  if (useSettingsStore.getState().confirmBeforeDelete) {
-                    setIsConfirmingTrash(true);
-                  } else {
-                    void handleDelete();
-                  }
-                }}
-                className="text-destructive"
-              >
-                <TrashIcon className="mr-2 h-4 w-4" />
-                Move to Trash
-              </DropdownMenuItem>
+              {renderRowActions(
+                actions,
+                DropdownMenuItem,
+                DropdownMenuSeparator,
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
       </div>
     </div>
+  );
+
+  const rowContent = (
+    <ContextMenu>
+      <ContextMenuTrigger asChild disabled={isRenaming}>
+        {row}
+      </ContextMenuTrigger>
+      <ContextMenuContent
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={preventFocusReturn}
+      >
+        {renderRowActions(actions, ContextMenuItem, ContextMenuSeparator)}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 
   const trashDialog = (
@@ -677,6 +768,11 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           {rowGuides}
           {rowContent}
           {trashDialog}
+          <NewShardDialog
+            open={isCreatingShard}
+            onOpenChange={setIsCreatingShard}
+            folder={node.path}
+          />
         </div>
 
         <CollapsibleContent className="w-full min-w-0 overflow-hidden">
@@ -690,6 +786,9 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             ) : null}
 
             <SidebarMenu className="w-full min-w-0 overflow-hidden">
+              {newFolderParent === node.path ? (
+                <NewFolderRow parent={node.path} depth={depth + 1} />
+              ) : null}
               {node.children?.map((child) => (
                 <TreeNode key={child.path} node={child} depth={depth + 1} />
               ))}

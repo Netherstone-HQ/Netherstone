@@ -77,7 +77,7 @@ const editorVariants = cva(
           'max-h-[min(70vh,320px)] w-full overflow-y-auto px-3 py-2 text-base md:text-sm',
         comment: cn('rounded-none border-none bg-transparent text-sm'),
         default:
-          'size-full px-16 pt-4 pb-72 font-reading text-(length:--reading-size) leading-relaxed sm:px-[max(64px,calc(50%-var(--reading-half-width)))]',
+          'size-full px-(--editor-gutter) pt-4 pb-72 font-reading text-(length:--reading-size) leading-relaxed sm:px-[max(var(--editor-gutter),calc(50%-var(--reading-half-width)))]',
         demo: 'size-full px-16 pt-4 pb-72 font-reading text-[1.0625rem] leading-relaxed sm:px-[max(64px,calc(50%-350px))]',
         fullWidth: 'size-full px-16 pt-4 pb-72 font-reading text-(length:--reading-size) leading-relaxed sm:px-24',
         none: '',

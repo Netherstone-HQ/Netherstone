@@ -56,7 +56,7 @@ function serializeChildren(children: unknown[]): string {
       value: preparation.value as any,
     });
 
-  return finalizeSerializedMarkdown(serialized, preparation.replacements);
+  return finalizeSerializedMarkdown(serialized);
 }
 
 function deserializeMarkdown(markdown: string): unknown[] {

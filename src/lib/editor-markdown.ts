@@ -309,33 +309,8 @@ function getDurableMediaSource(record: Record<string, unknown>): string | null {
 export type SerializableEditorValue = Descendant[];
 
 export type SerializableMarkdownPreparation = {
-  replacements: Map<string, string>;
   value: SerializableEditorValue;
 };
-
-function encodeHtmlAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function replaceAllLiteral(
-  source: string,
-  search: string,
-  replacement: string,
-): string {
-  return source.replace(new RegExp(escapeRegExp(search), "g"), replacement);
-}
-
-function markdownEscapedMarker(marker: string): string {
-  return marker.replace(/_/g, "\\_");
-}
 
 /**
  * A plain paragraph (not a list item) with no text: the editor's trailing
@@ -362,8 +337,6 @@ export function isBlankParagraph(node: unknown): boolean {
 export function prepareSerializableMarkdownValue(
   nodes: unknown,
 ): SerializableMarkdownPreparation {
-  const replacements = new Map<string, string>();
-
   const walk = (value: unknown): { changed: boolean; value: unknown } => {
     if (!Array.isArray(value)) {
       return { changed: false, value };
@@ -441,7 +414,6 @@ export function prepareSerializableMarkdownValue(
   while (end > 0 && isBlankParagraph(value[end - 1])) end -= 1;
 
   return {
-    replacements,
     value: end === value.length ? value : value.slice(0, end),
   };
 }
@@ -450,26 +422,12 @@ export function prepareSerializableMarkdownValue(
 // survive a round-trip (`preserveEmptyParagraphs`).
 const EMPTY_PARAGRAPHS_ONLY = /^[\s\u200B]*$/;
 
-export function finalizeSerializedMarkdown(
-  markdown: string,
-  replacements: Map<string, string> = new Map(),
-): string {
+export function finalizeSerializedMarkdown(markdown: string): string {
   // A note with nothing but empty paragraphs is an empty file, not one
   // holding invisible characters.
   if (EMPTY_PARAGRAPHS_ONLY.test(markdown)) return "";
 
-  let finalized = markdown;
-
-  for (const [marker, replacement] of replacements) {
-    finalized = replaceAllLiteral(finalized, marker, replacement);
-    finalized = replaceAllLiteral(
-      finalized,
-      markdownEscapedMarker(marker),
-      replacement,
-    );
-  }
-
-  return finalized;
+  return markdown;
 }
 
 export function getSerializableMarkdownValue(
@@ -490,7 +448,7 @@ export function serializeEditorMarkdown(editor: SlateEditor): string {
     value: preparation.value,
   });
 
-  return finalizeSerializedMarkdown(serialized, preparation.replacements);
+  return finalizeSerializedMarkdown(serialized);
 }
 
 export function getSaveMarkdownContent(

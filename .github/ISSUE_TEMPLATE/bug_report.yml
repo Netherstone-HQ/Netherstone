@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Netherstone doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a security problem? Please don't report it here. See
+        [Report a vulnerability](https://github.com/Netherstone-HQ/Netherstone/security/advisories/new).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest way to make it happen again.
+      placeholder: |
+        1. Open a shard
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Netherstone version
+      description: You can find it in Settings › About.
+      placeholder: 0.2.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: sync
+    attributes:
+      label: Is GitHub sync on for this vault?
+      options:
+        - "No"
+        - "Yes"
+        - Not sure
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, or a sample shard that shows the problem. Leave out anything private.

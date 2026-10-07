@@ -1,0 +1,21 @@
+name: Feature request
+description: An idea for something Netherstone could do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to do
+      description: The task or problem, not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you picture it working.
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today
+      description: Any workaround you use now, if there is one.

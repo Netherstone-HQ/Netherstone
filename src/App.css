@@ -403,3 +403,48 @@
         transform: translateX(300%);
     }
 }
+
+/* Companion (components/brand/Companion.tsx). Breathing and the floating z's
+   only animate transform and opacity, so they stay off the main thread. */
+.companion-zs {
+    opacity: 0;
+    transition: opacity 0.7s ease;
+}
+
+.companion[data-zz] .companion-zs {
+    opacity: 1;
+}
+
+.companion-z {
+    position: absolute;
+    opacity: 0;
+}
+
+.companion[data-breathing] .companion-z {
+    animation: companion-z 3.45s ease-in-out infinite;
+}
+
+.companion[data-breathing] .companion-body {
+    animation: companion-breathe 3.6s ease-in-out infinite;
+    will-change: transform;
+}
+
+@keyframes companion-breathe {
+    50% {
+        transform: scale(1, 1.035);
+    }
+}
+
+@keyframes companion-z {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(0.6);
+    }
+    30% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(10px, -28px) scale(1.15);
+    }
+}

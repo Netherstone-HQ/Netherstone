@@ -15,6 +15,7 @@ import { useSearchModal } from "./hooks/useSearchModal";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { SearchModal } from "./components/SearchModal";
 import { Toaster } from "@/components/ui/sonner";
+import { Companion } from "@/components/brand/Companion";
 import { preloadEditorMarkdownWorker } from "@/lib/editor-markdown-worker";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { useWelcomeTour } from "@/components/onboarding/useWelcomeTour";
@@ -52,6 +53,7 @@ function App() {
             open={isOpen && screen !== "onboarding"}
             onOpenChange={setIsOpen}
           />
+          <Companion />
           <Toaster />
         </TooltipProvider>
       </DndProvider>

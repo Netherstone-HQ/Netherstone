@@ -14,6 +14,8 @@ export type SettingsCategory =
   | "shortcuts"
   | "about";
 export type AppMode = "notes" | "canvas";
+/** Right sidebar sections that collapse. */
+export type RightSidebarSection = "outline" | "metadata";
 
 const MAX_RECENT_FILES_HISTORY = 25;
 
@@ -34,6 +36,12 @@ interface UIState {
   isRightSidebarOpen: boolean;
   setRightSidebarOpen: (open: boolean) => void;
   toggleRightSidebar: () => void;
+  /** Which collapsible right sidebar sections are expanded. */
+  rightSidebarSections: Record<RightSidebarSection, boolean>;
+  setRightSidebarSectionOpen: (
+    section: RightSidebarSection,
+    open: boolean,
+  ) => void;
 
   // ── Notes Browser Panel ────────────────────────────────────────────────────
   isBrowserPanelOpen: boolean;
@@ -103,6 +111,14 @@ export const useUIStore = create<UIState>()(
       setRightSidebarOpen: (open) => set({ isRightSidebarOpen: open }),
       toggleRightSidebar: () =>
         set((state) => ({ isRightSidebarOpen: !state.isRightSidebarOpen })),
+      rightSidebarSections: { outline: true, metadata: true },
+      setRightSidebarSectionOpen: (section, open) =>
+        set((state) => ({
+          rightSidebarSections: {
+            ...state.rightSidebarSections,
+            [section]: open,
+          },
+        })),
 
       // ── Notes Browser Panel ────────────────────────────────────────────────────
       isBrowserPanelOpen: false,
@@ -191,6 +207,7 @@ export const useUIStore = create<UIState>()(
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,
         isRightSidebarOpen: state.isRightSidebarOpen,
+        rightSidebarSections: state.rightSidebarSections,
         isBrowserPanelOpen: state.isBrowserPanelOpen,
         browserLastUrl: state.browserLastUrl,
         isCanvasBrowserPanelOpen: state.isCanvasBrowserPanelOpen,

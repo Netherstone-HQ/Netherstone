@@ -7,6 +7,8 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
@@ -22,6 +24,15 @@ const FOLDER: FileTreeNode = {
   kind: "directory",
   children: [{ name: "Plan.md", path: `${VAULT}/Work/Plan.md`, kind: "file" }],
 };
+
+// Rows drag and take drops, so they need the app's drag context.
+function renderNode(node: FileTreeNode) {
+  return render(
+    <DndProvider backend={HTML5Backend}>
+      <TreeNode node={node} />
+    </DndProvider>,
+  );
+}
 
 function openMenuOn(text: string) {
   const event = new MouseEvent("contextmenu", {
@@ -42,7 +53,7 @@ describe("TreeNode right-click menu", () => {
   afterEach(cleanup);
 
   it("replaces the webview's menu on a folder", () => {
-    render(<TreeNode node={FOLDER} />);
+    renderNode(FOLDER);
 
     const event = openMenuOn("Work");
 
@@ -59,7 +70,7 @@ describe("TreeNode right-click menu", () => {
   });
 
   it("names a new folder inside the folder it was opened on", async () => {
-    render(<TreeNode node={FOLDER} />);
+    renderNode(FOLDER);
 
     openMenuOn("Work");
     fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
@@ -72,7 +83,7 @@ describe("TreeNode right-click menu", () => {
   });
 
   it("keeps focus in the rename field once the menu has closed", async () => {
-    render(<TreeNode node={FOLDER.children![0]} />);
+    renderNode(FOLDER.children![0]);
 
     openMenuOn("Plan");
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
@@ -86,7 +97,7 @@ describe("TreeNode right-click menu", () => {
   });
 
   it("offers moving, not creating, on a shard", () => {
-    render(<TreeNode node={FOLDER.children![0]} />);
+    renderNode(FOLDER.children![0]);
 
     openMenuOn("Plan");
 

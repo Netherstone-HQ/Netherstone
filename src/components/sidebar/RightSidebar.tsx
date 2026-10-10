@@ -7,7 +7,7 @@ import { useEditorStore } from "@/store/editor";
 import { BacklinksSection } from "./right-sidebar/BacklinksSection";
 import { DocumentLinksSection } from "./right-sidebar/DocumentLinksSection";
 import { MetadataSection } from "./right-sidebar/MetadataSection";
-import { TableOfContentsSection } from "./right-sidebar/TableOfContentsSection";
+import { OutlineSection } from "./right-sidebar/OutlineSection";
 import {
   areDocumentLinksEqual,
   buildLinkSections,
@@ -494,7 +494,7 @@ export function RightSidebar() {
         }`}
       >
         <div className="flex-1 overflow-auto p-4">
-          <TableOfContentsSection
+          <OutlineSection
             currentFilePath={currentFilePath}
             plateEditor={plateEditor}
             tocHeadings={tocHeadings}

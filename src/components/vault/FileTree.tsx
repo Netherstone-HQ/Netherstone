@@ -25,6 +25,8 @@ import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { TreeNode } from "@/components/vault/TreeNode";
+import { useShardDropTarget } from "@/components/vault/useShardDropTarget";
+import { cn } from "@/lib/utils";
 import { useMenuAction } from "@/lib/use-menu-action";
 
 interface FileTreeProps {
@@ -41,6 +43,8 @@ export function FileTree({ onNewShard }: FileTreeProps) {
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
   const [isCreatingRootShard, setIsCreatingRootShard] = useState(false);
   const menuAction = useMenuAction();
+  // Folders inside the tree take their own drops; the rest is the vault root.
+  const rootDrop = useShardDropTarget(currentVaultPath);
 
   if (!currentVaultPath) return null;
 
@@ -92,7 +96,15 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           New Shard
         </TooltipContent>
       </Tooltip>
-      <SidebarGroupContent className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+      <SidebarGroupContent
+        ref={(el: HTMLDivElement | null) => {
+          rootDrop.connect(el);
+        }}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md transition-colors",
+          rootDrop.isDropTarget && "bg-sidebar-accent/40",
+        )}
+      >
         <SidebarMenu className="w-full min-w-0 gap-0.5">
           {isNamingRootFolder ? (
             <NewFolderRow parent={currentVaultPath} depth={0} />

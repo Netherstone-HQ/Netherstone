@@ -1,4 +1,5 @@
 import { DotIcon } from "lucide-react";
+import { CollapsibleSection } from "./CollapsibleSection";
 import type { MetadataSectionProps } from "./types";
 
 export function MetadataSection({
@@ -9,17 +10,18 @@ export function MetadataSection({
   metadataRows,
 }: MetadataSectionProps) {
   return (
-    <div>
-      <div className="mb-3 flex items-center gap-1">
-        <h3 className="text-sm font-semibold">Metadata</h3>
-        {isDirty ? (
+    <CollapsibleSection
+      section="metadata"
+      title="Metadata"
+      adornment={
+        isDirty ? (
           <DotIcon
-            className="size-4 fill-current text-muted-foreground"
+            className="-ml-1.5 size-4 fill-current text-muted-foreground"
             aria-label="Unsaved changes"
           />
-        ) : null}
-      </div>
-
+        ) : null
+      }
+    >
       {!currentFilePath ? (
         <div className="text-xs text-muted-foreground">
           Open a shard to see its metadata.
@@ -44,6 +46,6 @@ export function MetadataSection({
           ))}
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }

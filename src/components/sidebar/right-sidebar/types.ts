@@ -46,7 +46,7 @@ export interface LinkSection {
   links: DocumentLink[];
 }
 
-export interface TableOfContentsSectionProps {
+export interface OutlineSectionProps {
   currentFilePath: string | null;
   plateEditor: any;
   tocHeadings: Heading[];

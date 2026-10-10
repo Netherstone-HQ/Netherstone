@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useDrag } from "react-dnd";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   ArrowsDownUpIcon,
@@ -75,6 +76,12 @@ import {
 import type { FileTreeNode } from "@/store";
 
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
+import { useShardDropTarget } from "@/components/vault/useShardDropTarget";
+import {
+  EXPAND_ON_HOVER_MS,
+  SHARD_DRAG_TYPE,
+  type ShardDragItem,
+} from "@/lib/shard-drag";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
@@ -494,6 +501,31 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     setNewFolderParent(node.path);
   };
 
+  // Shards drag onto folders as a shortcut for the Move dialog.
+  const [{ isDragging }, connectDrag] = useDrag<
+    ShardDragItem,
+    void,
+    { isDragging: boolean }
+  >(
+    () => ({
+      type: SHARD_DRAG_TYPE,
+      item: { path: node.path, moveTo: handleMoveToFolder },
+      canDrag: node.kind === "file" && !isRenaming,
+      collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+    }),
+    [node.kind, node.path, isRenaming, handleMoveToFolder],
+  );
+  const drop = useShardDropTarget(
+    node.kind === "directory" ? node.path : null,
+  );
+
+  // A shard held over a closed folder opens it, so nested folders are reachable.
+  useEffect(() => {
+    if (!drop.isOver || isOpen) return;
+    const timer = window.setTimeout(() => setIsOpen(true), EXPAND_ON_HOVER_MS);
+    return () => window.clearTimeout(timer);
+  }, [drop.isOver, isOpen]);
+
   const actions: RowAction[] =
     node.kind === "directory"
       ? [
@@ -747,13 +779,19 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     return (
       <SidebarMenuItem className="w-full min-w-0 overflow-hidden">
         <div
+          ref={(el) => {
+            connectDrag(el);
+          }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => {
             if (!isDropdownOpen) {
               setIsHovered(false);
             }
           }}
-          className="relative w-full min-w-0"
+          className={cn(
+            "relative w-full min-w-0 transition-opacity",
+            isDragging && "opacity-40",
+          )}
         >
           {rowGuides}
           {rowContent}
@@ -774,7 +812,18 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
 
   return (
     <SidebarMenuItem className="w-full min-w-0 overflow-hidden">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible
+        ref={(el: HTMLDivElement | null) => {
+          drop.connect(el);
+        }}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        className={cn(
+          "rounded-sm transition-colors",
+          drop.isDropTarget &&
+            "bg-sidebar-accent/60 ring-1 ring-sidebar-ring/50 ring-inset",
+        )}
+      >
         <div
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => {

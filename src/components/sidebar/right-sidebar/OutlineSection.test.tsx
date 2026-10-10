@@ -35,8 +35,8 @@ describe("OutlineSection", () => {
 
     const goals = screen.getByRole("button", { name: "Goals" });
     const week = screen.getByRole("button", { name: "This week" });
-    expect(goals.style.paddingLeft).toBe("6px");
-    expect(week.style.paddingLeft).toBe("18px");
+    expect(goals.style.paddingLeft).toBe("10px");
+    expect(week.style.paddingLeft).toBe("22px");
   });
 
   it("collapses and remembers it", () => {

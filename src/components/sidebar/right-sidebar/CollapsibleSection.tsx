@@ -36,14 +36,14 @@ export function CollapsibleSection({
       className={className}
     >
       <h3>
-        <CollapsibleTrigger className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 py-1 text-left font-semibold text-sm outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50">
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm py-1 text-left font-semibold text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           {icon}
           <span>{title}</span>
           {adornment}
           <CaretRightIcon
             aria-hidden="true"
             className={cn(
-              "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+              "ml-auto size-3.5 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground",
               open && "rotate-90",
             )}
           />

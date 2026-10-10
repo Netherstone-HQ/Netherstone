@@ -15,7 +15,7 @@
 // commit never lands without its tag.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,7 @@ import {
   jsonVersion,
   lockVersion,
   nextVersion,
+  releaseNoteSubjects,
   setCargoVersion,
   setJsonVersion,
 } from "./release-version.mjs";
@@ -160,16 +161,40 @@ function checkTag(tag) {
   ok(`${tag} isn't taken`);
 }
 
-function changesSinceLastRelease() {
+/**
+ * What the release notes will say: release-notes/<tag>.md when it exists,
+ * as the workflow prefers it, otherwise the filtered commit subjects.
+ */
+function releaseNotes(tag) {
   const last = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], {
     allowFailure: true,
   });
+  const since = last ?? "the first commit";
   const range = last ? `${last}..HEAD` : "HEAD";
-  const subjects = git("log", "--no-merges", "--format=%s", range)
+  const commits = git("log", "--no-merges", "--format=%s", range)
     .split("\n")
     .filter(Boolean);
-  if (subjects.length === 0) stop(`Nothing has changed since ${last}.`);
-  return { last, subjects };
+  if (commits.length === 0) stop(`Nothing has changed since ${since}.`);
+
+  const file = `release-notes/${tag}.md`;
+  if (existsSync(join(ROOT, file))) {
+    return {
+      heading: `The release notes come from ${file}:`,
+      lines: read(file).trimEnd().split(/\r?\n/),
+    };
+  }
+
+  const subjects = releaseNoteSubjects(commits);
+  if (subjects.length === 0) {
+    stop(
+      `Every change since ${since} is a release commit or was reverted, so the release notes would be empty.`,
+    );
+  }
+  const left = commits.length - subjects.length;
+  return {
+    heading: `${subjects.length} change(s) since ${since} become the release notes${left ? ` (${left} reverted or release commit(s) left out)` : ""}:`,
+    lines: subjects.map((subject) => `- ${subject}`),
+  };
 }
 
 function checkCi(skip) {
@@ -309,7 +334,7 @@ async function main() {
   const tag = `v${next}`;
   checkTag(tag);
   checkCi(values["skip-ci"]);
-  const { last, subjects } = changesSinceLastRelease();
+  const notes = releaseNotes(tag);
 
   const kind = next.includes("-") ? "pre-release" : "stable release";
   console.log(`
@@ -318,8 +343,8 @@ ${bold(`${current} -> ${next}`)} ${dim(`(${kind}, tag ${tag})`)}
 Updates ${Object.values(FILES).join(", ")},
 commits "Release ${next}" as ${identity.name}, then pushes it with ${tag}.
 
-${subjects.length} change(s) since ${last ?? "the first commit"}, which become the release notes:
-${subjects.map((subject) => `  - ${subject}`).join("\n")}`);
+${notes.heading}
+${notes.lines.map((line) => `  ${line}`).join("\n")}`);
 
   if (values["dry-run"]) {
     console.log(`\n${dim("Dry run: nothing was changed.")}`);

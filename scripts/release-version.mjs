@@ -91,6 +91,27 @@ export function nextVersion(currentText, input) {
   return formatVersion(exact);
 }
 
+/**
+ * The commit subjects that become the release notes, filtered the way the
+ * release workflow's "Write the release notes" step does: a reverted change
+ * goes along with its revert, release commits are left out, and repeats
+ * appear once. `subjects` is newest first, as git log prints them.
+ */
+export function releaseNoteSubjects(subjects) {
+  const reverted = new Set(
+    subjects.map((s) => /^Revert "(.*)"$/.exec(s)?.[1]).filter(Boolean),
+  );
+  const seen = new Set();
+  return subjects.filter((subject) => {
+    if (!subject.trim() || /^(Revert |Release |Netherstone )/.test(subject)) {
+      return false;
+    }
+    if (reverted.has(subject) || seen.has(subject)) return false;
+    seen.add(subject);
+    return true;
+  });
+}
+
 /** The top-level "version" of a JSON file, read the way the release workflow does. */
 export function jsonVersion(text) {
   return JSON.parse(text).version;

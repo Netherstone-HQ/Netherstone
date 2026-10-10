@@ -29,11 +29,12 @@ env:
 jobs:
   check-version:
     name: Check tag matches app version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       prerelease: ${{ steps.check.outputs.prerelease }}
+      release-id: ${{ steps.release.outputs.id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: check
         run: |
@@ -51,6 +52,36 @@ jobs:
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # Every build uploads to this one draft. When each build found or
+      # created the release itself, two builds could each make a draft at
+      # the same moment, and only one of them got published.
+      - id: release
+        name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ steps.check.outputs.prerelease }}
+        run: |
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$GITHUB_REF_NAME\") | .id")
+          count=$(printf '%s' "$ids" | grep -c . || true)
+          if [ "$count" -gt 1 ]; then
+            echo "::error::$GITHUB_REF_NAME already has $count releases. Delete the extra ones, then re-run."
+            exit 1
+          elif [ "$count" -eq 1 ]; then
+            # A re-run keeps uploading to the draft the first run made.
+            id="$ids"
+          else
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$GITHUB_REF_NAME" \
+              -f name="Netherstone $GITHUB_REF_NAME" \
+              -f body="Download the installer for your system from the assets below." \
+              -F draft=true \
+              -F prerelease="$PRERELEASE" \
+              --jq .id)
+          fi
+          echo "Uploading to release $id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build (${{ matrix.name }})
@@ -79,7 +110,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Tauri system libraries
         if: runner.os == 'Linux'
@@ -87,11 +118,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -119,11 +150,7 @@ jobs:
           # APPLE_PASSWORD and APPLE_TEAM_ID, and pass them through here.
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Netherstone ${{ github.ref_name }}
-          releaseBody: Download the installer for your system from the assets below.
-          releaseDraft: true
-          prerelease: ${{ needs.check-version.outputs.prerelease == 'true' }}
+          releaseId: ${{ needs.check-version.outputs.release-id }}
           args: ${{ matrix.args }}
 
   # The release stays a draft until every platform has uploaded its installer,
@@ -133,13 +160,14 @@ jobs:
   publish:
     name: Publish release
     needs: [check-version, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
       PRERELEASE: ${{ needs.check-version.outputs.prerelease }}
+      RELEASE_ID: ${{ needs.check-version.outputs.release-id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -168,14 +196,33 @@ jobs:
           fi
           printf '\nDownload the installer for your system from the assets below.\n' >> notes.md
           cat notes.md
-          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F body=@notes.md --silent
+
+      # Each build merges its platforms into latest.json, the file installed
+      # apps update from. Publish only once all of them are in it.
+      - name: Check every platform is in latest.json
+        run: |
+          asset=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" \
+            --jq '.assets[] | select(.name == "latest.json") | .id')
+          if [ -z "$asset" ]; then
+            echo "::error::The release has no latest.json, so it stays a draft."
+            exit 1
+          fi
+          gh api "repos/$GH_REPO/releases/assets/$asset" \
+            -H "Accept: application/octet-stream" > latest.json
+          missing=$(jq -r '["darwin-aarch64", "darwin-x86_64", "linux-x86_64", "windows-x86_64"] - (.platforms | keys) | join(", ")' latest.json)
+          if [ -n "$missing" ]; then
+            echo "::error::latest.json is missing $missing, so the release stays a draft."
+            exit 1
+          fi
 
       - name: Publish the release
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false --silent
 
       - name: Update the release channels
         run: |
-          gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir channels
+          mkdir -p channels
+          cp latest.json channels/latest.json
           if ! gh release view updates >/dev/null 2>&1; then
             gh release create updates --prerelease --latest=false \
               --title "Update channels" \

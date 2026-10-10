@@ -8,6 +8,7 @@ name: Release
 #
 # The tag must match the version in package.json, src-tauri/tauri.conf.json and
 # src-tauri/Cargo.toml, otherwise the run stops before building anything.
+# `pnpm release beta` (see scripts/release.mjs) bumps all three, tags and pushes.
 
 on:
   push:

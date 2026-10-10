@@ -6,7 +6,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: "node",
-      include: ["src/**/*.test.{ts,tsx}"],
+      include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
       setupFiles: ["src/test/setup-dom.ts"],
       // HTML exports embed KaTeX's stylesheet as text (`?raw`); Vitest would
       // otherwise hand tests an empty string for it.

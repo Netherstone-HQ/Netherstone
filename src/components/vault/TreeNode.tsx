@@ -76,12 +76,12 @@ import {
 import type { FileTreeNode } from "@/store";
 
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
-import { useShardDropTarget } from "@/components/vault/useShardDropTarget";
+import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
 import {
   EXPAND_ON_HOVER_MS,
-  SHARD_DRAG_TYPE,
-  type ShardDragItem,
-} from "@/lib/shard-drag";
+  TREE_DRAG_TYPE,
+  type TreeDragItem,
+} from "@/lib/tree-drag";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
@@ -115,6 +115,29 @@ async function flushDrawingAffectedBy(path: string) {
   if (activeDrawingPath && isPathWithin(activeDrawingPath, path)) {
     await flushPendingDrawingSave();
   }
+}
+
+/** `node`'s path and every path inside it, as the watcher reports them. */
+function collectTreePaths(node: FileTreeNode): string[] {
+  return [node.path, ...(node.children ?? []).flatMap(collectTreePaths)];
+}
+
+/**
+ * Keeps the watcher from treating a rename or move the app just made as an
+ * outside change, for `node` and everything inside it at both paths.
+ */
+function suppressPathChange(
+  node: FileTreeNode,
+  newPath: string | null,
+  reason: "rename" | "move",
+) {
+  const oldPaths = collectTreePaths(node);
+  const newPaths = newPath
+    ? oldPaths.map(
+        (path) => remapPathAfterMove(path, node.path, newPath) ?? path,
+      )
+    : [];
+  suppressVaultChangePaths([...oldPaths, ...newPaths], { reason });
 }
 
 function remapActiveDrawingPath(oldPath: string, newPath: string) {
@@ -252,19 +275,17 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     setNewName(getDisplayName(node));
   };
 
+  /** Saves the open shard if it is `node` or inside it, before its path changes. */
   const persistOpenFileBeforePathChange = async (
     reason: "rename" | "move",
   ): Promise<{
+    path: string;
     content: string;
     sessionSnapshot: ReturnType<
       typeof captureOpenEditorSessionPathChangeSnapshot
     >;
   } | null> => {
-    if (
-      node.kind !== "file" ||
-      !currentFilePath ||
-      !isSamePath(node.path, currentFilePath)
-    ) {
+    if (!currentFilePath || !isPathWithin(currentFilePath, node.path)) {
       return null;
     }
 
@@ -308,9 +329,59 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     markSaved(content);
 
     return {
+      path: currentFilePath,
       content,
       sessionSnapshot,
     };
+  };
+
+  /**
+   * Points everything that remembers a path at `newPath` once `node` has
+   * been renamed or moved: the open shard (even deep inside a folder), the
+   * open drawing, recent files and drawing links.
+   */
+  const finishPathChange = async (
+    newPath: string,
+    persistedOpenFile: Awaited<
+      ReturnType<typeof persistOpenFileBeforePathChange>
+    >,
+    reason: "rename" | "move",
+  ) => {
+    remapActiveDrawingPath(node.path, newPath);
+    suppressPathChange(node, newPath, reason);
+
+    const openPath = persistedOpenFile
+      ? remapPathAfterMove(persistedOpenFile.path, node.path, newPath)
+      : null;
+
+    if (persistedOpenFile && openPath) {
+      if (plateEditor) {
+        try {
+          await upsertAstCache({
+            filePath: openPath,
+            markdown: persistedOpenFile.content,
+            plateValue: plateEditor.children,
+          });
+        } catch (error) {
+          console.error(
+            `[Netherstone] Failed to refresh AST cache after ${reason}:`,
+            openPath,
+            error,
+          );
+        }
+      }
+
+      applyOpenEditorSessionPathChange(
+        openPath,
+        persistedOpenFile.content,
+        persistedOpenFile.sessionSnapshot,
+      );
+    }
+
+    updateRecentFilePath(node.path, newPath);
+
+    await refreshVault(currentVaultPath);
+    await relinkMovedDrawings(node, newPath, currentVaultPath);
   };
 
   const handleRename = async () => {
@@ -328,52 +399,14 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     try {
       const persistedOpenFile = await persistOpenFileBeforePathChange("rename");
       await flushDrawingAffectedBy(node.path);
-
-      suppressVaultChangePaths([node.path], {
-        reason: "rename",
-      });
+      suppressPathChange(node, null, "rename");
 
       const newPath = await invoke<string>("rename_file", {
         oldPath: node.path,
         newName: trimmedName,
       });
 
-      remapActiveDrawingPath(node.path, newPath);
-
-      suppressVaultChangePaths([node.path, newPath], {
-        reason: "rename",
-      });
-
-      if (persistedOpenFile) {
-        if (plateEditor) {
-          try {
-            await upsertAstCache({
-              filePath: newPath,
-              markdown: persistedOpenFile.content,
-              plateValue: plateEditor.children,
-            });
-          } catch (error) {
-            console.error(
-              "[Netherstone] Failed to refresh AST cache after rename:",
-              newPath,
-              error,
-            );
-          }
-        }
-
-        applyOpenEditorSessionPathChange(
-          newPath,
-          persistedOpenFile.content,
-          persistedOpenFile.sessionSnapshot,
-        );
-      }
-
-      if (node.kind === "file") {
-        updateRecentFilePath(node.path, newPath);
-      }
-
-      await refreshVault(currentVaultPath);
-      await relinkMovedDrawings(node, newPath, currentVaultPath);
+      await finishPathChange(newPath, persistedOpenFile, "rename");
       cancelRename();
     } catch (error) {
       console.error("Failed to rename:", error);
@@ -425,62 +458,20 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     }
   };
 
-  const handleMove = () => {
-    if (node.kind !== "file") return;
-
-    setIsMoving(true);
-  };
+  const handleMove = () => setIsMoving(true);
 
   const handleMoveToFolder = async (destinationPath: string) => {
-    if (node.kind !== "file") return;
-
     try {
       const persistedOpenFile = await persistOpenFileBeforePathChange("move");
       await flushDrawingAffectedBy(node.path);
-
-      suppressVaultChangePaths([node.path], {
-        reason: "move",
-      });
+      suppressPathChange(node, null, "move");
 
       const newPath = await invoke<string>("move_file", {
         sourcePath: node.path,
         destinationDir: destinationPath,
       });
 
-      remapActiveDrawingPath(node.path, newPath);
-
-      suppressVaultChangePaths([node.path, newPath], {
-        reason: "move",
-      });
-
-      if (persistedOpenFile) {
-        if (plateEditor) {
-          try {
-            await upsertAstCache({
-              filePath: newPath,
-              markdown: persistedOpenFile.content,
-              plateValue: plateEditor.children,
-            });
-          } catch (error) {
-            console.error(
-              "[Netherstone] Failed to refresh AST cache after move:",
-              newPath,
-              error,
-            );
-          }
-        }
-
-        applyOpenEditorSessionPathChange(
-          newPath,
-          persistedOpenFile.content,
-          persistedOpenFile.sessionSnapshot,
-        );
-      }
-
-      updateRecentFilePath(node.path, newPath);
-
-      await refreshVault(currentVaultPath);
-      await relinkMovedDrawings(node, newPath, currentVaultPath);
+      await finishPathChange(newPath, persistedOpenFile, "move");
     } catch (error) {
       console.error("Failed to move:", error);
       alert(error instanceof Error ? error.message : String(error));
@@ -501,25 +492,23 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     setNewFolderParent(node.path);
   };
 
-  // Shards drag onto folders as a shortcut for the Move dialog.
+  // Shards and folders drag onto folders as a shortcut for the Move dialog.
   const [{ isDragging }, connectDrag] = useDrag<
-    ShardDragItem,
+    TreeDragItem,
     void,
     { isDragging: boolean }
   >(
     () => ({
-      type: SHARD_DRAG_TYPE,
+      type: TREE_DRAG_TYPE,
       item: { path: node.path, moveTo: handleMoveToFolder },
-      canDrag: node.kind === "file" && !isRenaming,
+      canDrag: !isRenaming,
       collect: (monitor) => ({ isDragging: monitor.isDragging() }),
     }),
-    [node.kind, node.path, isRenaming, handleMoveToFolder],
+    [node.path, isRenaming, handleMoveToFolder],
   );
-  const drop = useShardDropTarget(
-    node.kind === "directory" ? node.path : null,
-  );
+  const drop = useTreeDropTarget(node.kind === "directory" ? node.path : null);
 
-  // A shard held over a closed folder opens it, so nested folders are reachable.
+  // An item held over a closed folder opens it, so nested folders are reachable.
   useEffect(() => {
     if (!drop.isOver || isOpen) return;
     const timer = window.setTimeout(() => setIsOpen(true), EXPAND_ON_HOVER_MS);
@@ -545,6 +534,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             onSelect: startRename,
             separated: true,
           },
+          { label: "Move", icon: ArrowsDownUpIcon, onSelect: handleMove },
           {
             label: "Open location",
             icon: FolderOpenIcon,
@@ -825,13 +815,19 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
         )}
       >
         <div
+          ref={(el) => {
+            connectDrag(el);
+          }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => {
             if (!isDropdownOpen) {
               setIsHovered(false);
             }
           }}
-          className="relative w-full min-w-0"
+          className={cn(
+            "relative w-full min-w-0 transition-opacity",
+            isDragging && "opacity-40",
+          )}
         >
           {rowGuides}
           {rowContent}
@@ -840,6 +836,16 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             open={isCreatingShard}
             onOpenChange={setIsCreatingShard}
             folder={node.path}
+          />
+          <MoveFileDialog
+            open={isMoving}
+            onOpenChange={setIsMoving}
+            fileName={displayName}
+            filePath={node.path}
+            isFolder
+            currentVaultPath={currentVaultPath}
+            fileTree={fileTree}
+            onMove={handleMoveToFolder}
           />
         </div>
 

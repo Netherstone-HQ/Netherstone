@@ -9,8 +9,9 @@ import {
 } from "@testing-library/react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useVaultStore } from "@/store";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import { TreeNode } from "./TreeNode";
 
@@ -103,5 +104,69 @@ describe("TreeNode right-click menu", () => {
 
     expect(screen.getByRole("menuitem", { name: "Move" })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: "New Folder" })).toBeNull();
+  });
+});
+
+describe("TreeNode path changes", () => {
+  const RENAMED = `${VAULT}/Projects`;
+
+  beforeEach(() => {
+    useVaultStore.setState({ currentVaultPath: VAULT, newFolderParent: null });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "rename_file") return RENAMED;
+      if (command === "scan_vault") return [];
+      if (command === "find_shards_containing") return [];
+      return null;
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.mocked(invoke).mockReset();
+    useEditorStore.setState({ currentFilePath: null });
+    useUIStore.setState({ recentFiles: [] });
+  });
+
+  it("keeps the open shard and recent files when their folder is renamed", async () => {
+    useEditorStore.setState({
+      currentFilePath: `${VAULT}/Work/Plan.md`,
+      markdownContent: "# Plan",
+      plateEditor: null,
+    });
+    useUIStore.setState({
+      recentFiles: [
+        { path: `${VAULT}/Work/Plan.md`, name: "Plan.md" },
+        { path: `${VAULT}/Home.md`, name: "Home.md" },
+      ],
+    });
+    renderNode(FOLDER);
+
+    openMenuOn("Work");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = await screen.findByDisplayValue("Work");
+    fireEvent.change(input, { target: { value: "Projects" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(useEditorStore.getState().currentFilePath).toBe(
+        `${RENAMED}/Plan.md`,
+      ),
+    );
+    expect(invoke).toHaveBeenCalledWith("save_markdown_file", {
+      filePath: `${VAULT}/Work/Plan.md`,
+      content: "# Plan",
+    });
+    expect(useUIStore.getState().recentFiles.map((f) => f.path)).toEqual([
+      `${RENAMED}/Plan.md`,
+      `${VAULT}/Home.md`,
+    ]);
+  });
+
+  it("offers Move on a folder too", () => {
+    renderNode(FOLDER);
+
+    openMenuOn("Work");
+
+    expect(screen.getByRole("menuitem", { name: "Move" })).toBeTruthy();
   });
 });

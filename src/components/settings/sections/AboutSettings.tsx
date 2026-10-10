@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { CopyIcon } from "@phosphor-icons/react";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { toast } from "sonner";
 
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
 import {
@@ -9,14 +11,44 @@ import {
   SettingsGroup,
 } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
+import { useKeySequence } from "@/hooks/useKeySequence";
 import { installUpdateWithToast } from "@/hooks/useUpdateCheck";
+import { bugReportUrl, versionDetails } from "@/lib/bug-report";
 import { canUpdate } from "@/lib/updates";
+import { useCompanionStore } from "@/store/companion";
 import { type UpdateStatus, useUpdatesStore } from "@/store/updates";
 
 const REPOSITORY_URL = "https://github.com/Netherstone-HQ/Netherstone";
 
+const COMPANION_SEQUENCE = [
+  "ArrowUp",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowLeft",
+  "ArrowRight",
+  "b",
+  "a",
+  "Enter",
+] as const;
+
+async function copyVersionDetails(version: string) {
+  try {
+    await navigator.clipboard.writeText(
+      versionDetails(version, navigator.userAgent),
+    );
+    toast.success("Copied version details");
+  } catch {
+    toast.error("Couldn't copy the version details.");
+  }
+}
+
 export function AboutSettings() {
   const [version, setVersion] = useState<string | null>(null);
+  const showCompanion = useCompanionStore((s) => s.show);
+  useKeySequence(COMPANION_SEQUENCE, showCompanion);
 
   useEffect(() => {
     getVersion().then(setVersion, () => setVersion(null));
@@ -38,9 +70,21 @@ export function AboutSettings() {
 
       <SettingsGroup>
         <SettingRow label="Version">
-          <span className="font-mono text-muted-foreground text-sm">
-            {version ?? "Unknown"}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="font-mono text-muted-foreground text-sm">
+              {version ?? "Unknown"}
+            </span>
+            {version ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Copy version details"
+                onClick={() => void copyVersionDetails(version)}
+              >
+                <CopyIcon />
+              </Button>
+            ) : null}
+          </div>
         </SettingRow>
         <UpdateRow />
         <PreferenceSwitch
@@ -65,12 +109,20 @@ export function AboutSettings() {
         </SettingRow>
         <SettingRow
           label="Report a problem"
-          description="Something not working? Let us know."
+          description="Something not working? Let us know. Your version and OS are filled in for you."
         >
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void openUrl(`${REPOSITORY_URL}/issues/new`)}
+            onClick={() =>
+              void openUrl(
+                bugReportUrl(
+                  REPOSITORY_URL,
+                  version ?? "Unknown",
+                  navigator.userAgent,
+                ),
+              )
+            }
           >
             Open an issue
           </Button>

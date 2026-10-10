@@ -6,6 +6,7 @@ import {
   lockVersion,
   nextVersion,
   parseVersion,
+  releaseNoteSubjects,
   setCargoVersion,
   setJsonVersion,
 } from "./release-version.mjs";
@@ -42,6 +43,36 @@ describe("nextVersion", () => {
     expect(() => nextVersion("0.2.0-beta.1", "bta")).toThrow(/keyword/);
     expect(() => nextVersion("0.2.0-beta.1", "0.2.0-bta.2")).toThrow(/keyword/);
     expect(() => nextVersion("0.2.0-beta.1", "0.2")).toThrow(/keyword/);
+  });
+});
+
+describe("releaseNoteSubjects", () => {
+  it("drops a reverted change along with its revert", () => {
+    expect(
+      releaseNoteSubjects([
+        'Revert "Add Kevin (#22)"',
+        "Fix sync (#23)",
+        "Add Kevin (#22)",
+      ]),
+    ).toEqual(["Fix sync (#23)"]);
+  });
+
+  it("leaves out release commits and repeats", () => {
+    expect(
+      releaseNoteSubjects([
+        "Fix sync",
+        "Release 0.2.0-beta.2",
+        "Netherstone 0.2.0",
+        "Fix sync",
+        "Add Outline",
+      ]),
+    ).toEqual(["Fix sync", "Add Outline"]);
+  });
+
+  it("keeps a change whose title only starts like a reverted one", () => {
+    expect(
+      releaseNoteSubjects(['Revert "Add X"', "Add X and Y", "Add X"]),
+    ).toEqual(["Add X and Y"]);
   });
 });
 

@@ -12,7 +12,6 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Tooltip,
@@ -20,7 +19,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useVaultStore } from "@/store";
-import { CollapsedNode } from "@/components/vault/CollapsedNode";
 import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
@@ -37,7 +35,6 @@ const GROUP_ACTION_CLASS =
   "text-sidebar-foreground/50 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
 
 export function FileTree({ onNewShard }: FileTreeProps) {
-  const { state } = useSidebar();
   const { fileTree, isVaultLoading, currentVaultPath } = useVaultStore();
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
@@ -47,20 +44,6 @@ export function FileTree({ onNewShard }: FileTreeProps) {
   const rootDrop = useShardDropTarget(currentVaultPath);
 
   if (!currentVaultPath) return null;
-
-  if (state === "collapsed") {
-    return (
-      <SidebarGroup>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {fileTree.map((node) => (
-              <CollapsedNode key={node.path} node={node} />
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    );
-  }
 
   const isNamingRootFolder = newFolderParent === currentVaultPath;
   const startRootFolder = () => setNewFolderParent(currentVaultPath);

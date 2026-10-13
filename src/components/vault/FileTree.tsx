@@ -25,7 +25,7 @@ import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { TreeNode } from "@/components/vault/TreeNode";
-import { useShardDropTarget } from "@/components/vault/useShardDropTarget";
+import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
 import { cn } from "@/lib/utils";
 import { useMenuAction } from "@/lib/use-menu-action";
 
@@ -44,7 +44,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
   const [isCreatingRootShard, setIsCreatingRootShard] = useState(false);
   const menuAction = useMenuAction();
   // Folders inside the tree take their own drops; the rest is the vault root.
-  const rootDrop = useShardDropTarget(currentVaultPath);
+  const rootDrop = useTreeDropTarget(currentVaultPath);
 
   if (!currentVaultPath) return null;
 

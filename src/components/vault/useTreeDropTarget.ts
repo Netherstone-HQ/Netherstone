@@ -1,26 +1,26 @@
 import { useDrop } from "react-dnd";
 
 import {
-  SHARD_DRAG_TYPE,
-  canMoveShardInto,
-  type ShardDragItem,
-} from "@/lib/shard-drag";
+  TREE_DRAG_TYPE,
+  canMoveInto,
+  type TreeDragItem,
+} from "@/lib/tree-drag";
 
 /**
- * Makes an element take shards dropped into `folderPath`. Folders nest, so
- * only the innermost one under the pointer reacts; dropping a shard on the
- * folder it's already in does nothing rather than falling through to a parent.
+ * Makes an element take shards and folders dropped into `folderPath`. Folders
+ * nest, so only the innermost one under the pointer reacts; dropping on a
+ * folder that can't take the item does nothing rather than falling through
+ * to a parent.
  */
-export function useShardDropTarget(folderPath: string | null) {
+export function useTreeDropTarget(folderPath: string | null) {
   const [{ isOver, canDrop }, connect] = useDrop<
-    ShardDragItem,
+    TreeDragItem,
     void,
     { isOver: boolean; canDrop: boolean }
   >(
     () => ({
-      accept: SHARD_DRAG_TYPE,
-      canDrop: (item) =>
-        !!folderPath && canMoveShardInto(item.path, folderPath),
+      accept: TREE_DRAG_TYPE,
+      canDrop: (item) => !!folderPath && canMoveInto(item.path, folderPath),
       drop: (item, monitor) => {
         if (!folderPath || !monitor.isOver({ shallow: true })) return;
         // moveTo reports its own failures.

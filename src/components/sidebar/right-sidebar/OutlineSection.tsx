@@ -5,6 +5,8 @@ import { CollapsibleSection } from "./CollapsibleSection";
 import type { OutlineSectionProps } from "./types";
 
 const INDENT_PX = 12;
+/** Where the first level's guide sits; each level's text starts 7px past it. */
+const RAIL_PX = 3;
 
 export function OutlineSection({
   currentFilePath,
@@ -38,21 +40,18 @@ export function OutlineSection({
           Headings you add to this shard show up here.
         </p>
       ) : (
-        <nav aria-label="Outline" className="-mx-1.5 space-y-px">
+        <nav aria-label="Outline">
           {tocHeadings.map((heading) => {
             const level = heading.depth - topDepth;
             return (
               <button
                 key={heading.id}
                 type="button"
-                title={heading.title}
                 className={cn(
-                  "relative block w-full truncate rounded-md py-1 pr-1.5 text-left text-xs outline-none transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
-                  level === 0
-                    ? "font-medium text-foreground/90"
-                    : "text-muted-foreground",
+                  "relative block w-full truncate rounded-sm py-1 pr-1 text-left text-xs outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+                  level === 0 ? "text-foreground/75" : "text-muted-foreground",
                 )}
-                style={{ paddingLeft: 6 + level * INDENT_PX }}
+                style={{ paddingLeft: RAIL_PX + 7 + level * INDENT_PX }}
                 onClick={() => scrollPlateToHeading(plateEditor, heading)}
               >
                 {/* One guide per level, like the file tree. */}
@@ -61,7 +60,7 @@ export function OutlineSection({
                     key={i}
                     aria-hidden="true"
                     className="absolute inset-y-0 w-px bg-border"
-                    style={{ left: 9 + i * INDENT_PX }}
+                    style={{ left: RAIL_PX + i * INDENT_PX }}
                   />
                 ))}
                 {heading.title}

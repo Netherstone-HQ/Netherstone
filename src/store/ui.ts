@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { isPathWithin, isSamePath } from "@/lib/drawing-files";
+import {
+  isPathWithin,
+  isSamePath,
+  remapPathAfterMove,
+} from "@/lib/drawing-files";
 import { renamedLocalStorage } from "./renamed-storage";
 
 type NavItem = "notes" | "search" | "tags" | "settings" | null;
@@ -160,17 +164,19 @@ export const useUIStore = create<UIState>()(
             ),
           ].slice(0, MAX_RECENT_FILES_HISTORY),
         })),
+      // Renaming or moving a folder also updates the recent files inside it.
       updateRecentFilePath: (previousPath, nextPath) =>
         set((state) => ({
-          recentFiles: state.recentFiles.map((entry) =>
-            isSamePath(entry.path, previousPath)
+          recentFiles: state.recentFiles.map((entry) => {
+            const path = remapPathAfterMove(entry.path, previousPath, nextPath);
+            return path
               ? {
                   ...entry,
-                  path: nextPath,
-                  name: nextPath.split(/[\\/]/).pop() ?? entry.name,
+                  path,
+                  name: path.split(/[\\/]/).pop() ?? entry.name,
                 }
-              : entry,
-          ),
+              : entry;
+          }),
         })),
       // Removing a folder also removes the recent files inside it.
       removeRecentFile: (path) =>

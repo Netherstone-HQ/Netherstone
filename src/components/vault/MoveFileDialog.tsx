@@ -17,6 +17,8 @@ type MoveFileDialogProps = {
   onOpenChange: (open: boolean) => void;
   fileName: string;
   filePath: string;
+  /** Moving a folder: it and its subfolders aren't offered as destinations. */
+  isFolder?: boolean;
   currentVaultPath: string | null;
   fileTree: FileTreeNode[];
   onMove: (destinationPath: string) => Promise<void> | void;
@@ -127,6 +129,7 @@ export function MoveFileDialog({
   onOpenChange,
   fileName,
   filePath,
+  isFolder = false,
   currentVaultPath,
   fileTree,
   onMove,
@@ -160,7 +163,8 @@ export function MoveFileDialog({
   ): React.ReactElement[] => {
     const directoryNodes = nodes.filter(
       (node): node is FileTreeNode & { kind: "directory" } =>
-        node.kind === "directory",
+        node.kind === "directory" &&
+        !(isFolder && pathsEqual(node.path, filePath)),
     );
 
     return directoryNodes.flatMap((directory, index) => {
@@ -195,7 +199,7 @@ export function MoveFileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Move File</DialogTitle>
+          <DialogTitle>{isFolder ? "Move Folder" : "Move File"}</DialogTitle>
           <DialogDescription>
             Select a folder to move "{fileName}" to.
           </DialogDescription>

@@ -753,6 +753,72 @@ fn search_files(
     })
 }
 
+/// The (old, new) path of every shard affected when `old_path` became
+/// `new_path`: the shard itself, or each shard inside a folder.
+fn moved_markdown_paths(old_path: &str, new_path: &Path) -> Vec<(String, String)> {
+    if !new_path.is_dir() {
+        return vec![(old_path.to_string(), new_path.to_string_lossy().to_string())];
+    }
+
+    let Ok(moved) = collect_markdown_file_paths(new_path) else {
+        return Vec::new();
+    };
+
+    moved
+        .into_iter()
+        .filter_map(|moved_path| {
+            let relative = Path::new(&moved_path).strip_prefix(new_path).ok()?;
+            let previous = Path::new(old_path).join(relative);
+            Some((previous.to_string_lossy().to_string(), moved_path))
+        })
+        .collect()
+}
+
+/// Points the AST cache and attachment references at the new paths after a
+/// rename or move, so a folder takes the cached state of its shards along.
+fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) {
+    let conn = match db::open_connection() {
+        Ok(conn) => conn,
+        Err(error) => {
+            eprintln!(
+                "[Netherstone] Failed to open database after {} {} -> {}: {}",
+                action,
+                old_path,
+                new_path.display(),
+                error
+            );
+            return;
+        }
+    };
+
+    for (previous, next) in moved_markdown_paths(old_path, new_path) {
+        match db::ast_cache::rename_ast_cache(&conn, &previous, &next) {
+            Ok(renamed) => {
+                eprintln!(
+                    "[Netherstone] AST cache sync after file {} {} old_path={} new_path={}",
+                    action,
+                    if renamed { "success" } else { "noop" },
+                    previous,
+                    next
+                );
+            }
+            Err(error) => {
+                eprintln!(
+                    "[Netherstone] Failed to update AST cache {} -> {}: {}",
+                    previous, next, error
+                );
+            }
+        }
+
+        if let Err(error) = db::attachments::rename_reference_file_path(&conn, &previous, &next) {
+            eprintln!(
+                "[Netherstone] Failed to update attachment references {} -> {}: {}",
+                previous, next, error
+            );
+        }
+    }
+}
+
 #[tauri::command(async)]
 fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
     let old_file = std::path::Path::new(&old_path);
@@ -801,42 +867,7 @@ fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
     std::fs::rename(&old_file, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
 
     let new_path_string = new_path.to_string_lossy().to_string();
-
-    match db::open_connection() {
-        Ok(conn) => {
-            match db::ast_cache::rename_ast_cache(&conn, &old_path, &new_path_string) {
-                Ok(renamed) => {
-                    eprintln!(
-                        "[Netherstone] AST cache sync after file rename {} old_path={} new_path={}",
-                        if renamed { "success" } else { "noop" },
-                        old_path,
-                        new_path_string
-                    );
-                }
-                Err(error) => {
-                    eprintln!(
-                        "[Netherstone] Failed to rename AST cache {} -> {}: {}",
-                        old_path, new_path_string, error
-                    );
-                }
-            }
-
-            if let Err(error) =
-                db::attachments::rename_reference_file_path(&conn, &old_path, &new_path_string)
-            {
-                eprintln!(
-                    "[Netherstone] Failed to rename attachment references {} -> {}: {}",
-                    old_path, new_path_string, error
-                );
-            }
-        }
-        Err(error) => {
-            eprintln!(
-                "[Netherstone] Failed to open database while renaming AST cache {} -> {}: {}",
-                old_path, new_path_string, error
-            );
-        }
-    }
+    sync_caches_after_path_change(&old_path, &new_path, "rename");
 
     Ok(new_path_string)
 }
@@ -850,11 +881,17 @@ fn move_file(source_path: String, destination_dir: String) -> Result<String, Str
         return Err(format!("Source file does not exist: {}", source_path));
     }
 
+    let kind = if source.is_dir() { "folder" } else { "file" };
+
     if !dest_dir.is_dir() {
         return Err(format!(
             "Destination is not a directory: {}",
             destination_dir
         ));
+    }
+
+    if source.is_dir() && dest_dir.starts_with(source) {
+        return Err("A folder can't be moved into itself.".to_string());
     }
 
     let file_name = source.file_name().ok_or("Cannot get file name")?;
@@ -863,51 +900,16 @@ fn move_file(source_path: String, destination_dir: String) -> Result<String, Str
 
     if new_path.exists() {
         return Err(format!(
-            "A file with name '{}' already exists in destination",
+            "A {} with name '{}' already exists in destination",
+            kind,
             file_name.to_string_lossy()
         ));
     }
 
-    // Move the file
-    std::fs::rename(&source, &new_path).map_err(|e| format!("Failed to move file: {}", e))?;
+    std::fs::rename(&source, &new_path).map_err(|e| format!("Failed to move {}: {}", kind, e))?;
 
     let new_path_string = new_path.to_string_lossy().to_string();
-
-    match db::open_connection() {
-        Ok(conn) => {
-            match db::ast_cache::rename_ast_cache(&conn, &source_path, &new_path_string) {
-                Ok(renamed) => {
-                    eprintln!(
-                        "[Netherstone] AST cache sync after file move {} old_path={} new_path={}",
-                        if renamed { "success" } else { "noop" },
-                        source_path,
-                        new_path_string
-                    );
-                }
-                Err(error) => {
-                    eprintln!(
-                        "[Netherstone] Failed to move AST cache {} -> {}: {}",
-                        source_path, new_path_string, error
-                    );
-                }
-            }
-
-            if let Err(error) =
-                db::attachments::rename_reference_file_path(&conn, &source_path, &new_path_string)
-            {
-                eprintln!(
-                    "[Netherstone] Failed to move attachment references {} -> {}: {}",
-                    source_path, new_path_string, error
-                );
-            }
-        }
-        Err(error) => {
-            eprintln!(
-                "[Netherstone] Failed to open database while moving AST cache {} -> {}: {}",
-                source_path, new_path_string, error
-            );
-        }
-    }
+    sync_caches_after_path_change(&source_path, &new_path, "move");
 
     Ok(new_path_string)
 }
@@ -1271,5 +1273,45 @@ mod tests {
             })
             .collect();
         assert_eq!(names, ["a.md", "b.md"]);
+    }
+    #[test]
+    fn moved_markdown_paths_maps_every_shard_in_a_folder() {
+        let dir = std::env::temp_dir().join(format!("netherstone-moved-{}", std::process::id()));
+        let moved = dir.join("Archive").join("Work");
+        std::fs::create_dir_all(moved.join("2026")).unwrap();
+        std::fs::write(moved.join("Plan.md"), "").unwrap();
+        std::fs::write(moved.join("2026").join("Notes.md"), "").unwrap();
+        std::fs::write(moved.join("Sketch.excalidraw"), "").unwrap();
+
+        let old_root = dir.join("Work");
+        let mut pairs = moved_markdown_paths(&old_root.to_string_lossy(), &moved);
+        pairs.sort();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        let expected = |relative: &[&str]| {
+            let from = relative.iter().fold(old_root.clone(), |p, part| p.join(part));
+            let to = relative.iter().fold(moved.clone(), |p, part| p.join(part));
+            (from.to_string_lossy().to_string(), to.to_string_lossy().to_string())
+        };
+        let mut wanted = vec![expected(&["2026", "Notes.md"]), expected(&["Plan.md"])];
+        wanted.sort();
+        assert_eq!(pairs, wanted);
+    }
+
+    #[test]
+    fn move_file_refuses_to_move_a_folder_into_itself() {
+        let dir = std::env::temp_dir().join(format!("netherstone-into-{}", std::process::id()));
+        let inner = dir.join("Work").join("Inner");
+        std::fs::create_dir_all(&inner).unwrap();
+
+        let result = move_file(
+            dir.join("Work").to_string_lossy().into_owned(),
+            inner.to_string_lossy().into_owned(),
+        );
+        let still_there = inner.is_dir();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(result.is_err());
+        assert!(still_there);
     }
 }

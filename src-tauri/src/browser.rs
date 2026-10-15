@@ -79,14 +79,6 @@ impl BrowserState {
         Self::snapshot_from_inner(label, &state)
     }
 
-    pub fn apply_navigation(&self, label: &str, url: String) -> BrowserStateSnapshot {
-        let mut inner = self.0.lock().unwrap();
-        let state = inner.entry(label.to_string()).or_default();
-        state.current_url = Some(url);
-        state.is_loading = true;
-        Self::snapshot_from_inner(label, state)
-    }
-
     pub fn apply_page_load(
         &self,
         label: &str,
@@ -233,13 +225,12 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                     );
                     return false;
                 }
-
-                let browser_state = app.state::<BrowserState>();
-                let snapshot = browser_state.apply_navigation(&label, url.to_string());
-                emit_browser_state(app, snapshot);
-                refresh_and_emit_browser_state(app, &label);
             }
 
+            // The address and loading state are left to `on_page_load`. On
+            // macOS this also runs for every frame inside the page (embeds,
+            // ads, `about:srcdoc`), which would show the frame's URL and stay
+            // loading forever, since frames never report a finished load.
             true
         })
         .on_page_load(|webview, payload| {

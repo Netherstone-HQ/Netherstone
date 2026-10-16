@@ -61,7 +61,7 @@ export function AppHeader({
             }
           >
             <PanelLeftIcon className="size-5 scale-x-[-1]" />
-            <span className="sr-only">Toggle Right Sidebar</span>
+            <span className="sr-only">Toggle right sidebar</span>
           </Button>
         </div>
       </div>
@@ -76,7 +76,7 @@ export function AppHeader({
           className="ml-auto gap-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         >
           <FilePlusIcon className="size-4" />
-          New Shard
+          New shard
         </Button>
       </div>
     </header>

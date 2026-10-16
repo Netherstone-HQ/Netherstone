@@ -199,7 +199,7 @@ export function MoveFileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isFolder ? "Move Folder" : "Move File"}</DialogTitle>
+          <DialogTitle>{isFolder ? "Move folder" : "Move file"}</DialogTitle>
           <DialogDescription>
             Select a folder to move "{fileName}" to.
           </DialogDescription>
@@ -210,7 +210,7 @@ export function MoveFileDialog({
             {currentVaultPath && (
               <FolderRow
                 path={currentVaultPath}
-                name="Vault Root"
+                name="Vault root"
                 depth={0}
                 isCurrent={pathsEqual(currentVaultPath, currentParentDir)}
                 isLast={folderOptions.length === 0}

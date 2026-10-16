@@ -134,7 +134,7 @@ export function LeftSidebarResizeHandle({
     <Button
       type="button"
       variant="ghost"
-      aria-label="Resize Sidebar"
+      aria-label="Resize sidebar"
       tabIndex={-1}
       onPointerDown={handleResizePointerDown}
       onClick={(event) => {

@@ -95,15 +95,15 @@ export function VaultSwitcher() {
         <SidebarGroupContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Open Vault" onClick={handleOpenVault}>
+              <SidebarMenuButton tooltip="Open vault" onClick={handleOpenVault}>
                 <FolderOpenIcon />
-                <span>Open Vault</span>
+                <span>Open vault</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Open Shard" onClick={handleOpenShard}>
+              <SidebarMenuButton tooltip="Open shard" onClick={handleOpenShard}>
                 <FileIcon />
-                <span>Open Shard</span>
+                <span>Open shard</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

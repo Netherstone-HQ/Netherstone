@@ -522,7 +522,7 @@ export function ExcalidrawCanvas({
             className="pointer-events-auto shadow-lg"
           >
             <FileImageIcon />
-            Export current options to Shard
+            Export current options to shard
           </Button>
         </div>
       )}
@@ -557,7 +557,7 @@ export function ExcalidrawCanvas({
               openImageExportDialog();
             }}
           >
-            Export PNG to Shard...
+            Export PNG to shard…
           </MainMenu.Item>
           <MainMenu.DefaultItems.Export />
           <MainMenu.DefaultItems.ClearCanvas />

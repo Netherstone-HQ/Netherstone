@@ -134,7 +134,7 @@ export function TagBrowser() {
             </PopoverTrigger>
             <PopoverContent className="w-80">
               <div className="space-y-2">
-                <h4 className="font-medium leading-none">How Tags Work</h4>
+                <h4 className="font-medium leading-none">How tags work</h4>
                 <p className="text-ui text-muted-foreground">
                   Tags are automatically extracted from your shards. Simply type{" "}
                   <code className="rounded bg-muted px-1 py-0.5">#tagname</code>{" "}

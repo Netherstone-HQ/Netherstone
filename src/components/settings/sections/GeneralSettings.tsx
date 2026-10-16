@@ -43,8 +43,8 @@ export function GeneralSettings() {
       <SettingsGroup title="Deleting">
         <PreferenceSwitch
           name="confirmBeforeDelete"
-          label="Ask before moving to Trash"
-          description="Deleted shards and folders go to your system Trash."
+          label="Ask before moving to trash"
+          description="Deleted shards and folders go to your system trash."
         />
       </SettingsGroup>
 

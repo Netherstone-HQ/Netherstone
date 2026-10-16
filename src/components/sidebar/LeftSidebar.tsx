@@ -258,11 +258,11 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
               <DropdownMenuContent side="top" align="start" className="w-56">
                 <DropdownMenuItem onClick={() => void handleOpenVault()}>
                   <FolderOpenIcon />
-                  <span>Open Vault</span>
+                  <span>Open vault</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void handleOpenShard()}>
                   <FileIcon />
-                  <span>Open Shard</span>
+                  <span>Open shard</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!currentVaultPath}
@@ -274,7 +274,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onNewShard}>
                   <FilePlusIcon />
-                  <span>New Shard</span>
+                  <span>New shard</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

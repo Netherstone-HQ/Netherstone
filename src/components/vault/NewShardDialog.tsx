@@ -118,7 +118,7 @@ export function NewShardDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Shard</DialogTitle>
+          <DialogTitle>Create new shard</DialogTitle>
           <DialogDescription>
             Create a new markdown file in your vault.
           </DialogDescription>
@@ -126,7 +126,7 @@ export function NewShardDialog({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="shard-name">Shard Name</Label>
+            <Label htmlFor="shard-name">Shard name</Label>
             <Input
               id="shard-name"
               placeholder="my-new-shard"
@@ -160,7 +160,7 @@ export function NewShardDialog({
             onClick={handleCreate}
             disabled={!shardName.trim() || isCreating}
           >
-            {isCreating ? "Creating..." : "Create Shard"}
+            {isCreating ? "Creating..." : "Create shard"}
           </Button>
         </DialogFooter>
       </DialogContent>

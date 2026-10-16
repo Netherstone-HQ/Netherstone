@@ -123,7 +123,7 @@ export const turnIntoItems = [
       'flowchart',
       'mermaid',
     ],
-    label: 'Code Drawing',
+    label: 'Code drawing',
     value: KEYS.codeDrawing,
   },
   {

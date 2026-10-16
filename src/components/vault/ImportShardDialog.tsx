@@ -27,7 +27,7 @@ export function ImportShardDialog({
     <Dialog open={shard !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Shard is Outside of Vault</DialogTitle>
+          <DialogTitle>Shard is outside the vault</DialogTitle>
           <DialogDescription>
             <strong className="text-foreground">{fileName}</strong> is outside
             your current vault. What would you like to do?
@@ -36,9 +36,9 @@ export function ImportShardDialog({
 
         <div className="grid grid-cols-2 gap-2 pt-2">
           <Button variant="outline" onClick={onOpenVault}>
-            Switch Vault
+            Switch vault
           </Button>
-          <Button onClick={onImport}>Import into Vault</Button>
+          <Button onClick={onImport}>Import into vault</Button>
         </div>
       </DialogContent>
     </Dialog>

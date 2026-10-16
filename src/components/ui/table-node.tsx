@@ -1039,28 +1039,28 @@ function TableBordersDropdownMenuContent(
           onCheckedChange={getOnSelectTableBorder("top")}
         >
           <BorderTopIcon />
-          <div>Top Border</div>
+          <div>Top border</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasRightBorder}
           onCheckedChange={getOnSelectTableBorder("right")}
         >
           <BorderRightIcon />
-          <div>Right Border</div>
+          <div>Right border</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasBottomBorder}
           onCheckedChange={getOnSelectTableBorder("bottom")}
         >
           <BorderBottomIcon />
-          <div>Bottom Border</div>
+          <div>Bottom border</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasLeftBorder}
           onCheckedChange={getOnSelectTableBorder("left")}
         >
           <BorderLeftIcon />
-          <div>Left Border</div>
+          <div>Left border</div>
         </DropdownMenuCheckboxItem>
       </DropdownMenuGroup>
 
@@ -1070,14 +1070,14 @@ function TableBordersDropdownMenuContent(
           onCheckedChange={getOnSelectTableBorder("none")}
         >
           <BorderNoneIcon />
-          <div>No Border</div>
+          <div>No border</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasOuterBorders}
           onCheckedChange={getOnSelectTableBorder("outer")}
         >
           <BorderAllIcon />
-          <div>Outside Borders</div>
+          <div>Outside borders</div>
         </DropdownMenuCheckboxItem>
       </DropdownMenuGroup>
     </DropdownMenuContent>

@@ -12,7 +12,7 @@ export function BacklinksSection({
     <div className="mb-6">
       <div className="mb-3 flex items-center gap-2">
         <UnlinkIcon className="h-4 w-4" />
-        <h3 className="text-ui font-semibold">Referenced By</h3>
+        <h3 className="text-ui font-semibold">Referenced by</h3>
       </div>
 
       {!currentFilePath ? (

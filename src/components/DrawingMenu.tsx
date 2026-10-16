@@ -170,9 +170,9 @@ export function DrawingMenu({
       ui.removeRecentFile(drawingPath);
       ui.openDrawing(null);
       await refreshFileTree(currentVaultPath);
-      toast.success(`Moved ${title} to Trash`);
+      toast.success(`Moved ${title} to trash`);
     } catch (error) {
-      showError("Couldn't move drawing to Trash", error);
+      showError("Couldn't move drawing to trash", error);
     }
   };
 
@@ -258,7 +258,7 @@ export function DrawingMenu({
               onSelect={() => void handleDelete()}
             >
               <Trash2Icon />
-              Move to Trash
+              Move to trash
             </DropdownMenuItem>
           </>
         ) : null}

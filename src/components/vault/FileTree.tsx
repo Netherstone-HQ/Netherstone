@@ -62,7 +62,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           </SidebarGroupAction>
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={6}>
-          New Folder
+          New folder
         </TooltipContent>
       </Tooltip>
       <Tooltip delayDuration={300}>
@@ -76,7 +76,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           </SidebarGroupAction>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={6}>
-          New Shard
+          New shard
         </TooltipContent>
       </Tooltip>
       <SidebarGroupContent
@@ -113,11 +113,11 @@ export function FileTree({ onNewShard }: FileTreeProps) {
               onSelect={menuAction.defer(() => setIsCreatingRootShard(true))}
             >
               <FilePlusIcon />
-              New Shard
+              New shard
             </ContextMenuItem>
             <ContextMenuItem onSelect={menuAction.defer(startRootFolder)}>
               <FolderPlusIcon />
-              New Folder
+              New folder
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>

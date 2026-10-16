@@ -327,7 +327,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon className="size-5" />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">Toggle sidebar</span>
     </Button>
   );
 }
@@ -393,7 +393,7 @@ function SidebarRail({
     <button
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label="Resize Sidebar"
+      aria-label="Resize sidebar"
       tabIndex={-1}
       onPointerDown={(event) => {
         onPointerDown?.(event);

@@ -112,7 +112,7 @@ function sumBytes(files: UnusedAttachment[]) {
 
 /**
  * Unused files, and a cleanup that moves the ones unused for the grace
- * period to the Trash after previewing them.
+ * period to the trash after previewing them.
  */
 function UnusedFilesRow({
   unused,
@@ -141,7 +141,7 @@ function UnusedFilesRow({
 
       if (result.removed.length > 0) {
         toast.success(
-          `Moved ${plural(result.removed.length, "file")} to Trash`,
+          `Moved ${plural(result.removed.length, "file")} to trash`,
           {
             description:
               result.kept.length > 0
@@ -205,12 +205,12 @@ function UnusedFilesRow({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Move {plural(ready.length, "unused file")} to Trash?
+              Move {plural(ready.length, "unused file")} to trash?
             </AlertDialogTitle>
             <AlertDialogDescription>
               No shard has linked to these for {CLEANUP_GRACE_DAYS} days. This
               frees {formatBytes(sumBytes(ready))}, and you can restore them
-              from the Trash.
+              from the trash.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm">
@@ -240,7 +240,7 @@ function UnusedFilesRow({
               }}
             >
               {isCleaning ? <Loader2Icon className="animate-spin" /> : null}
-              Move to Trash
+              Move to trash
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

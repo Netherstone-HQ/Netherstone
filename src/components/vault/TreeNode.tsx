@@ -519,12 +519,12 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     node.kind === "directory"
       ? [
           {
-            label: "New Shard",
+            label: "New shard",
             icon: FilePlusIcon,
             onSelect: () => setIsCreatingShard(true),
           },
           {
-            label: "New Folder",
+            label: "New folder",
             icon: FolderPlusIcon,
             onSelect: handleNewFolder,
           },
@@ -541,7 +541,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             onSelect: () => void handleOpenFileLocation(),
           },
           {
-            label: "Move to Trash",
+            label: "Move to trash",
             icon: Trash2Icon,
             onSelect: handleTrash,
             destructive: true,
@@ -566,7 +566,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 },
               ]),
           {
-            label: "Move to Trash",
+            label: "Move to trash",
             icon: Trash2Icon,
             onSelect: handleTrash,
             destructive: true,
@@ -758,7 +758,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             variant="destructive"
             onClick={() => void handleDelete()}
           >
-            Move to Trash
+            Move to trash
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

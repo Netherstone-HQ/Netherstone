@@ -70,7 +70,7 @@ export function EquationElement(props: PlateElementProps<TEquationElement>) {
             ) : (
               <div className="flex h-7 w-full items-center gap-2 whitespace-nowrap text-muted-foreground text-sm">
                 <RadicalIcon className="size-6 text-muted-foreground/80" />
-                <div>Add a Tex equation</div>
+                <div>Add a TeX equation</div>
               </div>
             )}
           </div>

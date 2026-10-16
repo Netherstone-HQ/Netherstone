@@ -132,9 +132,9 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl p-0" showCloseButton={false}>
-        <DialogDescription className="hidden">Search Dialog</DialogDescription>
+        <DialogDescription className="hidden">Search dialog</DialogDescription>
         <DialogHeader className="px-4 pt-4 pb-0">
-          <DialogTitle className="sr-only">Search Files</DialogTitle>
+          <DialogTitle className="sr-only">Search files</DialogTitle>
           <div className="relative">
             <SearchIcon className="absolute left-3 top-1/2 size-icon -translate-y-1/2 text-muted-foreground" />
             <Input

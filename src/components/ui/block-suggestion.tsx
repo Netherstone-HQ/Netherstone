@@ -49,7 +49,7 @@ const TYPE_TEXT_MAP: Record<string, (node?: TElement) => string> = {
   [KEYS.audio]: () => "Audio",
   [KEYS.blockquote]: () => "Blockquote",
   [KEYS.callout]: () => "Callout",
-  [KEYS.codeBlock]: () => "Code Block",
+  [KEYS.codeBlock]: () => "Code block",
   [KEYS.column]: () => "Column",
   [KEYS.equation]: () => "Equation",
   [KEYS.file]: () => "File",

@@ -3,9 +3,11 @@ import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor";
 import { CollapsibleSection, SECTION_NOTE_CLASS } from "./CollapsibleSection";
 
-const INDENT_PX = 12;
-/** Where the first level's guide sits; each level's text starts 7px past it. */
-const RAIL_PX = 3;
+const INDENT_PX = 14;
+/** Where the top level's text starts. */
+const TEXT_PX = 8;
+/** How far past its heading's first letter a level's guide sits. */
+const GUIDE_INSET_PX = 3;
 
 export function OutlineSection() {
   const plateEditor = useEditorStore((s) => s.plateEditor);
@@ -34,20 +36,23 @@ export function OutlineSection() {
                 type="button"
                 className={cn(
                   "relative block w-full truncate rounded-sm py-1 pr-1 text-left text-ui-sm outline-none transition-colors hover:bg-accent/40 hover:text-foreground focus-visible:bg-accent/40",
-                  level === 0 ? "text-foreground/85" : "text-muted-foreground",
+                  level === 0
+                    ? "font-medium text-foreground"
+                    : "text-sidebar-foreground/85",
                 )}
-                style={{ paddingLeft: RAIL_PX + 7 + level * INDENT_PX }}
+                style={{ paddingLeft: TEXT_PX + level * INDENT_PX }}
                 onClick={() =>
                   plateEditor && scrollPlateToHeading(plateEditor, heading)
                 }
               >
-                {/* One guide per level, like the file tree. */}
+                {/* One guide per level, under the heading it belongs to, like
+                    the file tree. */}
                 {Array.from({ length: level }, (_, i) => (
                   <span
                     key={i}
                     aria-hidden="true"
                     className="absolute inset-y-0 w-px bg-border"
-                    style={{ left: RAIL_PX + i * INDENT_PX }}
+                    style={{ left: TEXT_PX + i * INDENT_PX + GUIDE_INSET_PX }}
                   />
                 ))}
                 {heading.title}

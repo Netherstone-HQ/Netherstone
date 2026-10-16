@@ -38,7 +38,7 @@ export function RightSidebar() {
       <aside
         aria-label="Right sidebar"
         className={cn(
-          "absolute inset-y-0 flex w-72 flex-col gap-2 overflow-y-auto border-l bg-sidebar p-2 transition-[right] duration-200 ease-linear",
+          "absolute inset-y-0 flex w-72 flex-col gap-3 overflow-y-auto border-l bg-sidebar p-2 transition-[right] duration-200 ease-linear",
           isOpen ? "right-0" : "-right-72",
         )}
       >

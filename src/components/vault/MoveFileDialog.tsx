@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FolderSimpleIcon } from "@phosphor-icons/react";
+import { FolderIcon } from "lucide-react";
 
 import {
   Dialog,
@@ -112,7 +112,7 @@ function FolderRow({
         disabled={isCurrent}
         onClick={() => onSelect(path)}
       >
-        <FolderSimpleIcon className="mr-2 h-4 w-4 shrink-0" />
+        <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{name}</span>
         {isCurrent && (
           <span className="ml-2 shrink-0 text-xs text-muted-foreground">

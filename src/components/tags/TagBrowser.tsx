@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  TagIcon,
-  FileIcon,
-  HashIcon,
-  XIcon,
-  InfoIcon,
-} from "@phosphor-icons/react";
+import { FileIcon, HashIcon, InfoIcon, TagIcon, XIcon } from "lucide-react";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useVaultStore } from "@/store/vault";
 import { useUIStore } from "@/store/ui";

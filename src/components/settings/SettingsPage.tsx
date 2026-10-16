@@ -1,15 +1,15 @@
 import { useEffect } from "react";
 import {
-  ArrowsClockwiseIcon,
-  FolderSimpleIcon,
-  GearSixIcon,
+  FolderIcon,
   InfoIcon,
   KeyboardIcon,
-  PaintBrushIcon,
+  PaintbrushIcon,
   PaperclipIcon,
   PencilLineIcon,
-  type Icon,
-} from "@phosphor-icons/react";
+  RefreshCwIcon,
+  SettingsIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 import { AboutSettings } from "@/components/settings/sections/AboutSettings";
 import { AppearanceSettings } from "@/components/settings/sections/AppearanceSettings";
@@ -25,7 +25,7 @@ import { type SettingsCategory, useUIStore } from "@/store/ui";
 type Category = {
   id: SettingsCategory;
   label: string;
-  icon: Icon;
+  icon: LucideIcon;
   Content: () => React.ReactNode;
 };
 
@@ -33,13 +33,13 @@ export const SETTINGS_CATEGORIES: Category[] = [
   {
     id: "general",
     label: "General",
-    icon: GearSixIcon,
+    icon: SettingsIcon,
     Content: GeneralSettings,
   },
   {
     id: "appearance",
     label: "Appearance",
-    icon: PaintBrushIcon,
+    icon: PaintbrushIcon,
     Content: AppearanceSettings,
   },
   {
@@ -57,13 +57,13 @@ export const SETTINGS_CATEGORIES: Category[] = [
   {
     id: "sync",
     label: "Sync & backup",
-    icon: ArrowsClockwiseIcon,
+    icon: RefreshCwIcon,
     Content: SyncSettings,
   },
   {
     id: "vault",
     label: "Vault",
-    icon: FolderSimpleIcon,
+    icon: FolderIcon,
     Content: VaultSettings,
   },
   {
@@ -120,10 +120,7 @@ export function SettingsPage() {
                 active && "bg-sidebar-accent font-medium text-foreground",
               )}
             >
-              <Icon
-                className="size-4 shrink-0"
-                weight={active ? "fill" : "regular"}
-              />
+              <Icon className="size-4 shrink-0" />
               {label}
             </button>
           );

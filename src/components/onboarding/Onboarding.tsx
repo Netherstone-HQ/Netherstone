@@ -1,7 +1,7 @@
 import "./onboarding.css";
 
 import { useState } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "lucide-react";
 
 import { WindowTitleBar } from "@/components/WindowTitleBar";
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { LoaderCircleIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -97,7 +97,7 @@ export function ConflictDialog({ vaultPath }: { vaultPath: string }) {
             onClick={() => void choose("both")}
             title={`GitHub's version keeps the name; this device's is saved as ${copyName}`}
           >
-            {choosing === "both" ? <CircleNotchIcon className="animate-spin" /> : null}
+            {choosing === "both" ? <LoaderCircleIcon className="animate-spin" /> : null}
             Keep both
           </Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
@@ -106,12 +106,12 @@ export function ConflictDialog({ vaultPath }: { vaultPath: string }) {
               disabled={choosing !== null}
               onClick={() => void choose("gitHub")}
             >
-              {choosing === "gitHub" ? <CircleNotchIcon className="animate-spin" /> : null}
+              {choosing === "gitHub" ? <LoaderCircleIcon className="animate-spin" /> : null}
               Keep GitHub version
             </Button>
             <Button disabled={choosing !== null} onClick={() => void choose("thisDevice")}>
               {choosing === "thisDevice" ? (
-                <CircleNotchIcon className="animate-spin" />
+                <LoaderCircleIcon className="animate-spin" />
               ) : null}
               Keep this device's version
             </Button>

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleNotchIcon, FileDocIcon, FileHtmlIcon, FilePdfIcon, XIcon } from "@phosphor-icons/react";
+import {
+  FileCodeIcon,
+  FileTextIcon,
+  FileTypeIcon,
+  LoaderCircleIcon,
+  XIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,10 +32,10 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   html: "Web page",
 };
 
-const FORMAT_ICONS: Record<ExportFormat, typeof FilePdfIcon> = {
-  pdf: FilePdfIcon,
-  docx: FileDocIcon,
-  html: FileHtmlIcon,
+const FORMAT_ICONS: Record<ExportFormat, typeof FileTextIcon> = {
+  pdf: FileTextIcon,
+  docx: FileTypeIcon,
+  html: FileCodeIcon,
 };
 
 const EXPORT_LABELS: Record<ExportFormat, string> = {
@@ -245,7 +251,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
               </>
             ) : (
               <>
-                <CircleNotchIcon className="size-5 animate-spin" />
+                <LoaderCircleIcon className="size-5 animate-spin" />
                 Preparing preview…
               </>
             )}
@@ -291,7 +297,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
                       : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                   )}
                 >
-                  <Icon className="size-6" weight={checked ? "duotone" : "regular"} />
+                  <Icon className="size-6" />
                   {FORMAT_LABELS[format]}
                 </button>
               );
@@ -383,7 +389,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
             Cancel
           </Button>
           <Button onClick={handleExport} disabled={!prepared || isExporting}>
-            {isExporting ? <CircleNotchIcon className="animate-spin" /> : null}
+            {isExporting ? <LoaderCircleIcon className="animate-spin" /> : null}
             {isExporting ? "Exporting…" : EXPORT_LABELS[options.format]}
           </Button>
         </footer>

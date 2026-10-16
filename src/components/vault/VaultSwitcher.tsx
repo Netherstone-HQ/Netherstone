@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileIcon, FolderOpenIcon } from "@phosphor-icons/react";
+import { FileIcon, FolderOpenIcon } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,

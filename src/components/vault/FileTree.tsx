@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FilePlusIcon, FolderSimplePlusIcon } from "@phosphor-icons/react";
+import { FilePlusIcon, FolderPlusIcon } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -58,7 +58,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
             aria-label="Create new folder"
             className={`right-9 ${GROUP_ACTION_CLASS}`}
           >
-            <FolderSimplePlusIcon />
+            <FolderPlusIcon />
           </SidebarGroupAction>
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={6}>
@@ -116,7 +116,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
               New Shard
             </ContextMenuItem>
             <ContextMenuItem onSelect={menuAction.defer(startRootFolder)}>
-              <FolderSimplePlusIcon />
+              <FolderPlusIcon />
               New Folder
             </ContextMenuItem>
           </ContextMenuContent>

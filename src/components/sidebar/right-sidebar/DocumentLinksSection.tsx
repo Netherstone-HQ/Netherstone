@@ -1,8 +1,4 @@
-import {
-  LinkIcon,
-  CheckCircleIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react";
+import { CircleAlertIcon, CircleCheckIcon, LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getLinkTargetDisplay } from "./link-utils";
 import type { DocumentLinksSectionProps } from "./types";
@@ -43,9 +39,9 @@ export function DocumentLinksSection({
                   const content = (
                     <>
                       {link.isValid ? (
-                        <CheckCircleIcon className="mt-0.5 h-3 w-3 shrink-0 text-green-600 dark:text-green-400" />
+                        <CircleCheckIcon className="mt-0.5 h-3 w-3 shrink-0 text-green-600 dark:text-green-400" />
                       ) : (
-                        <WarningCircleIcon className="mt-0.5 h-3 w-3 shrink-0 text-red-600 dark:text-red-400" />
+                        <CircleAlertIcon className="mt-0.5 h-3 w-3 shrink-0 text-red-600 dark:text-red-400" />
                       )}
                       <div className="min-w-0 flex-1 text-left">
                         <div

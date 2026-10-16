@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
-  ArrowClockwiseIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   PauseIcon,
+  RotateCwIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/store";
 import { useBrowserWebview } from "@/components/browser/useBrowserWebview";
@@ -313,9 +313,9 @@ export function BrowserPanel({
             title={isPageLoading ? "Stop loading" : "Refresh"}
           >
             {isPageLoading ? (
-              <XIcon className="size-4" weight="bold" />
+              <XIcon className="size-4" />
             ) : (
-              <ArrowClockwiseIcon className="size-4" />
+              <RotateCwIcon className="size-4" />
             )}
           </Button>
 
@@ -376,7 +376,7 @@ export function BrowserPanel({
               data-slot="browser-paused"
               className="pointer-events-none absolute inset-0 flex select-none flex-col items-center justify-center gap-1.5 bg-muted/40 text-muted-foreground"
             >
-              <PauseIcon className="size-5" weight="fill" />
+              <PauseIcon className="size-5 fill-current" />
               <span className="text-xs">Paused</span>
               <span className="max-w-[80%] truncate text-xs opacity-70">
                 {getHostname(currentUrl)}

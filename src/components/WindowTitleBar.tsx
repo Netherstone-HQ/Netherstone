@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  MinusIcon,
-  SquareIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { MinusIcon, SquareIcon, XIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { cn } from "@/lib/utils";
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
@@ -57,7 +53,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
           if (!isTauriWindow) return;
           void getCurrentWindow().minimize();
         },
-        icon: <MinusIcon className="size-4" weight="bold" />,
+        icon: <MinusIcon className="size-4" />,
       },
       {
         label: isMaximized ? "Restore" : "Maximize",
@@ -65,7 +61,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
           if (!isTauriWindow) return;
           void getCurrentWindow().toggleMaximize();
         },
-        icon: <SquareIcon className="size-3.5" weight="bold" />,
+        icon: <SquareIcon className="size-3.5" />,
       },
       {
         label: "Close",
@@ -73,7 +69,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
           if (!isTauriWindow) return;
           void getCurrentWindow().close();
         },
-        icon: <XIcon className="size-4" weight="bold" />,
+        icon: <XIcon className="size-4" />,
         destructive: true,
       },
     ],

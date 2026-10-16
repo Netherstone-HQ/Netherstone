@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CopyIcon } from "@phosphor-icons/react";
+import { CopyIcon } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";

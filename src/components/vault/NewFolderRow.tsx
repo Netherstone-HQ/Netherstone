@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { ChevronRightIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -71,7 +71,7 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
             className="flex h-4 shrink-0 items-center justify-center"
             style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
           >
-            <CaretRightIcon className="h-3.5 w-3.5 text-sidebar-foreground/70" />
+            <ChevronRightIcon className="h-3.5 w-3.5 text-sidebar-foreground/70" />
           </span>
           <Input
             autoFocus

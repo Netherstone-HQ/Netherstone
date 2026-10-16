@@ -1,4 +1,4 @@
-import { LinkBreakIcon, FileTextIcon } from "@phosphor-icons/react";
+import { FileTextIcon, UnlinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { BacklinksSectionProps } from "./types";
 
@@ -11,7 +11,7 @@ export function BacklinksSection({
   return (
     <div className="mb-6">
       <div className="mb-3 flex items-center gap-2">
-        <LinkBreakIcon className="h-4 w-4" />
+        <UnlinkIcon className="h-4 w-4" />
         <h3 className="text-sm font-semibold">Referenced By</h3>
       </div>
 

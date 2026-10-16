@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { LoaderCircleIcon } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export function GitHubAppInstallNotice() {
         Install on GitHub
       </Button>
       <p className="inline-flex items-center gap-1.5 text-muted-foreground text-xs">
-        <CircleNotchIcon className="size-3.5 animate-spin" />
+        <LoaderCircleIcon className="size-3.5 animate-spin" />
         Continues on its own once it's installed
       </p>
     </div>

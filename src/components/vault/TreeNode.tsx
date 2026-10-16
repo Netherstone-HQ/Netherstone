@@ -3,17 +3,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { useDrag } from "react-dnd";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
-  ArrowsDownUpIcon,
-  CaretRightIcon,
-  DotsThreeVerticalIcon,
-  ExportIcon,
+  ArrowDownUpIcon,
+  ChevronRightIcon,
+  EllipsisVerticalIcon,
   FilePlusIcon,
   FolderOpenIcon,
-  FolderSimplePlusIcon,
-  PencilSimpleIcon,
-  ScribbleIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+  FolderPlusIcon,
+  PencilIcon,
+  ShareIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { DrawingIcon } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -525,16 +525,16 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           },
           {
             label: "New Folder",
-            icon: FolderSimplePlusIcon,
+            icon: FolderPlusIcon,
             onSelect: handleNewFolder,
           },
           {
             label: "Rename",
-            icon: PencilSimpleIcon,
+            icon: PencilIcon,
             onSelect: startRename,
             separated: true,
           },
-          { label: "Move", icon: ArrowsDownUpIcon, onSelect: handleMove },
+          { label: "Move", icon: ArrowDownUpIcon, onSelect: handleMove },
           {
             label: "Open location",
             icon: FolderOpenIcon,
@@ -542,15 +542,15 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           },
           {
             label: "Move to Trash",
-            icon: TrashIcon,
+            icon: Trash2Icon,
             onSelect: handleTrash,
             destructive: true,
             separated: true,
           },
         ]
       : [
-          { label: "Rename", icon: PencilSimpleIcon, onSelect: startRename },
-          { label: "Move", icon: ArrowsDownUpIcon, onSelect: handleMove },
+          { label: "Rename", icon: PencilIcon, onSelect: startRename },
+          { label: "Move", icon: ArrowDownUpIcon, onSelect: handleMove },
           {
             label: "Open location",
             icon: FolderOpenIcon,
@@ -561,13 +561,13 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             : [
                 {
                   label: "Export…",
-                  icon: ExportIcon,
+                  icon: ShareIcon,
                   onSelect: () => openExportDialog(node.path),
                 },
               ]),
           {
             label: "Move to Trash",
-            icon: TrashIcon,
+            icon: Trash2Icon,
             onSelect: handleTrash,
             destructive: true,
             separated: true,
@@ -609,7 +609,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
               className="flex h-4 shrink-0 items-center justify-center"
               style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
             >
-              <CaretRightIcon
+              <ChevronRightIcon
                 className={cn(
                   "h-3.5 w-3.5 text-sidebar-foreground/70 transition-transform duration-150",
                   isOpen && "rotate-90",
@@ -633,7 +633,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 className="flex h-4 shrink-0 items-center justify-center"
                 style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
               >
-                <CaretRightIcon
+                <ChevronRightIcon
                   className={cn(
                     "h-3.5 w-3.5 text-sidebar-foreground/70 transition-transform duration-150",
                     isOpen && "rotate-90",
@@ -674,7 +674,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             style={{ width: `${FILE_DISCLOSURE_SLOT_PX}px` }}
           />
           {isDrawingPath(node.path) ? (
-            <ScribbleIcon
+            <DrawingIcon
               aria-label="Drawing"
               className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/60"
             />
@@ -706,7 +706,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <DotsThreeVerticalIcon weight="bold" className="size-5" />
+                <EllipsisVerticalIcon className="size-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent

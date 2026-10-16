@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { ChevronRightIcon } from "lucide-react";
 
 import {
   Collapsible,
@@ -40,7 +40,7 @@ export function CollapsibleSection({
           {icon}
           <span>{title}</span>
           {adornment}
-          <CaretRightIcon
+          <ChevronRightIcon
             aria-hidden="true"
             className={cn(
               "ml-auto size-3.5 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground",

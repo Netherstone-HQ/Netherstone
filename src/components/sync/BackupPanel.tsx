@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowSquareOutIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  CircleNotchIcon,
-  CloudSlashIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react";
+  ChevronRightIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CloudOffIcon,
+  ExternalLinkIcon,
+  LoaderCircleIcon,
+} from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatDistanceToNow } from "date-fns";
 
@@ -102,7 +102,7 @@ export function BackupPanel({
           >
             <GitHubAvatar account={account} size="sm" />
             <span className="min-w-0 flex-1 truncate">{repoName}</span>
-            <ArrowSquareOutIcon className="size-3.5 text-muted-foreground" />
+            <ExternalLinkIcon className="size-3.5 text-muted-foreground" />
           </button>
         ) : null}
         <div className="flex items-center justify-between gap-2">
@@ -144,7 +144,7 @@ export function BackupPanel({
           disabled={isWorking || !plan || !appInstalled}
           onClick={() => void turnOn(vaultPath)}
         >
-          {isWorking ? <CircleNotchIcon className="animate-spin" /> : null}
+          {isWorking ? <LoaderCircleIcon className="animate-spin" /> : null}
           {isWorking ? "Setting up" : "Turn on sync"}
         </Button>
         {appInstalled ? (
@@ -194,7 +194,7 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
             className="inline-flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
             aria-expanded={showSkipped}
           >
-            <CaretRightIcon
+            <ChevronRightIcon
               className={cn("size-3 transition-transform", showSkipped && "rotate-90")}
             />
             {skipped.length === 1
@@ -235,7 +235,7 @@ function SyncStatus({
   if (isWorking) {
     return (
       <div className="flex items-center gap-2 text-sm">
-        <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+        <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         Syncing
       </div>
     );
@@ -244,7 +244,7 @@ function SyncStatus({
     return (
       <div className="space-y-0.5">
         <div className="flex items-center gap-2 text-sm">
-          <CloudSlashIcon className="size-4 text-muted-foreground" />
+          <CloudOffIcon className="size-4 text-muted-foreground" />
           Working offline
         </div>
         <p className="pl-6 text-muted-foreground text-xs">
@@ -255,7 +255,7 @@ function SyncStatus({
   }
   return (
     <div className="flex items-center gap-2 text-sm">
-      <CheckCircleIcon weight="fill" className="size-4 text-emerald-500" />
+      <CircleCheckIcon className="size-4 text-emerald-500" />
       {since ? `Synced ${since}` : "Synced"}
     </div>
   );
@@ -271,7 +271,7 @@ function ConflictList({
   return (
     <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
       <div className="flex items-center gap-2 text-sm">
-        <WarningCircleIcon weight="fill" className="size-4 text-amber-500" />
+        <CircleAlertIcon className="size-4 text-amber-500" />
         {conflicts.length === 1
           ? "1 file needs a decision"
           : `${conflicts.length} files need a decision`}
@@ -325,7 +325,7 @@ function BackupPicker({
       </p>
       {backups === null ? (
         <div className="flex h-16 items-center justify-center">
-          <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+          <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         </div>
       ) : backups.length === 0 ? (
         <p className="text-sm">No backups found on your GitHub account.</p>
@@ -341,7 +341,7 @@ function BackupPicker({
               >
                 <span className="min-w-0 flex-1 truncate">{backup.name}</span>
                 {isWorking && chosen === backup.fullName ? (
-                  <CircleNotchIcon className="size-3.5 animate-spin text-muted-foreground" />
+                  <LoaderCircleIcon className="size-3.5 animate-spin text-muted-foreground" />
                 ) : backup.pushedAt ? (
                   <span className="shrink-0 text-muted-foreground text-xs">
                     {formatDistanceToNow(new Date(backup.pushedAt), { addSuffix: true })}

@@ -1,4 +1,4 @@
-import { CheckCircleIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleCheckIcon, LoaderCircleIcon } from "lucide-react";
 import { useShallow } from "zustand/shallow";
 import { useEditorStore } from "@/store";
 
@@ -16,7 +16,7 @@ export function AutosaveIndicator() {
   if (isSaving) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <CircleNotchIcon className="size-3.5 animate-spin" />
+        <LoaderCircleIcon className="size-3.5 animate-spin" />
         <span>Saving...</span>
       </div>
     );
@@ -32,7 +32,7 @@ export function AutosaveIndicator() {
 
   return (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <CheckCircleIcon className="size-3.5" />
+      <CircleCheckIcon className="size-3.5" />
       <span>Saved</span>
     </div>
   );

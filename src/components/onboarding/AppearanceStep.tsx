@@ -1,4 +1,4 @@
-import { CaretDownIcon, CheckCircleIcon } from "@phosphor-icons/react";
+import { ChevronDownIcon, CircleCheckIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useTheme } from "@/components/theme/theme-provider";
@@ -101,7 +101,7 @@ export function AppearanceStep({
           className="-ml-2.5 text-muted-foreground text-xs"
         >
           {showMore ? copy.appearance.fewerThemes : copy.appearance.moreThemes}
-          <CaretDownIcon
+          <ChevronDownIcon
             data-icon="inline-end"
             className={cn("size-3 transition-transform", showMore && "rotate-180")}
           />
@@ -142,7 +142,7 @@ function ThemeOption({
       </div>
       <span className="flex items-center gap-1.5 font-medium text-sm">
         {label}
-        {selected ? <CheckCircleIcon weight="fill" className="size-4" /> : null}
+        {selected ? <CircleCheckIcon className="size-4" /> : null}
       </span>
     </button>
   );

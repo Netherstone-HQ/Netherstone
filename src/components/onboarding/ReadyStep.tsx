@@ -1,8 +1,5 @@
-import {
-  MagnifyingGlassIcon,
-  ScribbleIcon,
-  TextTIcon,
-} from "@phosphor-icons/react";
+import { SearchIcon, TypeIcon } from "lucide-react";
+import { DrawingIcon } from "@/components/icons";
 
 import { useState } from "react";
 
@@ -36,9 +33,9 @@ export function ReadyStep({
         : copy.ready.body;
 
   const tips = [
-    { icon: MagnifyingGlassIcon, text: copy.ready.tips.search(isMac ? "⌘K" : "Ctrl+K") },
-    { icon: TextTIcon, text: copy.ready.tips.blocks },
-    { icon: ScribbleIcon, text: copy.ready.tips.canvas },
+    { icon: SearchIcon, text: copy.ready.tips.search(isMac ? "⌘K" : "Ctrl+K") },
+    { icon: TypeIcon, text: copy.ready.tips.blocks },
+    { icon: DrawingIcon, text: copy.ready.tips.canvas },
   ];
 
   return (

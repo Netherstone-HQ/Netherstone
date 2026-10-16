@@ -1,5 +1,4 @@
-import { GlobeIcon, SidebarIcon } from "@phosphor-icons/react";
-import { FilePlusIcon } from "lucide-react";
+import { FilePlusIcon, GlobeIcon, PanelLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -61,7 +60,7 @@ export function AppHeader({
               isRightSidebarOpen ? "Hide right sidebar" : "Show right sidebar"
             }
           >
-            <SidebarIcon className="size-5 scale-x-[-1]" />
+            <PanelLeftIcon className="size-5 scale-x-[-1]" />
             <span className="sr-only">Toggle Right Sidebar</span>
           </Button>
         </div>

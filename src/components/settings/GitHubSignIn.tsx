@@ -1,10 +1,6 @@
 import { useId, useState } from "react";
-import {
-  CheckIcon,
-  CircleNotchIcon,
-  CopyIcon,
-  GithubLogoIcon,
-} from "@phosphor-icons/react";
+import { CheckIcon, CopyIcon, LoaderCircleIcon } from "lucide-react";
+import { GitHubIcon } from "@/components/icons";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/button";
@@ -44,9 +40,9 @@ export function GitHubSignIn({ compact = false }: { compact?: boolean }) {
       className={cn(compact && "w-full")}
     >
       {signIn.kind === "starting" ? (
-        <CircleNotchIcon className="animate-spin" />
+        <LoaderCircleIcon className="animate-spin" />
       ) : (
-        <GithubLogoIcon />
+        <GitHubIcon />
       )}
       Connect GitHub
     </Button>
@@ -136,7 +132,7 @@ function SignInCodePrompt({
       </div>
       <div className="flex items-center gap-3 text-muted-foreground text-xs">
         <span className="inline-flex items-center gap-1.5">
-          <CircleNotchIcon className="size-3.5 animate-spin" />
+          <LoaderCircleIcon className="size-3.5 animate-spin" />
           Waiting for you to approve on GitHub
         </span>
         <Button

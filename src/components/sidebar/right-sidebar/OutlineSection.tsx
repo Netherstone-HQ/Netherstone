@@ -1,4 +1,4 @@
-import { ListBulletsIcon } from "@phosphor-icons/react";
+import { ListIcon } from "lucide-react";
 import { scrollPlateToHeading } from "@/lib/plate-toc-headings";
 import { cn } from "@/lib/utils";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -21,7 +21,7 @@ export function OutlineSection({
     <CollapsibleSection
       section="outline"
       title="Outline"
-      icon={<ListBulletsIcon className="size-4" />}
+      icon={<ListIcon className="size-4" />}
       adornment={
         tocHeadings.length > 0 ? (
           <span className="font-normal text-muted-foreground text-xs tabular-nums">

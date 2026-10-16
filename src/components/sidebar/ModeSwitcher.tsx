@@ -1,4 +1,5 @@
-import { GearIcon, NotebookIcon, ScribbleIcon } from "@phosphor-icons/react";
+import { NotebookIcon, SettingsIcon } from "lucide-react";
+import { DrawingIcon } from "@/components/icons";
 import {
   Tooltip,
   TooltipContent,
@@ -10,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const modes: { mode: AppMode; label: string; icon: React.ElementType }[] = [
   { mode: "notes", label: "Notes", icon: NotebookIcon },
-  { mode: "canvas", label: "Canvas", icon: ScribbleIcon },
+  { mode: "canvas", label: "Canvas", icon: DrawingIcon },
 ];
 
 export function ModeSwitcher() {
@@ -61,7 +62,7 @@ export function ModeSwitcher() {
             aria-label="Settings"
             aria-pressed={activeNavItem === "settings"}
           >
-            <GearIcon className="size-5" />
+            <SettingsIcon className="size-5" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={6}>

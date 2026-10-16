@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MagnifyingGlassIcon, FileIcon } from "@phosphor-icons/react";
+import { FileIcon, SearchIcon } from "lucide-react";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useVaultStore } from "@/store/vault";
 
@@ -136,7 +136,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         <DialogHeader className="px-4 pt-4 pb-0">
           <DialogTitle className="sr-only">Search Files</DialogTitle>
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search your vault..."
               value={query}

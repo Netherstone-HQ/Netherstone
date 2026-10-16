@@ -8,7 +8,7 @@ import { TagBrowser } from "./tags/TagBrowser";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
 import { NewShardDialog } from "./vault/NewShardDialog";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { BrowserPanel } from "./browser/BrowserPanel";

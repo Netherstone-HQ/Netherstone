@@ -32,6 +32,14 @@ export function toVaultRelativePath(filePath: string, vaultPath: string) {
   return file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file;
 }
 
+/** The folders between the vault and `filePath`, or "" at the vault root. */
+export function getFolderInVault(filePath: string, vaultPath: string) {
+  return toVaultRelativePath(filePath, vaultPath)
+    .split("/")
+    .slice(0, -1)
+    .join("/");
+}
+
 /** Absolute path of a vault-relative path, using the vault's separators. */
 export function resolveVaultRelativePath(
   relativePath: string,

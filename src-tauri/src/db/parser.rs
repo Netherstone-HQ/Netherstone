@@ -1,3 +1,4 @@
+use crate::markdown_text::{markdown_options, tags_in};
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
 /// Metadata extracted from a markdown file.
@@ -65,7 +66,7 @@ fn classify_link_target(target: &str) -> LinkType {
 
 pub fn parse_markdown(content: &str) -> MarkdownMetadata {
     let mut metadata = MarkdownMetadata::default();
-    let parser = Parser::new(content);
+    let parser = Parser::new_ext(content, markdown_options());
 
     let mut current_link: Option<(String, String)> = None;
     let mut word_count = 0;
@@ -99,16 +100,9 @@ pub fn parse_markdown(content: &str) -> MarkdownMetadata {
                     link_text.push_str(&text);
                 }
 
-                // Extract tags (hashtags)
-                for word in text.split_whitespace() {
-                    if let Some(tag) = word.strip_prefix('#') {
-                        // Remove trailing punctuation
-                        let clean_tag = tag.trim_end_matches(|c: char| c.is_ascii_punctuation());
-                        if !clean_tag.is_empty() {
-                            metadata.tags.push(clean_tag.to_string());
-                        }
-                    }
-                }
+                metadata
+                    .tags
+                    .extend(tags_in(&text).map(|(_, tag)| tag.to_string()));
 
                 // Count words
                 word_count += text.split_whitespace().count();

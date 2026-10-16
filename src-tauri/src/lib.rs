@@ -2,6 +2,7 @@ mod browser;
 mod db;
 mod export;
 mod github;
+mod markdown_text;
 mod splash;
 mod sync;
 mod updater;
@@ -968,20 +969,11 @@ fn delete_vault_path(target_path: String) -> Result<(), String> {
 }
 
 #[tauri::command(async)]
-fn get_all_tags() -> Result<Vec<db::queries::TagInfo>, String> {
+fn get_tagged_files() -> Result<Vec<db::queries::TaggedFile>, String> {
     let db = db::Database::new()?;
 
     db.with_connection(|conn| {
-        db::queries::get_all_tags(conn).map_err(|_e| rusqlite::Error::InvalidQuery)
-    })
-}
-
-#[tauri::command(async)]
-fn get_files_by_tag(tag: String) -> Result<Vec<db::queries::FileInfo>, String> {
-    let db = db::Database::new()?;
-
-    db.with_connection(|conn| {
-        db::queries::get_files_by_tag(conn, &tag).map_err(|_e| rusqlite::Error::InvalidQuery)
+        db::queries::get_tagged_files(conn).map_err(|_e| rusqlite::Error::InvalidQuery)
     })
 }
 
@@ -1214,8 +1206,7 @@ pub fn run() {
             rename_ast_cache,
             index_vault,
             search_files,
-            get_all_tags,
-            get_files_by_tag,
+            get_tagged_files,
             get_file_metadata,
             get_backlinks,
             rename_file,

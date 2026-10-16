@@ -17,6 +17,7 @@ import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { indexVault } from "@/lib/refresh-vault";
 
 interface NewShardDialogProps {
   open: boolean;
@@ -87,7 +88,7 @@ export function NewShardDialog({
       useVaultStore.getState().setFileTree(fileTree as any);
 
       // Trigger re-indexing
-      await invoke("index_vault", { vaultPath: currentVaultPath });
+      await indexVault(currentVaultPath);
 
       // Close dialog and reset
       onOpenChange(false);

@@ -26,6 +26,7 @@ import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { applyOpenEditorSessionPathChange } from "@/lib/open-editor-session-path-change";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
 import { openExportDialog } from "@/lib/export";
+import { indexVault } from "@/lib/refresh-vault";
 
 function getCloseLifecycleNowMs(): number {
   return typeof window !== "undefined" && "performance" in window
@@ -325,7 +326,7 @@ export function VaultTitle() {
         });
         useVaultStore.getState().setFileTree(fileTree as any);
 
-        await invoke("index_vault", { vaultPath: currentVaultPath });
+        await indexVault(currentVaultPath);
       }
 
       cancelRename();

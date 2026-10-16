@@ -5,7 +5,7 @@ import { useUIStore } from "@/store";
 
 import { RightSidebar } from "./sidebar/RightSidebar";
 import { LeftSidebar } from "./sidebar/LeftSidebar";
-import { TagBrowser } from "./tags/TagBrowser";
+import { TagsView } from "./tags/TagsView";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
 import { NewShardDialog } from "./vault/NewShardDialog";
@@ -41,7 +41,7 @@ const ModeAwareLeftSidebar = React.memo(function ModeAwareLeftSidebar({
   const appMode = useUIStore((s) => s.appMode);
 
   return (
-    <div className={appMode === "notes" ? "" : "hidden"}>
+    <div className={appMode === "canvas" ? "hidden" : ""}>
       <LeftSidebar onNewShard={onNewShard} />
     </div>
   );
@@ -66,14 +66,24 @@ const ModeAwareCanvas = React.memo(function ModeAwareCanvas() {
   );
 });
 
+// Mounted only while Tags is open, so its results cost nothing elsewhere.
+const ModeAwareTags = React.memo(function ModeAwareTags() {
+  const appMode = useUIStore((s) => s.appMode);
+  if (appMode !== "tags") return null;
+
+  return (
+    <main className="min-h-0 flex-1">
+      <TagsView />
+    </main>
+  );
+});
+
 const ModeAwareNotes = React.memo(function ModeAwareNotes({
   children,
   isBrowserPanelOpen,
   setBrowserPanelOpen,
   isRightSidebarOpen,
   toggleRightSidebar,
-  activeNavItem,
-  setActiveNavItem,
   onNewShard,
 }: {
   children?: React.ReactNode;
@@ -81,10 +91,6 @@ const ModeAwareNotes = React.memo(function ModeAwareNotes({
   setBrowserPanelOpen: (open: boolean) => void;
   isRightSidebarOpen: boolean;
   toggleRightSidebar: () => void;
-  activeNavItem: "notes" | "search" | "tags" | "settings" | null;
-  setActiveNavItem: (
-    item: "notes" | "search" | "tags" | "settings" | null,
-  ) => void;
   onNewShard: () => void;
 }) {
   const appMode = useUIStore((s) => s.appMode);
@@ -124,12 +130,6 @@ const ModeAwareNotes = React.memo(function ModeAwareNotes({
               </main>
 
               <RightSidebar />
-
-              {children == null && activeNavItem === "tags" && (
-                <div className="absolute inset-0 z-31 bg-background">
-                  <TagBrowser />
-                </div>
-              )}
             </div>
           </div>
         </ResizablePanel>
@@ -183,14 +183,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
           <div className="relative flex h-full min-w-0 flex-1 flex-col">
             <ModeAwareCanvas />
+            <ModeAwareTags />
             <ModeAwareNotes
               children={children}
               isBrowserPanelOpen={isBrowserPanelOpen}
               setBrowserPanelOpen={setBrowserPanelOpen}
               isRightSidebarOpen={isRightSidebarOpen}
               toggleRightSidebar={toggleRightSidebar}
-              activeNavItem={activeNavItem}
-              setActiveNavItem={setActiveNavItem}
               onNewShard={openNewShardDialog}
             />
 

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { ATTACHMENTS_SECTION_ID } from "@/components/settings/AttachmentsSection";
@@ -17,6 +16,7 @@ import {
 } from "@/lib/editor-ast-warm-state";
 import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
+import { indexVault } from "@/lib/refresh-vault";
 import {
   useAttachmentReportStore,
   useEditorStore,
@@ -136,9 +136,7 @@ export function useVaultIndexing() {
     setIndexingError(null);
 
     try {
-      const result = await invoke<string>("index_vault", {
-        vaultPath,
-      });
+      const result = await indexVault(vaultPath);
       console.log("Indexing complete:", result);
     } catch (error) {
       console.error("Indexing failed:", error);

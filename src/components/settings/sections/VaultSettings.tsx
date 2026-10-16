@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { LoaderCircleIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +7,7 @@ import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { openVaultDialog } from "@/lib/commands";
 import { switchVault } from "@/lib/switch-vault";
+import { indexVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store/vault";
 
 const REVEAL_LABEL = navigator.userAgent.includes("Mac")
@@ -67,7 +67,7 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
   async function refresh() {
     setWorking(true);
     try {
-      await invoke("index_vault", { vaultPath });
+      await indexVault(vaultPath);
       toast("Search index is up to date.");
     } catch (error) {
       showError(error);

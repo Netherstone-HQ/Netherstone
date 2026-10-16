@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { FileTextIcon } from "lucide-react";
+import { Command as CommandPrimitive } from "cmdk";
+import { SearchIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { flattenShardFiles } from "@/components/sidebar/right-sidebar/link-utils";
@@ -8,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
-  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   addDrawingToShard,
   getDrawingAltText,
@@ -147,7 +146,7 @@ export function AddToShardDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="gap-4 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add {drawingName} to a shard</DialogTitle>
           <DialogDescription>
@@ -168,16 +167,20 @@ export function AddToShardDialog({
               void add();
             }
           }}
-          className="rounded-lg! border bg-transparent"
+          className="gap-2 overflow-visible rounded-none! bg-transparent p-0"
         >
-          <CommandInput
-            placeholder="Find a shard"
-            value={query}
-            onValueChange={setQuery}
-            autoFocus
-          />
-          <CommandList className="h-60 max-h-60">
-            <CommandEmpty className="py-6 text-ui-sm text-muted-foreground">
+          <label className="flex h-9 items-center gap-2 rounded-md border border-input px-2.5 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+            <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+            <CommandPrimitive.Input
+              placeholder="Find a shard"
+              value={query}
+              onValueChange={setQuery}
+              autoFocus
+              className="h-full min-w-0 flex-1 bg-transparent text-ui outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          <CommandList className="max-h-64">
+            <CommandEmpty className="py-4 text-ui-sm text-muted-foreground">
               {query
                 ? `No shards match “${query}”.`
                 : "This vault has no shards yet."}
@@ -191,11 +194,11 @@ export function AddToShardDialog({
                   key={shard.path}
                   value={shard.path}
                   data-checked={shard.path === shardPath}
+                  className="h-row cursor-pointer gap-2 px-2 py-0 text-sidebar-foreground/85 hover:bg-accent/40 data-selected:bg-accent data-selected:text-accent-foreground in-data-[slot=dialog-content]:rounded-sm!"
                 >
-                  <FileTextIcon className="text-muted-foreground" />
-                  <span className="min-w-0 truncate">{shard.name}</span>
+                  <span className="min-w-0 flex-1 truncate">{shard.name}</span>
                   {folder ? (
-                    <span className="min-w-0 shrink truncate text-ui-sm text-muted-foreground">
+                    <span className="max-w-[40%] shrink-0 truncate text-ui-sm text-muted-foreground">
                       {folder}
                     </span>
                   ) : null}
@@ -205,31 +208,31 @@ export function AddToShardDialog({
           </CommandList>
         </Command>
 
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="add-to-shard-background"
-            checked={includeBackground}
-            onCheckedChange={(checked) => setIncludeBackground(checked === true)}
-          />
-          <Label htmlFor="add-to-shard-background" className="font-normal">
+        <DialogFooter className="sm:items-center sm:justify-between">
+          <label className="flex cursor-pointer items-center gap-2 text-ui">
+            <Checkbox
+              checked={includeBackground}
+              onCheckedChange={(checked) =>
+                setIncludeBackground(checked === true)
+              }
+            />
             Include background
-          </Label>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-            disabled={isAdding}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => void add()}
-            disabled={!isShardPicked || isAdding}
-          >
-            {isAdding ? "Adding…" : "Add to shard"}
-          </Button>
+          </label>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isAdding}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void add()}
+              disabled={!isShardPicked || isAdding}
+            >
+              {isAdding ? "Adding…" : "Add to shard"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

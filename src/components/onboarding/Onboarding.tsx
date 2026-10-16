@@ -1,10 +1,11 @@
 import "./onboarding.css";
 
 import { useState } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "lucide-react";
 
 import { WindowTitleBar } from "@/components/WindowTitleBar";
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/tooltip";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/store/settings";
@@ -84,16 +85,17 @@ export function Onboarding({
         <WindowTitleBar bare />
       </div>
       {onClose ? (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="tauri-no-drag absolute top-1.5 left-2 z-20 text-muted-foreground"
-          aria-label={copy.common.close}
-          title={copy.common.close}
-          onClick={onClose}
-        >
-          <XIcon />
-        </Button>
+        <Hint label={copy.common.close} side="bottom">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="tauri-no-drag absolute top-1.5 left-2 z-20 text-muted-foreground"
+            aria-label={copy.common.close}
+            onClick={onClose}
+          >
+            <XIcon />
+          </Button>
+        </Hint>
       ) : null}
 
       {step === "welcome" ? (

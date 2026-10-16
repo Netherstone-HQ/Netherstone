@@ -33,7 +33,7 @@ export function Step({
           <div className="mb-8 space-y-2">
             <h1 className="font-semibold text-2xl tracking-tight">{title}</h1>
             {body ? (
-              <p className="text-muted-foreground text-sm leading-6">{body}</p>
+              <p className="text-muted-foreground text-ui leading-6">{body}</p>
             ) : null}
           </div>
           {children}
@@ -89,7 +89,7 @@ export function Hint({
   return (
     <p
       className={cn(
-        "text-sm leading-6",
+        "text-ui leading-6",
         tone === "error" ? "text-destructive" : "text-muted-foreground",
       )}
     >
@@ -134,8 +134,8 @@ export function ChoiceCard({
           {icon}
         </span>
         <span className="min-w-0 space-y-0.5">
-          <span className="block font-medium text-sm">{title}</span>
-          <span className="block text-muted-foreground text-sm">{description}</span>
+          <span className="block font-medium text-ui">{title}</span>
+          <span className="block text-muted-foreground text-ui">{description}</span>
         </span>
       </button>
       {selected && children ? (
@@ -147,5 +147,5 @@ export function ChoiceCard({
 
 /** A small label over a field or value, the same everywhere. */
 export function FieldLabel({ children }: { children: ReactNode }) {
-  return <span className="block font-medium text-xs text-muted-foreground">{children}</span>;
+  return <span className="block font-medium text-ui-sm text-muted-foreground">{children}</span>;
 }

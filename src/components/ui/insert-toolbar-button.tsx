@@ -175,7 +175,7 @@ const groups: Group[] = [
       },
       {
         icon: <Code2 />,
-        label: "Code Drawing",
+        label: "Code drawing",
         value: KEYS.codeDrawing,
       },
     ].map((item) => ({
@@ -202,7 +202,7 @@ const groups: Group[] = [
       {
         focusEditor: false,
         icon: <RadicalIcon />,
-        label: "Inline Equation",
+        label: "Inline equation",
         value: KEYS.inlineEquation,
       },
     ].map((item) => ({

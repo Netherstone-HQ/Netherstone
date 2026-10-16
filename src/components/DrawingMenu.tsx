@@ -170,9 +170,9 @@ export function DrawingMenu({
       ui.removeRecentFile(drawingPath);
       ui.openDrawing(null);
       await refreshFileTree(currentVaultPath);
-      toast.success(`Moved ${title} to Trash`);
+      toast.success(`Moved ${title} to trash`);
     } catch (error) {
-      showError("Couldn't move drawing to Trash", error);
+      showError("Couldn't move drawing to trash", error);
     }
   };
 
@@ -182,7 +182,7 @@ export function DrawingMenu({
         <PencilLineIcon />
         <input
           aria-label="Drawing name"
-          className="w-40 bg-transparent text-xs leading-normal shadow-none! outline-none"
+          className="w-40 bg-transparent text-ui-sm leading-normal shadow-none! outline-none"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onFocus={(e) => e.currentTarget.select()}
@@ -258,7 +258,7 @@ export function DrawingMenu({
               onSelect={() => void handleDelete()}
             >
               <Trash2Icon />
-              Move to Trash
+              Move to trash
             </DropdownMenuItem>
           </>
         ) : null}
@@ -266,7 +266,7 @@ export function DrawingMenu({
         {drawings.length > 0 ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+            <DropdownMenuLabel className="text-ui-sm font-normal text-muted-foreground">
               Drawings
             </DropdownMenuLabel>
             {drawings.map((drawing) => {
@@ -286,7 +286,7 @@ export function DrawingMenu({
                     {getVaultFileDisplayName(drawing.name)}
                   </span>
                   {folder ? (
-                    <span className="max-w-24 truncate text-xs text-muted-foreground">
+                    <span className="max-w-24 truncate text-ui-sm text-muted-foreground">
                       {folder}
                     </span>
                   ) : null}

@@ -306,19 +306,19 @@ export function resolveShardReferencePath(
 export function getLinkSectionTitle(kind: DocumentLinkKind) {
   switch (kind) {
     case "shard-mention":
-      return "Shard References";
+      return "Shard references";
     case "internal":
-      return "Document Links";
+      return "Document links";
     case "external":
-      return "External Links";
+      return "External links";
     case "email":
-      return "Email Links";
+      return "Email links";
     case "phone":
-      return "Phone Links";
+      return "Phone links";
     case "anchor":
       return "In-Document Anchors";
     default:
-      return "Other Links";
+      return "Other links";
   }
 }
 
@@ -364,11 +364,11 @@ export function buildMetadataRows(
   return [
     { label: "Created", value: formatTimestamp(fileMetadata.created_at) },
     {
-      label: "Last Modified",
+      label: "Last modified",
       value: formatTimestamp(fileMetadata.last_modified),
     },
     {
-      label: "Last Indexed",
+      label: "Last indexed",
       value: formatTimestamp(fileMetadata.last_indexed),
     },
     {
@@ -384,11 +384,11 @@ export function buildMetadataRows(
       value: fileMetadata.character_count.toLocaleString(),
     },
     {
-      label: "File Size",
+      label: "File size",
       value: formatFileSize(fileMetadata.file_size),
     },
     {
-      label: "Outbound Links",
+      label: "Outbound links",
       value: fileMetadata.outbound_link_count.toLocaleString(),
     },
     {

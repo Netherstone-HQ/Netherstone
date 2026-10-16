@@ -134,7 +134,7 @@ export function LeftSidebarResizeHandle({
     <Button
       type="button"
       variant="ghost"
-      aria-label="Resize Sidebar"
+      aria-label="Resize sidebar"
       tabIndex={-1}
       onPointerDown={handleResizePointerDown}
       onClick={(event) => {
@@ -149,7 +149,6 @@ export function LeftSidebarResizeHandle({
         }
       }}
       onDoubleClick={handleResetWidth}
-      title="Drag to resize sidebar. Double-click to reset width."
       className={cn(
         "absolute inset-y-0 -right-4 z-20 hidden h-auto w-4 -translate-x-1/2 p-0 transition-all ease-linear sm:flex after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 hover:after:bg-sidebar-border",
         state === "collapsed" ? "cursor-e-resize" : "cursor-w-resize",

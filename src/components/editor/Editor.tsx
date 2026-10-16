@@ -155,13 +155,13 @@ class EditorErrorBoundary extends Component<
     if (!error) return this.props.children;
 
     return (
-      <div className="mx-auto max-w-xl px-8 py-16 text-sm">
+      <div className="mx-auto max-w-xl px-8 py-16 text-ui">
         <p className="font-medium">The editor ran into an error.</p>
         <p className="mt-1 text-muted-foreground">
           The note on disk is unaffected. Reloading it restores the last saved
           version.
         </p>
-        <pre className="mt-4 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
+        <pre className="mt-4 overflow-auto rounded-md bg-muted p-3 text-ui-sm whitespace-pre-wrap">
           {error.message}
         </pre>
         <Button

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
-  CaretUpDownIcon,
+  ChevronsUpDownIcon,
   FileIcon,
   FilePlusIcon,
+  FolderIcon,
   FolderOpenIcon,
   GitBranchIcon,
-  FolderSimpleIcon,
-  MagnifyingGlassIcon,
+  SearchIcon,
   TagIcon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import {
@@ -195,7 +195,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
             className="h-9 flex-1 justify-center gap-2 border border-sidebar-border/60 bg-sidebar-accent/25 font-medium text-sidebar-foreground/85 shadow-xs hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
             onClick={() => setSearchModalOpen(true)}
           >
-            <MagnifyingGlassIcon className="relative top-px shrink-0" />
+            <SearchIcon className="relative top-px shrink-0" />
             <span className="text-center leading-none">Search</span>
           </SidebarMenuButton>
 
@@ -252,29 +252,29 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                       </div>
                     </div>
                   </div>
-                  <CaretUpDownIcon className="size-3.5 shrink-0 text-sidebar-foreground/60" />
+                  <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-56">
                 <DropdownMenuItem onClick={() => void handleOpenVault()}>
                   <FolderOpenIcon />
-                  <span>Open Vault</span>
+                  <span>Open vault</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void handleOpenShard()}>
                   <FileIcon />
-                  <span>Open Shard</span>
+                  <span>Open shard</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!currentVaultPath}
                   onClick={() => void handleRevealVaultLocation()}
                 >
-                  <FolderSimpleIcon />
+                  <FolderIcon />
                   <span>Open in Explorer</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onNewShard}>
                   <FilePlusIcon />
-                  <span>New Shard</span>
+                  <span>New shard</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

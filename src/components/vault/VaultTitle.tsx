@@ -4,13 +4,13 @@ import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useShallow } from "zustand/shallow";
 import {
-  CaretRightIcon,
-  DotsThreeIcon,
-  ExportIcon,
-  FloppyDiskIcon,
+  ChevronRightIcon,
+  EllipsisIcon,
+  PencilIcon,
+  SaveIcon,
+  ShareIcon,
   XIcon,
-  PencilSimpleIcon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -356,25 +356,25 @@ export function VaultTitle() {
   }, [isRenaming]);
 
   if (!vaultName) {
-    return <span className="text-sm text-muted-foreground">No vault open</span>;
+    return <span className="text-ui text-muted-foreground">No vault open</span>;
   }
 
   if (!currentFilePath) {
-    return <span className="text-sm font-medium">{vaultName}</span>;
+    return <span className="text-ui font-medium">{vaultName}</span>;
   }
 
   return (
-    <div className="flex items-center gap-1 text-sm">
+    <div className="flex items-center gap-1 text-ui">
       <span className="font-medium">{vaultName}</span>
 
       {folders.length > 0 && (
         <>
-          <CaretRightIcon className="h-3 w-3 text-muted-foreground" />
+          <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
           <span className="text-muted-foreground">{folders.join(" / ")}</span>
         </>
       )}
 
-      <CaretRightIcon className="h-3 w-3 text-muted-foreground" />
+      <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
       {isRenaming ? (
         <Input
           ref={inputRef}
@@ -384,7 +384,7 @@ export function VaultTitle() {
           onBlur={() => {
             void handleRename();
           }}
-          className="h-6 w-48 px-2 py-0 text-sm"
+          className="h-6 w-48 px-2 py-0 text-ui"
         />
       ) : (
         <Button
@@ -395,29 +395,29 @@ export function VaultTitle() {
           className="group h-auto gap-1 px-1 font-normal"
         >
           <span className="font-medium">{displayFileName}</span>
-          <PencilSimpleIcon className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-50" />
+          <PencilIcon className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-50" />
         </Button>
       )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="ghost" size="icon-sm" className="ml-1">
-            <DotsThreeIcon className="h-4 w-4" />
+            <EllipsisIcon className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuItem onClick={() => void handleSave()}>
-            <FloppyDiskIcon className="mr-2 h-4 w-4" />
+            <SaveIcon className="mr-2 h-4 w-4" />
             Save
           </DropdownMenuItem>
           <DropdownMenuItem onClick={startRename}>
-            <PencilSimpleIcon className="mr-2 h-4 w-4" />
+            <PencilIcon className="mr-2 h-4 w-4" />
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => currentFilePath && openExportDialog(currentFilePath)}
           >
-            <ExportIcon className="mr-2 h-4 w-4" />
+            <ShareIcon className="mr-2 h-4 w-4" />
             Export…
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleClose}>

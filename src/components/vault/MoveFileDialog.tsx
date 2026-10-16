@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FolderSimpleIcon } from "@phosphor-icons/react";
+import { FolderIcon } from "lucide-react";
 
 import {
   Dialog,
@@ -112,10 +112,10 @@ function FolderRow({
         disabled={isCurrent}
         onClick={() => onSelect(path)}
       >
-        <FolderSimpleIcon className="mr-2 h-4 w-4 shrink-0" />
+        <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{name}</span>
         {isCurrent && (
-          <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+          <span className="ml-2 shrink-0 text-ui-sm text-muted-foreground">
             (current)
           </span>
         )}
@@ -199,7 +199,7 @@ export function MoveFileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isFolder ? "Move Folder" : "Move File"}</DialogTitle>
+          <DialogTitle>{isFolder ? "Move folder" : "Move file"}</DialogTitle>
           <DialogDescription>
             Select a folder to move "{fileName}" to.
           </DialogDescription>
@@ -210,7 +210,7 @@ export function MoveFileDialog({
             {currentVaultPath && (
               <FolderRow
                 path={currentVaultPath}
-                name="Vault Root"
+                name="Vault root"
                 depth={0}
                 isCurrent={pathsEqual(currentVaultPath, currentParentDir)}
                 isLast={folderOptions.length === 0}
@@ -222,7 +222,7 @@ export function MoveFileDialog({
             {folderOptions.length > 0 ? (
               folderOptions
             ) : !currentVaultPath ? (
-              <p className="px-2 py-3 text-sm text-muted-foreground">
+              <p className="px-2 py-3 text-ui text-muted-foreground">
                 No folders available.
               </p>
             ) : null}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FilePlusIcon, FolderSimplePlusIcon } from "@phosphor-icons/react";
+import { FilePlusIcon, FolderPlusIcon } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -32,7 +32,7 @@ interface FileTreeProps {
 }
 
 const GROUP_ACTION_CLASS =
-  "text-sidebar-foreground/50 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
+  "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
 
 export function FileTree({ onNewShard }: FileTreeProps) {
   const { fileTree, isVaultLoading, currentVaultPath } = useVaultStore();
@@ -58,11 +58,11 @@ export function FileTree({ onNewShard }: FileTreeProps) {
             aria-label="Create new folder"
             className={`right-9 ${GROUP_ACTION_CLASS}`}
           >
-            <FolderSimplePlusIcon />
+            <FolderPlusIcon />
           </SidebarGroupAction>
         </TooltipTrigger>
         <TooltipContent side="top" sideOffset={6}>
-          New Folder
+          New folder
         </TooltipContent>
       </Tooltip>
       <Tooltip delayDuration={300}>
@@ -76,7 +76,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           </SidebarGroupAction>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={6}>
-          New Shard
+          New shard
         </TooltipContent>
       </Tooltip>
       <SidebarGroupContent
@@ -95,7 +95,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           {isVaultLoading ? (
             <FileTreeSkeleton />
           ) : fileTree.length === 0 && !isNamingRootFolder ? (
-            <p className="px-2 py-4 text-xs text-muted-foreground">
+            <p className="px-2 py-4 text-ui-sm text-muted-foreground">
               No shards found in this vault.
             </p>
           ) : (
@@ -113,11 +113,11 @@ export function FileTree({ onNewShard }: FileTreeProps) {
               onSelect={menuAction.defer(() => setIsCreatingRootShard(true))}
             >
               <FilePlusIcon />
-              New Shard
+              New shard
             </ContextMenuItem>
             <ContextMenuItem onSelect={menuAction.defer(startRootFolder)}>
-              <FolderSimplePlusIcon />
-              New Folder
+              <FolderPlusIcon />
+              New folder
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>

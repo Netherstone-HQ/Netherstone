@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircleIcon, CircleNotchIcon } from "@phosphor-icons/react";
+import { CircleCheckIcon, LoaderCircleIcon } from "lucide-react";
 
 import { GitHubAvatar } from "@/components/settings/GitHubAccountSection";
 import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNotice";
@@ -45,8 +45,8 @@ export function SyncStep({
     body = <div className="h-9" />;
   } else if (syncOn) {
     body = (
-      <p className="onboarding-fade flex items-center gap-3 rounded-xl border bg-card p-4 text-sm">
-        <CheckCircleIcon weight="fill" className="size-5" />
+      <p className="onboarding-fade flex items-center gap-3 rounded-xl border bg-card p-4 text-ui">
+        <CircleCheckIcon className="size-5" />
         {wasOnAlready ? copy.sync.alreadyOn : copy.sync.done}
       </p>
     );
@@ -58,16 +58,16 @@ export function SyncStep({
         <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
           <GitHubAvatar account={account} />
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-sm">
+            <div className="truncate font-medium text-ui">
               {account.name ?? account.login}
             </div>
-            <div className="truncate text-muted-foreground text-sm">
+            <div className="truncate text-muted-foreground text-ui">
               @{account.login}
             </div>
           </div>
           {installed ? (
             <Button onClick={() => void turnOn(vaultPath)} disabled={isWorking}>
-              {isWorking ? <CircleNotchIcon className="animate-spin" /> : null}
+              {isWorking ? <LoaderCircleIcon className="animate-spin" /> : null}
               {isWorking ? copy.sync.working : copy.sync.turnOn}
             </Button>
           ) : null}
@@ -94,7 +94,7 @@ export function SyncStep({
         )
       }
     >
-      <div className="mb-8 -mt-4 space-y-3 text-muted-foreground text-sm leading-6">
+      <div className="mb-8 -mt-4 space-y-3 text-muted-foreground text-ui leading-6">
         {copy.sync.explainer.map((line) => (
           <p key={line}>{line}</p>
         ))}

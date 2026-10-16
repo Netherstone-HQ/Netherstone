@@ -3,17 +3,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { useDrag } from "react-dnd";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
-  ArrowsDownUpIcon,
-  CaretRightIcon,
-  DotsThreeVerticalIcon,
-  ExportIcon,
+  ArrowDownUpIcon,
+  ChevronRightIcon,
+  EllipsisVerticalIcon,
   FilePlusIcon,
   FolderOpenIcon,
-  FolderSimplePlusIcon,
-  PencilSimpleIcon,
-  ScribbleIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+  FolderPlusIcon,
+  PencilIcon,
+  ShareIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { DrawingIcon } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -519,38 +519,38 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     node.kind === "directory"
       ? [
           {
-            label: "New Shard",
+            label: "New shard",
             icon: FilePlusIcon,
             onSelect: () => setIsCreatingShard(true),
           },
           {
-            label: "New Folder",
-            icon: FolderSimplePlusIcon,
+            label: "New folder",
+            icon: FolderPlusIcon,
             onSelect: handleNewFolder,
           },
           {
             label: "Rename",
-            icon: PencilSimpleIcon,
+            icon: PencilIcon,
             onSelect: startRename,
             separated: true,
           },
-          { label: "Move", icon: ArrowsDownUpIcon, onSelect: handleMove },
+          { label: "Move", icon: ArrowDownUpIcon, onSelect: handleMove },
           {
             label: "Open location",
             icon: FolderOpenIcon,
             onSelect: () => void handleOpenFileLocation(),
           },
           {
-            label: "Move to Trash",
-            icon: TrashIcon,
+            label: "Move to trash",
+            icon: Trash2Icon,
             onSelect: handleTrash,
             destructive: true,
             separated: true,
           },
         ]
       : [
-          { label: "Rename", icon: PencilSimpleIcon, onSelect: startRename },
-          { label: "Move", icon: ArrowsDownUpIcon, onSelect: handleMove },
+          { label: "Rename", icon: PencilIcon, onSelect: startRename },
+          { label: "Move", icon: ArrowDownUpIcon, onSelect: handleMove },
           {
             label: "Open location",
             icon: FolderOpenIcon,
@@ -561,13 +561,13 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             : [
                 {
                   label: "Export…",
-                  icon: ExportIcon,
+                  icon: ShareIcon,
                   onSelect: () => openExportDialog(node.path),
                 },
               ]),
           {
-            label: "Move to Trash",
-            icon: TrashIcon,
+            label: "Move to trash",
+            icon: Trash2Icon,
             onSelect: handleTrash,
             destructive: true,
             separated: true,
@@ -593,7 +593,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const row = (
     <div
       className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm text-sidebar-foreground/85 transition-colors hover:bg-accent/40 has-[button:focus-visible]:bg-accent/40 data-[state=open]:bg-accent/40",
+        "flex h-row w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-ui text-sidebar-foreground/85 transition-colors hover:bg-accent/40 has-[button:focus-visible]:bg-accent/40 data-[state=open]:bg-accent/40",
         node.kind === "file" &&
           !!currentFilePath &&
           isSamePath(node.path, currentFilePath) &&
@@ -609,9 +609,9 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
               className="flex h-4 shrink-0 items-center justify-center"
               style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
             >
-              <CaretRightIcon
+              <ChevronRightIcon
                 className={cn(
-                  "h-3.5 w-3.5 text-sidebar-foreground/70 transition-transform duration-150",
+                  "size-3.5 text-muted-foreground transition-transform duration-150",
                   isOpen && "rotate-90",
                 )}
               />
@@ -622,7 +622,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={() => void handleRename()}
-              className="h-6 min-w-0 flex-1 px-2 py-0 text-sm"
+              className="h-6 min-w-0 flex-1 px-2 py-0 text-ui"
             />
           </div>
         ) : (
@@ -633,9 +633,9 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 className="flex h-4 shrink-0 items-center justify-center"
                 style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
               >
-                <CaretRightIcon
+                <ChevronRightIcon
                   className={cn(
-                    "h-3.5 w-3.5 text-sidebar-foreground/70 transition-transform duration-150",
+                    "size-3.5 text-muted-foreground transition-transform duration-150",
                     isOpen && "rotate-90",
                   )}
                 />
@@ -659,7 +659,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             onBlur={() => void handleRename()}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="h-6 min-w-0 flex-1 px-2 py-0 text-sm"
+            className="h-6 min-w-0 flex-1 px-2 py-0 text-ui"
           />
         </div>
       ) : (
@@ -674,9 +674,9 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             style={{ width: `${FILE_DISCLOSURE_SLOT_PX}px` }}
           />
           {isDrawingPath(node.path) ? (
-            <ScribbleIcon
+            <DrawingIcon
               aria-label="Drawing"
-              className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/60"
+              className="size-4 shrink-0 text-muted-foreground"
             />
           ) : null}
           <span className="block min-w-0 flex-1 truncate">{displayName}</span>
@@ -699,14 +699,14 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="rounded-sm text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
+                className="rounded-sm text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <DotsThreeVerticalIcon weight="bold" className="size-5" />
+                <EllipsisVerticalIcon className="size-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -758,7 +758,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             variant="destructive"
             onClick={() => void handleDelete()}
           >
-            Move to Trash
+            Move to trash
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

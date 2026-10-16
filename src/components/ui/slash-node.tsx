@@ -101,7 +101,7 @@ const groups: Group[] = [
       {
         icon: <Code2 />,
         keywords: ["```"],
-        label: "Code Block",
+        label: "Code block",
         value: KEYS.codeBlock,
       },
       { icon: <Table />, label: "Table", value: KEYS.table },
@@ -153,7 +153,7 @@ const groups: Group[] = [
       },
       {
         icon: <RadicalIcon />,
-        label: "Inline Equation",
+        label: "Inline equation",
         value: KEYS.inlineEquation,
       },
     ].map((item) => ({

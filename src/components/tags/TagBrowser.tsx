@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  TagIcon,
-  FileIcon,
-  HashIcon,
-  XIcon,
-  InfoIcon,
-} from "@phosphor-icons/react";
+import { FileIcon, HashIcon, InfoIcon, TagIcon, XIcon } from "lucide-react";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useVaultStore } from "@/store/vault";
 import { useUIStore } from "@/store/ui";
@@ -111,7 +105,7 @@ export function TagBrowser() {
   if (!currentVaultPath) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <div className="text-center text-sm text-muted-foreground">
+        <div className="text-center text-ui text-muted-foreground">
           <TagIcon className="mx-auto mb-2 h-8 w-8 opacity-50" />
           <p>Open a vault to browse tags</p>
         </div>
@@ -140,13 +134,13 @@ export function TagBrowser() {
             </PopoverTrigger>
             <PopoverContent className="w-80">
               <div className="space-y-2">
-                <h4 className="font-medium leading-none">How Tags Work</h4>
-                <p className="text-sm text-muted-foreground">
+                <h4 className="font-medium leading-none">How tags work</h4>
+                <p className="text-ui text-muted-foreground">
                   Tags are automatically extracted from your shards. Simply type{" "}
                   <code className="rounded bg-muted px-1 py-0.5">#tagname</code>{" "}
                   anywhere in your notes.
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-ui-sm text-muted-foreground">
                   Changes appear after saving and re-indexing.
                 </p>
               </div>
@@ -177,11 +171,11 @@ export function TagBrowser() {
         <ScrollArea className="flex-1 border-r">
           <div className="p-2">
             {isLoading && tags.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
+              <div className="p-4 text-center text-ui text-muted-foreground">
                 Loading tags...
               </div>
             ) : filteredTags.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
+              <div className="p-4 text-center text-ui text-muted-foreground">
                 {searchQuery ? "No tags found" : "No tags in vault"}
               </div>
             ) : (
@@ -192,7 +186,7 @@ export function TagBrowser() {
                     type="button"
                     variant="ghost"
                     onClick={() => handleTagClick(tag.tag)}
-                    className={`h-auto w-full justify-between px-3 py-2 text-left text-sm font-normal transition-colors hover:bg-accent ${
+                    className={`h-auto w-full justify-between px-3 py-2 text-left text-ui font-normal transition-colors hover:bg-accent ${
                       selectedTag === tag.tag ? "bg-accent" : ""
                     }`}
                   >
@@ -216,16 +210,16 @@ export function TagBrowser() {
             {selectedTag ? (
               <>
                 {isLoading ? (
-                  <div className="p-4 text-center text-sm text-muted-foreground">
+                  <div className="p-4 text-center text-ui text-muted-foreground">
                     Loading files...
                   </div>
                 ) : files.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-muted-foreground">
+                  <div className="p-4 text-center text-ui text-muted-foreground">
                     No files found
                   </div>
                 ) : (
                   <>
-                    <div className="mb-2 px-2 text-xs font-medium text-muted-foreground">
+                    <div className="mb-2 px-2 text-ui-sm font-medium text-muted-foreground">
                       {files.length} {files.length === 1 ? "file" : "files"}{" "}
                       with #{selectedTag}
                     </div>
@@ -236,7 +230,7 @@ export function TagBrowser() {
                           type="button"
                           variant="ghost"
                           onClick={() => handleFileClick(file)}
-                          className="h-auto w-full justify-start gap-2 px-3 py-2 text-left text-sm font-normal transition-colors hover:bg-accent"
+                          className="h-auto w-full justify-start gap-2 px-3 py-2 text-left text-ui font-normal transition-colors hover:bg-accent"
                         >
                           <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{file.name}</span>
@@ -248,7 +242,7 @@ export function TagBrowser() {
               </>
             ) : (
               <div className="flex h-full items-center justify-center p-4">
-                <div className="text-center text-sm text-muted-foreground">
+                <div className="text-center text-ui text-muted-foreground">
                   <HashIcon className="mx-auto mb-2 h-6 w-6 opacity-50" />
                   <p>Select a tag to view files</p>
                 </div>

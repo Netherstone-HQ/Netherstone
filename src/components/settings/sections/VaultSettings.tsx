@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { LoaderCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
@@ -87,7 +87,7 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
         disabled={working}
         onClick={() => void refresh()}
       >
-        {working ? <CircleNotchIcon className="animate-spin" /> : null}
+        {working ? <LoaderCircleIcon className="animate-spin" /> : null}
         {working ? "Refreshing" : "Refresh"}
       </Button>
     </SettingRow>

@@ -1,8 +1,4 @@
-import {
-  LinkIcon,
-  CheckCircleIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react";
+import { CircleAlertIcon, CircleCheckIcon, LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getLinkTargetDisplay } from "./link-utils";
 import type { DocumentLinksSectionProps } from "./types";
@@ -18,15 +14,15 @@ export function DocumentLinksSection({
     <div className="mb-6">
       <div className="mb-3 flex items-center gap-2">
         <LinkIcon className="h-4 w-4" />
-        <h3 className="text-sm font-semibold">References</h3>
+        <h3 className="text-ui font-semibold">References</h3>
       </div>
 
       {!currentFilePath ? (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-ui-sm text-muted-foreground">
           Open a shard to inspect its outbound references.
         </div>
       ) : documentLinks.length === 0 ? (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-ui-sm text-muted-foreground">
           This shard does not reference anything yet.
         </div>
       ) : (
@@ -43,9 +39,9 @@ export function DocumentLinksSection({
                   const content = (
                     <>
                       {link.isValid ? (
-                        <CheckCircleIcon className="mt-0.5 h-3 w-3 shrink-0 text-green-600 dark:text-green-400" />
+                        <CircleCheckIcon className="mt-0.5 h-3 w-3 shrink-0 text-green-600 dark:text-green-400" />
                       ) : (
-                        <WarningCircleIcon className="mt-0.5 h-3 w-3 shrink-0 text-red-600 dark:text-red-400" />
+                        <CircleAlertIcon className="mt-0.5 h-3 w-3 shrink-0 text-red-600 dark:text-red-400" />
                       )}
                       <div className="min-w-0 flex-1 text-left">
                         <div
@@ -72,7 +68,7 @@ export function DocumentLinksSection({
                         key={`${section.kind}-${index}`}
                         type="button"
                         variant="ghost"
-                        className="flex h-auto w-full items-start justify-start gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-accent/50"
+                        className="flex h-auto w-full items-start justify-start gap-2 rounded-md px-2 py-1.5 text-ui-sm hover:bg-accent/50"
                         onClick={() => {
                           onOpenResolvedLink(link.resolvedPath!);
                         }}
@@ -85,7 +81,7 @@ export function DocumentLinksSection({
                   return (
                     <div
                       key={`${section.kind}-${index}`}
-                      className="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs"
+                      className="flex items-start gap-2 rounded-md px-2 py-1.5 text-ui-sm"
                     >
                       {content}
                     </div>

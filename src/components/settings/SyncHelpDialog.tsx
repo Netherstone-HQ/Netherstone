@@ -1,4 +1,4 @@
-import { QuestionIcon } from "@phosphor-icons/react";
+import { CircleQuestionMarkIcon } from "lucide-react";
 
 import {
   Dialog,
@@ -17,7 +17,7 @@ export function SyncHelpDialog() {
         aria-label="How sync works"
         className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <QuestionIcon className="size-4" />
+        <CircleQuestionMarkIcon className="size-4" />
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -27,7 +27,7 @@ export function SyncHelpDialog() {
             millions of people use to store files.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 text-sm leading-6">
+        <div className="space-y-3 text-ui leading-6">
           <p>
             Your vault is saved there as a private repository: a folder that
             also keeps every earlier version of your shards.

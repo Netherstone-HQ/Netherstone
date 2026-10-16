@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowCounterClockwiseIcon,
-  CircleNotchIcon,
+  FolderIcon,
   FolderOpenIcon,
-  FolderSimpleIcon,
-  FolderSimplePlusIcon,
-} from "@phosphor-icons/react";
+  FolderPlusIcon,
+  LoaderCircleIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNotice";
@@ -75,7 +75,7 @@ export function VaultStep({
       <div className="space-y-2.5">
         {currentVaultPath ? (
           <ChoiceCard
-            icon={<FolderSimpleIcon />}
+            icon={<FolderIcon />}
             title={copy.vault.keep.title(folderName(currentVaultPath))}
             description={copy.vault.keep.description}
             onClick={() => onChoose({ path: currentVaultPath, kind: "kept" })}
@@ -83,7 +83,7 @@ export function VaultStep({
         ) : null}
 
         <ChoiceCard
-          icon={<FolderSimplePlusIcon />}
+          icon={<FolderPlusIcon />}
           title={copy.vault.create.title}
           description={copy.vault.create.description}
           selected={option === "create"}
@@ -107,7 +107,7 @@ export function VaultStep({
         />
 
         <ChoiceCard
-          icon={<ArrowCounterClockwiseIcon />}
+          icon={<RotateCcwIcon />}
           title={copy.vault.restore.title}
           description={copy.vault.restore.description}
           selected={option === "restore"}
@@ -143,7 +143,7 @@ function LocationRow({
       <FieldLabel>{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <span
-          className="flex h-9 min-w-0 flex-1 items-center truncate rounded-md border bg-background px-2.5 text-muted-foreground text-sm dark:bg-input/30"
+          className="flex h-9 min-w-0 flex-1 items-center truncate rounded-md border bg-background px-2.5 text-muted-foreground text-ui dark:bg-input/30"
           title={location ?? undefined}
         >
           {location ?? "…"}
@@ -208,7 +208,7 @@ function CreateVaultForm({
       />
       {error ? <Hint tone="error">{error}</Hint> : null}
       <Button type="submit" disabled={busy || !location}>
-        {busy ? <CircleNotchIcon className="animate-spin" /> : null}
+        {busy ? <LoaderCircleIcon className="animate-spin" /> : null}
         {copy.vault.create.submit}
       </Button>
     </form>
@@ -282,8 +282,8 @@ function RestoreVault({
 
   if (backups === null) {
     return (
-      <p className="inline-flex items-center gap-2 text-muted-foreground text-sm">
-        <CircleNotchIcon className="size-4 animate-spin" />
+      <p className="inline-flex items-center gap-2 text-muted-foreground text-ui">
+        <LoaderCircleIcon className="size-4 animate-spin" />
         {copy.vault.restore.loading}
       </p>
     );
@@ -305,12 +305,12 @@ function RestoreVault({
             onClick={() => setChosen(backup)}
             disabled={busy}
             className={cn(
-              "flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-left text-sm transition-colors hover:border-foreground/20 dark:bg-input/30",
+              "flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-left text-ui transition-colors hover:border-foreground/20 dark:bg-input/30",
               chosen?.fullName === backup.fullName && "border-foreground/40",
             )}
           >
             <span className="truncate font-medium">{backup.name}</span>
-            <span className="shrink-0 text-muted-foreground text-xs">
+            <span className="shrink-0 text-muted-foreground text-ui-sm">
               {backup.pushedAt
                 ? copy.vault.restore.lastSynced(
                     formatDistanceToNow(new Date(backup.pushedAt), { addSuffix: true }),
@@ -330,7 +330,7 @@ function RestoreVault({
           />
           {error ? <Hint tone="error">{error}</Hint> : null}
           <Button onClick={() => void restore(chosen)} disabled={busy || !location}>
-            {busy ? <CircleNotchIcon className="animate-spin" /> : null}
+            {busy ? <LoaderCircleIcon className="animate-spin" /> : null}
             {busy ? copy.vault.restore.working : copy.vault.restore.submit}
           </Button>
         </>

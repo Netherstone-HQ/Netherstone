@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CopyIcon } from "@phosphor-icons/react";
+import { CopyIcon } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
@@ -62,7 +62,7 @@ export function AboutSettings() {
           <div className="font-semibold text-lg tracking-tight">
             Netherstone
           </div>
-          <div className="text-muted-foreground text-sm">
+          <div className="text-muted-foreground text-ui">
             Your knowledge, set in stone.
           </div>
         </div>
@@ -71,7 +71,7 @@ export function AboutSettings() {
       <SettingsGroup>
         <SettingRow label="Version">
           <div className="flex items-center gap-1">
-            <span className="font-mono text-muted-foreground text-sm">
+            <span className="font-mono text-muted-foreground text-ui">
               {version ?? "Unknown"}
             </span>
             {version ? (

@@ -40,10 +40,10 @@ export function GitHubAccountSection() {
             <div className="flex items-center gap-3">
               <GitHubAvatar account={account} />
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-sm">
+                <div className="truncate font-medium text-ui">
                   {account.name ?? account.login}
                 </div>
-                <div className="truncate text-muted-foreground text-xs">
+                <div className="truncate text-muted-foreground text-ui-sm">
                   @{account.login}
                 </div>
               </div>
@@ -59,7 +59,7 @@ export function GitHubAccountSection() {
         )}
 
         {error ? (
-          <p className="mt-3 text-destructive text-sm">{error}</p>
+          <p className="mt-3 text-destructive text-ui">{error}</p>
         ) : null}
       </div>
     </SettingsGroup>
@@ -70,7 +70,7 @@ export function GitHubAccountSection() {
 function TokenStorageNote({ storage }: { storage: GitHubTokenStorage | null }) {
   if (storage === "file") {
     return (
-      <p className="text-muted-foreground text-xs leading-5">
+      <p className="text-muted-foreground text-ui-sm leading-5">
         Your sign-in is saved in a file only your account can read, because this
         computer has no keyring. Install GNOME Keyring or KWallet and restart
         Netherstone to move it there.
@@ -79,7 +79,7 @@ function TokenStorageNote({ storage }: { storage: GitHubTokenStorage | null }) {
   }
   if (storage === "memory") {
     return (
-      <p className="text-muted-foreground text-xs leading-5">
+      <p className="text-muted-foreground text-ui-sm leading-5">
         Your sign-in isn't saved on this computer. You'll connect again the next
         time you open Netherstone.
       </p>

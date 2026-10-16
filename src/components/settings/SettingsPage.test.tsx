@@ -49,7 +49,7 @@ describe("SettingsPage", () => {
 
   it("changes a preference from its switch", () => {
     render(<SettingsPage />);
-    fireEvent.click(screen.getByLabelText("Ask before moving to Trash"));
+    fireEvent.click(screen.getByLabelText("Ask before moving to trash"));
     expect(useSettingsStore.getState().confirmBeforeDelete).toBe(false);
   });
 

@@ -1,8 +1,8 @@
-import { GlobeIcon, SidebarIcon } from "@phosphor-icons/react";
-import { FilePlusIcon } from "lucide-react";
+import { FilePlusIcon, GlobeIcon, PanelLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Hint } from "@/components/ui/tooltip";
 import { AutosaveIndicator } from "./editor/AutosaveIndicator";
 import { WordCount } from "./editor/WordCount";
 import { VaultTitle } from "./vault/VaultTitle";
@@ -22,6 +22,13 @@ export function AppHeader({
   onToggleRightSidebar,
   onNewShard,
 }: AppHeaderProps) {
+  const browserPanelLabel = isBrowserPanelOpen
+    ? "Hide browser panel"
+    : "Show browser panel";
+  const rightSidebarLabel = isRightSidebarOpen
+    ? "Hide right sidebar"
+    : "Show right sidebar";
+
   return (
     <header className="flex h-12 shrink-0 items-stretch border-b">
       <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
@@ -31,39 +38,33 @@ export function AppHeader({
         <AutosaveIndicator />
         <WordCount />
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onToggleBrowserPanel}
-            aria-label={
-              isBrowserPanelOpen ? "Hide browser panel" : "Show browser panel"
-            }
-            aria-pressed={isBrowserPanelOpen}
-            title={
-              isBrowserPanelOpen ? "Hide browser panel" : "Show browser panel"
-            }
-          >
-            <GlobeIcon className="size-5" />
-          </Button>
+          <Hint label={browserPanelLabel} side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onToggleBrowserPanel}
+              aria-label={browserPanelLabel}
+              aria-pressed={isBrowserPanelOpen}
+            >
+              <GlobeIcon />
+            </Button>
+          </Hint>
           <Separator orientation="vertical" className="h-4" />
-          <Button
-            type="button"
-            data-sidebar="trigger"
-            data-slot="sidebar-trigger"
-            variant="ghost"
-            onClick={onToggleRightSidebar}
-            aria-label={
-              isRightSidebarOpen ? "Hide right sidebar" : "Show right sidebar"
-            }
-            aria-expanded={isRightSidebarOpen}
-            title={
-              isRightSidebarOpen ? "Hide right sidebar" : "Show right sidebar"
-            }
-          >
-            <SidebarIcon className="size-5 scale-x-[-1]" />
-            <span className="sr-only">Toggle Right Sidebar</span>
-          </Button>
+          <Hint label={rightSidebarLabel} side="bottom">
+            <Button
+              type="button"
+              data-sidebar="trigger"
+              data-slot="sidebar-trigger"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onToggleRightSidebar}
+              aria-label={rightSidebarLabel}
+              aria-expanded={isRightSidebarOpen}
+            >
+              <PanelLeftIcon className="scale-x-[-1]" />
+            </Button>
+          </Hint>
         </div>
       </div>
 
@@ -76,8 +77,8 @@ export function AppHeader({
           onClick={onNewShard}
           className="ml-auto gap-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         >
-          <FilePlusIcon className="size-4" />
-          New Shard
+          <FilePlusIcon />
+          New shard
         </Button>
       </div>
     </header>

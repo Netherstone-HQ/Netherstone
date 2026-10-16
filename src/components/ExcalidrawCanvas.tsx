@@ -501,7 +501,7 @@ export function ExcalidrawCanvas({
 
   if (initialData === undefined) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full w-full items-center justify-center text-ui text-muted-foreground">
         Loading drawing…
       </div>
     );
@@ -522,7 +522,7 @@ export function ExcalidrawCanvas({
             className="pointer-events-auto shadow-lg"
           >
             <FileImageIcon />
-            Export current options to Shard
+            Export current options to shard
           </Button>
         </div>
       )}
@@ -557,7 +557,7 @@ export function ExcalidrawCanvas({
               openImageExportDialog();
             }}
           >
-            Export PNG to Shard...
+            Export PNG to shard…
           </MainMenu.Item>
           <MainMenu.DefaultItems.Export />
           <MainMenu.DefaultItems.ClearCanvas />

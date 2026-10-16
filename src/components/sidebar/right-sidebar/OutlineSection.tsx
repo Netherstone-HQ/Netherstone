@@ -1,4 +1,4 @@
-import { ListBulletsIcon } from "@phosphor-icons/react";
+import { ListIcon } from "lucide-react";
 import { scrollPlateToHeading } from "@/lib/plate-toc-headings";
 import { cn } from "@/lib/utils";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -21,10 +21,10 @@ export function OutlineSection({
     <CollapsibleSection
       section="outline"
       title="Outline"
-      icon={<ListBulletsIcon className="size-4" />}
+      icon={<ListIcon className="size-4" />}
       adornment={
         tocHeadings.length > 0 ? (
-          <span className="font-normal text-muted-foreground text-xs tabular-nums">
+          <span className="font-normal text-muted-foreground text-ui-sm tabular-nums">
             {tocHeadings.length}
           </span>
         ) : null
@@ -32,11 +32,11 @@ export function OutlineSection({
       className="mb-6"
     >
       {!currentFilePath ? (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-ui-sm">
           Open a shard to see its outline.
         </p>
       ) : tocHeadings.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-ui-sm">
           Headings you add to this shard show up here.
         </p>
       ) : (
@@ -48,7 +48,7 @@ export function OutlineSection({
                 key={heading.id}
                 type="button"
                 className={cn(
-                  "relative block w-full truncate rounded-sm py-1 pr-1 text-left text-xs outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+                  "relative block w-full truncate rounded-sm py-1 pr-1 text-left text-ui-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
                   level === 0 ? "text-foreground/75" : "text-muted-foreground",
                 )}
                 style={{ paddingLeft: RAIL_PX + 7 + level * INDENT_PX }}

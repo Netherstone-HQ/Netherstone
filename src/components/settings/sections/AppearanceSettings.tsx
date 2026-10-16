@@ -106,7 +106,7 @@ function ThemePicker() {
             />
             <span
               className={cn(
-                "block text-center text-xs",
+                "block text-center text-ui-sm",
                 checked
                   ? "font-medium text-foreground"
                   : "text-muted-foreground",

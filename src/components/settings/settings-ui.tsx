@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
+import { MinusIcon, PlusIcon } from "lucide-react";
 
 import {
   Select,
@@ -31,9 +31,9 @@ export function SettingsGroup({
     <section id={id} className="scroll-mt-8 space-y-3">
       {title ? (
         <div className="space-y-1 px-1">
-          <h3 className="font-medium text-sm">{title}</h3>
+          <h3 className="font-medium text-ui">{title}</h3>
           {description ? (
-            <p className="text-muted-foreground text-sm">{description}</p>
+            <p className="text-muted-foreground text-ui">{description}</p>
           ) : null}
         </div>
       ) : null}
@@ -70,11 +70,11 @@ export function SettingRow({
       )}
     >
       <div className="min-w-0 flex-1 space-y-0.5">
-        <label htmlFor={htmlFor} className="block font-medium text-sm">
+        <label htmlFor={htmlFor} className="block font-medium text-ui">
           {label}
         </label>
         {description ? (
-          <p className="text-muted-foreground text-xs leading-5">
+          <p className="text-muted-foreground text-ui-sm leading-5">
             {description}
           </p>
         ) : null}
@@ -201,7 +201,7 @@ export function SegmentedControl<T extends string>({
             aria-checked={checked}
             onClick={() => onChange(option.value)}
             className={cn(
-              "rounded-md px-3 py-1 text-muted-foreground text-xs transition-colors hover:text-foreground",
+              "rounded-md px-3 py-1 text-muted-foreground text-ui-sm transition-colors hover:text-foreground",
               checked && "bg-background text-foreground shadow-xs",
               option.className,
             )}
@@ -275,7 +275,7 @@ export function Stepper({
       </button>
       <output
         aria-live="polite"
-        className="min-w-6 text-center text-sm tabular-nums"
+        className="min-w-6 text-center text-ui tabular-nums"
       >
         {value}
       </output>

@@ -60,11 +60,11 @@ describe("TreeNode right-click menu", () => {
 
     expect(event.defaultPrevented).toBe(true);
     for (const item of [
-      "New Shard",
-      "New Folder",
+      "New shard",
+      "New folder",
       "Rename",
       "Open location",
-      "Move to Trash",
+      "Move to trash",
     ]) {
       expect(screen.getByRole("menuitem", { name: item })).toBeTruthy();
     }
@@ -74,7 +74,7 @@ describe("TreeNode right-click menu", () => {
     renderNode(FOLDER);
 
     openMenuOn("Work");
-    fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "New folder" }));
 
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByLabelText("Folder name")),
@@ -103,7 +103,7 @@ describe("TreeNode right-click menu", () => {
     openMenuOn("Plan");
 
     expect(screen.getByRole("menuitem", { name: "Move" })).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: "New Folder" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "New folder" })).toBeNull();
   });
 });
 

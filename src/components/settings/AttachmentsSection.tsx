@@ -112,7 +112,7 @@ function sumBytes(files: UnusedAttachment[]) {
 
 /**
  * Unused files, and a cleanup that moves the ones unused for the grace
- * period to the Trash after previewing them.
+ * period to the trash after previewing them.
  */
 function UnusedFilesRow({
   unused,
@@ -141,7 +141,7 @@ function UnusedFilesRow({
 
       if (result.removed.length > 0) {
         toast.success(
-          `Moved ${plural(result.removed.length, "file")} to Trash`,
+          `Moved ${plural(result.removed.length, "file")} to trash`,
           {
             description:
               result.kept.length > 0
@@ -167,7 +167,7 @@ function UnusedFilesRow({
   };
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 text-sm">
+    <div className="flex items-start gap-3 px-4 py-3 text-ui">
       <FileQuestionIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div>
@@ -176,7 +176,7 @@ function UnusedFilesRow({
             : `${plural(unused.length, "unused file")} · ${formatBytes(sumBytes(unused))}`}
         </div>
         {unused.length > 0 ? (
-          <p className="text-muted-foreground text-xs">
+          <p className="text-muted-foreground text-ui-sm">
             {ready.length === 0
               ? `No shard links to these. They can be cleaned up once unused for ${CLEANUP_GRACE_DAYS} days.`
               : waitingCount > 0
@@ -205,15 +205,15 @@ function UnusedFilesRow({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Move {plural(ready.length, "unused file")} to Trash?
+              Move {plural(ready.length, "unused file")} to trash?
             </AlertDialogTitle>
             <AlertDialogDescription>
               No shard has linked to these for {CLEANUP_GRACE_DAYS} days. This
               frees {formatBytes(sumBytes(ready))}, and you can restore them
-              from the Trash.
+              from the trash.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm">
             {ready.map((file) => (
               <li
                 key={file.assetPath}
@@ -240,7 +240,7 @@ function UnusedFilesRow({
               }}
             >
               {isCleaning ? <Loader2Icon className="animate-spin" /> : null}
-              Move to Trash
+              Move to trash
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -280,8 +280,8 @@ export function AttachmentsSection() {
     >
       <div className="mb-5 flex items-start gap-4">
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h3 className="font-medium text-sm">Attachments in this vault</h3>
-          <p className="text-muted-foreground text-xs">
+          <h3 className="font-medium text-ui">Attachments in this vault</h3>
+          <p className="text-muted-foreground text-ui-sm">
             {currentReport
               ? `${plural(currentReport.fileCount, "file")} · ${formatBytes(currentReport.totalBytes)} in this vault`
               : "Files copied into this vault."}
@@ -304,7 +304,7 @@ export function AttachmentsSection() {
       </div>
 
       {isCurrent && error && !isChecking ? (
-        <p className="text-destructive text-sm">
+        <p className="text-destructive text-ui">
           Couldn't check attachments: {error}
         </p>
       ) : null}
@@ -312,19 +312,19 @@ export function AttachmentsSection() {
       {currentReport ? (
         <div className="divide-y rounded-lg border bg-background">
           {currentReport.missing.length === 0 ? (
-            <div className="flex items-center gap-3 px-4 py-3 text-sm">
+            <div className="flex items-center gap-3 px-4 py-3 text-ui">
               <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
               Every linked file is in the vault
             </div>
           ) : (
             <div className="space-y-2 px-4 py-3">
-              <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-3 text-ui">
                 <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
                 <span className="font-medium">
                   {plural(currentReport.missing.length, "missing file")}
                 </span>
               </div>
-              <ul className="space-y-1 pl-7 text-sm">
+              <ul className="space-y-1 pl-7 text-ui">
                 {currentReport.missing.map((file) => (
                   <li
                     key={file.assetPath}
@@ -336,7 +336,7 @@ export function AttachmentsSection() {
                     >
                       {file.originalName ?? getAssetLabel(file.assetPath)}
                     </span>
-                    <span className="text-muted-foreground text-xs">in</span>
+                    <span className="text-muted-foreground text-ui-sm">in</span>
                     {file.shardPaths.map((shardPath, index) => (
                       <button
                         key={shardPath}
@@ -384,7 +384,7 @@ export function AttachmentsSection() {
           ) : null}
         </div>
       ) : isChecking ? (
-        <p className="text-muted-foreground text-sm">Checking attachments</p>
+        <p className="text-muted-foreground text-ui">Checking attachments</p>
       ) : null}
     </section>
   );

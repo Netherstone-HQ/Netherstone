@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileIcon, FolderOpenIcon, PlusIcon } from "@phosphor-icons/react";
+import { FileIcon, FolderOpenIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -85,23 +85,23 @@ export function EditorEmptyState() {
           {hasVault ? (
             <>
               <Button onClick={() => setIsNewShardDialogOpen(true)}>
-                <PlusIcon className="size-4" />
-                New Shard
+                <PlusIcon />
+                New shard
               </Button>
               <Button variant="outline" onClick={() => void handleOpenShard()}>
-                <FileIcon className="size-4" />
-                Open Shard
+                <FileIcon />
+                Open shard
               </Button>
             </>
           ) : (
             <>
               <Button onClick={() => void handleOpenVault()}>
-                <FolderOpenIcon className="size-4" />
-                Open Vault
+                <FolderOpenIcon />
+                Open vault
               </Button>
               <Button variant="outline" onClick={() => void handleOpenShard()}>
-                <FileIcon className="size-4" />
-                Open Shard
+                <FileIcon />
+                Open shard
               </Button>
             </>
           )}

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
-  ArrowClockwiseIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   PauseIcon,
+  RotateCwIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/store";
 import { useBrowserWebview } from "@/components/browser/useBrowserWebview";
@@ -24,6 +24,7 @@ import {
 } from "@/components/browser/browserCommands";
 
 import { Progress } from "@/components/ui/progress";
+import { Hint } from "@/components/ui/tooltip";
 
 const DEFAULT_BROWSER_URL = "https://netherstone.app";
 
@@ -266,81 +267,81 @@ export function BrowserPanel({
             void navigateTo(address);
           }}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              void runBrowserCommand(() => goBackBrowserWebview(webviewLabel));
-            }}
-            disabled={isBusy || !isBrowserReady || !canGoBack}
-            aria-label="Go back"
-            title={canGoBack ? "Go back" : "No page to go back to"}
-          >
-            <ArrowLeftIcon className="size-4" />
-          </Button>
+          <Hint label="Go back" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                void runBrowserCommand(() => goBackBrowserWebview(webviewLabel));
+              }}
+              disabled={isBusy || !isBrowserReady || !canGoBack}
+              aria-label="Go back"
+            >
+              <ArrowLeftIcon />
+            </Button>
+          </Hint>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              void runBrowserCommand(() =>
-                goForwardBrowserWebview(webviewLabel),
-              );
-            }}
-            disabled={isBusy || !isBrowserReady || !canGoForward}
-            aria-label="Go forward"
-            title={canGoForward ? "Go forward" : "No page to go forward to"}
-          >
-            <ArrowRightIcon className="size-4" />
-          </Button>
+          <Hint label="Go forward" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                void runBrowserCommand(() =>
+                  goForwardBrowserWebview(webviewLabel),
+                );
+              }}
+              disabled={isBusy || !isBrowserReady || !canGoForward}
+              aria-label="Go forward"
+            >
+              <ArrowRightIcon />
+            </Button>
+          </Hint>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              if (isPageLoading) {
-                stopLoading();
-                return;
-              }
+          <Hint label={isPageLoading ? "Stop loading" : "Refresh"} side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                if (isPageLoading) {
+                  stopLoading();
+                  return;
+                }
 
-              void runBrowserCommand(() => reloadBrowserWebview(webviewLabel));
-            }}
-            disabled={isBusy || !isBrowserReady}
-            aria-label={isPageLoading ? "Stop loading page" : "Refresh page"}
-            title={isPageLoading ? "Stop loading" : "Refresh"}
-          >
-            {isPageLoading ? (
-              <XIcon className="size-4" weight="bold" />
-            ) : (
-              <ArrowClockwiseIcon className="size-4" />
-            )}
-          </Button>
+                void runBrowserCommand(() => reloadBrowserWebview(webviewLabel));
+              }}
+              disabled={isBusy || !isBrowserReady}
+              aria-label={isPageLoading ? "Stop loading page" : "Refresh page"}
+            >
+              {isPageLoading ? <XIcon /> : <RotateCwIcon />}
+            </Button>
+          </Hint>
 
           <input
             type="text"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
-            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-3 text-ui-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
             placeholder="Enter a URL or search"
             aria-label="Browser address"
             disabled={isBusy || !isBrowserReady}
           />
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              void closeBrowserPanel();
-            }}
-            aria-label="Close browser panel"
-            title="Close browser panel"
-          >
-            <XIcon className="size-4" />
-          </Button>
+          <Hint label="Close browser panel" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                void closeBrowserPanel();
+              }}
+              aria-label="Close browser panel"
+            >
+              <XIcon />
+            </Button>
+          </Hint>
 
           {isPageLoading && (
             <>
@@ -359,7 +360,7 @@ export function BrowserPanel({
         </form>
 
         {statusMessage && (
-          <div className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <div className="border-b bg-muted/30 px-3 py-2 text-ui-sm text-muted-foreground">
             {statusMessage}
           </div>
         )}
@@ -376,9 +377,9 @@ export function BrowserPanel({
               data-slot="browser-paused"
               className="pointer-events-none absolute inset-0 flex select-none flex-col items-center justify-center gap-1.5 bg-muted/40 text-muted-foreground"
             >
-              <PauseIcon className="size-5" weight="fill" />
-              <span className="text-xs">Paused</span>
-              <span className="max-w-[80%] truncate text-xs opacity-70">
+              <PauseIcon className="size-5 fill-current" />
+              <span className="text-ui-sm">Paused</span>
+              <span className="max-w-[80%] truncate text-ui-sm opacity-70">
                 {getHostname(currentUrl)}
               </span>
             </div>

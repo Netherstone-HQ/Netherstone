@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { ChevronRightIcon } from "lucide-react";
 
 import {
   Collapsible,
@@ -36,11 +36,11 @@ export function CollapsibleSection({
       className={className}
     >
       <h3>
-        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm py-1 text-left font-semibold text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm py-1 text-left font-semibold text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           {icon}
           <span>{title}</span>
           {adornment}
-          <CaretRightIcon
+          <ChevronRightIcon
             aria-hidden="true"
             className={cn(
               "ml-auto size-3.5 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground",

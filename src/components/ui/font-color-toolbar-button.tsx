@@ -237,7 +237,7 @@ function PureColorPicker({
 }) {
   return (
     <div className={cn("flex flex-col", className)} {...props}>
-      <ToolbarMenuGroup label="Custom Colors">
+      <ToolbarMenuGroup label="Custom colors">
         <ColorCustom
           className="px-2"
           color={color}
@@ -250,7 +250,7 @@ function PureColorPicker({
           updatedColor={updatedColor}
         />
       </ToolbarMenuGroup>
-      <ToolbarMenuGroup label="Default Colors">
+      <ToolbarMenuGroup label="Default colors">
         <ColorDropdownMenuItems
           className="px-2"
           color={color}

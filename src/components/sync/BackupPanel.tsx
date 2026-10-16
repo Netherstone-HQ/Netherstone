@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowSquareOutIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  CircleNotchIcon,
-  CloudSlashIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react";
+  ChevronRightIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CloudOffIcon,
+  ExternalLinkIcon,
+  LoaderCircleIcon,
+} from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatDistanceToNow } from "date-fns";
 
@@ -76,13 +76,13 @@ export function BackupPanel({
   } else if (!account) {
     body = (
       <div className="space-y-3">
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-ui">
           Connect GitHub to back up this vault to a private repository and
           sync it between your devices.
         </p>
         <GitHubSignIn compact />
         {accountError ? (
-          <p className="text-destructive text-xs">{accountError}</p>
+          <p className="text-destructive text-ui-sm">{accountError}</p>
         ) : null}
       </div>
     );
@@ -98,11 +98,11 @@ export function BackupPanel({
           <button
             type="button"
             onClick={() => void openUrl(`https://github.com/${repoName}`)}
-            className="flex w-full items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-left text-ui-sm transition-colors hover:bg-muted"
           >
             <GitHubAvatar account={account} size="sm" />
             <span className="min-w-0 flex-1 truncate">{repoName}</span>
-            <ArrowSquareOutIcon className="size-3.5 text-muted-foreground" />
+            <ExternalLinkIcon className="size-3.5 text-muted-foreground" />
           </button>
         ) : null}
         <div className="flex items-center justify-between gap-2">
@@ -144,7 +144,7 @@ export function BackupPanel({
           disabled={isWorking || !plan || !appInstalled}
           onClick={() => void turnOn(vaultPath)}
         >
-          {isWorking ? <CircleNotchIcon className="animate-spin" /> : null}
+          {isWorking ? <LoaderCircleIcon className="animate-spin" /> : null}
           {isWorking ? "Setting up" : "Turn on sync"}
         </Button>
         {appInstalled ? (
@@ -152,7 +152,7 @@ export function BackupPanel({
             type="button"
             disabled={isWorking}
             onClick={() => setRestoring(true)}
-            className="w-full text-center text-muted-foreground text-xs hover:text-foreground disabled:pointer-events-none"
+            className="w-full text-center text-muted-foreground text-ui-sm hover:text-foreground disabled:pointer-events-none"
           >
             Already backed up on another device? Use that backup
           </button>
@@ -163,9 +163,9 @@ export function BackupPanel({
 
   return (
     <div className="space-y-3">
-      {showTitle ? <h2 className="font-medium text-sm">Sync</h2> : null}
+      {showTitle ? <h2 className="font-medium text-ui">Sync</h2> : null}
       {body}
-      {error ? <p className="text-destructive text-xs leading-5">{error}</p> : null}
+      {error ? <p className="text-destructive text-ui-sm leading-5">{error}</p> : null}
     </div>
   );
 }
@@ -175,7 +175,7 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
   const skipped = plan.skipped;
 
   return (
-    <div className="space-y-2 text-sm">
+    <div className="space-y-2 text-ui">
       <p>
         {describeBackupContents(plan)}
         {plan.includedCount > 0 ? (
@@ -191,10 +191,10 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
           <button
             type="button"
             onClick={() => setShowSkipped((v) => !v)}
-            className="inline-flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
+            className="inline-flex items-center gap-1 text-muted-foreground text-ui-sm hover:text-foreground"
             aria-expanded={showSkipped}
           >
-            <CaretRightIcon
+            <ChevronRightIcon
               className={cn("size-3 transition-transform", showSkipped && "rotate-90")}
             />
             {skipped.length === 1
@@ -204,7 +204,7 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
           {showSkipped ? (
             <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
               {skipped.map((file) => (
-                <li key={file.path} className="text-xs">
+                <li key={file.path} className="text-ui-sm">
                   <div className="truncate" title={file.path}>
                     {file.path.split("/").pop()}
                   </div>
@@ -234,8 +234,8 @@ function SyncStatus({
 
   if (isWorking) {
     return (
-      <div className="flex items-center gap-2 text-sm">
-        <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+      <div className="flex items-center gap-2 text-ui">
+        <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         Syncing
       </div>
     );
@@ -243,19 +243,19 @@ function SyncStatus({
   if (offline) {
     return (
       <div className="space-y-0.5">
-        <div className="flex items-center gap-2 text-sm">
-          <CloudSlashIcon className="size-4 text-muted-foreground" />
+        <div className="flex items-center gap-2 text-ui">
+          <CloudOffIcon className="size-4 text-muted-foreground" />
           Working offline
         </div>
-        <p className="pl-6 text-muted-foreground text-xs">
+        <p className="pl-6 text-muted-foreground text-ui-sm">
           Changes sync when you're back online{since ? `. Last synced ${since}.` : "."}
         </p>
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <CheckCircleIcon weight="fill" className="size-4 text-emerald-500" />
+    <div className="flex items-center gap-2 text-ui">
+      <CircleCheckIcon className="size-4 text-emerald-500" />
       {since ? `Synced ${since}` : "Synced"}
     </div>
   );
@@ -270,15 +270,15 @@ function ConflictList({
 }) {
   return (
     <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
-      <div className="flex items-center gap-2 text-sm">
-        <WarningCircleIcon weight="fill" className="size-4 text-amber-500" />
+      <div className="flex items-center gap-2 text-ui">
+        <CircleAlertIcon className="size-4 text-amber-500" />
         {conflicts.length === 1
           ? "1 file needs a decision"
           : `${conflicts.length} files need a decision`}
       </div>
       <ul className="max-h-32 space-y-1 overflow-y-auto">
         {conflicts.map((conflict) => (
-          <li key={conflict.path} className="flex items-center gap-2 text-xs">
+          <li key={conflict.path} className="flex items-center gap-2 text-ui-sm">
             <span className="min-w-0 flex-1 truncate" title={conflict.path}>
               {fileName(conflict.path)}
             </span>
@@ -318,17 +318,17 @@ function BackupPicker({
 
   return (
     <div className="space-y-3">
-      <p className="text-muted-foreground text-sm">
+      <p className="text-muted-foreground text-ui">
         {vaultHasFiles
           ? "Choose a backup to sync with this vault. Its files are added here, and this vault's files are added to it."
           : "Choose a backup to download into this vault. It stays in sync afterwards."}
       </p>
       {backups === null ? (
         <div className="flex h-16 items-center justify-center">
-          <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+          <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         </div>
       ) : backups.length === 0 ? (
-        <p className="text-sm">No backups found on your GitHub account.</p>
+        <p className="text-ui">No backups found on your GitHub account.</p>
       ) : (
         <ul className="max-h-48 space-y-1 overflow-y-auto">
           {backups.map((backup) => (
@@ -337,13 +337,13 @@ function BackupPicker({
                 type="button"
                 disabled={isWorking}
                 onClick={() => use(backup)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
               >
                 <span className="min-w-0 flex-1 truncate">{backup.name}</span>
                 {isWorking && chosen === backup.fullName ? (
-                  <CircleNotchIcon className="size-3.5 animate-spin text-muted-foreground" />
+                  <LoaderCircleIcon className="size-3.5 animate-spin text-muted-foreground" />
                 ) : backup.pushedAt ? (
-                  <span className="shrink-0 text-muted-foreground text-xs">
+                  <span className="shrink-0 text-muted-foreground text-ui-sm">
                     {formatDistanceToNow(new Date(backup.pushedAt), { addSuffix: true })}
                   </span>
                 ) : null}

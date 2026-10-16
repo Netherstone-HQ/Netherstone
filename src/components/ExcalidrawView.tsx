@@ -148,7 +148,7 @@ export function ExcalidrawView() {
       <div className="min-w-0 flex-1">
         <Suspense
           fallback={
-            <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center text-ui text-muted-foreground">
               Loading canvas…
             </div>
           }

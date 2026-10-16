@@ -131,14 +131,14 @@ export function ExternalFilesRow({
   };
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 text-sm">
+    <div className="flex items-start gap-3 px-4 py-3 text-ui">
       <FileInputIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div>
           {plural(files.length, "file")} linked from outside the attachment
           folder
         </div>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-ui-sm">
           Used in {plural(shardCount, "shard")}. Importing copies them into this
           vault so they travel with it.
         </p>
@@ -161,7 +161,7 @@ export function ExternalFilesRow({
               links are updated. The originals stay where they are.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ul className="max-h-56 space-y-1.5 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <ul className="max-h-56 space-y-1.5 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm">
             {files.map((file) => (
               <li key={file.absolutePath}>
                 <label
@@ -284,11 +284,11 @@ export function TidyRow({
   };
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 text-sm">
+    <div className="flex items-start gap-3 px-4 py-3 text-ui">
       <TagIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div>{plural(renames.length, "file")} to tidy</div>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-ui-sm">
           Saved with hash names or in subfolders. Tidying moves them into the
           attachment folder under their original names.
         </p>
@@ -318,7 +318,7 @@ export function TidyRow({
               where it is known, and links to it are updated.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ul className="max-h-56 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <ul className="max-h-56 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm">
             {renames.map((rename) => (
               <li
                 key={rename.from}

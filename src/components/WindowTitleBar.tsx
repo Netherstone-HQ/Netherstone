@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  MinusIcon,
-  SquareIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { MinusIcon, SquareIcon, XIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { cn } from "@/lib/utils";
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
+import { Hint } from "@/components/ui/tooltip";
 
 /**
  * The custom title bar. `bare` drops the name and background for full-window
@@ -57,7 +54,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
           if (!isTauriWindow) return;
           void getCurrentWindow().minimize();
         },
-        icon: <MinusIcon className="size-4" weight="bold" />,
+        icon: <MinusIcon className="size-4" />,
       },
       {
         label: isMaximized ? "Restore" : "Maximize",
@@ -65,7 +62,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
           if (!isTauriWindow) return;
           void getCurrentWindow().toggleMaximize();
         },
-        icon: <SquareIcon className="size-3.5" weight="bold" />,
+        icon: <SquareIcon className="size-3.5" />,
       },
       {
         label: "Close",
@@ -73,7 +70,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
           if (!isTauriWindow) return;
           void getCurrentWindow().close();
         },
-        icon: <XIcon className="size-4" weight="bold" />,
+        icon: <XIcon className="size-4" />,
         destructive: true,
       },
     ],
@@ -108,7 +105,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
     >
       <div
         data-tauri-drag-region
-        className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
+        className="flex min-w-0 flex-1 items-center gap-2 text-ui text-muted-foreground"
       >
         {bare ? null : (
           <>
@@ -122,21 +119,21 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
 
       <div className="flex h-full items-stretch">
         {controls.map(({ label, onClick, icon, destructive }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={onClick}
-            aria-label={label}
-            title={label}
-            data-tauri-drag-region={false}
-            className={cn(
-              "tauri-no-drag flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-              destructive &&
-                "hover:bg-destructive hover:text-white dark:hover:text-white",
-            )}
-          >
-            {icon}
-          </button>
+          <Hint key={label} label={label} side="bottom">
+            <button
+              type="button"
+              onClick={onClick}
+              aria-label={label}
+              data-tauri-drag-region={false}
+              className={cn(
+                "tauri-no-drag flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                destructive &&
+                  "hover:bg-destructive hover:text-white dark:hover:text-white",
+              )}
+            >
+              {icon}
+            </button>
+          </Hint>
         ))}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import * as React from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useAppShortcuts } from "@/hooks/useAppShortcuts";
 import { useUIStore } from "@/store";
 
 import { RightSidebar } from "./sidebar/RightSidebar";
@@ -165,6 +166,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isBrowserPanelOpen = useUIStore((s) => s.isBrowserPanelOpen);
   const setBrowserPanelOpen = useUIStore((s) => s.setBrowserPanelOpen);
   const [isNewShardDialogOpen, setIsNewShardDialogOpen] = useState(false);
+  const openNewShardDialog = useCallback(
+    () => setIsNewShardDialogOpen(true),
+    [],
+  );
+  useAppShortcuts({ onNewShard: openNewShardDialog });
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>
@@ -173,9 +179,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <div className="flex min-h-0 flex-1">
           <ModeSwitcher />
-          <ModeAwareLeftSidebar
-            onNewShard={() => setIsNewShardDialogOpen(true)}
-          />
+          <ModeAwareLeftSidebar onNewShard={openNewShardDialog} />
 
           <div className="relative flex h-full min-w-0 flex-1 flex-col">
             <ModeAwareCanvas />
@@ -187,7 +191,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               toggleRightSidebar={toggleRightSidebar}
               activeNavItem={activeNavItem}
               setActiveNavItem={setActiveNavItem}
-              onNewShard={() => setIsNewShardDialogOpen(true)}
+              onNewShard={openNewShardDialog}
             />
 
             {children == null && activeNavItem === "settings" && (

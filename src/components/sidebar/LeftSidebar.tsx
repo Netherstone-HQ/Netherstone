@@ -2,35 +2,21 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ChevronsUpDownIcon,
   FileIcon,
-  FilePlusIcon,
   FolderIcon,
   FolderOpenIcon,
   GitBranchIcon,
   SearchIcon,
-  TagIcon,
 } from "lucide-react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+import { Sidebar } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Hint } from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
@@ -40,6 +26,7 @@ import { BackupPanel } from "@/components/sync/BackupPanel";
 import { ConflictDialog } from "@/components/sync/ConflictDialog";
 import { cn } from "@/lib/utils";
 import { useSyncStore } from "@/store/sync";
+import { PinnedSection } from "../recent/PinnedSection";
 import { RecentFilesSection } from "../recent/RecentFilesSection";
 import { FileTree } from "../vault/FileTree";
 import { ImportShardDialog } from "../vault/ImportShardDialog";
@@ -65,8 +52,6 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
     null,
   );
 
-  const activeNavItem = useUIStore((s) => s.activeNavItem);
-  const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
   const setSearchModalOpen = useUIStore((s) => s.setSearchModalOpen);
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
@@ -189,135 +174,93 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
         side="left"
         className="overflow-hidden data-[side=left]:left-12"
       >
-        <div className="flex gap-2 px-2 pt-1.5 pb-2">
-          <SidebarMenuButton
-            tooltip="Search"
-            className="h-9 flex-1 justify-center gap-2 border border-sidebar-border/60 bg-sidebar-accent/25 font-medium text-sidebar-foreground/85 shadow-xs hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-            onClick={() => setSearchModalOpen(true)}
-          >
-            <SearchIcon className="relative top-px shrink-0" />
-            <span className="text-center leading-none">Search</span>
-          </SidebarMenuButton>
-
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
+        {/* Lines up with the app's top bar. */}
+        <div className="flex h-header shrink-0 items-center gap-1.5 border-b px-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                onClick={() =>
-                  setActiveNavItem(activeNavItem === "tags" ? null : "tags")
-                }
-                className={
-                  activeNavItem === "tags"
-                    ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border/60 bg-sidebar-accent text-sidebar-accent-foreground shadow-xs transition-colors"
-                    : "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border/60 bg-sidebar-accent/25 text-sidebar-foreground/85 shadow-xs transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                }
-                aria-label="Tags"
-                aria-pressed={activeNavItem === "tags"}
+                className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-none transition-colors hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-sidebar-ring aria-expanded:bg-sidebar-accent/60"
               >
-                <TagIcon className="size-5" />
+                <span className="flex size-6.5 shrink-0 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-foreground">
+                  <FolderIcon className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium text-ui">
+                  {currentVaultName}
+                </span>
+                <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={6}>
-              Tags
-            </TooltipContent>
-          </Tooltip>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="bottom" align="start" className="w-56">
+              <DropdownMenuItem onClick={() => void handleOpenVault()}>
+                <FolderOpenIcon />
+                <span>Open vault</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void handleOpenShard()}>
+                <FileIcon />
+                <span>Open shard</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!currentVaultPath}
+                onClick={() => void handleRevealVaultLocation()}
+              >
+                <FolderIcon />
+                <span>Open location</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Popover>
+            <Hint label="Sync" side="bottom">
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={!currentVaultPath}
+                  className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-sidebar-accent/60"
+                  aria-label="Sync"
+                >
+                  <GitBranchIcon className="size-5" />
+                  {backupIndicator ? (
+                    <span
+                      className={cn(
+                        "absolute top-1.5 right-1.5 size-2 rounded-full ring-2 ring-sidebar",
+                        backupIndicator === "ok"
+                          ? "bg-emerald-500"
+                          : backupIndicator === "offline"
+                            ? "bg-muted-foreground"
+                            : "bg-amber-500",
+                      )}
+                    />
+                  ) : null}
+                </button>
+              </PopoverTrigger>
+            </Hint>
+            {currentVaultPath ? (
+              <PopoverContent side="bottom" align="end" className="w-80">
+                <BackupPanel vaultPath={currentVaultPath} />
+              </PopoverContent>
+            ) : null}
+          </Popover>
+          {currentVaultPath ? <ConflictDialog vaultPath={currentVaultPath} /> : null}
         </div>
 
-        {/* ── Scrollable Content ────────────────────────────────── */}
-        <SidebarContent className="min-h-0 overflow-x-hidden overflow-y-auto">
-          {/* Recent Files */}
+        {/* Sized and placed like the editor toolbar's buttons beside it. */}
+        <div className="flex h-10 shrink-0 items-center px-2">
+          <button
+            type="button"
+            onClick={() => setSearchModalOpen(true)}
+            className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-sidebar-border bg-sidebar-accent/25 font-medium text-sidebar-foreground/85 text-ui-sm shadow-xs outline-none transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          >
+            <SearchIcon className="size-4" />
+            Search
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
+          <PinnedSection />
           <RecentFilesSection />
-
-          {/* File Tree */}
           <FileTree onNewShard={onNewShard} />
-        </SidebarContent>
-
-        {/* ── Footer ───────────────────────────────────────────── */}
-        <SidebarFooter>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton
-                  size="lg"
-                  className="min-w-0 flex-1 justify-between"
-                  tooltip="Vault"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <div className="flex aspect-square size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/40 text-sidebar-foreground">
-                      <FolderOpenIcon className="size-4" />
-                    </div>
-                    <div className="min-w-0 text-left">
-                      <div className="truncate font-medium">
-                        {currentVaultName}
-                      </div>
-                    </div>
-                  </div>
-                  <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuItem onClick={() => void handleOpenVault()}>
-                  <FolderOpenIcon />
-                  <span>Open vault</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => void handleOpenShard()}>
-                  <FileIcon />
-                  <span>Open shard</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!currentVaultPath}
-                  onClick={() => void handleRevealVaultLocation()}
-                >
-                  <FolderIcon />
-                  <span>Open in Explorer</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onNewShard}>
-                  <FilePlusIcon />
-                  <span>New shard</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Popover>
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      disabled={!currentVaultPath}
-                      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-                      aria-label="Sync"
-                    >
-                      <GitBranchIcon className="size-5" />
-                      {backupIndicator ? (
-                        <span
-                          className={cn(
-                            "absolute top-3 right-3 size-2 rounded-full ring-2 ring-sidebar",
-                            backupIndicator === "ok"
-                              ? "bg-emerald-500"
-                              : backupIndicator === "offline"
-                                ? "bg-muted-foreground"
-                                : "bg-amber-500",
-                          )}
-                        />
-                      ) : null}
-                    </button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={6}>
-                  Sync
-                </TooltipContent>
-              </Tooltip>
-              {currentVaultPath ? (
-                <PopoverContent side="top" align="end" className="w-80">
-                  <BackupPanel vaultPath={currentVaultPath} />
-                </PopoverContent>
-              ) : null}
-            </Popover>
-            {currentVaultPath ? <ConflictDialog vaultPath={currentVaultPath} /> : null}
-          </div>
-        </SidebarFooter>
+        </div>
       </Sidebar>
 
       <ImportShardDialog

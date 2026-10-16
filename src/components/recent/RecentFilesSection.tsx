@@ -1,12 +1,25 @@
+import { EyeOffIcon } from "lucide-react";
+import { toast } from "sonner";
+
 import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { SectionHeader } from "@/components/sidebar/SectionHeader";
+import {
+  ACTIVE_SHORTCUT_ROW_CLASS,
+  FileSlot,
+  ROW_BUTTON_CLASS,
+  ROW_CLASS,
+  getRowIndent,
+} from "@/components/vault/tree-layout";
+import {
+  getVaultFileDisplayName,
+  isPathWithin,
+  isSamePath,
+} from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
 import {
@@ -16,100 +29,97 @@ import {
   useVaultStore,
 } from "@/store";
 
-function getVaultRelativePath(
-  filePath: string,
-  currentVaultPath: string | null,
-) {
-  if (!currentVaultPath) return filePath;
+/** The folders between the vault and `filePath`, or "" for the vault root. */
+function getFolderInVault(filePath: string, vaultPath: string) {
+  const relative = filePath
+    .replace(/\\/g, "/")
+    .slice(vaultPath.replace(/\\/g, "/").length + 1);
+  return relative.split("/").slice(0, -1).join("/");
+}
 
-  const normalizedVaultPath = currentVaultPath.replace(/\\/g, "/");
-  const normalizedFilePath = filePath.replace(/\\/g, "/");
-
-  if (!normalizedFilePath.startsWith(normalizedVaultPath)) {
-    return filePath.split(/[\\/]/).pop() ?? filePath;
-  }
-
-  const relativePath = normalizedFilePath
-    .slice(normalizedVaultPath.length)
-    .replace(/^\//, "");
-  return relativePath || (filePath.split(/[\\/]/).pop() ?? filePath);
+function hideRecent() {
+  const { setPreference } = useSettingsStore.getState();
+  setPreference("showRecentFiles", false);
+  toast("Recent is hidden. Turn it back on in Settings › General.", {
+    action: {
+      label: "Undo",
+      onClick: () => setPreference("showRecentFiles", true),
+    },
+  });
 }
 
 export function RecentFilesSection() {
   const currentFilePath = useEditorStore((s) => s.currentFilePath);
   const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
   const recentFiles = useUIStore((s) => s.recentFiles);
+  const isCollapsed = useUIStore((s) => s.collapsedSections.recent);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
   const showRecentFiles = useSettingsStore((s) => s.showRecentFiles);
   const recentFilesLimit = useSettingsStore((s) => s.recentFilesLimit);
 
+  if (!currentVaultPath || !showRecentFiles) return null;
+
   const visibleRecentFiles = recentFiles
-    .filter((file) => {
-      if (!currentVaultPath) return false;
-
-      const normalizedVaultPath = currentVaultPath.replace(/\\/g, "/");
-      const normalizedFilePath = file.path.replace(/\\/g, "/");
-
-      return (
-        normalizedFilePath.startsWith(`${normalizedVaultPath}/`) ||
-        normalizedFilePath === normalizedVaultPath
-      );
-    })
+    .filter((file) => isPathWithin(file.path, currentVaultPath))
     .slice(0, recentFilesLimit);
 
-  if (
-    !currentVaultPath ||
-    !showRecentFiles ||
-    visibleRecentFiles.length === 0
-  ) {
-    return null;
-  }
+  if (visibleRecentFiles.length === 0) return null;
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Recent</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
+    <section aria-label="Recent" className="shrink-0">
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <SectionHeader label="Recent" section="recent" />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={hideRecent}>
+            <EyeOffIcon />
+            Hide Recent
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+
+      {isCollapsed ? null : (
+        <ul className="flex flex-col gap-0.5">
           {visibleRecentFiles.map((file) => {
-            const fileName = getVaultFileDisplayName(file.name);
-            const relativePath = getVaultRelativePath(
-              file.path,
-              currentVaultPath,
-            );
+            const folder = getFolderInVault(file.path, currentVaultPath);
+            const isOpen =
+              !!currentFilePath && isSamePath(file.path, currentFilePath);
 
             return (
-              <SidebarMenuItem key={file.path}>
-                <SidebarMenuButton
-                  tooltip={relativePath}
-                  isActive={file.path === currentFilePath}
-                  onClick={async () => {
-                    try {
-                      await openVaultFile(file.path);
-                      setActiveNavItem(null);
-                    } catch (error) {
-                      console.error("Failed to open recent file:", error);
-                    }
-                  }}
-                  className="w-full min-w-0"
+              <li key={file.path}>
+                <div
+                  className={cn(ROW_CLASS, isOpen && ACTIVE_SHORTCUT_ROW_CLASS)}
+                  style={{ paddingLeft: `${getRowIndent(0)}px` }}
                 >
-                  <span className="min-w-0 flex-1 truncate">{fileName}</span>
-                  <span
-                    className={cn(
-                      "min-w-0 max-w-28 truncate text-ui-sm text-muted-foreground",
-                      file.path === currentFilePath &&
-                        "text-sidebar-accent-foreground/70",
-                    )}
+                  <button
+                    type="button"
+                    className={ROW_BUTTON_CLASS}
+                    onClick={async () => {
+                      try {
+                        await openVaultFile(file.path);
+                        setActiveNavItem(null);
+                      } catch (error) {
+                        console.error("Failed to open recent file:", error);
+                      }
+                    }}
                   >
-                    {relativePath}
-                  </span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                    <FileSlot path={file.path} />
+                    <span className="min-w-0 flex-1 truncate">
+                      {getVaultFileDisplayName(file.name)}
+                    </span>
+                    {folder ? (
+                      <span className="min-w-0 max-w-[45%] shrink truncate pl-1.5 text-ui-sm text-muted-foreground">
+                        {folder}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              </li>
             );
           })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+        </ul>
+      )}
+    </section>
   );
 }
-
-export default RecentFilesSection;

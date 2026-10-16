@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { hasModKey } from "@/lib/platform";
 import { useUIStore } from "@/store/ui";
 
 export function useSearchModal() {
@@ -8,8 +9,8 @@ export function useSearchModal() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // CMD+K on Mac, CTRL+K on Windows/Linux
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      // ⌘K on a Mac, Ctrl+K elsewhere
+      if (hasModKey(e) && e.key === "k") {
         e.preventDefault();
         toggleSearchModal();
       }

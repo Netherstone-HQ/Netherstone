@@ -5,12 +5,10 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { IS_MAC } from "@/lib/platform";
 import { copy } from "./copy";
 import { Step } from "./StepLayout";
 import type { VaultChoice } from "./VaultStep";
-
-const isMac =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
 export function ReadyStep({
   vault,
@@ -33,7 +31,7 @@ export function ReadyStep({
         : copy.ready.body;
 
   const tips = [
-    { icon: SearchIcon, text: copy.ready.tips.search(isMac ? "⌘K" : "Ctrl+K") },
+    { icon: SearchIcon, text: copy.ready.tips.search(IS_MAC ? "⌘K" : "Ctrl+K") },
     { icon: TypeIcon, text: copy.ready.tips.blocks },
     { icon: DrawingIcon, text: copy.ready.tips.canvas },
   ];

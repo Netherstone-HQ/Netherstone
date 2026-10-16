@@ -1,6 +1,5 @@
 import { SettingsGroup } from "@/components/settings/settings-ui";
-
-const IS_MAC = navigator.userAgent.includes("Mac");
+import { IS_MAC } from "@/lib/platform";
 
 /** Keys as written in Plate's shortcut config ("mod+shift+x"). */
 type Shortcut = { keys: string; action: string };
@@ -8,7 +7,13 @@ type Shortcut = { keys: string; action: string };
 const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
   {
     title: "App",
-    shortcuts: [{ keys: "mod+k", action: "Search your vault" }],
+    shortcuts: [
+      { keys: "mod+k", action: "Search your vault" },
+      { keys: "mod+n", action: "New shard" },
+      { keys: "mod+1", action: "Editor" },
+      { keys: "mod+2", action: "Tags" },
+      { keys: "mod+3", action: "Canvas" },
+    ],
   },
   {
     title: "Text",

@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { FilePlusIcon, FolderPlusIcon } from "lucide-react";
+import { FilePlusIcon, FolderPlusIcon, PlusIcon } from "lucide-react";
+import { toast } from "sonner";
+
+import { DrawingIcon } from "@/components/icons";
+import { SectionHeader } from "@/components/sidebar/SectionHeader";
+import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -7,23 +12,20 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
-  SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-} from "@/components/ui/sidebar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarMenu } from "@/components/ui/sidebar";
+import { Hint } from "@/components/ui/tooltip";
 import { useVaultStore } from "@/store";
 import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { TreeNode } from "@/components/vault/TreeNode";
 import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
+import { createDrawing } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
 import { useMenuAction } from "@/lib/use-menu-action";
 
@@ -31,15 +33,13 @@ interface FileTreeProps {
   onNewShard: () => void;
 }
 
-const GROUP_ACTION_CLASS =
-  "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
-
 export function FileTree({ onNewShard }: FileTreeProps) {
   const { fileTree, isVaultLoading, currentVaultPath } = useVaultStore();
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
   const [isCreatingRootShard, setIsCreatingRootShard] = useState(false);
-  const menuAction = useMenuAction();
+  const addMenu = useMenuAction();
+  const rootMenu = useMenuAction();
   // Folders inside the tree take their own drops; the rest is the vault root.
   const rootDrop = useTreeDropTarget(currentVaultPath);
 
@@ -47,39 +47,58 @@ export function FileTree({ onNewShard }: FileTreeProps) {
 
   const isNamingRootFolder = newFolderParent === currentVaultPath;
   const startRootFolder = () => setNewFolderParent(currentVaultPath);
+  const newDrawing = async () => {
+    try {
+      await createDrawing(currentVaultPath);
+    } catch (error) {
+      console.error("[Netherstone] Failed to create drawing:", error);
+      toast.error("Couldn't create drawing", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
 
   return (
-    <SidebarGroup className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <SidebarGroupLabel className="shrink-0 px-2">Shards</SidebarGroupLabel>
-      <Tooltip delayDuration={300}>
-        <TooltipTrigger asChild>
-          <SidebarGroupAction
-            onClick={startRootFolder}
-            aria-label="Create new folder"
-            className={`right-9 ${GROUP_ACTION_CLASS}`}
+    <section
+      aria-label="Files"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
+      <SectionHeader label="Files">
+        <DropdownMenu>
+          <Hint label="New">
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="New"
+                className="text-muted-foreground"
+              >
+                <PlusIcon />
+              </Button>
+            </DropdownMenuTrigger>
+          </Hint>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={addMenu.onCloseAutoFocus}
           >
-            <FolderPlusIcon />
-          </SidebarGroupAction>
-        </TooltipTrigger>
-        <TooltipContent side="top" sideOffset={6}>
-          New folder
-        </TooltipContent>
-      </Tooltip>
-      <Tooltip delayDuration={300}>
-        <TooltipTrigger asChild>
-          <SidebarGroupAction
-            onClick={onNewShard}
-            aria-label="Create new shard"
-            className={GROUP_ACTION_CLASS}
-          >
-            <FilePlusIcon />
-          </SidebarGroupAction>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={6}>
-          New shard
-        </TooltipContent>
-      </Tooltip>
-      <SidebarGroupContent
+            <DropdownMenuItem onSelect={addMenu.defer(onNewShard)}>
+              <FilePlusIcon />
+              New shard
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void newDrawing()}>
+              <DrawingIcon />
+              New drawing
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={addMenu.defer(startRootFolder)}>
+              <FolderPlusIcon />
+              New folder
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SectionHeader>
+
+      <div
         ref={(el: HTMLDivElement | null) => {
           rootDrop.connect(el);
         }}
@@ -108,26 +127,30 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           <ContextMenuTrigger asChild>
             <div aria-hidden="true" className="min-h-8 flex-1" />
           </ContextMenuTrigger>
-          <ContextMenuContent onCloseAutoFocus={menuAction.onCloseAutoFocus}>
+          <ContextMenuContent onCloseAutoFocus={rootMenu.onCloseAutoFocus}>
             <ContextMenuItem
-              onSelect={menuAction.defer(() => setIsCreatingRootShard(true))}
+              onSelect={rootMenu.defer(() => setIsCreatingRootShard(true))}
             >
               <FilePlusIcon />
               New shard
             </ContextMenuItem>
-            <ContextMenuItem onSelect={menuAction.defer(startRootFolder)}>
+            <ContextMenuItem onSelect={() => void newDrawing()}>
+              <DrawingIcon />
+              New drawing
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={rootMenu.defer(startRootFolder)}>
               <FolderPlusIcon />
               New folder
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-      </SidebarGroupContent>
+      </div>
 
       <NewShardDialog
         open={isCreatingRootShard}
         onOpenChange={setIsCreatingRootShard}
         folder={currentVaultPath}
       />
-    </SidebarGroup>
+    </section>
   );
 }

@@ -19,14 +19,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createDrawingFile, scanVault } from "@/lib/commands";
+import { scanVault } from "@/lib/commands";
 import { relinkDrawingReferences } from "@/lib/drawing-exports";
 import {
   flattenDrawingFiles,
   flushPendingDrawingSave,
   getVaultFileDisplayName,
 } from "@/lib/drawing-files";
-import { openDrawingFile } from "@/lib/open-vault-file";
+import { createDrawing, openDrawingFile } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
@@ -102,9 +102,7 @@ export function DrawingMenu({
     if (!currentVaultPath) return;
 
     try {
-      const filePath = await createDrawingFile(currentVaultPath, "Untitled");
-      await openDrawingFile(filePath);
-      await refreshFileTree(currentVaultPath);
+      await createDrawing(currentVaultPath);
     } catch (error) {
       showError("Couldn't create drawing", error);
     }
@@ -137,7 +135,7 @@ export function DrawingMenu({
 
       const ui = useUIStore.getState();
       ui.setActiveDrawingPath(renamedPath);
-      ui.updateRecentFilePath(drawingPath, renamedPath);
+      ui.remapRememberedPaths(drawingPath, renamedPath);
       await refreshFileTree(currentVaultPath);
       if (currentVaultPath) {
         await relinkDrawingReferences(
@@ -167,7 +165,7 @@ export function DrawingMenu({
       await invoke("delete_vault_path", { targetPath: drawingPath });
 
       const ui = useUIStore.getState();
-      ui.removeRecentFile(drawingPath);
+      ui.forgetRememberedPaths(drawingPath);
       ui.openDrawing(null);
       await refreshFileTree(currentVaultPath);
       toast.success(`Moved ${title} to trash`);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDrag } from "react-dnd";
 
 import {
@@ -25,15 +25,18 @@ import {
 } from "@/components/vault/tree-layout";
 import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
 import { useVaultItem } from "@/components/vault/useVaultItem";
-import { isSamePath } from "@/lib/drawing-files";
+import { isPathWithin, isSamePath } from "@/lib/drawing-files";
 import {
   EXPAND_ON_HOVER_MS,
   TREE_DRAG_TYPE,
   type TreeDragItem,
 } from "@/lib/tree-drag";
 import { cn } from "@/lib/utils";
-import { useEditorStore, useVaultStore } from "@/store";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
+
+/** How long a folder revealed from the breadcrumb stays highlighted. */
+const REVEAL_HIGHLIGHT_MS = 1200;
 
 type TreeNodeProps = {
   node: FileTreeNode;
@@ -42,9 +45,18 @@ type TreeNodeProps = {
 
 export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isRevealed, setIsRevealed] = useState(false);
+  const rowButtonRef = useRef<HTMLButtonElement>(null);
 
   const currentFilePath = useEditorStore((s) => s.currentFilePath);
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
+  // Only the folders on the way to a revealed folder see the reveal.
+  const reveal = useUIStore((s) =>
+    s.treeReveal && isPathWithin(s.treeReveal.path, node.path)
+      ? s.treeReveal
+      : null,
+  );
+  const endTreeReveal = useUIStore((s) => s.endTreeReveal);
 
   const item = useVaultItem(node, { onNewFolder: () => setIsOpen(true) });
   const { displayName, isRenaming } = item;
@@ -71,6 +83,23 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     const timer = window.setTimeout(() => setIsOpen(true), EXPAND_ON_HOVER_MS);
     return () => window.clearTimeout(timer);
   }, [drop.isOver, isOpen]);
+
+  // Folders open down to a revealed folder, which then shows itself. Each
+  // one mounts as its parent opens, so this also runs on mount.
+  useEffect(() => {
+    if (!reveal || node.kind !== "directory") return;
+    setIsOpen(true);
+    if (!isSamePath(reveal.path, node.path)) return;
+
+    rowButtonRef.current?.scrollIntoView({ block: "nearest" });
+    rowButtonRef.current?.focus({ preventScroll: true });
+    setIsRevealed(true);
+    const timer = window.setTimeout(() => {
+      setIsRevealed(false);
+      endTreeReveal(reveal);
+    }, REVEAL_HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [reveal, node.kind, node.path, endTreeReveal]);
 
   const rowIndent = getRowIndent(depth);
   const showChildrenGuide =
@@ -106,6 +135,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           !!currentFilePath &&
           isSamePath(node.path, currentFilePath) &&
           ACTIVE_ROW_CLASS,
+        isRevealed && "bg-sidebar-primary/15",
       )}
       style={{ paddingLeft: `${rowIndent}px` }}
     >
@@ -116,7 +146,11 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
         </div>
       ) : node.kind === "directory" ? (
         <CollapsibleTrigger asChild>
-          <button type="button" className={ROW_BUTTON_CLASS}>
+          <button
+            ref={rowButtonRef}
+            type="button"
+            className={ROW_BUTTON_CLASS}
+          >
             {slot}
             {name}
           </button>

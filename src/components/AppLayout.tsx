@@ -80,20 +80,11 @@ const ModeAwareTags = React.memo(function ModeAwareTags() {
 
 const ModeAwareNotes = React.memo(function ModeAwareNotes({
   children,
-  isBrowserPanelOpen,
-  setBrowserPanelOpen,
-  isRightSidebarOpen,
-  toggleRightSidebar,
-  onNewShard,
 }: {
   children?: React.ReactNode;
-  isBrowserPanelOpen: boolean;
-  setBrowserPanelOpen: (open: boolean) => void;
-  isRightSidebarOpen: boolean;
-  toggleRightSidebar: () => void;
-  onNewShard: () => void;
 }) {
   const appMode = useUIStore((s) => s.appMode);
+  const isBrowserPanelOpen = useUIStore((s) => s.isBrowserPanelOpen);
 
   return (
     <div
@@ -103,20 +94,7 @@ const ModeAwareNotes = React.memo(function ModeAwareNotes({
           : "hidden min-h-0 flex-1 flex-col"
       }
     >
-      <AppHeader
-        isBrowserPanelOpen={isBrowserPanelOpen}
-        isRightSidebarOpen={isRightSidebarOpen}
-        onToggleBrowserPanel={() => {
-          if (isBrowserPanelOpen) {
-            setBrowserPanelOpen(false);
-            return;
-          }
-
-          setBrowserPanelOpen(true);
-        }}
-        onToggleRightSidebar={toggleRightSidebar}
-        onNewShard={onNewShard}
-      />
+      <AppHeader />
 
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel
@@ -161,10 +139,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const activeNavItem = useUIStore((s) => s.activeNavItem);
   const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
-  const isRightSidebarOpen = useUIStore((s) => s.isRightSidebarOpen);
-  const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
-  const isBrowserPanelOpen = useUIStore((s) => s.isBrowserPanelOpen);
-  const setBrowserPanelOpen = useUIStore((s) => s.setBrowserPanelOpen);
   const [isNewShardDialogOpen, setIsNewShardDialogOpen] = useState(false);
   const openNewShardDialog = useCallback(
     () => setIsNewShardDialogOpen(true),
@@ -184,14 +158,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="relative flex h-full min-w-0 flex-1 flex-col">
             <ModeAwareCanvas />
             <ModeAwareTags />
-            <ModeAwareNotes
-              children={children}
-              isBrowserPanelOpen={isBrowserPanelOpen}
-              setBrowserPanelOpen={setBrowserPanelOpen}
-              isRightSidebarOpen={isRightSidebarOpen}
-              toggleRightSidebar={toggleRightSidebar}
-              onNewShard={openNewShardDialog}
-            />
+            <ModeAwareNotes children={children} />
 
             {children == null && activeNavItem === "settings" && (
               <div className="absolute inset-0 z-31 bg-background">

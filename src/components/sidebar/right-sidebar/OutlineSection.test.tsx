@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Heading } from "@platejs/toc";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { OutlineSection } from "./OutlineSection";
 
@@ -18,20 +19,15 @@ const heading = (id: string, depth: number, title: string): Heading => ({
 
 describe("OutlineSection", () => {
   beforeEach(() => {
-    useUIStore.setState({
-      rightSidebarSections: { outline: true, metadata: true },
-    });
+    useUIStore.setState({ collapsedSections: {} });
   });
   afterEach(cleanup);
 
   it("lists the shard's headings, indented from the shallowest one", () => {
-    render(
-      <OutlineSection
-        currentFilePath="C:/Notes/Plan.md"
-        plateEditor={null}
-        tocHeadings={[heading("a", 2, "Goals"), heading("b", 3, "This week")]}
-      />,
-    );
+    useEditorStore.setState({
+      tocHeadings: [heading("a", 2, "Goals"), heading("b", 3, "This week")],
+    });
+    render(<OutlineSection />);
 
     const goals = screen.getByRole("button", { name: "Goals" });
     const week = screen.getByRole("button", { name: "This week" });
@@ -40,17 +36,12 @@ describe("OutlineSection", () => {
   });
 
   it("collapses and remembers it", () => {
-    render(
-      <OutlineSection
-        currentFilePath="C:/Notes/Plan.md"
-        plateEditor={null}
-        tocHeadings={[heading("a", 1, "Goals")]}
-      />,
-    );
+    useEditorStore.setState({ tocHeadings: [heading("a", 1, "Goals")] });
+    render(<OutlineSection />);
 
     fireEvent.click(screen.getByRole("button", { name: /Outline/ }));
 
     expect(screen.queryByRole("button", { name: "Goals" })).toBeNull();
-    expect(useUIStore.getState().rightSidebarSections.outline).toBe(false);
+    expect(useUIStore.getState().collapsedSections.outline).toBe(true);
   });
 });

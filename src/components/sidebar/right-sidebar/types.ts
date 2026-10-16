@@ -1,5 +1,4 @@
-import type { FileTreeNode } from "@/store";
-import type { Heading } from "@platejs/toc";
+import type { TextPart } from "@/components/HighlightedText";
 
 export type DocumentLinkKind =
   | "shard-mention"
@@ -10,75 +9,34 @@ export type DocumentLinkKind =
   | "anchor"
   | "other";
 
-export interface ExtractedDocumentLink {
+export interface DocumentLink {
   label: string;
   target: string;
   kind: DocumentLinkKind;
-}
-
-export interface DocumentLink extends ExtractedDocumentLink {
+  /** False for a link to a shard that doesn't exist. */
   isValid: boolean;
+  /** The linked shard, for links to shards. */
   resolvedPath: string | null;
 }
 
+/** A shard's indexed details. */
 export interface FileMetadata {
-  path: string;
-  name: string;
+  /** Seconds since the epoch. */
   created_at: number;
+  /** Seconds since the epoch. */
   last_modified: number;
-  last_indexed: number;
   word_count: number;
-  line_count: number;
   character_count: number;
+  /** In bytes. */
   file_size: number;
-  outbound_link_count: number;
-  tag_count: number;
+  /** Alphabetical. */
+  tags: string[];
 }
 
-export interface MetadataRow {
-  label: string;
-  value: string;
-}
-
-export interface LinkSection {
-  kind: DocumentLinkKind;
-  title: string;
-  links: DocumentLink[];
-}
-
-export interface OutlineSectionProps {
-  currentFilePath: string | null;
-  plateEditor: any;
-  tocHeadings: Heading[];
-}
-
-export interface DocumentLinksSectionProps {
-  currentFilePath: string | null;
-  isLoadingLinks: boolean;
-  documentLinks: DocumentLink[];
-  linkSections: LinkSection[];
-  onOpenResolvedLink: (resolvedPath: string) => void;
-}
-
+/** A shard that links to the open one. */
 export interface Backlink {
   path: string;
   name: string;
-  snippet: string | null;
+  /** The text around its first link to the open shard, highlighted. */
+  excerpt: TextPart[] | null;
 }
-
-export interface BacklinksSectionProps {
-  currentFilePath: string | null;
-  isLoadingBacklinks: boolean;
-  backlinks: Backlink[];
-  onOpenResolvedLink: (resolvedPath: string) => void;
-}
-
-export interface MetadataSectionProps {
-  currentFilePath: string | null;
-  isLoadingMetadata: boolean;
-  fileMetadata: FileMetadata | null;
-  isDirty: boolean;
-  metadataRows: MetadataRow[];
-}
-
-export type ShardFileNode = FileTreeNode;

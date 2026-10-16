@@ -1,57 +1,30 @@
 import type { ReactNode } from "react";
-import { ChevronRightIcon } from "lucide-react";
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
-import { type RightSidebarSection, useUIStore } from "@/store/ui";
+import { SectionHeader } from "@/components/sidebar/SectionHeader";
+import { type SidebarSection, useUIStore } from "@/store/ui";
 
-/** A right sidebar section whose header expands and collapses it. */
+/** Right sidebar text that stands in for a section's content. */
+export const SECTION_NOTE_CLASS =
+  "px-1.5 py-1 text-ui-sm text-muted-foreground";
+
+/** A right sidebar section whose header collapses it, as on the left. */
 export function CollapsibleSection({
   section,
-  title,
-  icon,
-  adornment,
-  className,
+  label,
+  count,
   children,
 }: {
-  section: RightSidebarSection;
-  title: string;
-  icon?: ReactNode;
-  /** Shown after the title, like a count or an unsaved dot. */
-  adornment?: ReactNode;
-  className?: string;
+  section: SidebarSection;
+  label: string;
+  count?: number;
   children: ReactNode;
 }) {
-  const open = useUIStore((s) => s.rightSidebarSections[section]);
-  const setOpen = useUIStore((s) => s.setRightSidebarSectionOpen);
+  const isCollapsed = useUIStore((s) => !!s.collapsedSections[section]);
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={(next) => setOpen(section, next)}
-      className={className}
-    >
-      <h3>
-        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm py-1 text-left font-semibold text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-          {icon}
-          <span>{title}</span>
-          {adornment}
-          <ChevronRightIcon
-            aria-hidden="true"
-            className={cn(
-              "ml-auto size-3.5 shrink-0 text-muted-foreground transition-[color,transform] duration-150 group-hover:text-foreground",
-              open && "rotate-90",
-            )}
-          />
-        </CollapsibleTrigger>
-      </h3>
-      <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-        <div className="pt-2">{children}</div>
-      </CollapsibleContent>
-    </Collapsible>
+    <section aria-label={label}>
+      <SectionHeader label={label} section={section} count={count} />
+      {isCollapsed ? null : children}
+    </section>
   );
 }

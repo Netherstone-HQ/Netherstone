@@ -53,6 +53,18 @@ describe("useTagsStore", () => {
     });
   });
 
+  it("keeps a tag shown from elsewhere through the first load", async () => {
+    const { load, showTag } = useTagsStore.getState();
+    useTagsStore.getState().setFilter("x");
+
+    showTag("/vault", "ideas");
+    await load("/vault");
+
+    expect(getTaggedFiles).toHaveBeenCalledTimes(1);
+    expect(useTagsStore.getState()).toMatchObject({ filter: "" });
+    expect(selectActiveTag(useTagsStore.getState())).toBe("ideas");
+  });
+
   it("tries again on the next visit after a failure", async () => {
     getTaggedFiles.mockRejectedValueOnce(new Error("offline"));
     vi.spyOn(console, "error").mockImplementation(() => {});

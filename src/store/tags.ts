@@ -18,6 +18,12 @@ interface TagsState {
   load: (vaultPath: string) => Promise<void>;
   invalidate: () => void;
   selectTag: (tag: string | null) => void;
+  /**
+   * Selects `tag` in `vaultPath` with the filter cleared, for opening Tags
+   * on it from elsewhere. Another vault's list is dropped, so the next load
+   * fetches this one and keeps the tag.
+   */
+  showTag: (vaultPath: string, tag: string) => void;
   setFilter: (filter: string) => void;
 }
 
@@ -60,6 +66,19 @@ export const useTagsStore = create<TagsState>()((set, get) => ({
   },
   invalidate: () => set({ isStale: true }),
   selectTag: (tag) => set({ selectedTag: tag }),
+  showTag: (vaultPath, tag) =>
+    set((state) =>
+      state.vaultPath === vaultPath
+        ? { selectedTag: tag, filter: "" }
+        : {
+            vaultPath,
+            files: [],
+            status: "loading",
+            isStale: true,
+            selectedTag: tag,
+            filter: "",
+          },
+    ),
   setFilter: (filter) => set({ filter }),
 }));
 

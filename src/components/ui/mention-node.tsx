@@ -63,7 +63,7 @@ export function MentionElement(
         'data-slate-value': element.value,
         draggable: true,
         onClick: () => {
-          // Resolved the same way as the right sidebar's shard references.
+          // Resolved the same way as mentions in the right sidebar's Links.
           const files = flattenShardFiles(useVaultStore.getState().fileTree);
           const path = resolveShardReferencePath(element.value, files);
           if (!path) return;

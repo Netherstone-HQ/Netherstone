@@ -1,8 +1,10 @@
+use super::indexer::resolve_link_target;
+use super::parser::{LinkType, classify_link_target};
 use crate::markdown_text::{BlockKind, TextBlock, TextPart, excerpt, text_blocks, word_matches};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 /// Characters an excerpt keeps before and after what it highlights.
@@ -38,22 +40,20 @@ pub struct TagExcerpt {
 pub struct Backlink {
     pub path: String,
     pub name: String,
-    pub snippet: Option<String>,
+    /// The text around the file's first link to the shard, with the link
+    /// highlighted.
+    pub excerpt: Option<Vec<TextPart>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct FileMetadata {
-    pub path: String,
-    pub name: String,
     pub created_at: i64,
     pub last_modified: i64,
-    pub last_indexed: i64,
     pub word_count: i64,
-    pub line_count: i64,
     pub character_count: i64,
     pub file_size: i64,
-    pub outbound_link_count: i64,
-    pub tag_count: i64,
+    /// Alphabetical.
+    pub tags: Vec<String>,
 }
 
 /// Search files using FTS5 full-text search.
@@ -236,102 +236,169 @@ fn locate_tags(blocks: &[TextBlock], tags: Vec<String>) -> Vec<TagExcerpt> {
     located.into_iter().map(|(_, tag)| tag).collect()
 }
 
-/// Get all files that link to the specified file (backlinks).
-pub fn get_backlinks(conn: &Connection, current_file_path: &str) -> Result<Vec<Backlink>, String> {
-    eprintln!(
-        "[Netherstone] Querying backlinks for: {}",
-        current_file_path
-    );
+/// A shard as the links to it name it.
+struct LinkedShard {
+    /// With forward slashes.
+    path: String,
+    name: String,
+    stem: String,
+}
 
-    let current_path = normalize_path(current_file_path);
+impl LinkedShard {
+    fn new(path: &str) -> Self {
+        let path = normalize_path(path);
+        let file = Path::new(&path);
+        let part = |part: Option<&std::ffi::OsStr>| {
+            part.and_then(|p| p.to_str()).unwrap_or("").to_string()
+        };
+        Self {
+            name: part(file.file_name()),
+            stem: part(file.file_stem()),
+            path,
+        }
+    }
 
-    let current_file = Path::new(&current_path);
-    let stem = current_file
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    let name = current_file
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
+    /// Whether a link whose target the `links` table stores as `target`
+    /// points here: an internal link by its path, with or without `.md`, or
+    /// a mention by its path or the shard's name. Case is ignored.
+    fn is_target(&self, link_type: LinkType, target: &str) -> bool {
+        let same = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
+        match link_type {
+            LinkType::Internal => {
+                same(target, &self.path) || same(&format!("{target}.md"), &self.path)
+            }
+            LinkType::Mention => {
+                same(&normalize_path(target), &self.path)
+                    || same(target, &self.stem)
+                    || same(target, &self.name)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Every file that links to or mentions the shard at `file_path`, by name,
+/// with the text around its first link to it.
+pub fn get_backlinks(conn: &Connection, file_path: &str) -> Result<Vec<Backlink>, String> {
+    let shard = LinkedShard::new(file_path);
 
     let mut stmt = conn
         .prepare(
-            "SELECT DISTINCT f.path, f.name, l.link_text
-             FROM links l
-             INNER JOIN files f ON l.source_file_id = f.id
-             WHERE
-                (l.link_type = 'internal' AND (LOWER(l.target_path) = LOWER(?1) OR LOWER(l.target_path || '.md') = LOWER(?1)))
-             OR
-                (l.link_type = 'mention' AND (
-                    LOWER(REPLACE(l.target_path, '\\', '/')) = LOWER(?1)
-                    OR LOWER(l.target_path) = LOWER(?2)
-                    OR LOWER(l.target_path) = LOWER(?3)
-                ))
-             ORDER BY f.name ASC",
+            "SELECT source_file_id, link_type, target_path FROM links
+             WHERE link_type IN ('internal', 'mention')",
+        )
+        .map_err(|e| format!("Failed to prepare links query: {}", e))?;
+    let links = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| format!("Failed to query links: {}", e))?;
+    let mut sources = HashSet::new();
+    for link in links {
+        let (source, link_type, target) =
+            link.map_err(|e| format!("Failed to read link: {}", e))?;
+        let link_type = if link_type == LinkType::Mention.as_str() {
+            LinkType::Mention
+        } else {
+            LinkType::Internal
+        };
+        if shard.is_target(link_type, &target) {
+            sources.insert(source);
+        }
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.path, f.name, s.content
+             FROM files f
+             LEFT JOIN fts_search s ON s.rowid = f.id
+             WHERE f.id = ?1",
         )
         .map_err(|e| format!("Failed to prepare backlinks query: {}", e))?;
-
-    let backlinks = stmt
-        .query_map(params![current_path, stem, name], |row| {
-            Ok(Backlink {
-                path: row.get(0)?,
-                name: row.get(1)?,
-                snippet: row.get(2)?,
+    let mut backlinks = sources
+        .into_iter()
+        .map(|source| {
+            stmt.query_row(params![source], |row| {
+                let path: String = row.get(0)?;
+                let content: Option<String> = row.get(2)?;
+                Ok(Backlink {
+                    excerpt: link_excerpt(&shard, &path, content.as_deref().unwrap_or("")),
+                    name: row.get(1)?,
+                    path,
+                })
             })
         })
-        .map_err(|e| format!("Failed to query backlinks: {}", e))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect backlinks: {}", e))?;
-
-    eprintln!("[Netherstone] Found {} backlinks", backlinks.len());
+        .map_err(|e| format!("Failed to query backlinks: {}", e))?;
+    backlinks.sort_by_cached_key(|backlink| backlink.name.to_lowercase());
     Ok(backlinks)
 }
 
-/// Get indexed metadata for a specific file.
-///
-/// Returns the persisted file stats and timestamps used by the editor sidebar.
+/// The text around the first link to `shard` in `content`, the Markdown of
+/// the file at `source`, with the link highlighted.
+fn link_excerpt(shard: &LinkedShard, source: &str, content: &str) -> Option<Vec<TextPart>> {
+    text_blocks(content).iter().find_map(|block| {
+        let (link, _) = block.links.iter().find(|(_, to)| {
+            let link_type = classify_link_target(to);
+            shard.is_target(
+                link_type,
+                &resolve_link_target(link_type, to, Path::new(source)),
+            )
+        })?;
+        Some(excerpt(
+            &block.text,
+            std::slice::from_ref(link),
+            EXCERPT_BEFORE,
+            EXCERPT_AFTER,
+        ))
+    })
+}
+
+/// The indexed details of the file at `file_path`, or None if it isn't
+/// indexed.
 pub fn get_file_metadata(
     conn: &Connection,
     file_path: &str,
 ) -> Result<Option<FileMetadata>, String> {
-    eprintln!("[Netherstone] Querying file metadata: {}", file_path);
+    let file = conn
+        .query_row(
+            "SELECT id, created_at, last_modified, word_count, character_count, file_size
+             FROM files
+             WHERE path = ?1",
+            params![file_path],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    FileMetadata {
+                        created_at: row.get(1)?,
+                        last_modified: row.get(2)?,
+                        word_count: row.get(3)?,
+                        character_count: row.get(4)?,
+                        file_size: row.get(5)?,
+                        tags: Vec::new(),
+                    },
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| format!("Failed to query file metadata: {}", e))?;
+    let Some((file_id, mut metadata)) = file else {
+        return Ok(None);
+    };
 
-    conn.query_row(
-        "SELECT
-             f.path,
-             f.name,
-             f.created_at,
-             f.last_modified,
-             f.last_indexed,
-             f.word_count,
-             f.line_count,
-             f.character_count,
-             f.file_size,
-             (SELECT COUNT(*) FROM links l WHERE l.source_file_id = f.id) AS outbound_link_count,
-             (SELECT COUNT(*) FROM tags t WHERE t.file_id = f.id) AS tag_count
-         FROM files f
-         WHERE f.path = ?1
-         LIMIT 1",
-        params![file_path],
-        |row| {
-            Ok(FileMetadata {
-                path: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                last_modified: row.get(3)?,
-                last_indexed: row.get(4)?,
-                word_count: row.get(5)?,
-                line_count: row.get(6)?,
-                character_count: row.get(7)?,
-                file_size: row.get(8)?,
-                outbound_link_count: row.get(9)?,
-                tag_count: row.get(10)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(|e| format!("Failed to query file metadata: {}", e))
+    let mut stmt = conn
+        .prepare("SELECT tag FROM tags WHERE file_id = ?1 ORDER BY tag")
+        .map_err(|e| format!("Failed to prepare tags query: {}", e))?;
+    metadata.tags = stmt
+        .query_map(params![file_id], |row| row.get(0))
+        .map_err(|e| format!("Failed to query tags: {}", e))?
+        .collect::<Result<_, _>>()
+        .map_err(|e| format!("Failed to collect tags: {}", e))?;
+    Ok(Some(metadata))
 }
 
 #[cfg(test)]
@@ -472,5 +539,56 @@ mod tests {
             shown(files[0].tags[0].excerpt.as_ref().unwrap()),
             "New [#ideas]"
         );
+    }
+
+    #[test]
+    fn lists_files_linking_to_a_shard_with_the_linking_line() {
+        let vault =
+            std::env::temp_dir().join(format!("netherstone-backlinks-{}", std::process::id()));
+        std::fs::create_dir_all(vault.join("Work")).unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        for (name, content) in [
+            ("Work/Plan.md", "# Plan #ideas #work\n\nGoals."),
+            (
+                "Diary.md",
+                "# Monday\n\nMet [Sam](mention:Sam.md).\n\nPicked up where [Plan](mention:Plan.md) left off.",
+            ),
+            (
+                "Work/Notes.md",
+                "See [the plan](./Plan.md#goals) for details, or [Plan](https://plan.example).",
+            ),
+            (
+                "Other.md",
+                "Nothing about it, just [a site](https://plan.example).",
+            ),
+        ] {
+            let path = vault.join(name);
+            std::fs::write(&path, content).unwrap();
+            crate::db::indexer::index_file(&conn, &path).unwrap();
+        }
+
+        let plan = vault.join("Work/Plan.md").to_string_lossy().into_owned();
+        let backlinks = get_backlinks(&conn, &plan).unwrap();
+        let found: Vec<_> = backlinks
+            .iter()
+            .map(|b| (b.name.as_str(), shown(b.excerpt.as_ref().unwrap())))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("Diary.md", "Picked up where [Plan] left off.".to_string()),
+                (
+                    "Notes.md",
+                    "See [the plan] for details, or Plan.".to_string()
+                ),
+            ]
+        );
+
+        let details = get_file_metadata(&conn, &plan).unwrap().unwrap();
+        assert_eq!(details.tags, ["ideas", "work"]);
+        assert_eq!(details.word_count, 4);
+
+        std::fs::remove_dir_all(&vault).unwrap();
     }
 }

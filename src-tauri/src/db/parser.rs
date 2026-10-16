@@ -29,15 +29,23 @@ pub enum LinkType {
     Other,
 }
 
-/// Parse markdown content and extract metadata.
-///
-/// Extracts:
-/// - Links (`[markdown](links)`, mention links like `[label](mention:target)`, and external/email/phone/anchor links)
-/// - Tags (hashtags like `#tag`)
-/// - Word count
-/// - Line count
-/// - Character count
-fn classify_link_target(target: &str) -> LinkType {
+impl LinkType {
+    /// The name the `links` table stores.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LinkType::Mention => "mention",
+            LinkType::Internal => "internal",
+            LinkType::External => "external",
+            LinkType::Email => "email",
+            LinkType::Phone => "phone",
+            LinkType::Anchor => "anchor",
+            LinkType::Other => "other",
+        }
+    }
+}
+
+/// What kind of link `target` is, by its scheme.
+pub fn classify_link_target(target: &str) -> LinkType {
     let trimmed = target.trim();
 
     if trimmed.starts_with("mention:") {
@@ -64,6 +72,14 @@ fn classify_link_target(target: &str) -> LinkType {
     }
 }
 
+/// Parse markdown content and extract metadata.
+///
+/// Extracts:
+/// - Links (`[markdown](links)`, mention links like `[label](mention:target)`, and external/email/phone/anchor links)
+/// - Tags (hashtags like `#tag`)
+/// - Word count
+/// - Line count
+/// - Character count
 pub fn parse_markdown(content: &str) -> MarkdownMetadata {
     let mut metadata = MarkdownMetadata::default();
     let parser = Parser::new_ext(content, markdown_options());

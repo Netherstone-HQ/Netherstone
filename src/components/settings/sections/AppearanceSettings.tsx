@@ -10,7 +10,6 @@ import {
   THEMES,
   type ThemeSwatchColors,
 } from "@/components/theme/themes";
-import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   type ContentWidth,
@@ -52,13 +51,6 @@ const ZOOMS: Option<string>[] = ZOOM_LEVELS.map((zoom) => ({
   label: `${zoom}%`,
 }));
 
-const MOD = IS_MAC ? "⌘" : "Ctrl+";
-
-/** A shortcut that never breaks across lines. */
-function Keys({ keys }: { keys: string }) {
-  return <span className="whitespace-nowrap">{MOD + keys}</span>;
-}
-
 export function AppearanceSettings() {
   return (
     <>
@@ -70,13 +62,7 @@ export function AppearanceSettings() {
         <PreferenceSelect
           name="zoom"
           label="Zoom"
-          description={
-            <>
-              Makes everything in Netherstone bigger or smaller.{" "}
-              <Keys keys="=" /> and <Keys keys="−" /> change it too, and{" "}
-              <Keys keys="0" /> goes back to 100%.
-            </>
-          }
+          description="Makes everything in Netherstone bigger or smaller."
           options={ZOOMS}
         />
       </SettingsGroup>

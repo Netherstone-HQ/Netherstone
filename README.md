@@ -39,7 +39,7 @@ Get the latest version for Windows, macOS or Linux from
 
 ## Building from source
 
-You need [Node.js](https://nodejs.org/) 18+, [pnpm](https://pnpm.io/),
+You need [Node.js](https://nodejs.org/) 22+, [pnpm](https://pnpm.io/) 11,
 [Rust](https://www.rust-lang.org/tools/install) and the
 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
 

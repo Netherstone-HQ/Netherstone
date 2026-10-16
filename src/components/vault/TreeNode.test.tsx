@@ -196,3 +196,42 @@ describe("TreeNode path changes", () => {
     expect(screen.getByRole("menuitem", { name: "Move" })).toBeTruthy();
   });
 });
+
+describe("TreeNode reveal", () => {
+  const NESTED: FileTreeNode = {
+    name: "Work",
+    path: `${VAULT}/Work`,
+    kind: "directory",
+    children: [
+      {
+        name: "Plans",
+        path: `${VAULT}/Work/Plans`,
+        kind: "directory",
+        children: [
+          { name: "Q3.md", path: `${VAULT}/Work/Plans/Q3.md`, kind: "file" },
+        ],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    useVaultStore.setState({ currentVaultPath: VAULT, newFolderParent: null });
+    useUIStore.setState({ isSidebarOpen: false, treeReveal: null });
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(cleanup);
+
+  it("opens the folders down to a revealed folder and focuses it", async () => {
+    renderNode(NESTED);
+    expect(screen.queryByText("Plans")).toBeNull();
+
+    act(() => useUIStore.getState().revealInTree(`${VAULT}/Work/Plans`));
+
+    const plans = await screen.findByRole("button", { name: "Plans" });
+    await waitFor(() => expect(document.activeElement).toBe(plans));
+    expect(screen.getByText("Q3")).toBeTruthy();
+    expect(plans.scrollIntoView).toHaveBeenCalled();
+    expect(useUIStore.getState().isSidebarOpen).toBe(true);
+  });
+});

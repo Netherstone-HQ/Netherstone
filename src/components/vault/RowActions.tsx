@@ -51,6 +51,37 @@ function renderRowActions(
   );
 }
 
+/** `actions` in a menu that `children`, its trigger, opens. */
+export function ActionsMenu({
+  actions,
+  align = "end",
+  children,
+}: {
+  actions: RowAction[];
+  align?: "start" | "end";
+  children: React.ReactElement;
+}) {
+  const menuAction = useMenuAction();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={align}
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={menuAction.onCloseAutoFocus}
+      >
+        {renderRowActions(
+          actions,
+          menuAction.defer,
+          DropdownMenuItem,
+          DropdownMenuSeparator,
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /**
  * A row's "more" (⋮) button, shown while the row (a `group/row`) is hovered
  * or focused, or its menu is open.
@@ -63,43 +94,27 @@ export function RowActionsButton({
   label: string;
   actions: RowAction[];
 }) {
-  const menuAction = useMenuAction();
-
   return (
     <div
       className="flex shrink-0 items-center justify-end opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 has-aria-expanded:opacity-100"
       style={{ width: `${ACTION_SLOT_PX}px` }}
     >
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Actions for ${label}`}
-            className="rounded-sm text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <EllipsisVerticalIcon className="size-icon" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          onClick={(e) => e.stopPropagation()}
-          onCloseAutoFocus={menuAction.onCloseAutoFocus}
+      <ActionsMenu actions={actions}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Actions for ${label}`}
+          className="rounded-sm text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          {renderRowActions(
-            actions,
-            menuAction.defer,
-            DropdownMenuItem,
-            DropdownMenuSeparator,
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <EllipsisVerticalIcon className="size-icon" />
+        </Button>
+      </ActionsMenu>
     </div>
   );
 }

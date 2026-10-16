@@ -44,6 +44,16 @@ interface UIState {
   /** Which left sidebar sections are collapsed. */
   collapsedSections: Record<LeftSidebarSection, boolean>;
   toggleSection: (section: LeftSidebarSection) => void;
+  /**
+   * A folder to show in the file tree: its folders open down to it, and it
+   * scrolls into view and flashes. A new object each time, so picking the
+   * same folder again shows it again.
+   */
+  treeReveal: { path: string } | null;
+  /** Opens the left sidebar on `path` in the file tree. */
+  revealInTree: (path: string) => void;
+  /** Ends `reveal`, unless another one has replaced it. */
+  endTreeReveal: (reveal: { path: string }) => void;
 
   // ── Right Sidebar ──────────────────────────────────────────────────────────
   isRightSidebarOpen: boolean;
@@ -133,6 +143,13 @@ export const useUIStore = create<UIState>()(
             [section]: !state.collapsedSections[section],
           },
         })),
+      treeReveal: null,
+      revealInTree: (path) =>
+        set({ isSidebarOpen: true, treeReveal: { path } }),
+      endTreeReveal: (reveal) =>
+        set((state) =>
+          state.treeReveal === reveal ? { treeReveal: null } : {},
+        ),
 
       // ── Right Sidebar ──────────────────────────────────────────────────────────
       isRightSidebarOpen: true,

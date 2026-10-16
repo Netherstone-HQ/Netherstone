@@ -34,7 +34,7 @@ export function WordCount() {
   if (count === null) return null;
 
   return (
-    <span className="text-muted-foreground text-ui-sm tabular-nums">
+    <span className="px-1 text-muted-foreground text-ui-sm tabular-nums">
       {count.toLocaleString()} {count === 1 ? "word" : "words"}
     </span>
   );

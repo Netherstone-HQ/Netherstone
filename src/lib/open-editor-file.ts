@@ -33,6 +33,28 @@ export async function openEditorFile(
   }
 }
 
+/** Saves the open shard and closes it. It stays open if the save fails. */
+export async function closeEditorFile() {
+  if (await saveOpenShard()) useEditorStore.getState().closeFile();
+}
+
+/**
+ * Saves pending edits to the open shard before it's replaced or closed.
+ * Returns false, and says so, if they couldn't be saved.
+ */
+async function saveOpenShard(): Promise<boolean> {
+  await flushPendingAutosave();
+
+  const { isDirty, currentFilePath } = useEditorStore.getState();
+  if (!isDirty || !currentFilePath) return true;
+
+  const fileName = currentFilePath.split(/[\\/]/).pop() ?? currentFilePath;
+  toast.error(`Couldn't save ${fileName}`, {
+    description: "Your changes are still open. Try again in a moment.",
+  });
+  return false;
+}
+
 async function readAndOpenFile(
   filePath: string,
 ): Promise<OpenMarkdownFileResult> {
@@ -42,22 +64,11 @@ async function readAndOpenFile(
     filePath,
   });
 
-  // Opening a file replaces the editor session, so persist pending edits to
-  // the current file first. If that save fails, stay on the current file
-  // rather than discarding its edits.
-  await flushPendingAutosave();
-
-  const editorState = useEditorStore.getState();
-  if (editorState.isDirty && editorState.currentFilePath) {
-    const fileName =
-      editorState.currentFilePath.split(/[\\/]/).pop() ??
-      editorState.currentFilePath;
-
-    toast.error(`Couldn't save ${fileName}`, {
-      description: "Your changes are still open. Try again in a moment.",
-    });
+  // Opening a file replaces the editor session. If the open shard's edits
+  // can't be saved, stay on it rather than discard them.
+  if (!(await saveOpenShard())) {
     throw new Error(
-      `Unsaved changes in ${editorState.currentFilePath} could not be saved before opening ${filePath}.`,
+      `Unsaved changes could not be saved before opening ${filePath}.`,
     );
   }
 

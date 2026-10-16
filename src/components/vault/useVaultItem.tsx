@@ -11,6 +11,7 @@ import {
   PinOffIcon,
   ShareIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
 
 import {
@@ -123,13 +124,17 @@ async function relinkMovedDrawings(
 }
 
 /**
- * Everything a file or folder row can do, shared by the file tree and the
- * Pinned section: its action list (for the "more" button and the right-click
- * menu), inline renaming, and the dialogs those actions open.
+ * Everything a file or folder row can do, shared by the file tree, the
+ * Pinned section and the top bar: its action list (for the "more" button and
+ * the right-click menu), inline renaming, and the dialogs those actions open.
+ * `onClose` adds Close, for the open file.
  */
 export function useVaultItem(
   node: FileTreeNode,
-  { onNewFolder }: { onNewFolder?: () => void } = {},
+  {
+    onNewFolder,
+    onClose,
+  }: { onNewFolder?: () => void; onClose?: () => void } = {},
 ) {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(getDisplayName(node));
@@ -455,7 +460,17 @@ export function useVaultItem(
                   onSelect: () => openExportDialog(node.path),
                 },
               ]),
-          trash,
+          ...(onClose
+            ? [
+                {
+                  label: "Close",
+                  icon: XIcon,
+                  onSelect: onClose,
+                  separated: true,
+                },
+                { ...trash, separated: false },
+              ]
+            : [trash]),
         ];
 
   const renameInputProps = {

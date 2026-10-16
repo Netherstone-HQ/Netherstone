@@ -93,3 +93,25 @@ describe("rail modes", () => {
     expect(selectRailMode(useUIStore.getState())).toBe("tags");
   });
 });
+
+describe("revealing a folder in the tree", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("opens the left sidebar, and a later reveal outlasts an earlier one", async () => {
+    const { useUIStore } = await loadStore();
+    useUIStore.setState({ isSidebarOpen: false });
+    const { revealInTree, endTreeReveal } = useUIStore.getState();
+
+    revealInTree("C:/Notes/Work");
+    const first = useUIStore.getState().treeReveal!;
+    expect(useUIStore.getState().isSidebarOpen).toBe(true);
+
+    revealInTree("C:/Notes/Work");
+    endTreeReveal(first);
+    expect(useUIStore.getState().treeReveal).not.toBeNull();
+    expect(useUIStore.getState().treeReveal).not.toBe(first);
+
+    endTreeReveal(useUIStore.getState().treeReveal!);
+    expect(useUIStore.getState().treeReveal).toBeNull();
+  });
+});

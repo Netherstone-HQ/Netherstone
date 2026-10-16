@@ -144,7 +144,9 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="relative flex min-w-0 flex-1">
             <MemoizedLeftSidebar onNewShard={openNewShardDialog} />
 
-            <div className="relative flex h-full min-w-0 flex-1 flex-col">
+            {/* Its own stacking layer, so the editor's raised parts (block
+                handles at z-50) stay under Settings and the sidebar. */}
+            <div className="relative isolate flex h-full min-w-0 flex-1 flex-col">
               <ModeAwareCanvas />
               <ModeAwareTags />
               <ModeAwareNotes children={children} />

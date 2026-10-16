@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createSlateEditor, normalizeStaticValue } from "platejs";
 import { useShallow } from "zustand/shallow";
+import { stripLinkDecorators } from "@/components/sidebar/right-sidebar/link-utils";
 import { Button } from "@/components/ui/button";
 import {
   deserializeEditorMarkdown,
@@ -50,7 +51,7 @@ function resolveInternalLinkPath(
   currentFilePath: string,
   href: string,
 ): string | null {
-  const cleanedHref = href.split("#")[0]?.split("?")[0]?.trim();
+  const cleanedHref = stripLinkDecorators(href);
 
   if (
     !cleanedHref ||

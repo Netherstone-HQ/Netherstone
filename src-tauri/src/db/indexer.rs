@@ -50,15 +50,38 @@ fn normalize_link_validity(link_type: LinkType, target: &str, resolved_target: &
     }
 }
 
+/// Decodes a percent-encoded link target (`My%20note.md` is `My note.md`),
+/// keeping it as written when the decoded bytes aren't valid UTF-8.
+fn decode_link_target(target: &str) -> String {
+    decode(target)
+        .map(|value| value.into_owned())
+        .unwrap_or_else(|_| target.to_string())
+}
+
+/// Resolves an internal link target against the folder of the linking file.
+fn resolve_internal_target(file_path: &Path, target: &str) -> String {
+    let cleaned = decode_link_target(strip_link_target(target).trim());
+
+    if cleaned.is_empty() || cleaned.starts_with('/') || is_absolute_path_like(&cleaned) {
+        return normalize_path(&cleaned);
+    }
+
+    match file_path.parent() {
+        Some(parent) => {
+            let normalized = normalize_relative_path(&parent.join(&cleaned));
+            normalize_path(&normalized.to_string_lossy())
+        }
+        None => target.to_string(),
+    }
+}
+
 fn resolve_mention_target(target: &str) -> String {
     let raw_target = target.strip_prefix("mention:").unwrap_or(target).trim();
     if raw_target.is_empty() {
         return String::new();
     }
 
-    let decoded = decode(raw_target)
-        .map(|value| value.into_owned())
-        .unwrap_or_else(|_| raw_target.to_string());
+    let decoded = decode_link_target(raw_target);
 
     let without_suffix =
         decoded
@@ -204,19 +227,7 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
                 final_target = resolve_mention_target(&link.target);
             }
             LinkType::Internal => {
-                let cleaned = strip_link_target(&link.target).trim();
-                if !cleaned.is_empty()
-                    && !cleaned.starts_with('/')
-                    && !is_absolute_path_like(cleaned)
-                {
-                    if let Some(parent) = file_path.parent() {
-                        let resolved = parent.join(cleaned);
-                        let normalized = normalize_relative_path(&resolved);
-                        final_target = normalize_path(&normalized.to_string_lossy());
-                    }
-                } else {
-                    final_target = normalize_path(cleaned);
-                }
+                final_target = resolve_internal_target(file_path, &link.target);
             }
             LinkType::External
             | LinkType::Email

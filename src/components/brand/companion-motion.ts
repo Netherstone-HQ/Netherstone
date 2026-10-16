@@ -9,7 +9,7 @@ export const STAGE = {
   height: 160,
   ground: 150,
   restX: 300,
-  scale: 0.5,
+  scale: 0.6,
 } as const;
 
 const ENTRY_X = 560;
@@ -64,12 +64,18 @@ interface Pose {
   nod: number;
   /** 0 holds the gem in his lap, 1 has it on the ground beside him. */
   gemDown: number;
+  /** 1 keeps the gem in his back; on the way out it rides in his right hand. */
+  stow: number;
+  gemHidden: boolean;
   /** Showing the back view. */
   back: boolean;
   mouth: Mouth;
 }
 
-type Animatable = Exclude<keyof Pose, "back" | "phase" | "mouth">;
+type Animatable = Exclude<
+  keyof Pose,
+  "back" | "phase" | "mouth" | "gemHidden"
+>;
 type Target = Partial<Record<Animatable, number>>;
 
 interface Tween {
@@ -151,6 +157,8 @@ export function runCompanion(
     wiggle: 0,
     nod: 0,
     gemDown: 0,
+    stow: 1,
+    gemHidden: true,
     back: false,
     mouth: "smile",
   };
@@ -186,7 +194,13 @@ export function runCompanion(
   };
 
   if (reducedMotion) {
-    Object.assign(pose, { x: STAGE.restX, walk: 0, sit: 1 });
+    Object.assign(pose, {
+      x: STAGE.restX,
+      walk: 0,
+      sit: 1,
+      stow: 0,
+      gemHidden: false,
+    });
     render(pose, parts);
     // Still answers a poke, just without moving.
     listen(parts.hit, "click", () => {
@@ -219,7 +233,7 @@ export function runCompanion(
       t.done();
       return false;
     });
-    pose.phase += dt * 0.0105 * pose.walk;
+    pose.phase += dt * 0.0085 * pose.walk;
     render(pose, parts);
     if (tweens.length) frameId = requestAnimationFrame(frame);
   };
@@ -342,6 +356,19 @@ export function runCompanion(
     await tween({ faceX: 0 }, 300);
   };
 
+  // Reaches over his shoulder, rummages, and brings the gem round to his lap.
+  const pullGem = async () => {
+    await tween({ faceX: 6 }, 300);
+    await tween({ armsUpR: 1 }, 450);
+    for (const side of [1, -1, 1]) await tween({ wiggle: side * 0.4 }, 120);
+    await tween({ wiggle: 0 }, 100);
+    pose.gemHidden = false;
+    await Promise.all([
+      tween({ armsUpR: 0, stow: 0 }, 700),
+      tween({ faceX: 0 }, 450),
+    ]);
+  };
+
   const lieDown = async () => {
     await setGemDown();
     await tween({ faceX: 8 }, 400);
@@ -430,12 +457,14 @@ export function runCompanion(
   const live = async () => {
     const distance = ENTRY_X - STAGE.restX;
     await Promise.all([
-      tween({ x: STAGE.restX }, distance * 12, linear),
+      tween({ x: STAGE.restX }, distance * 14, linear),
       tween({ faceX: -6 }, 300),
     ]);
     await tween({ walk: 0 }, 250);
     await tween({ faceX: 0 }, 300);
     await plop();
+    await wait(400);
+    await pullGem();
     await wait(800);
     for (;;) {
       await sitAwhile();
@@ -475,48 +504,72 @@ function render(p: Pose, el: Parts) {
   const { ground } = STAGE;
   const w = p.walk;
   const ph = p.phase;
-  const bob = -Math.abs(Math.sin(ph)) * 5 * w;
+  // A heavy pebble waddles: it rocks side to side more than it bounces,
+  // and squashes a little each time a foot lands.
+  const bob = -Math.abs(Math.sin(ph)) * 3 * w;
+  const land = (1 - Math.abs(Math.sin(ph))) * w;
 
   place(
     el.root,
-    `translate(${p.x} ${ground - (HALF_WIDTH + 1) * p.lie}) rotate(${90 * p.lie + Math.sin(ph) * 2.5 * w}) scale(${p.turn} 1)`,
+    `translate(${p.x} ${ground - (HALF_WIDTH + 1) * p.lie}) rotate(${90 * p.lie + Math.sin(ph) * 5 * w}) scale(${p.turn} 1)`,
   );
 
   const armsUp = (p.armsUpL + p.armsUpR) / 2;
-  const sx = 1 + 0.03 * p.sit + 0.07 * p.squash;
+  const sx = 1 + 0.03 * p.sit + 0.07 * p.squash + 0.02 * land;
   const sy =
-    1 - 0.05 * p.sit - 0.09 * p.squash + 0.06 * armsUp - 0.03 * p.nod;
+    1 -
+    0.05 * p.sit -
+    0.09 * p.squash +
+    0.06 * armsUp -
+    0.03 * p.nod -
+    0.03 * land;
   const lift = 8 * p.sit + bob;
   const body = `translate(0 ${lift}) scale(${sx} ${sy})`;
   place(el.frontBody, body);
   place(el.backBody, body);
 
-  // The gem sits in his lap and arcs down to the ground beside him.
   const down = p.gemDown;
-  const arc = Math.sin(Math.PI * down);
-  const lapX = p.x + 2 * sx;
-  const lapY = ground + lift - 30 * sy;
-  const gemX = lapX + (GEM_GROUND.x - lapX) * down;
-  const gemY = lapY + (GEM_GROUND.y - lapY) * down - arc * 16;
-  place(el.gem, `translate(${gemX} ${gemY}) rotate(${-arc * 20})`);
-
+  const holds = { L: 0, R: 0 };
+  let handAngle = 0;
   for (const [side, s] of [["L", -1], ["R", 1]] as const) {
     const up = s < 0 ? p.armsUpL : p.armsUpR;
-    const hold = (1 - down) * (1 - up);
+    const hold = (1 - down) * (1 - up) * (1 - p.stow);
+    holds[side] = hold;
     const swing = Math.sin(ph + (s > 0 ? Math.PI : 0));
-    const step = Math.max(0, swing) * 8 * w;
+    const step = Math.max(0, swing) * 6 * w;
     place(
       el[`frontLeg${side}`],
-      `translate(${s * (15 + 6 * p.sit)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 14 * w}) scale(1 ${1 - 0.45 * p.sit})`,
+      `translate(${s * (17 + 4 * p.sit)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 10 * w}) scale(1 ${1 - 0.45 * p.sit})`,
     );
     const wiggle = s > 0 ? p.wiggle * 22 : 0;
-    const arm = `translate(${s * 30} -50) rotate(${-s * (12 - 44 * hold + 150 * up - 18 * p.armsIn + wiggle) + Math.sin(ph) * 16 * w * (1 - hold)})`;
+    const angle =
+      -s * (12 - 44 * hold + 150 * up - 18 * p.armsIn + wiggle) +
+      Math.sin(ph) * 12 * w * (1 - hold);
+    if (s > 0) handAngle = angle;
+    const arm = `translate(${s * 30} -50) rotate(${angle})`;
     place(el[`frontArm${side}`], arm);
     place(el[`backArm${side}`], arm);
+  }
 
+  // The gem sits in his lap and arcs down to the ground beside him. Coming
+  // out of his back, it starts in his right hand.
+  const arc = Math.sin(Math.PI * down);
+  const rad = (handAngle * Math.PI) / 180;
+  const handX = p.x + p.turn * sx * (30 - 26 * Math.sin(rad));
+  const handY = ground + lift + sy * (-50 + 26 * Math.cos(rad));
+  const lapX = p.x + 2 * sx;
+  const lapY = ground + lift - 30 * sy;
+  const heldX = lapX + (handX - lapX) * p.stow;
+  const heldY = lapY + (handY - lapY) * p.stow;
+  const gemX = heldX + (GEM_GROUND.x - heldX) * down;
+  const gemY = heldY + (GEM_GROUND.y - heldY) * down - arc * 16;
+  place(el.gem, `translate(${gemX} ${gemY}) rotate(${-arc * 20})`);
+  show(el.gem, !p.gemHidden);
+
+  for (const [side, s] of [["L", -1], ["R", 1]] as const) {
     const hand = el[`hand${side}`];
     place(hand, `translate(${gemX + s * 13} ${gemY + 3})`);
-    show(hand, hold > 0.5 && !p.back);
+    show(hand, holds[side] > 0.5 && !p.back);
   }
 
   // Lying on his side, the lower leg rests along the floor and the upper

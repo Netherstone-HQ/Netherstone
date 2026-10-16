@@ -16,6 +16,7 @@ import {
   getRowIndent,
 } from "@/components/vault/tree-layout";
 import {
+  getFolderInVault,
   getVaultFileDisplayName,
   isPathWithin,
   isSamePath,
@@ -28,14 +29,6 @@ import {
   useUIStore,
   useVaultStore,
 } from "@/store";
-
-/** The folders between the vault and `filePath`, or "" for the vault root. */
-function getFolderInVault(filePath: string, vaultPath: string) {
-  const relative = filePath
-    .replace(/\\/g, "/")
-    .slice(vaultPath.replace(/\\/g, "/").length + 1);
-  return relative.split("/").slice(0, -1).join("/");
-}
 
 function hideRecent() {
   const { setPreference } = useSettingsStore.getState();

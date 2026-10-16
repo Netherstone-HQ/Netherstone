@@ -7,7 +7,7 @@ import {
 } from "@/lib/drawing-files";
 import { renamedLocalStorage } from "./renamed-storage";
 
-type NavItem = "notes" | "search" | "tags" | "settings" | null;
+type NavItem = "notes" | "search" | "settings" | null;
 export type SettingsCategory =
   | "general"
   | "appearance"
@@ -17,8 +17,9 @@ export type SettingsCategory =
   | "vault"
   | "shortcuts"
   | "about";
-export type AppMode = "notes" | "canvas";
-/** The modes on the rail, in order. Tags shows in the notes layout. */
+/** The editor is "notes"; the rail calls it Editor. */
+export type AppMode = "notes" | "tags" | "canvas";
+/** The modes on the rail, in order. */
 export const RAIL_MODES = ["editor", "tags", "canvas"] as const;
 export type RailMode = (typeof RAIL_MODES)[number];
 /** Right sidebar sections that collapse. */
@@ -97,7 +98,7 @@ interface UIState {
   // ── App Mode ───────────────────────────────────────────────────────────────
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
-  /** Shows a rail mode, closing Settings or Tags if they're open. */
+  /** Shows a rail mode, closing Settings if it's open. */
   openMode: (mode: RailMode) => void;
 
   // ── Canvas ─────────────────────────────────────────────────────────────────
@@ -235,8 +236,8 @@ export const useUIStore = create<UIState>()(
       setAppMode: (mode) => set({ appMode: mode }),
       openMode: (mode) =>
         set({
-          appMode: mode === "canvas" ? "canvas" : "notes",
-          activeNavItem: mode === "tags" ? "tags" : null,
+          appMode: mode === "editor" ? "notes" : mode,
+          activeNavItem: null,
         }),
 
       // ── Canvas ─────────────────────────────────────────────────────────────────
@@ -275,6 +276,5 @@ export const useUIStore = create<UIState>()(
 /** The rail mode on screen, or null while Settings covers it. */
 export function selectRailMode(state: UIState): RailMode | null {
   if (state.activeNavItem === "settings") return null;
-  if (state.appMode === "canvas") return "canvas";
-  return state.activeNavItem === "tags" ? "tags" : "editor";
+  return state.appMode === "notes" ? "editor" : state.appMode;
 }

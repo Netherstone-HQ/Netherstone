@@ -82,4 +82,14 @@ describe("rail modes", () => {
     expect(selectRailMode(useUIStore.getState())).toBe("editor");
     expect(useUIStore.getState().activeNavItem).toBeNull();
   });
+
+  it("returns to the mode Settings was opened from", async () => {
+    const { useUIStore, selectRailMode } = await loadStore();
+    const { openMode, setActiveNavItem } = useUIStore.getState();
+
+    openMode("tags");
+    setActiveNavItem("settings");
+    setActiveNavItem(null);
+    expect(selectRailMode(useUIStore.getState())).toBe("tags");
+  });
 });

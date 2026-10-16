@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileIcon, SearchIcon } from "lucide-react";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 
 // Convert common markdown syntax to HTML for snippets
@@ -123,6 +124,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const handleSelectFile = async (result: SearchResult) => {
     try {
       await openEditorFile(result.path);
+      useUIStore.getState().openMode("editor");
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to open file:", error);

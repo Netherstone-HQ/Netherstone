@@ -2,24 +2,34 @@ import { useEffect, useRef } from "react";
 
 import { runCompanion, STAGE } from "@/components/brand/companion-motion";
 import {
+  BRAND,
+  FACET,
+  LEFT,
+  RIGHT,
+  SILHOUETTE,
+  TOP,
+} from "@/components/brand/NetherstoneMark";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCompanionStore } from "@/store/companion";
+import { useEditorStore } from "@/store";
 
-const INK = "#2B2733";
-const SHADE = "#ECE9F2";
-const BLUSH = "#F6B7C1";
+// Colors come from App.css so the dark themes can soften him.
+const FILL = { fill: "var(--companion-fill)" };
+const SHADE = { fill: "var(--companion-shade)" };
+const INK = { fill: "var(--companion-ink)" };
 
 const FRONT =
-  "M-34,-40L-34,-72C-34,-92-19,-106 0,-106C19,-106 34,-92 34,-72L34,-40C34,-18 22,-10 0,-10C-22,-10-34,-18-34,-40Z";
+  "M-40,-46C-42,-72-24,-96 3,-96C28,-96 42,-74 39,-48C37,-22 22,-10 0,-10C-24,-10-38,-22-40,-46Z";
+// The front mirrored, with a lobe on each side of the crease.
 const BACK =
-  "M-34,-40L-34,-72C-34,-92-19,-106 0,-106C19,-106 34,-92 34,-72L34,-40C34,-24 29,-14 21,-10C16,-5 5,-5 0,-11C-5,-5-16,-5-21,-10C-29,-14-34,-24-34,-40Z";
+  "M40,-46C42,-72 24,-96-3,-96C-28,-96-42,-74-39,-48C-38,-30-33,-16-23,-10C-18,-4-6,-4 0,-11C6,-3 19,-3 24,-9C34,-16 39,-28 40,-46Z";
 
 // Outlines keep one width however the limbs stretch.
 const OUTLINE = {
-  stroke: INK,
+  stroke: "var(--companion-ink)",
   strokeWidth: 1.6,
   strokeLinejoin: "round",
   strokeLinecap: "round",
@@ -27,18 +37,26 @@ const OUTLINE = {
 } as const;
 
 const Leg = () => (
-  <rect x={-9} y={-6} width={18} height={28} rx={9} fill="#fff" {...OUTLINE} />
+  <rect x={-9} y={-6} width={18} height={28} rx={9} style={{ ...FILL, ...OUTLINE }} />
 );
 const Arm = () => (
-  <rect x={-8} y={-4} width={16} height={34} rx={8} fill="#fff" {...OUTLINE} />
+  <rect x={-7} y={-4} width={14} height={36} rx={7} style={{ ...FILL, ...OUTLINE }} />
+);
+const Hand = () => <circle r={5.5} style={{ ...FILL, ...OUTLINE }} />;
+
+/** The Netherstone mark, about 23 units across and centered on its origin. */
+const Gem = () => (
+  <g transform="scale(0.5) translate(-32 -32)">
+    <path d={SILHOUETTE} fill={BRAND.left} />
+    <path d={LEFT} fill={BRAND.left} />
+    <path d={RIGHT} fill={BRAND.right} />
+    <path d={TOP} fill={BRAND.top} />
+    <path d={FACET} fill={BRAND.facet} />
+    <path d={SILHOUETTE} style={{ ...OUTLINE, fill: "none" }} />
+  </g>
 );
 
 export function Companion() {
-  const visible = useCompanionStore((s) => s.visible);
-  return visible ? <CompanionStage /> : null;
-}
-
-function CompanionStage() {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,7 +65,15 @@ function CompanionStage() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    return runCompanion(host, { reducedMotion });
+    const companion = runCompanion(host, { reducedMotion });
+    const unsubscribe = useEditorStore.subscribe((state, prev) => {
+      if (state.editTick !== prev.editTick) companion.noticeEdit();
+      if (prev.isSaving && !state.isSaving && !state.isDirty) companion.nod();
+    });
+    return () => {
+      unsubscribe();
+      companion.stop();
+    };
   }, []);
 
   const { width, height, ground, restX, scale } = STAGE;
@@ -84,69 +110,82 @@ function CompanionStage() {
             data-part="shadow"
             cx={restX}
             cy={ground + 1}
-            rx={36}
+            rx={42}
             ry={4.5}
             className="fill-foreground/10"
           />
           <Tooltip delayDuration={1200}>
             <TooltipTrigger asChild>
-              <g data-part="root" className="pointer-events-auto">
-                <g data-part="front">
-                  <g data-part="frontLegL">
-                    <Leg />
-                  </g>
-                  <g data-part="frontLegR">
-                    <Leg />
-                  </g>
-                  <g data-part="frontBody">
-                    <g data-part="frontArmL">
-                      <Arm />
+              <g data-part="hit" className="companion-hit pointer-events-auto">
+                <g data-part="root">
+                  <g data-part="front">
+                    <g data-part="frontLegL">
+                      <Leg />
                     </g>
-                    <g data-part="frontArmR">
-                      <Arm />
+                    <g data-part="frontLegR">
+                      <Leg />
                     </g>
-                    <path d={FRONT} fill="#fff" />
-                    <g clipPath="url(#companion-front-clip)">
-                      <ellipse cx={48} cy={-58} rx={24} ry={70} fill={SHADE} />
-                      <ellipse cx={0} cy={-3} rx={44} ry={11} fill={SHADE} />
-                    </g>
-                    <path d={FRONT} fill="none" {...OUTLINE} />
-                    <g data-part="face">
-                      <ellipse cx={-21} cy={-67} rx={6} ry={3.5} fill={BLUSH} opacity={0.7} />
-                      <ellipse cx={21} cy={-67} rx={6} ry={3.5} fill={BLUSH} opacity={0.7} />
-                      <ellipse data-part="eyeL" cx={-12} cy={-78} rx={4} ry={6.3} fill={INK} />
-                      <ellipse data-part="eyeR" cx={12} cy={-78} rx={4} ry={6.3} fill={INK} />
-                      <g data-part="shine">
-                        <circle cx={-13.3} cy={-80.3} r={1.5} fill="#fff" />
-                        <circle cx={10.7} cy={-80.3} r={1.5} fill="#fff" />
+                    <g data-part="frontBody">
+                      <g data-part="frontArmL">
+                        <Arm />
                       </g>
-                      <path d="M-4,-67Q0,-63 4,-67" fill="none" {...OUTLINE} strokeWidth={1.3} />
+                      <g data-part="frontArmR">
+                        <Arm />
+                      </g>
+                      <path d={FRONT} style={FILL} />
+                      <g clipPath="url(#companion-front-clip)">
+                        <ellipse cx={54} cy={-54} rx={24} ry={64} style={SHADE} />
+                        <ellipse cx={0} cy={-2} rx={50} ry={11} style={SHADE} />
+                      </g>
+                      <path d={FRONT} style={{ ...OUTLINE, fill: "none" }} />
+                      <g data-part="face">
+                        <g className="companion-blush">
+                          <ellipse cx={-22} cy={-60} rx={6} ry={3.5} />
+                          <ellipse cx={24} cy={-60} rx={6} ry={3.5} />
+                        </g>
+                        <ellipse data-part="eyeL" cx={-11} cy={-71} rx={4} ry={6.3} style={INK} />
+                        <ellipse data-part="eyeR" cx={14} cy={-71} rx={4} ry={6.3} style={INK} />
+                        <g data-part="shine">
+                          <circle cx={-12.3} cy={-73.3} r={1.5} style={FILL} />
+                          <circle cx={12.7} cy={-73.3} r={1.5} style={FILL} />
+                        </g>
+                        <path data-part="mouth" style={{ ...OUTLINE, strokeWidth: 1.3 }} />
+                      </g>
+                    </g>
+                  </g>
+                  <g data-part="back" visibility="hidden">
+                    <g data-part="backLegR">
+                      <Leg />
+                    </g>
+                    <g data-part="backLegL">
+                      <Leg />
+                    </g>
+                    <g data-part="backBody">
+                      <g data-part="backArmL">
+                        <Arm />
+                      </g>
+                      <g data-part="backArmR">
+                        <Arm />
+                      </g>
+                      <path d={BACK} style={FILL} />
+                      <g clipPath="url(#companion-back-clip)">
+                        <ellipse cx={54} cy={-54} rx={24} ry={64} style={SHADE} />
+                        <ellipse cx={-12} cy={-6} rx={9} ry={5} style={SHADE} />
+                        <ellipse cx={12} cy={-5} rx={9} ry={5} style={SHADE} />
+                      </g>
+                      <path d={BACK} style={{ ...OUTLINE, fill: "none" }} />
+                      <path d="M0,-11Q-1,-16 1,-21" style={{ ...OUTLINE, strokeWidth: 1.3, fill: "none" }} />
                     </g>
                   </g>
                 </g>
-                <g data-part="back" visibility="hidden">
-                  <g data-part="backLegR">
-                    <Leg />
-                  </g>
-                  <g data-part="backLegL">
-                    <Leg />
-                  </g>
-                  <g data-part="backBody">
-                    <g data-part="backArmL">
-                      <Arm />
-                    </g>
-                    <g data-part="backArmR">
-                      <Arm />
-                    </g>
-                    <path d={BACK} fill="#fff" />
-                    <g clipPath="url(#companion-back-clip)">
-                      <ellipse cx={48} cy={-58} rx={24} ry={70} fill={SHADE} />
-                      <ellipse cx={-10} cy={-7} rx={9} ry={5} fill={SHADE} />
-                      <ellipse cx={10} cy={-7} rx={9} ry={5} fill={SHADE} />
-                    </g>
-                    <path d={BACK} fill="none" {...OUTLINE} />
-                    <path d="M0,-11Q-1,-16 1,-21" fill="none" {...OUTLINE} strokeWidth={1.3} />
-                  </g>
+                <g data-part="gem">
+                  <Gem />
+                </g>
+                <g data-part="handL">
+                  <Hand />
+                </g>
+                <g data-part="handR">
+                  <Hand />
                 </g>
               </g>
             </TooltipTrigger>
@@ -162,8 +201,8 @@ function CompanionStage() {
             key={i}
             className="companion-z font-medium text-muted-foreground text-ui-sm"
             style={{
-              left: (restX + 100) * scale + i * 3,
-              top: (ground - 84) * scale,
+              left: (restX + 92) * scale + i * 3,
+              top: (ground - 80) * scale,
               animationDelay: `${-i * 1.15}s`,
             }}
           >

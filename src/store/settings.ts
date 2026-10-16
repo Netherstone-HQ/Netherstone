@@ -49,6 +49,10 @@ export interface Preferences {
 
   // ── Updates ─────────────────────────────────────────────────────────────────
   betaUpdates: boolean;
+
+  // ── About ───────────────────────────────────────────────────────────────────
+  /** Only offered once the companion is found. */
+  showCompanion: boolean;
 }
 
 interface SettingsState extends Preferences {
@@ -68,8 +72,13 @@ interface SettingsState extends Preferences {
   /** Shows the welcome flow again on next launch. */
   resetOnboarding: () => void;
 
+  // ── Companion ───────────────────────────────────────────────────────────────
+  /** Found once, kept for good: resetting settings doesn't hide him again. */
+  companionUnlocked: boolean;
+  unlockCompanion: () => void;
+
   // ── Utilities ───────────────────────────────────────────────────────────────
-  /** Restores every preference. Leaves onboarding alone. */
+  /** Restores every preference. Leaves onboarding and the companion alone. */
   resetSettings: () => void;
 }
 
@@ -109,6 +118,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
 
   // Someone who installed a beta wants the next beta too.
   betaUpdates: isPrerelease(__APP_VERSION__),
+
+  showCompanion: true,
 };
 
 const PREFERENCE_KEYS = Object.keys(
@@ -180,6 +191,11 @@ export const useSettingsStore = create<SettingsState>()(
         set({ onboardingCompletedAt: new Date().toISOString() }),
       resetOnboarding: () => set({ onboardingCompletedAt: null }),
 
+      // ── Companion ───────────────────────────────────────────────────────────
+      companionUnlocked: false,
+      unlockCompanion: () =>
+        set({ companionUnlocked: true, showCompanion: true }),
+
       // ── Utilities ───────────────────────────────────────────────────────────
       resetSettings: () => set({ ...DEFAULT_PREFERENCES }),
     }),
@@ -188,9 +204,12 @@ export const useSettingsStore = create<SettingsState>()(
       storage: renamedLocalStorage("netherite-settings"),
       version: 2,
       partialize: (state) => {
-        const saved: Partial<Preferences> & {
-          onboardingCompletedAt: string | null;
-        } = { onboardingCompletedAt: state.onboardingCompletedAt };
+        const saved: Partial<Preferences> &
+          Pick<SettingsState, "onboardingCompletedAt" | "companionUnlocked"> =
+          {
+            onboardingCompletedAt: state.onboardingCompletedAt,
+            companionUnlocked: state.companionUnlocked,
+          };
         for (const key of PREFERENCE_KEYS) {
           (saved as Record<string, unknown>)[key] = state[key];
         }

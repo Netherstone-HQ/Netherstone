@@ -20,6 +20,23 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().onboardingCompletedAt).toBeNull();
   });
 
+  it("remembers the companion across launches and resets", async () => {
+    const first = await loadStore();
+    first.useSettingsStore.getState().unlockCompanion();
+    first.useSettingsStore.getState().setPreference("showCompanion", false);
+
+    const { useSettingsStore } = await loadStore();
+    expect(useSettingsStore.getState()).toMatchObject({
+      companionUnlocked: true,
+      showCompanion: false,
+    });
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState()).toMatchObject({
+      companionUnlocked: true,
+      showCompanion: true,
+    });
+  });
+
   it("keeps preferences within their allowed values", async () => {
     const { useSettingsStore } = await loadStore();
     const { setPreference } = useSettingsStore.getState();

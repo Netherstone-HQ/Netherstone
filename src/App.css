@@ -434,6 +434,31 @@
 
 /* Companion (components/brand/Companion.tsx). Breathing and the floating z's
    only animate transform and opacity, so they stay off the main thread. */
+
+.companion {
+    --companion-fill: #fff;
+    --companion-shade: #ece9f2;
+    --companion-ink: #2b2733;
+    --companion-blush: #f6b7c1;
+}
+
+/* Pure white glares on the dark themes. */
+.dark .companion {
+    --companion-fill: #dedbe6;
+    --companion-shade: #c3bfce;
+    --companion-blush: #e9a3b0;
+}
+
+.companion-blush {
+    fill: var(--companion-blush);
+    opacity: 0.7;
+    transition: opacity 0.4s ease;
+}
+
+.companion-hit:hover .companion-blush {
+    opacity: 1;
+}
+
 .companion-zs {
     opacity: 0;
     transition: opacity 0.7s ease;

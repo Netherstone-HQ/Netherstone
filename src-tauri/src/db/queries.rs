@@ -66,22 +66,18 @@ pub fn search_files(
 ) -> Result<Vec<SearchResult>, String> {
     eprintln!("[Netherstone] Searching for: '{}'", query);
 
-    if query.trim().is_empty() {
+    let terms = search_terms(query);
+    if terms.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Add prefix matching (*) to each word for better search results
-    // e.g., "auto save" becomes "auto* save*"
-    let fts_query = query
-        .split_whitespace()
-        .map(|word| format!("{}*", word))
+    // Each term quoted, so nothing typed is read as query syntax, and matched
+    // as a prefix: "auto save" becomes "auto"* "save"*.
+    let fts_query = terms
+        .iter()
+        .map(|term| format!("\"{}\"*", term))
         .collect::<Vec<_>>()
         .join(" ");
-    let terms: Vec<String> = query
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|term| !term.is_empty())
-        .map(str::to_lowercase)
-        .collect();
 
     eprintln!("[Netherstone] FTS5 query: '{}'", fts_query);
 
@@ -112,6 +108,23 @@ pub fn search_files(
 
     eprintln!("[Netherstone] Found {} search results", results.len());
     Ok(results)
+}
+
+/// The words of a search, lowercase, split as the index splits text: at
+/// anything but letters and digits, so "contractor's" gives "contractor".
+/// Single letters, like the "s" left from that, are dropped when there are
+/// longer words, since they would match nearly everything.
+fn search_terms(query: &str) -> Vec<String> {
+    let words: Vec<String> = query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let is_letter = |word: &String| word.chars().count() == 1;
+    if words.iter().all(is_letter) {
+        return words;
+    }
+    words.into_iter().filter(|word| !is_letter(word)).collect()
 }
 
 /// The block matching the most search terms, around its first match. With no
@@ -370,6 +383,48 @@ mod tests {
             shown(&search_snippet(content, &terms)),
             "Book the [train] for the [trip]."
         );
+    }
+
+    #[test]
+    fn splits_searches_as_the_index_splits_text() {
+        assert_eq!(search_terms("Contractor's quote"), ["contractor", "quote"]);
+        assert_eq!(search_terms("auto-save"), ["auto", "save"]);
+        assert_eq!(search_terms("a b"), ["a", "b"]);
+        assert!(search_terms(" ' \" ").is_empty());
+    }
+
+    #[test]
+    fn searches_with_punctuation_and_query_words() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, 'Quote.md', 'Quote.md', 0, 0, '')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO fts_search (rowid, path, name, content) VALUES (1, 'Quote.md', 'Quote.md', ?1)",
+            ["# Quote\n\nThe contractor's quote came in under budget."],
+        )
+        .unwrap();
+
+        let results = search_files(&conn, "contractor's quote", 20).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            shown(&results[0].snippet),
+            "The [contractor]'s [quote] came in under budget."
+        );
+
+        for query in [
+            "\"quote",
+            "quote-",
+            "NOT quote",
+            "name:quote",
+            "(quote",
+            "quote*",
+        ] {
+            assert!(search_files(&conn, query, 20).is_ok(), "{query}");
+        }
     }
 
     #[test]

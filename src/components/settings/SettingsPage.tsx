@@ -19,6 +19,13 @@ import { GeneralSettings } from "@/components/settings/sections/GeneralSettings"
 import { ShortcutsSettings } from "@/components/settings/sections/ShortcutsSettings";
 import { SyncSettings } from "@/components/settings/sections/SyncSettings";
 import { VaultSettings } from "@/components/settings/sections/VaultSettings";
+import {
+  ACTIVE_ROW_CLASS,
+  ROW_BUTTON_CLASS,
+  ROW_CLASS,
+  RowSlot,
+  getRowIndent,
+} from "@/components/vault/tree-layout";
 import { cn } from "@/lib/utils";
 import { type SettingsCategory, useUIStore } from "@/store/ui";
 
@@ -84,6 +91,7 @@ export function SettingsPage() {
   const categoryId = useUIStore((s) => s.settingsCategory);
   const openSettings = useUIStore((s) => s.openSettings);
   const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
+  const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const category =
     SETTINGS_CATEGORIES.find((c) => c.id === categoryId) ??
     SETTINGS_CATEGORIES[0];
@@ -99,32 +107,40 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-full min-h-0">
+      {/* Sized and laid out like the left sidebar, whose place it takes. */}
       <nav
         aria-label="Settings"
-        className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar px-3 py-6"
+        className="flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+        style={{ width: sidebarWidth }}
       >
-        <h1 className="px-2.5 pb-3 font-semibold text-base tracking-tight">
-          Settings
-        </h1>
-        {SETTINGS_CATEGORIES.map(({ id, label, icon: Icon }) => {
-          const active = id === category.id;
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-current={active ? "page" : undefined}
-              onClick={() => openSettings(id)}
-              className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-ui outline-none transition-colors",
-                "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
-                active && "bg-sidebar-accent font-medium text-foreground",
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              {label}
-            </button>
-          );
-        })}
+        <div className="flex h-header shrink-0 items-center border-b px-4">
+          <h1 className="font-medium text-ui">Settings</h1>
+        </div>
+        <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+          {SETTINGS_CATEGORIES.map(({ id, label, icon: Icon }) => {
+            const active = id === category.id;
+            return (
+              <li key={id}>
+                <div
+                  className={cn(ROW_CLASS, active && ACTIVE_ROW_CLASS)}
+                  style={{ paddingLeft: `${getRowIndent(0)}px` }}
+                >
+                  <button
+                    type="button"
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => openSettings(id)}
+                    className={ROW_BUTTON_CLASS}
+                  >
+                    <RowSlot>
+                      <Icon className="size-4 text-muted-foreground" />
+                    </RowSlot>
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
 
       <div className="min-w-0 flex-1 overflow-y-auto">

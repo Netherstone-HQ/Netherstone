@@ -9,8 +9,6 @@ import { TagsView } from "./tags/TagsView";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
 import { NewShardDialog } from "./vault/NewShardDialog";
-import { XIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { BrowserPanel } from "./browser/BrowserPanel";
 import { useCoversBrowser } from "./browser/browserOcclusion";
@@ -126,7 +124,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const activeNavItem = useUIStore((s) => s.activeNavItem);
-  const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
   const [isNewShardDialogOpen, setIsNewShardDialogOpen] = useState(false);
   const openNewShardDialog = useCallback(
     () => setIsNewShardDialogOpen(true),
@@ -141,26 +138,21 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <div className="flex min-h-0 flex-1">
           <ModeSwitcher />
-          <MemoizedLeftSidebar onNewShard={openNewShardDialog} />
 
-          <div className="relative flex h-full min-w-0 flex-1 flex-col">
-            <ModeAwareCanvas />
-            <ModeAwareTags />
-            <ModeAwareNotes children={children} />
+          {/* Settings covers the left sidebar too: its categories take the
+              sidebar's place, and the sidebar is back as it was on leaving. */}
+          <div className="relative flex min-w-0 flex-1">
+            <MemoizedLeftSidebar onNewShard={openNewShardDialog} />
+
+            <div className="relative flex h-full min-w-0 flex-1 flex-col">
+              <ModeAwareCanvas />
+              <ModeAwareTags />
+              <ModeAwareNotes children={children} />
+            </div>
 
             {children == null && activeNavItem === "settings" && (
               <div className="absolute inset-0 z-31 bg-background">
                 <CoversBrowser />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setActiveNavItem(null)}
-                  className="absolute top-4 right-4 z-10 text-muted-foreground hover:text-accent-foreground"
-                  aria-label="Close settings"
-                >
-                  <XIcon />
-                </Button>
                 <SettingsPage />
               </div>
             )}

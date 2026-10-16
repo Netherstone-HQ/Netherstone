@@ -12,6 +12,9 @@ pub const SYNC_SOFT_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
 const SYNCABLE_EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "gif", "webp", "svg", "pdf", "txt", "md", "csv", "json", "xml", "yaml",
     "yml", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    // Audio and video, under the size limit like any other file.
+    "mp3", "wav", "ogg", "m4a", "flac", "aac", "opus", "wma", "mp4", "mov", "mkv", "avi", "webm",
+    "m4v", "wmv", "flv",
 ];
 
 const BLOCKED_EXTENSIONS: &[&str] = &[
@@ -1664,6 +1667,22 @@ pub fn clean_up_vault_attachments(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn audio_and_video_sync_under_the_size_limit() {
+        for extension in ["mp3", "m4a", "mp4", "mov", "webm"] {
+            assert_eq!(
+                sync_status_for_attachment(extension, 5 * 1024 * 1024),
+                AttachmentSyncStatus::Syncable,
+                "{extension}"
+            );
+            assert_eq!(
+                sync_status_for_attachment(extension, SYNC_SOFT_LIMIT_BYTES + 1),
+                AttachmentSyncStatus::LocalOnly,
+                "{extension}"
+            );
+        }
+    }
 
     const USED_HASH: &str = "ab00000000000000000000000000000000000000000000000000000000000000";
 

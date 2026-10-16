@@ -213,7 +213,7 @@ mod tests {
         write(&vault, "_attachments/photo.png", b"png");
         write(&vault, "_attachments/ab/0123.pdf", b"pdf");
         write(&vault, "_attachments/setup.exe", b"exe");
-        write(&vault, "_attachments/song.flac", b"flac");
+        write(&vault, "_attachments/scene.blend", b"blend");
         write(&vault, "_attachments/README", b"no extension");
         write(&vault, "images/diagram.png", b"png");
         write(&vault, ".netherstone/vault-id", b"abc");
@@ -246,8 +246,8 @@ mod tests {
             skipped,
             vec![
                 ("_attachments/README", SkipReason::PendingReview),
+                ("_attachments/scene.blend", SkipReason::LocalOnly),
                 ("_attachments/setup.exe", SkipReason::Blocked),
-                ("_attachments/song.flac", SkipReason::LocalOnly),
                 ("images/diagram.png", SkipReason::Unmanaged),
             ]
         );

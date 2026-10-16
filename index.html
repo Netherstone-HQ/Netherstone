@@ -22,6 +22,11 @@
         opacity: 0;
         pointer-events: none;
       }
+      /* After the first launch the lockup shows as it lands and leaves as
+         soon as the app is ready: the motion is for the welcome. */
+      #splash.is-still {
+        transition-duration: 150ms;
+      }
       /* Brand guide, splash motion: the stone tips in (P7), settles level
          (P6) with a soft landing, then the wordmark fades in beside it.
          About 900 ms, on Ink. The lockup starts shifted so the stone
@@ -65,6 +70,9 @@
       #splash:not(.is-playing) * {
         animation-play-state: paused;
       }
+      #splash.is-still * {
+        animation: none;
+      }
       @media (prefers-reduced-motion: reduce) {
         .splash-lockup,
         .splash-mark,
@@ -102,6 +110,10 @@
       // motion once the window has painted.
       (function () {
         var splash = document.getElementById("splash");
+        try {
+          var settings = JSON.parse(localStorage.getItem("netherstone-settings"));
+          if (settings.state.onboardingCompletedAt) splash.classList.add("is-still");
+        } catch (error) {}
         function play() {
           requestAnimationFrame(function () {
             requestAnimationFrame(function () {

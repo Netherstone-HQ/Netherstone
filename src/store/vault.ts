@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { isSamePath } from "@/lib/drawing-files";
 import { renamedLocalStorage } from "./renamed-storage";
+
+const MAX_RECENT_VAULTS = 5;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -16,6 +19,10 @@ interface VaultState {
   currentVaultPath: string | null;
   setCurrentVaultPath: (path: string | null) => void;
   clearVault: () => void;
+  /** Vaults opened on this computer, newest first, to switch back to. */
+  recentVaults: string[];
+  /** Drops a vault from the recent list, once its folder is gone. */
+  forgetRecentVault: (path: string) => void;
 
   // ── File Tree (Phase 2) ────────────────────────────────────────────────────
   fileTree: FileTreeNode[];
@@ -38,8 +45,22 @@ export const useVaultStore = create<VaultState>()(
     (set) => ({
       // ── Vault Path ─────────────────────────────────────────────────────────────
       currentVaultPath: null,
-      setCurrentVaultPath: (path) => set({ currentVaultPath: path }),
+      setCurrentVaultPath: (path) =>
+        set((state) => ({
+          currentVaultPath: path,
+          recentVaults: path
+            ? [
+                path,
+                ...state.recentVaults.filter((v) => !isSamePath(v, path)),
+              ].slice(0, MAX_RECENT_VAULTS)
+            : state.recentVaults,
+        })),
       clearVault: () => set({ currentVaultPath: null, fileTree: [] }),
+      recentVaults: [],
+      forgetRecentVault: (path) =>
+        set((state) => ({
+          recentVaults: state.recentVaults.filter((v) => !isSamePath(v, path)),
+        })),
 
       // ── File Tree (Phase 2) ────────────────────────────────────────────────────
       fileTree: [],
@@ -56,8 +77,11 @@ export const useVaultStore = create<VaultState>()(
     {
       name: "netherstone-vault",
       storage: renamedLocalStorage("netherite-vault"),
-      // Only persist the vault path — the tree is always rebuilt from disk.
-      partialize: (state) => ({ currentVaultPath: state.currentVaultPath }),
+      // The tree is always rebuilt from disk.
+      partialize: (state) => ({
+        currentVaultPath: state.currentVaultPath,
+        recentVaults: state.recentVaults,
+      }),
     },
   ),
 );

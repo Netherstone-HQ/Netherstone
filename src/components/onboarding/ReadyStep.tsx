@@ -12,23 +12,24 @@ import type { VaultChoice } from "./VaultStep";
 
 export function ReadyStep({
   vault,
+  replay,
   onBack,
   onFinish,
 }: {
   vault: VaultChoice;
+  /** Started again from Settings, on a vault that's already in use. */
+  replay: boolean;
   onBack: () => void;
   onFinish: (addGuide: boolean) => void;
 }) {
   // A new vault already has the guide; any other vault can get it here.
   const offerGuide = !vault.startHerePath;
-  const [addGuide, setAddGuide] = useState(true);
+  // On a replay the vault is in use already, so the guide is only added on
+  // request.
+  const [addGuide, setAddGuide] = useState(!replay);
 
   const body =
-    vault.kind === "created"
-      ? copy.ready.bodyNewVault
-      : vault.kind === "restored"
-        ? copy.ready.bodyRestored
-        : copy.ready.body;
+    vault.kind === "restored" ? copy.ready.bodyRestored : copy.ready.body;
 
   const tips = [
     { icon: SearchIcon, text: copy.ready.tips.search(IS_MAC ? "⌘K" : "Ctrl+K") },

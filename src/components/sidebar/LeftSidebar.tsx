@@ -2,18 +2,26 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ChevronsUpDownIcon,
   FileIcon,
+  FilePlusIcon,
   FolderIcon,
+  FolderInputIcon,
   FolderOpenIcon,
+  FolderPlusIcon,
   GitBranchIcon,
+  PlusIcon,
   SearchIcon,
+  SettingsIcon,
 } from "lucide-react";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Sidebar } from "@/components/ui/sidebar";
+import { DrawingIcon } from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Hint } from "@/components/ui/tooltip";
@@ -31,14 +39,20 @@ import { RecentFilesSection } from "../recent/RecentFilesSection";
 import { TagFilterField, TagList } from "../tags/TagList";
 import { FileTree } from "../vault/FileTree";
 import { ImportShardDialog } from "../vault/ImportShardDialog";
+import { NewVaultDialog } from "../vault/NewVaultDialog";
 import { openEditorFile } from "@/lib/open-editor-file";
 import {
+  fileExists,
   openShardDialog,
   openVaultDialog,
   scanVault,
   importShard,
   type ShardDialogResult,
 } from "@/lib/commands";
+import { folderName, openVault } from "@/lib/open-vault";
+import { createDrawing } from "@/lib/open-vault-file";
+import { REVEAL_LABEL } from "@/lib/platform";
+import { useMenuAction } from "@/lib/use-menu-action";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store";
 import { LeftSidebarResizeHandle } from "./LeftSidebarResizeHandle";
@@ -52,19 +66,25 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
   const [pendingShard, setPendingShard] = useState<ShardDialogResult | null>(
     null,
   );
+  const [isNewVaultOpen, setIsNewVaultOpen] = useState(false);
+  const vaultMenu = useMenuAction();
 
   const setSearchModalOpen = useUIStore((s) => s.setSearchModalOpen);
   const isTagsMode = useUIStore((s) => s.appMode === "tags");
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
-  const {
-    currentVaultPath,
-    setCurrentVaultPath,
-    setFileTree,
-    setVaultLoading,
-  } = useVaultStore();
+  const openSettings = useUIStore((s) => s.openSettings);
+  const { currentVaultPath, setFileTree } = useVaultStore();
+  const recentVaults = useVaultStore((s) => s.recentVaults);
+  const forgetRecentVault = useVaultStore((s) => s.forgetRecentVault);
+  const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
 
-  const currentVaultName = currentVaultPath?.split(/[\\/]/).pop() || "No vault";
+  const currentVaultName = currentVaultPath
+    ? folderName(currentVaultPath)
+    : "No vault";
+  const otherVaults = recentVaults.filter(
+    (path) => path !== currentVaultPath,
+  );
 
   const loadBackupState = useSyncStore((s) => s.load);
   const backupIndicator = useSyncStore((s) => {
@@ -82,16 +102,23 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
   }
 
   async function switchVault(vaultPath: string) {
-    setCurrentVaultPath(vaultPath);
-    setVaultLoading(true);
     try {
-      const tree = await scanVault(vaultPath);
-      setFileTree(tree);
-    } catch (err) {
-      console.error("[Netherstone] Failed to scan vault:", err);
-    } finally {
-      setVaultLoading(false);
+      await openVault(vaultPath);
+    } catch (error) {
+      console.error("[Netherstone] Failed to open vault:", error);
+      toast.error(`Couldn't open ${folderName(vaultPath)}`);
     }
+  }
+
+  async function switchToRecent(vaultPath: string) {
+    if (!(await fileExists(vaultPath).catch(() => false))) {
+      forgetRecentVault(vaultPath);
+      toast.error(`Couldn't find ${folderName(vaultPath)}`, {
+        description: "It was moved or deleted.",
+      });
+      return;
+    }
+    await switchVault(vaultPath);
   }
 
   async function handleOpenVault() {
@@ -100,19 +127,21 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
     await switchVault(path);
   }
 
+  function newFolder() {
+    if (!currentVaultPath) return;
+    // Tags mode lists tags in place of the file tree the folder is named in.
+    if (isTagsMode) useUIStore.getState().openMode("editor");
+    setNewFolderParent(currentVaultPath);
+  }
+
   async function handleRevealVaultLocation() {
     if (!currentVaultPath) return;
 
     try {
-      await openPath(currentVaultPath);
+      await revealItemInDir(currentVaultPath);
     } catch (error) {
       console.error("[Netherstone] Failed to reveal vault location:", error);
-      toast.error("Failed to open vault location", {
-        description:
-          error instanceof Error
-            ? error.message
-            : "Could not open the OS file explorer.",
-      });
+      toast.error("Couldn't show the vault's folder");
     }
   }
 
@@ -193,22 +222,77 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                 <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="bottom" align="start" className="w-56">
-              <DropdownMenuItem onClick={() => void handleOpenVault()}>
-                <FolderOpenIcon />
-                <span>Open vault</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void handleOpenShard()}>
-                <FileIcon />
-                <span>Open shard</span>
+            <DropdownMenuContent
+              side="bottom"
+              align="start"
+              className="w-60"
+              onCloseAutoFocus={vaultMenu.onCloseAutoFocus}
+            >
+              {currentVaultPath ? (
+                <>
+                  <DropdownMenuItem onSelect={vaultMenu.defer(onNewShard)}>
+                    <FilePlusIcon />
+                    New shard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => void createDrawing(currentVaultPath)}
+                  >
+                    <DrawingIcon />
+                    New drawing
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={vaultMenu.defer(newFolder)}>
+                    <FolderPlusIcon />
+                    New folder
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
+
+              {otherVaults.length > 0 ? (
+                <>
+                  <DropdownMenuLabel>Recent vaults</DropdownMenuLabel>
+                  {otherVaults.map((path) => (
+                    <DropdownMenuItem
+                      key={path}
+                      title={path}
+                      onSelect={() => void switchToRecent(path)}
+                    >
+                      <FolderIcon />
+                      <span className="truncate">{folderName(path)}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              ) : null}
+              <DropdownMenuItem onSelect={() => void handleOpenVault()}>
+                <FolderInputIcon />
+                Open vault
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={!currentVaultPath}
-                onClick={() => void handleRevealVaultLocation()}
+                onSelect={vaultMenu.defer(() => setIsNewVaultOpen(true))}
               >
-                <FolderIcon />
-                <span>Open location</span>
+                <PlusIcon />
+                New vault
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem onSelect={() => void handleOpenShard()}>
+                <FileIcon />
+                Open shard
+              </DropdownMenuItem>
+              {currentVaultPath ? (
+                <>
+                  <DropdownMenuItem
+                    onSelect={() => void handleRevealVaultLocation()}
+                  >
+                    <FolderOpenIcon />
+                    {REVEAL_LABEL}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => openSettings("vault")}>
+                    <SettingsIcon />
+                    Vault settings
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -274,6 +358,8 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
           )}
         </div>
       </Sidebar>
+
+      <NewVaultDialog open={isNewVaultOpen} onOpenChange={setIsNewVaultOpen} />
 
       <ImportShardDialog
         shard={pendingShard}

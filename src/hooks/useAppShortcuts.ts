@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { hasModKey } from "@/lib/platform";
 import { RAIL_MODES, useUIStore } from "@/store/ui";
 
 // Ctrl+1/2/3 by physical key, so they work on layouts where those keys type
@@ -16,7 +17,7 @@ const MODE_KEYS: Record<string, (typeof RAIL_MODES)[number]> = {
 export function useAppShortcuts({ onNewShard }: { onNewShard: () => void }) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat) {
+      if (!hasModKey(e) || e.altKey || e.shiftKey || e.repeat) {
         return;
       }
 

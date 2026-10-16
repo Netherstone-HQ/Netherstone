@@ -1,6 +1,5 @@
 import { SettingsGroup } from "@/components/settings/settings-ui";
-
-const IS_MAC = navigator.userAgent.includes("Mac");
+import { IS_MAC } from "@/lib/platform";
 
 /** Keys as written in Plate's shortcut config ("mod+shift+x"). */
 type Shortcut = { keys: string; action: string };

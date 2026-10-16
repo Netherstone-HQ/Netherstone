@@ -52,4 +52,24 @@ function TooltipContent({
   );
 }
 
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger };
+/** Names a control in a tooltip on hover and keyboard focus. Use it instead of `title`. */
+function Hint({
+  label,
+  side,
+  children,
+}: {
+  label: React.ReactNode;
+  side?: React.ComponentProps<typeof TooltipPrimitive.Content>["side"];
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side={side} sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger };

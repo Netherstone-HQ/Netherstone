@@ -24,6 +24,7 @@ import {
 } from "@/components/browser/browserCommands";
 
 import { Progress } from "@/components/ui/progress";
+import { Hint } from "@/components/ui/tooltip";
 
 const DEFAULT_BROWSER_URL = "https://netherstone.app";
 
@@ -266,58 +267,57 @@ export function BrowserPanel({
             void navigateTo(address);
           }}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              void runBrowserCommand(() => goBackBrowserWebview(webviewLabel));
-            }}
-            disabled={isBusy || !isBrowserReady || !canGoBack}
-            aria-label="Go back"
-            title={canGoBack ? "Go back" : "No page to go back to"}
-          >
-            <ArrowLeftIcon />
-          </Button>
+          <Hint label="Go back" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                void runBrowserCommand(() => goBackBrowserWebview(webviewLabel));
+              }}
+              disabled={isBusy || !isBrowserReady || !canGoBack}
+              aria-label="Go back"
+            >
+              <ArrowLeftIcon />
+            </Button>
+          </Hint>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              void runBrowserCommand(() =>
-                goForwardBrowserWebview(webviewLabel),
-              );
-            }}
-            disabled={isBusy || !isBrowserReady || !canGoForward}
-            aria-label="Go forward"
-            title={canGoForward ? "Go forward" : "No page to go forward to"}
-          >
-            <ArrowRightIcon />
-          </Button>
+          <Hint label="Go forward" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                void runBrowserCommand(() =>
+                  goForwardBrowserWebview(webviewLabel),
+                );
+              }}
+              disabled={isBusy || !isBrowserReady || !canGoForward}
+              aria-label="Go forward"
+            >
+              <ArrowRightIcon />
+            </Button>
+          </Hint>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              if (isPageLoading) {
-                stopLoading();
-                return;
-              }
+          <Hint label={isPageLoading ? "Stop loading" : "Refresh"} side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                if (isPageLoading) {
+                  stopLoading();
+                  return;
+                }
 
-              void runBrowserCommand(() => reloadBrowserWebview(webviewLabel));
-            }}
-            disabled={isBusy || !isBrowserReady}
-            aria-label={isPageLoading ? "Stop loading page" : "Refresh page"}
-            title={isPageLoading ? "Stop loading" : "Refresh"}
-          >
-            {isPageLoading ? (
-              <XIcon />
-            ) : (
-              <RotateCwIcon />
-            )}
-          </Button>
+                void runBrowserCommand(() => reloadBrowserWebview(webviewLabel));
+              }}
+              disabled={isBusy || !isBrowserReady}
+              aria-label={isPageLoading ? "Stop loading page" : "Refresh page"}
+            >
+              {isPageLoading ? <XIcon /> : <RotateCwIcon />}
+            </Button>
+          </Hint>
 
           <input
             type="text"
@@ -329,18 +329,19 @@ export function BrowserPanel({
             disabled={isBusy || !isBrowserReady}
           />
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              void closeBrowserPanel();
-            }}
-            aria-label="Close browser panel"
-            title="Close browser panel"
-          >
-            <XIcon />
-          </Button>
+          <Hint label="Close browser panel" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                void closeBrowserPanel();
+              }}
+              aria-label="Close browser panel"
+            >
+              <XIcon />
+            </Button>
+          </Hint>
 
           {isPageLoading && (
             <>

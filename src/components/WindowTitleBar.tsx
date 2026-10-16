@@ -3,6 +3,7 @@ import { MinusIcon, SquareIcon, XIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { cn } from "@/lib/utils";
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
+import { Hint } from "@/components/ui/tooltip";
 
 /**
  * The custom title bar. `bare` drops the name and background for full-window
@@ -118,21 +119,21 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
 
       <div className="flex h-full items-stretch">
         {controls.map(({ label, onClick, icon, destructive }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={onClick}
-            aria-label={label}
-            title={label}
-            data-tauri-drag-region={false}
-            className={cn(
-              "tauri-no-drag flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-              destructive &&
-                "hover:bg-destructive hover:text-white dark:hover:text-white",
-            )}
-          >
-            {icon}
-          </button>
+          <Hint key={label} label={label} side="bottom">
+            <button
+              type="button"
+              onClick={onClick}
+              aria-label={label}
+              data-tauri-drag-region={false}
+              className={cn(
+                "tauri-no-drag flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                destructive &&
+                  "hover:bg-destructive hover:text-white dark:hover:text-white",
+              )}
+            >
+              {icon}
+            </button>
+          </Hint>
         ))}
       </div>
     </div>

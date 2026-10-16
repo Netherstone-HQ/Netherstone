@@ -18,6 +18,7 @@ import { FolderOpenIcon, Grid3x3Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { SaveState } from "@/components/SaveStatus";
+import { useHeldSize } from "@/components/canvas/useHeldSize";
 import {
   createDrawingFile,
   readDrawingFile,
@@ -360,6 +361,10 @@ export function ExcalidrawCanvas({
     [onSceneChange],
   );
 
+  // State, not a ref: the frame only appears once the drawing has loaded.
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
+  const heldSize = useHeldSize(frame);
+
   useEffect(() => {
     onSaveStateChange(status);
   }, [status, onSaveStateChange]);
@@ -375,55 +380,64 @@ export function ExcalidrawCanvas({
   }
 
   return (
-    <div className="relative h-full min-h-0">
-      <Excalidraw
-        theme={theme}
-        initialData={initialData}
-        excalidrawAPI={onExcalidrawAPI}
-        libraryReturnUrl={libraryReturnUrl}
-        onChange={handleChange}
-        UIOptions={UI_OPTIONS}
+    <div ref={setFrame} className="relative h-full min-h-0">
+      <div
+        className="absolute inset-0"
+        style={
+          heldSize
+            ? { ...heldSize, right: "auto", bottom: "auto" }
+            : undefined
+        }
       >
-        {/* Saving and exporting go through the top bar's drawing menu, and
-            the theme follows the app's. */}
-        <MainMenu>
-          <MainMenu.DefaultItems.ClearCanvas />
-          <MainMenu.Item
-            icon={<Grid3x3Icon />}
-            shortcut={GRID_SHORTCUT}
-            onSelect={() =>
-              excalidrawAPI?.updateScene({
-                appState: { gridModeEnabled: !isGridShown },
-              })
-            }
-          >
-            {isGridShown ? "Hide grid" : "Show grid"}
-          </MainMenu.Item>
-          <MainMenu.DefaultItems.ChangeCanvasBackground />
-          <MainMenu.DefaultItems.Help />
-        </MainMenu>
-        {/* Shown on an empty canvas. Drawing on it is what saves it, which
-            nothing else on screen says. "Open an existing drawing" shows the
-            left sidebar, where the vault's drawings are. */}
-        <WelcomeScreen>
-          <WelcomeScreen.Hints.ToolbarHint />
-          <WelcomeScreen.Hints.HelpHint />
-          <WelcomeScreen.Center>
-            <WelcomeScreen.Center.Heading>
-              Your drawing is saved to your vault as you go.
-            </WelcomeScreen.Center.Heading>
-            <WelcomeScreen.Center.Menu>
-              <WelcomeScreen.Center.MenuItem
-                icon={<FolderOpenIcon />}
-                shortcut={SIDEBAR_SHORTCUT}
-                onSelect={showDrawings}
-              >
-                Open an existing drawing
-              </WelcomeScreen.Center.MenuItem>
-            </WelcomeScreen.Center.Menu>
-          </WelcomeScreen.Center>
-        </WelcomeScreen>
-      </Excalidraw>
+        <Excalidraw
+          theme={theme}
+          initialData={initialData}
+          excalidrawAPI={onExcalidrawAPI}
+          libraryReturnUrl={libraryReturnUrl}
+          onChange={handleChange}
+          UIOptions={UI_OPTIONS}
+        >
+          {/* Saving and exporting go through the top bar's drawing menu, and
+              the theme follows the app's. */}
+          <MainMenu>
+            <MainMenu.DefaultItems.ClearCanvas />
+            <MainMenu.Item
+              icon={<Grid3x3Icon />}
+              shortcut={GRID_SHORTCUT}
+              onSelect={() =>
+                excalidrawAPI?.updateScene({
+                  appState: { gridModeEnabled: !isGridShown },
+                })
+              }
+            >
+              {isGridShown ? "Hide grid" : "Show grid"}
+            </MainMenu.Item>
+            <MainMenu.DefaultItems.ChangeCanvasBackground />
+            <MainMenu.DefaultItems.Help />
+          </MainMenu>
+          {/* Shown on an empty canvas. Drawing on it is what saves it, which
+              nothing else on screen says. "Open an existing drawing" shows the
+              left sidebar, where the vault's drawings are. */}
+          <WelcomeScreen>
+            <WelcomeScreen.Hints.ToolbarHint />
+            <WelcomeScreen.Hints.HelpHint />
+            <WelcomeScreen.Center>
+              <WelcomeScreen.Center.Heading>
+                Your drawing is saved to your vault as you go.
+              </WelcomeScreen.Center.Heading>
+              <WelcomeScreen.Center.Menu>
+                <WelcomeScreen.Center.MenuItem
+                  icon={<FolderOpenIcon />}
+                  shortcut={SIDEBAR_SHORTCUT}
+                  onSelect={showDrawings}
+                >
+                  Open an existing drawing
+                </WelcomeScreen.Center.MenuItem>
+              </WelcomeScreen.Center.Menu>
+            </WelcomeScreen.Center>
+          </WelcomeScreen>
+        </Excalidraw>
+      </div>
     </div>
   );
 }

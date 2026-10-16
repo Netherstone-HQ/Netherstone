@@ -63,7 +63,7 @@ pub fn search_files(
     conn: &Connection,
     query: &str,
     limit: usize,
-) -> Result<Vec<SearchResult>, String> {
+) -> rusqlite::Result<Vec<SearchResult>> {
     eprintln!("[Netherstone] Searching for: '{}'", query);
 
     let terms = search_terms(query);
@@ -81,16 +81,14 @@ pub fn search_files(
 
     eprintln!("[Netherstone] FTS5 query: '{}'", fts_query);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT f.path, f.name, fts_search.content, rank
-             FROM fts_search
-             INNER JOIN files f ON fts_search.rowid = f.id
-             WHERE fts_search MATCH ?1
-             ORDER BY rank
-             LIMIT ?2",
-        )
-        .map_err(|e| format!("Failed to prepare search query: {}", e))?;
+    let mut stmt = conn.prepare(
+        "SELECT f.path, f.name, fts_search.content, rank
+         FROM fts_search
+         INNER JOIN files f ON fts_search.rowid = f.id
+         WHERE fts_search MATCH ?1
+         ORDER BY rank
+         LIMIT ?2",
+    )?;
 
     let results = stmt
         .query_map(params![fts_query, limit], |row| {
@@ -101,10 +99,8 @@ pub fn search_files(
                 snippet: search_snippet(&content, &terms),
                 rank: row.get(3)?,
             })
-        })
-        .map_err(|e| format!("Failed to execute search: {}", e))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect search results: {}", e))?;
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     eprintln!("[Netherstone] Found {} search results", results.len());
     Ok(results)

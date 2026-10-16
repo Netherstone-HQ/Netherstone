@@ -23,6 +23,14 @@ interface SearchResult {
   rank: number;
 }
 
+/** What the dialog says when a search fails, by the reason the backend gives. */
+const SEARCH_ERRORS = {
+  unavailable: "Couldn't open the search index. Restart Netherstone and try again.",
+  failed: "Search couldn't finish. Try again.",
+};
+
+type SearchError = keyof typeof SEARCH_ERRORS;
+
 interface SearchModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,6 +40,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<SearchError | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
 
@@ -58,6 +67,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     if (!open) {
       setQuery("");
       setResults([]);
+      setSearchError(null);
       setSelectedIndex(0);
     }
   }, [open]);
@@ -66,10 +76,12 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const performSearch = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length === 0) {
       setResults([]);
+      setSearchError(null);
       return;
     }
 
     setIsSearching(true);
+    setSearchError(null);
     try {
       const searchResults = await invoke<SearchResult[]>("search_files", {
         query: searchQuery,
@@ -80,6 +92,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     } catch (error) {
       console.error("Search failed:", error);
       setResults([]);
+      setSearchError(error === "unavailable" ? "unavailable" : "failed");
     } finally {
       setIsSearching(false);
     }
@@ -119,6 +132,12 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     }
   };
 
+  let message: string | null = null;
+  if (isSearching) message = "Searching...";
+  else if (searchError) message = SEARCH_ERRORS[searchError];
+  else if (results.length === 0)
+    message = query.trim() ? "No results found" : "Type to search your vault";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl p-0" showCloseButton={false}>
@@ -139,17 +158,9 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         </DialogHeader>
 
         <div className="max-h-100 overflow-y-auto border-t">
-          {isSearching ? (
+          {message ? (
             <div className="p-4 text-center text-ui text-muted-foreground">
-              Searching...
-            </div>
-          ) : results.length === 0 && query.trim().length > 0 ? (
-            <div className="p-4 text-center text-ui text-muted-foreground">
-              No results found
-            </div>
-          ) : results.length === 0 ? (
-            <div className="p-4 text-center text-ui text-muted-foreground">
-              Type to search your vault
+              {message}
             </div>
           ) : (
             <div className="py-2">

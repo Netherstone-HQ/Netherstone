@@ -720,16 +720,29 @@ fn create_drawing_file(directory: String, name: String) -> Result<String, String
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Why a search failed, so the search dialog can say what went wrong.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum SearchError {
+    /// The search index couldn't be opened.
+    Unavailable,
+    /// The index opened, but the search itself failed.
+    Failed,
+}
+
 #[tauri::command(async)]
 fn search_files(
     query: String,
     limit: Option<usize>,
-) -> Result<Vec<db::queries::SearchResult>, String> {
-    let db = db::Database::new()?;
-    let limit = limit.unwrap_or(20);
+) -> Result<Vec<db::queries::SearchResult>, SearchError> {
+    let conn = db::open_connection().map_err(|e| {
+        eprintln!("[Netherstone] Couldn't open the search index: {}", e);
+        SearchError::Unavailable
+    })?;
 
-    db.with_connection(|conn| {
-        db::queries::search_files(conn, &query, limit).map_err(|_e| rusqlite::Error::InvalidQuery)
+    db::queries::search_files(&conn, &query, limit.unwrap_or(20)).map_err(|e| {
+        eprintln!("[Netherstone] Search failed: {}", e);
+        SearchError::Failed
     })
 }
 

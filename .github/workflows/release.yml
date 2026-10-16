@@ -150,6 +150,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
           releaseId: ${{ needs.check-version.outputs.release-id }}
+          # Without the tag, latest.json links to /releases/latest/download,
+          # which only follows stable releases, so betas could not update.
+          tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
 
   # The release stays a draft until every platform has uploaded its installer,
@@ -195,7 +198,9 @@ jobs:
           fi
           printf '\nDownload the installer for your system from the assets below.\n' >> notes.md
           cat notes.md
-          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F body=@notes.md --silent
+          # Edits name the tag too: a draft edited without it loses its tag.
+          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+            -f tag_name="$GITHUB_REF_NAME" -F body=@notes.md --silent
 
       # Each build merges its platforms into latest.json, the file installed
       # apps update from. Publish only once all of them are in it.
@@ -216,7 +221,9 @@ jobs:
           fi
 
       - name: Publish the release
-        run: gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false --silent
+        run: |
+          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+            -f tag_name="$GITHUB_REF_NAME" -F draft=false --silent
 
       - name: Update the release channels
         run: |

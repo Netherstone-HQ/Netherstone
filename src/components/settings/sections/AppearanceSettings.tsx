@@ -10,12 +10,14 @@ import {
   THEMES,
   type ThemeSwatchColors,
 } from "@/components/theme/themes";
+import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   type ContentWidth,
   type ReadingFont,
   type TextSize,
   useSettingsStore,
+  ZOOM_LEVELS,
 } from "@/store/settings";
 
 const FONTS: Option<ReadingFont>[] = [
@@ -45,11 +47,38 @@ const WIDTHS: Option<ContentWidth>[] = [
   { value: "full", label: "Full" },
 ];
 
+const ZOOMS: Option<string>[] = ZOOM_LEVELS.map((zoom) => ({
+  value: String(zoom),
+  label: `${zoom}%`,
+}));
+
+const MOD = IS_MAC ? "⌘" : "Ctrl+";
+
+/** A shortcut that never breaks across lines. */
+function Keys({ keys }: { keys: string }) {
+  return <span className="whitespace-nowrap">{MOD + keys}</span>;
+}
+
 export function AppearanceSettings() {
   return (
     <>
       <SettingsGroup title="Theme">
         <ThemePicker />
+      </SettingsGroup>
+
+      <SettingsGroup title="Interface">
+        <PreferenceSelect
+          name="zoom"
+          label="Zoom"
+          description={
+            <>
+              Makes everything in Netherstone bigger or smaller.{" "}
+              <Keys keys="=" /> and <Keys keys="−" /> change it too, and{" "}
+              <Keys keys="0" /> goes back to 100%.
+            </>
+          }
+          options={ZOOMS}
+        />
       </SettingsGroup>
 
       <SettingsGroup

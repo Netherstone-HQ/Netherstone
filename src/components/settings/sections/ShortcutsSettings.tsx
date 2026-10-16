@@ -14,6 +14,9 @@ const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
       { keys: "mod+1", action: "Editor" },
       { keys: "mod+2", action: "Tags" },
       { keys: "mod+3", action: "Canvas" },
+      { keys: "mod+=", action: "Zoom in" },
+      { keys: "mod+minus", action: "Zoom out" },
+      { keys: "mod+0", action: "Reset zoom" },
     ],
   },
   {
@@ -46,7 +49,15 @@ const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
 ];
 
 const KEY_NAMES: Record<string, string> = IS_MAC
-  ? { mod: "⌘", alt: "⌥", shift: "⇧", enter: "↩", period: ".", comma: "," }
+  ? {
+      mod: "⌘",
+      alt: "⌥",
+      shift: "⇧",
+      enter: "↩",
+      period: ".",
+      comma: ",",
+      minus: "−",
+    }
   : {
       mod: "Ctrl",
       alt: "Alt",
@@ -54,6 +65,7 @@ const KEY_NAMES: Record<string, string> = IS_MAC
       enter: "Enter",
       period: ".",
       comma: ",",
+      minus: "−",
     };
 
 export function formatKeys(keys: string): string[] {

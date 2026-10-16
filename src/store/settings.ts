@@ -18,6 +18,8 @@ export type ReadingFont = "newsreader" | "geist" | "system";
 export type TextSize = "small" | "default" | "large";
 export type ContentWidth = "narrow" | "default" | "wide" | "full";
 export type NewShardLocation = "vault-root" | "current-folder";
+/** How much bigger or smaller the whole interface is, in percent. */
+export type Zoom = 80 | 90 | 100 | 110 | 125 | 150;
 /** Minutes between automatic syncs. */
 export type SyncInterval = 5 | 15 | 30 | 60;
 
@@ -34,6 +36,7 @@ export interface Preferences {
   readingFont: ReadingFont;
   textSize: TextSize;
   contentWidth: ContentWidth;
+  zoom: Zoom;
 
   // ── Editor ──────────────────────────────────────────────────────────────────
   spellcheck: boolean;
@@ -90,6 +93,14 @@ export const DEFAULT_RECENT_FILES_LIMIT = 3;
 export const MIN_RECENT_FILES_LIMIT = 1;
 export const MAX_RECENT_FILES_LIMIT = 20;
 export const SYNC_INTERVALS: SyncInterval[] = [5, 15, 30, 60];
+/** The steps browsers zoom in, so Ctrl+= feels the same here. */
+export const ZOOM_LEVELS: Zoom[] = [80, 90, 100, 110, 125, 150];
+
+/** The next zoom step in (1) or out (-1), stopping at either end. */
+export function stepZoom(zoom: Zoom, direction: 1 | -1): Zoom {
+  const index = ZOOM_LEVELS.indexOf(zoom) + direction;
+  return ZOOM_LEVELS[Math.min(ZOOM_LEVELS.length - 1, Math.max(0, index))];
+}
 
 /** True for versions with a pre-release suffix, like 0.2.0-beta.1. */
 export function isPrerelease(version: string): boolean {
@@ -106,6 +117,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   readingFont: "newsreader",
   textSize: "default",
   contentWidth: "default",
+  zoom: 100,
 
   spellcheck: true,
   newShardLocation: "current-folder",
@@ -150,6 +162,9 @@ function normalize<K extends keyof Preferences>(
     !SYNC_INTERVALS.includes(value as SyncInterval)
   ) {
     return DEFAULT_PREFERENCES.autoSyncInterval as Preferences[K];
+  }
+  if (key === "zoom" && !ZOOM_LEVELS.includes(value as Zoom)) {
+    return DEFAULT_PREFERENCES.zoom as Preferences[K];
   }
   return value;
 }

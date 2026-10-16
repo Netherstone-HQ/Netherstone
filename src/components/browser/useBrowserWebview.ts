@@ -5,7 +5,10 @@ import {
   DEFAULT_BROWSER_WEBVIEW_LABEL,
   resetBrowserWebviewState,
 } from "@/components/browser/browserCommands";
-import { BrowserViewController } from "@/components/browser/browserView";
+import {
+  BrowserViewController,
+  getZoomFactor,
+} from "@/components/browser/browserView";
 
 type BrowserWebviewStatus = "idle" | "creating" | "ready" | "unavailable";
 
@@ -107,13 +110,15 @@ export function useBrowserWebview({
 
         if (cancelled || operationId !== operationIdRef.current) return;
 
+        // In window pixels, which the zoom makes bigger than CSS pixels.
+        const zoom = getZoomFactor();
         const rect = viewportElement.getBoundingClientRect();
         const webview = new Webview(getCurrentWindow(), label, {
           url: initialUrlRef.current,
-          x: Math.round(rect.left),
-          y: Math.round(rect.top),
-          width: Math.max(1, Math.round(rect.width)),
-          height: Math.max(1, Math.round(rect.height)),
+          x: Math.round(rect.left * zoom),
+          y: Math.round(rect.top * zoom),
+          width: Math.max(1, Math.round(rect.width * zoom)),
+          height: Math.max(1, Math.round(rect.height * zoom)),
         });
 
         webviewRef.current = webview;

@@ -11,14 +11,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { openVaultDialog } from "@/lib/commands";
 import { switchVault } from "@/lib/switch-vault";
+import { REVEAL_LABEL } from "@/lib/platform";
 import { indexVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store/vault";
-
-const REVEAL_LABEL = navigator.userAgent.includes("Mac")
-  ? "Show in Finder"
-  : navigator.userAgent.includes("Windows")
-    ? "Show in File Explorer"
-    : "Show in file manager";
 
 export function VaultSettings() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);

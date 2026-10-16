@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/context-menu";
 import { SectionHeader } from "@/components/sidebar/SectionHeader";
 import {
-  ACTIVE_ROW_CLASS,
+  ACTIVE_SHORTCUT_ROW_CLASS,
   FileSlot,
   ROW_BUTTON_CLASS,
   ROW_CLASS,
@@ -89,7 +89,7 @@ export function RecentFilesSection() {
             return (
               <li key={file.path}>
                 <div
-                  className={cn(ROW_CLASS, isOpen && ACTIVE_ROW_CLASS)}
+                  className={cn(ROW_CLASS, isOpen && ACTIVE_SHORTCUT_ROW_CLASS)}
                   style={{ paddingLeft: `${getRowIndent(0)}px` }}
                 >
                   <button

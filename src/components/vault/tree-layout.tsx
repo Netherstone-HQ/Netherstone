@@ -10,9 +10,14 @@ export const ROW_CLASS =
   "flex h-row w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-ui text-sidebar-foreground/85 transition-colors hover:bg-accent/40 has-[button:focus-visible]:bg-accent/40 data-[state=open]:bg-accent/40";
 export const ACTIVE_ROW_CLASS =
   "bg-accent text-accent-foreground hover:bg-accent";
+/**
+ * The open file in Pinned and Recent: lighter than in the tree, so the tree
+ * keeps the one strong highlight.
+ */
+export const ACTIVE_SHORTCUT_ROW_CLASS = "bg-accent/40 text-accent-foreground";
 // Rows draw their own hover and focus; the button inside only takes clicks.
 export const ROW_BUTTON_CLASS =
-  "flex h-full min-w-0 flex-1 cursor-default items-center gap-1 text-left outline-none";
+  "flex h-full min-w-0 flex-1 items-center gap-1 text-left outline-none";
 
 export const MAX_INDENT_DEPTH = 6;
 const INDENT_STEP_PX = 16;

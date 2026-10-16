@@ -5,7 +5,7 @@ import {
   RowContextMenu,
 } from "@/components/vault/RowActions";
 import {
-  ACTIVE_ROW_CLASS,
+  ACTIVE_SHORTCUT_ROW_CLASS,
   FileSlot,
   ROW_BUTTON_CLASS,
   ROW_CLASS,
@@ -27,7 +27,7 @@ function PinnedRow({ file }: { file: RecentFileEntry }) {
     <li className="group/row">
       <RowContextMenu actions={item.actions} disabled={item.isRenaming}>
         <div
-          className={cn(ROW_CLASS, isOpen && ACTIVE_ROW_CLASS)}
+          className={cn(ROW_CLASS, isOpen && ACTIVE_SHORTCUT_ROW_CLASS)}
           style={{ paddingLeft: `${getRowIndent(0)}px` }}
         >
           {item.isRenaming ? (

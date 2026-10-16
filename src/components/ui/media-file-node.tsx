@@ -8,7 +8,7 @@ import type { PlateElementProps } from "platejs/react";
 import { useMediaState } from "@platejs/media/react";
 import { ResizableProvider } from "@platejs/resizable";
 import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { FileUp, Link2Icon } from "lucide-react";
+import { LinkIcon } from "lucide-react";
 import { PlateElement, useReadOnly, withHOC } from "platejs/react";
 import { toast } from "sonner";
 
@@ -19,15 +19,17 @@ import {
   type ResolvedMediaSource,
 } from "@/lib/media-source";
 
-import { AttachmentBackupIndicator } from "./attachment-backup-indicator";
+import { Hint } from "@/components/ui/tooltip";
+
 import { Caption, CaptionTextarea } from "./caption";
 import {
-  LocalReferenceMediaCard,
-  MediaStatusCard,
-  MissingLocalMediaCard,
-  MissingVaultAttachmentCard,
-  VaultAttachmentMediaCard,
-} from "./media-status-card";
+  LinkedFileDetails,
+  MediaFileRow,
+  MissingLinkedFileRow,
+  MissingVaultFileRow,
+  VaultFileDetails,
+  useVaultRelativePath,
+} from "./media-file-row";
 import { useMediaNodeActions } from "./media-node-actions";
 import type { WithPersistedMediaMetadata } from "./media-types";
 
@@ -89,9 +91,7 @@ async function openResolvedSource(
     fallbackSource;
 
   if (!target) {
-    throw new Error(
-      "This file embed does not currently have an openable source.",
-    );
+    throw new Error("This file has no location to open.");
   }
 
   if (resolved.kind === "remote") {
@@ -123,9 +123,7 @@ async function revealResolvedSource(
   const target = resolved.path || resolved.openTarget || fallbackSource;
 
   if (!target) {
-    throw new Error(
-      "This file embed does not currently have a revealable path.",
-    );
+    throw new Error("This file has no location to show.");
   }
 
   if (resolved.kind === "vault" || resolved.kind === "local") {
@@ -133,9 +131,7 @@ async function revealResolvedSource(
     return;
   }
 
-  throw new Error(
-    "Only local and vault files can be revealed in the file explorer.",
-  );
+  throw new Error("Only files on this computer can be shown in a folder.");
 }
 
 export const FileElement = withHOC(
@@ -225,12 +221,12 @@ export const FileElement = withHOC(
           source,
         });
 
-        toast.error("Failed to open file", {
+        toast.error(`Couldn't open ${displayName}`, {
           description:
-            error instanceof Error ? error.message : "Unknown open error.",
+            error instanceof Error ? error.message : undefined,
         });
       }
-    }, [resolvedSource, source]);
+    }, [displayName, resolvedSource, source]);
 
     const handleReveal = React.useCallback(async () => {
       try {
@@ -242,183 +238,144 @@ export const FileElement = withHOC(
           source,
         });
 
-        toast.error("Failed to reveal file", {
+        toast.error(`Couldn't show ${displayName}`, {
           description:
-            error instanceof Error ? error.message : "Unknown reveal error.",
+            error instanceof Error ? error.message : undefined,
         });
       }
-    }, [resolvedSource, source]);
+    }, [displayName, resolvedSource, source]);
+
+    const shownPath = useVaultRelativePath(attachmentPath);
+    const remove = mediaActions.canEdit
+      ? [
+          {
+            label: "Remove",
+            onSelect: mediaActions.removeNode,
+            destructive: true,
+          },
+        ]
+      : [];
 
     let content: React.ReactNode;
 
     if (resolvedSource.kind === "vault" && resolvedSource.isMissing) {
       content = (
-        <MissingVaultAttachmentCard
+        <MissingVaultFileRow
           name={displayName}
           attachmentPath={attachmentPath}
-          className="w-full"
           onRelink={
             mediaActions.canRelinkVaultAttachment
-              ? () => {
-                  void mediaActions.relinkVaultAttachment();
-                }
+              ? () => void mediaActions.relinkVaultAttachment()
               : undefined
           }
           onRelinkTo={
             mediaActions.canRelinkVaultAttachment
-              ? (path) => {
-                  void mediaActions.relinkVaultAttachmentTo(path);
-                }
+              ? (path) => void mediaActions.relinkVaultAttachmentTo(path)
               : undefined
           }
           onRemove={mediaActions.canEdit ? mediaActions.removeNode : undefined}
-          disableActions={!mediaActions.canEdit}
         />
       );
     } else if (resolvedSource.kind === "local" && resolvedSource.isMissing) {
       content = (
-        <MissingLocalMediaCard
+        <MissingLinkedFileRow
           name={displayName}
           path={attachmentPath}
-          className="w-full"
           onLocate={
             mediaActions.canRelinkLocalFile
-              ? () => {
-                  void mediaActions.relinkLocalFile();
-                }
-              : undefined
-          }
-          onImportToVault={
-            mediaActions.canImportToVault
-              ? () => {
-                  void mediaActions.importToVault();
-                }
+              ? () => void mediaActions.relinkLocalFile()
               : undefined
           }
           onRemove={mediaActions.canEdit ? mediaActions.removeNode : undefined}
-          disableActions={!mediaActions.canEdit}
         />
       );
     } else if (resolvedSource.kind === "vault") {
       content = (
-        <VaultAttachmentMediaCard
+        <MediaFileRow
           name={displayName}
-          attachmentPath={attachmentPath}
-          className="w-full"
-          onOpen={handleOpen}
-          onReveal={handleReveal}
-          onConvertToReference={
-            mediaActions.canLinkOriginalFile
-              ? () => {
-                  void mediaActions.convertToLocalReference();
-                }
-              : undefined
-          }
-          onRemove={mediaActions.canEdit ? mediaActions.removeNode : undefined}
+          nameHint={shownPath}
+          details={<VaultFileDetails metadata={props.element} />}
+          onOpen={() => void handleOpen()}
+          action={{ label: "Open", onSelect: () => void handleOpen() }}
+          onReveal={() => void handleReveal()}
+          menu={[
+            ...(mediaActions.canLinkOriginalFile
+              ? [
+                  {
+                    label: "Link original file",
+                    onSelect: () => void mediaActions.convertToLocalReference(),
+                  },
+                ]
+              : []),
+            ...remove,
+          ]}
         />
       );
     } else if (resolvedSource.kind === "local") {
       content = (
-        <LocalReferenceMediaCard
+        <MediaFileRow
           name={displayName}
-          path={attachmentPath}
-          className="w-full"
-          onOpen={handleOpen}
-          onReveal={handleReveal}
-          onImportToVault={
-            mediaActions.canImportToVault
-              ? () => {
-                  void mediaActions.importToVault();
-                }
-              : undefined
-          }
-          onRemove={mediaActions.canEdit ? mediaActions.removeNode : undefined}
+          nameHint={attachmentPath}
+          details={<LinkedFileDetails metadata={props.element} />}
+          onOpen={() => void handleOpen()}
+          action={{ label: "Open", onSelect: () => void handleOpen() }}
+          onReveal={() => void handleReveal()}
+          menu={[
+            ...(mediaActions.canImportToVault
+              ? [
+                  {
+                    label: "Copy into vault",
+                    onSelect: () => void mediaActions.importToVault(),
+                  },
+                ]
+              : []),
+            ...remove,
+          ]}
         />
       );
     } else if (resolvedSource.kind === "remote") {
       content = (
-        <MediaStatusCard
-          className="w-full"
-          tone="default"
-          icon={<Link2Icon className="size-4" />}
-          title={displayName}
-          badge="Remote file"
-          description="This file is embedded from a remote URL and will open externally."
-          meta={<span className="break-all">{source}</span>}
-          actions={[
-            {
-              label: "Open URL",
-              onClick: () => {
-                void handleOpen();
-              },
-            },
-          ]}
-        />
-      );
-    } else if (resolvedSource.kind === "blob") {
-      content = (
-        <MediaStatusCard
-          className="w-full"
-          tone="warning"
-          icon={<FileUp className="size-4" />}
-          title={displayName}
-          badge="Temporary file URL"
-          description="This file uses a temporary in-memory URL. It may work right now, but it may not survive a full app restart."
-          meta={<span className="break-all">{source}</span>}
-          actions={[
-            {
-              label: "Open",
-              onClick: () => {
-                void handleOpen();
-              },
-            },
-          ]}
+        <MediaFileRow
+          icon={LinkIcon}
+          name={displayName}
+          nameHint={source}
+          details={getHost(source)}
+          onOpen={() => void handleOpen()}
+          action={{ label: "Open", onSelect: () => void handleOpen() }}
+          menu={remove}
         />
       );
     } else {
+      // A temporary in-memory file, or a source Netherstone doesn't know.
+      const temporary = resolvedSource.kind === "blob";
       content = (
-        <MediaStatusCard
-          className="w-full"
-          tone="warning"
-          icon={<FileUp className="size-4" />}
-          title={displayName}
-          badge="File"
-          description="This file embed does not currently have a recognized source type."
-          meta={
-            source ? (
-              <span className="break-all">{source}</span>
-            ) : (
-              "No persisted source was found on this file node."
-            )
+        <MediaFileRow
+          warning
+          name={displayName}
+          details={
+            <Hint
+              label={
+                temporary
+                  ? "It may be gone after Netherstone restarts."
+                  : "Netherstone can't tell where this file is."
+              }
+            >
+              <span>{temporary ? "Temporary file" : "Unknown source"}</span>
+            </Hint>
           }
-          actions={
+          action={
             source
-              ? [
-                  {
-                    label: "Open",
-                    onClick: () => {
-                      void handleOpen();
-                    },
-                  },
-                ]
+              ? { label: "Open", onSelect: () => void handleOpen() }
               : undefined
           }
+          menu={remove}
         />
       );
     }
 
     return (
       <PlateElement className="my-px rounded-sm" {...props}>
-        <div
-          className="relative [&>div:first-of-type]:pr-14"
-          contentEditable={false}
-        >
-          <AttachmentBackupIndicator
-            className="absolute top-1/2 right-3 z-10 -translate-y-1/2"
-            metadata={props.element}
-          />
-          {content}
-        </div>
+        <div contentEditable={false}>{content}</div>
 
         <Caption align="left">
           <CaptionTextarea
@@ -433,3 +390,12 @@ export const FileElement = withHOC(
     );
   },
 );
+
+/** The site a remote file is on, as "example.com". */
+function getHost(source: string) {
+  try {
+    return new URL(source).host;
+  } catch {
+    return null;
+  }
+}

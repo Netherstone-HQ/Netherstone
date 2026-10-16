@@ -19,7 +19,6 @@ import {
   METADATA_WATCHER_SUPPRESS_AFTER_SAVE_MS,
   resolveInternalTargetPath,
   resolveShardReferencePath,
-  stripLinkDecorators,
 } from "./right-sidebar/link-utils";
 import type {
   Backlink,
@@ -144,9 +143,8 @@ export function RightSidebar() {
         }
 
         if (link.kind === "internal") {
-          const normalizedTarget = stripLinkDecorators(link.target);
           const resolvedPath = resolveInternalTargetPath(
-            normalizedTarget,
+            link.target,
             filePath,
             vaultPath,
             latestShardFiles,

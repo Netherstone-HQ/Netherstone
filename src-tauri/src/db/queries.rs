@@ -473,4 +473,44 @@ mod tests {
             "New [#ideas]"
         );
     }
+
+    #[test]
+    fn lists_files_linking_to_a_shard_with_spaces_in_its_name() {
+        let vault =
+            std::env::temp_dir().join(format!("netherstone-backlinks-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&vault);
+        std::fs::create_dir_all(vault.join("Projects")).unwrap();
+
+        let roadmap = vault.join("Projects/Netherstone roadmap.md");
+        std::fs::write(&roadmap, "# Roadmap").unwrap();
+        // Other tools percent-encode the space; the editor uses angle brackets.
+        for (name, content) in [
+            (
+                "Encoded.md",
+                "See [roadmap](./Projects/Netherstone%20roadmap.md#goals).",
+            ),
+            (
+                "Bracketed.md",
+                "See [roadmap](<Projects/Netherstone roadmap.md>).",
+            ),
+        ] {
+            std::fs::write(vault.join(name), content).unwrap();
+        }
+
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        for name in [
+            "Projects/Netherstone roadmap.md",
+            "Encoded.md",
+            "Bracketed.md",
+        ] {
+            crate::db::indexer::index_file(&conn, &vault.join(name)).unwrap();
+        }
+
+        let backlinks = get_backlinks(&conn, &roadmap.to_string_lossy()).unwrap();
+        let names: Vec<_> = backlinks.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, ["Bracketed.md", "Encoded.md"]);
+
+        let _ = std::fs::remove_dir_all(&vault);
+    }
 }

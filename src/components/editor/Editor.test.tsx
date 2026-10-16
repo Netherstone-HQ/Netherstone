@@ -349,6 +349,20 @@ describe("Editor", () => {
       );
     });
 
+    it.each([
+      ["percent-encoded", "./Netherstone%20roadmap.md"],
+      ["in angle brackets", "<./Netherstone roadmap.md>"],
+    ])("opens a linked note with a space in its name, %s", async (_, url) => {
+      await openNote(`[Roadmap](${url})\n`);
+
+      click("Roadmap");
+      await waitFor(() =>
+        expect(openMarkdownFile).toHaveBeenCalledWith(
+          "C:/vault/notes/Netherstone roadmap.md",
+        ),
+      );
+    });
+
     it("opens a mentioned note", async () => {
       act(() =>
         useVaultStore.getState().setFileTree([

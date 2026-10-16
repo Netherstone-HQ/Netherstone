@@ -53,8 +53,22 @@ export function normalizePath(path: string) {
   return path.replace(/\\/g, "/");
 }
 
+/**
+ * Decodes a percent-encoded link target (`My%20note.md` is `My note.md`).
+ * A target that isn't valid percent-encoding, like `100% done.md`, is kept
+ * as written.
+ */
+function decodeLinkTarget(target: string) {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+/** The path a link points to, without its `#heading` or `?query`, decoded. */
 export function stripLinkDecorators(target: string) {
-  return target.split("#")[0]?.split("?")[0]?.trim() ?? "";
+  return decodeLinkTarget(target.split("#")[0]?.split("?")[0]?.trim() ?? "");
 }
 
 export function removeMarkdownExtension(value: string) {

@@ -35,7 +35,7 @@ export function GitHubAppInstallNotice() {
   }, [checkInstallation, installed]);
 
   if (error) {
-    return <p className="text-destructive text-xs leading-5">{error}</p>;
+    return <p className="text-destructive text-ui-sm leading-5">{error}</p>;
   }
   if (!installation || installation.installed) return null;
 
@@ -43,8 +43,8 @@ export function GitHubAppInstallNotice() {
 
   return (
     <div className="space-y-2.5 rounded-lg border bg-background p-3">
-      <p className="font-medium text-sm">One more step on GitHub</p>
-      <p className="text-muted-foreground text-xs leading-5">
+      <p className="font-medium text-ui">One more step on GitHub</p>
+      <p className="text-muted-foreground text-ui-sm leading-5">
         {elsewhere.length > 0
           ? `Netherstone is installed on ${elsewhere.join(", ")}, but backups go to your personal account. Install it on ${login ? `@${login}` : "your account"} too.`
           : "Install the Netherstone app so it can create your backup repository and keep it up to date."}{" "}
@@ -55,7 +55,7 @@ export function GitHubAppInstallNotice() {
       <Button size="sm" onClick={() => void openUrl(installation.installUrl)}>
         Install on GitHub
       </Button>
-      <p className="inline-flex items-center gap-1.5 text-muted-foreground text-xs">
+      <p className="inline-flex items-center gap-1.5 text-muted-foreground text-ui-sm">
         <LoaderCircleIcon className="size-3.5 animate-spin" />
         Continues on its own once it's installed
       </p>

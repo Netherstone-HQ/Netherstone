@@ -104,7 +104,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
     >
       <div
         data-tauri-drag-region
-        className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
+        className="flex min-w-0 flex-1 items-center gap-2 text-ui text-muted-foreground"
       >
         {bare ? null : (
           <>

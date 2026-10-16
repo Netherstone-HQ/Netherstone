@@ -62,7 +62,7 @@ export function AboutSettings() {
           <div className="font-semibold text-lg tracking-tight">
             Netherstone
           </div>
-          <div className="text-muted-foreground text-sm">
+          <div className="text-muted-foreground text-ui">
             Your knowledge, set in stone.
           </div>
         </div>
@@ -71,7 +71,7 @@ export function AboutSettings() {
       <SettingsGroup>
         <SettingRow label="Version">
           <div className="flex items-center gap-1">
-            <span className="font-mono text-muted-foreground text-sm">
+            <span className="font-mono text-muted-foreground text-ui">
               {version ?? "Unknown"}
             </span>
             {version ? (

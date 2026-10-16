@@ -32,7 +32,7 @@ interface FileTreeProps {
 }
 
 const GROUP_ACTION_CLASS =
-  "text-sidebar-foreground/50 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
+  "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
 
 export function FileTree({ onNewShard }: FileTreeProps) {
   const { fileTree, isVaultLoading, currentVaultPath } = useVaultStore();
@@ -95,7 +95,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           {isVaultLoading ? (
             <FileTreeSkeleton />
           ) : fileTree.length === 0 && !isNamingRootFolder ? (
-            <p className="px-2 py-4 text-xs text-muted-foreground">
+            <p className="px-2 py-4 text-ui-sm text-muted-foreground">
               No shards found in this vault.
             </p>
           ) : (

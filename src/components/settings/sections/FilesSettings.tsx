@@ -72,10 +72,10 @@ export function FilesSettings() {
                   <Icon className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1 space-y-0.5">
-                  <span className="block font-medium text-sm">
+                  <span className="block font-medium text-ui">
                     {option.title}
                   </span>
-                  <span className="block text-muted-foreground text-xs leading-5">
+                  <span className="block text-muted-foreground text-ui-sm leading-5">
                     {option.description}
                   </span>
                 </span>

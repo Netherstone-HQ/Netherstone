@@ -277,7 +277,7 @@ export function BrowserPanel({
             aria-label="Go back"
             title={canGoBack ? "Go back" : "No page to go back to"}
           >
-            <ArrowLeftIcon className="size-4" />
+            <ArrowLeftIcon />
           </Button>
 
           <Button
@@ -293,7 +293,7 @@ export function BrowserPanel({
             aria-label="Go forward"
             title={canGoForward ? "Go forward" : "No page to go forward to"}
           >
-            <ArrowRightIcon className="size-4" />
+            <ArrowRightIcon />
           </Button>
 
           <Button
@@ -313,9 +313,9 @@ export function BrowserPanel({
             title={isPageLoading ? "Stop loading" : "Refresh"}
           >
             {isPageLoading ? (
-              <XIcon className="size-4" />
+              <XIcon />
             ) : (
-              <RotateCwIcon className="size-4" />
+              <RotateCwIcon />
             )}
           </Button>
 
@@ -323,7 +323,7 @@ export function BrowserPanel({
             type="text"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
-            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-3 text-ui-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
             placeholder="Enter a URL or search"
             aria-label="Browser address"
             disabled={isBusy || !isBrowserReady}
@@ -339,7 +339,7 @@ export function BrowserPanel({
             aria-label="Close browser panel"
             title="Close browser panel"
           >
-            <XIcon className="size-4" />
+            <XIcon />
           </Button>
 
           {isPageLoading && (
@@ -359,7 +359,7 @@ export function BrowserPanel({
         </form>
 
         {statusMessage && (
-          <div className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <div className="border-b bg-muted/30 px-3 py-2 text-ui-sm text-muted-foreground">
             {statusMessage}
           </div>
         )}
@@ -377,8 +377,8 @@ export function BrowserPanel({
               className="pointer-events-none absolute inset-0 flex select-none flex-col items-center justify-center gap-1.5 bg-muted/40 text-muted-foreground"
             >
               <PauseIcon className="size-5 fill-current" />
-              <span className="text-xs">Paused</span>
-              <span className="max-w-[80%] truncate text-xs opacity-70">
+              <span className="text-ui-sm">Paused</span>
+              <span className="max-w-[80%] truncate text-ui-sm opacity-70">
                 {getHostname(currentUrl)}
               </span>
             </div>

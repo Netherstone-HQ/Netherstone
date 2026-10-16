@@ -81,7 +81,7 @@ function RememberChoice({
         />
         Remember this sign-in on this computer
       </Label>
-      <p className="text-muted-foreground text-xs leading-5">
+      <p className="text-muted-foreground text-ui-sm leading-5">
         {remember
           ? "This computer has no keyring, so it's saved in a file only your account can read."
           : "You'll connect again each time you open Netherstone."}
@@ -113,7 +113,7 @@ function SignInCodePrompt({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm">
+      <p className="text-ui">
         Enter this code on GitHub to connect your account.
       </p>
       <div
@@ -130,7 +130,7 @@ function SignInCodePrompt({
           Copy code and open GitHub
         </Button>
       </div>
-      <div className="flex items-center gap-3 text-muted-foreground text-xs">
+      <div className="flex items-center gap-3 text-muted-foreground text-ui-sm">
         <span className="inline-flex items-center gap-1.5">
           <LoaderCircleIcon className="size-3.5 animate-spin" />
           Waiting for you to approve on GitHub
@@ -138,7 +138,7 @@ function SignInCodePrompt({
         <Button
           variant="link"
           size="sm"
-          className="h-auto px-0 text-xs"
+          className="h-auto px-0 text-ui-sm"
           onClick={onCancel}
         >
           Cancel

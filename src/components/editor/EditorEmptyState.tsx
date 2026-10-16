@@ -85,22 +85,22 @@ export function EditorEmptyState() {
           {hasVault ? (
             <>
               <Button onClick={() => setIsNewShardDialogOpen(true)}>
-                <PlusIcon className="size-4" />
+                <PlusIcon />
                 New Shard
               </Button>
               <Button variant="outline" onClick={() => void handleOpenShard()}>
-                <FileIcon className="size-4" />
+                <FileIcon />
                 Open Shard
               </Button>
             </>
           ) : (
             <>
               <Button onClick={() => void handleOpenVault()}>
-                <FolderOpenIcon className="size-4" />
+                <FolderOpenIcon />
                 Open Vault
               </Button>
               <Button variant="outline" onClick={() => void handleOpenShard()}>
-                <FileIcon className="size-4" />
+                <FileIcon />
                 Open Shard
               </Button>
             </>

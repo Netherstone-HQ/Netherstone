@@ -136,7 +136,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         <DialogHeader className="px-4 pt-4 pb-0">
           <DialogTitle className="sr-only">Search Files</DialogTitle>
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <SearchIcon className="absolute left-3 top-1/2 size-icon -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search your vault..."
               value={query}
@@ -150,15 +150,15 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
         <div className="max-h-100 overflow-y-auto border-t">
           {isSearching ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
+            <div className="p-4 text-center text-ui text-muted-foreground">
               Searching...
             </div>
           ) : results.length === 0 && query.trim().length > 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
+            <div className="p-4 text-center text-ui text-muted-foreground">
               No results found
             </div>
           ) : results.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
+            <div className="p-4 text-center text-ui text-muted-foreground">
               Type to search your vault
             </div>
           ) : (
@@ -175,17 +175,17 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <FileIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <FileIcon className="mt-0.5 size-icon shrink-0 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
+                      <div className="text-ui font-medium truncate">
                         {result.name}
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-ui-sm text-muted-foreground truncate">
                         {getRelativePath(result.path)}
                       </div>
                       {result.snippet && (
                         <div
-                          className="mt-1 text-xs text-muted-foreground line-clamp-2"
+                          className="mt-1 text-ui-sm text-muted-foreground line-clamp-2"
                           dangerouslySetInnerHTML={{
                             __html: markdownToHtml(result.snippet).replace(
                               /<mark>/g,
@@ -202,7 +202,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
           )}
         </div>
 
-        <div className="border-t px-4 py-2 text-xs text-muted-foreground">
+        <div className="border-t px-4 py-2 text-ui-sm text-muted-foreground">
           <kbd className="rounded bg-muted px-1.5 py-0.5">↑↓</kbd> to navigate,{" "}
           <kbd className="rounded bg-muted px-1.5 py-0.5">Enter</kbd> to open,{" "}
           <kbd className="rounded bg-muted px-1.5 py-0.5">Esc</kbd> to close

@@ -115,7 +115,7 @@ export function SettingsPage() {
               aria-current={active ? "page" : undefined}
               onClick={() => openSettings(id)}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm outline-none transition-colors",
+                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-ui outline-none transition-colors",
                 "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
                 active && "bg-sidebar-accent font-medium text-foreground",
               )}

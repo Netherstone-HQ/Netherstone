@@ -64,12 +64,12 @@ export function ShortcutsSettings() {
               key={shortcut.keys}
               className="flex items-center justify-between gap-6 px-4 py-2.5"
             >
-              <span className="text-sm">{shortcut.action}</span>
+              <span className="text-ui">{shortcut.action}</span>
               <span className="flex gap-1">
                 {formatKeys(shortcut.keys).map((key) => (
                   <kbd
                     key={key}
-                    className="min-w-6 rounded-md border bg-muted px-1.5 py-0.5 text-center font-sans text-muted-foreground text-xs"
+                    className="min-w-6 rounded-md border bg-muted px-1.5 py-0.5 text-center font-sans text-muted-foreground text-ui-sm"
                   >
                     {key}
                   </kbd>
@@ -79,7 +79,7 @@ export function ShortcutsSettings() {
           ))}
         </SettingsGroup>
       ))}
-      <p className="px-1 text-muted-foreground text-xs leading-5">
+      <p className="px-1 text-muted-foreground text-ui-sm leading-5">
         Markdown works as you type too: start a line with # for a heading, - for
         a list or &gt; for a quote.
       </p>

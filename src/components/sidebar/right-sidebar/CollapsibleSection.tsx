@@ -36,7 +36,7 @@ export function CollapsibleSection({
       className={className}
     >
       <h3>
-        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm py-1 text-left font-semibold text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-sm py-1 text-left font-semibold text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           {icon}
           <span>{title}</span>
           {adornment}

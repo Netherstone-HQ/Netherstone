@@ -10,6 +10,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * The app's own interface scale. Shell UI (sidebars, top bar, menus, dialogs,
+ * settings) uses these instead of Tailwind's text-sm / text-xs, so the whole
+ * interface can be sized in one place. Reading text has its own scale below.
+ */
+@theme {
+    /* Rows, menu items, buttons, inputs. */
+    --text-ui: 0.9375rem;
+    --text-ui--line-height: 1.375rem;
+    /* Section labels, counts, secondary lines, hints. */
+    --text-ui-sm: 0.8125rem;
+    --text-ui-sm--line-height: 1.125rem;
+
+    /* size-icon: the standard interface icon. */
+    --spacing-icon: 1.125rem;
+    /* size-control: icon-only buttons. */
+    --spacing-control: 1.75rem;
+    /* h-row: file tree, list and section rows. */
+    --spacing-row: 1.875rem;
+    /* h-header: the app top bar and the sidebar row that lines up with it. */
+    --spacing-header: 3rem;
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-reading: var(--reading-font);
@@ -360,6 +383,11 @@
 @layer base {
     :where(button, [role="button"]):not([disabled]) {
         cursor: pointer;
+    }
+
+    /* One stroke weight for every icon; Lucide's default 2 reads heavy at 18px. */
+    .lucide {
+        stroke-width: 1.6;
     }
 
     [data-slot="alert-dialog-overlay"],

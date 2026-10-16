@@ -160,7 +160,7 @@ function CompanionStage() {
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="companion-z font-medium text-muted-foreground text-xs"
+            className="companion-z font-medium text-muted-foreground text-ui-sm"
             style={{
               left: (restX + 100) * scale + i * 3,
               top: (ground - 84) * scale,

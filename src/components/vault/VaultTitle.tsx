@@ -356,15 +356,15 @@ export function VaultTitle() {
   }, [isRenaming]);
 
   if (!vaultName) {
-    return <span className="text-sm text-muted-foreground">No vault open</span>;
+    return <span className="text-ui text-muted-foreground">No vault open</span>;
   }
 
   if (!currentFilePath) {
-    return <span className="text-sm font-medium">{vaultName}</span>;
+    return <span className="text-ui font-medium">{vaultName}</span>;
   }
 
   return (
-    <div className="flex items-center gap-1 text-sm">
+    <div className="flex items-center gap-1 text-ui">
       <span className="font-medium">{vaultName}</span>
 
       {folders.length > 0 && (
@@ -384,7 +384,7 @@ export function VaultTitle() {
           onBlur={() => {
             void handleRename();
           }}
-          className="h-6 w-48 px-2 py-0 text-sm"
+          className="h-6 w-48 px-2 py-0 text-ui"
         />
       ) : (
         <Button

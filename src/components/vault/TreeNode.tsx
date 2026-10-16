@@ -593,7 +593,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const row = (
     <div
       className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-sm text-sidebar-foreground/85 transition-colors hover:bg-accent/40 has-[button:focus-visible]:bg-accent/40 data-[state=open]:bg-accent/40",
+        "flex h-row w-full min-w-0 items-center gap-1 rounded-sm pr-1 text-ui text-sidebar-foreground/85 transition-colors hover:bg-accent/40 has-[button:focus-visible]:bg-accent/40 data-[state=open]:bg-accent/40",
         node.kind === "file" &&
           !!currentFilePath &&
           isSamePath(node.path, currentFilePath) &&
@@ -611,7 +611,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             >
               <ChevronRightIcon
                 className={cn(
-                  "h-3.5 w-3.5 text-sidebar-foreground/70 transition-transform duration-150",
+                  "size-3.5 text-muted-foreground transition-transform duration-150",
                   isOpen && "rotate-90",
                 )}
               />
@@ -622,7 +622,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={() => void handleRename()}
-              className="h-6 min-w-0 flex-1 px-2 py-0 text-sm"
+              className="h-6 min-w-0 flex-1 px-2 py-0 text-ui"
             />
           </div>
         ) : (
@@ -635,7 +635,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
               >
                 <ChevronRightIcon
                   className={cn(
-                    "h-3.5 w-3.5 text-sidebar-foreground/70 transition-transform duration-150",
+                    "size-3.5 text-muted-foreground transition-transform duration-150",
                     isOpen && "rotate-90",
                   )}
                 />
@@ -659,7 +659,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
             onBlur={() => void handleRename()}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="h-6 min-w-0 flex-1 px-2 py-0 text-sm"
+            className="h-6 min-w-0 flex-1 px-2 py-0 text-ui"
           />
         </div>
       ) : (
@@ -676,7 +676,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           {isDrawingPath(node.path) ? (
             <DrawingIcon
               aria-label="Drawing"
-              className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/60"
+              className="size-4 shrink-0 text-muted-foreground"
             />
           ) : null}
           <span className="block min-w-0 flex-1 truncate">{displayName}</span>
@@ -699,7 +699,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                className="rounded-sm text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
+                className="rounded-sm text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground focus-visible:border-transparent focus-visible:ring-0 aria-expanded:bg-transparent aria-expanded:text-sidebar-foreground dark:hover:bg-transparent"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

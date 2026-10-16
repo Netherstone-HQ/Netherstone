@@ -59,7 +59,7 @@ function Segments<T extends string>({
 }) {
   return (
     <div className="space-y-2">
-      <div className="text-muted-foreground text-xs">{label}</div>
+      <div className="text-muted-foreground text-ui-sm">{label}</div>
       <div role="radiogroup" aria-label={label} className="grid auto-cols-fr grid-flow-col rounded-lg bg-muted/60 p-0.5">
         {choices.map((choice) => {
           const checked = choice.value === value;
@@ -71,7 +71,7 @@ function Segments<T extends string>({
               aria-checked={checked}
               onClick={() => onChange(choice.value)}
               className={cn(
-                "h-7 rounded-md px-2 text-muted-foreground text-xs transition-colors hover:text-foreground",
+                "h-7 rounded-md px-2 text-muted-foreground text-ui-sm transition-colors hover:text-foreground",
                 checked && "bg-background text-foreground shadow-xs",
                 choice.className,
               )}
@@ -243,11 +243,11 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
         ) : null}
 
         {!isPreviewReady ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-ui">
             {prepareError ? (
               <>
                 <span className="font-medium text-foreground">Couldn't read this shard</span>
-                <span className="max-w-sm text-center text-xs">{prepareError}</span>
+                <span className="max-w-sm text-center text-ui-sm">{prepareError}</span>
               </>
             ) : (
               <>
@@ -259,7 +259,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
         ) : null}
 
         {pageLabel && isPreviewReady ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-background/90 px-2 py-1 text-muted-foreground text-xs shadow-xs ring-1 ring-foreground/10">
+          <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-background/90 px-2 py-1 text-muted-foreground text-ui-sm shadow-xs ring-1 ring-foreground/10">
             {pageLabel}
           </div>
         ) : null}
@@ -269,7 +269,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
         <header className="flex items-start gap-3 px-5 pt-5 pb-4">
           <div className="min-w-0 flex-1 space-y-1">
             <DialogTitle className="font-medium text-base">Export</DialogTitle>
-            <DialogDescription className="truncate text-muted-foreground text-sm" title={shardName}>
+            <DialogDescription className="truncate text-muted-foreground text-ui" title={shardName}>
               {shardName}
             </DialogDescription>
           </div>
@@ -291,7 +291,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
                   aria-checked={checked}
                   onClick={() => update("format", format)}
                   className={cn(
-                    "flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-xs transition-colors",
+                    "flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-ui-sm transition-colors",
                     checked
                       ? "border-primary/50 bg-accent text-foreground"
                       : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -350,8 +350,8 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
 
               <label className="flex cursor-pointer items-center justify-between gap-3">
                 <span className="space-y-0.5">
-                  <span className="block text-sm">Page numbers</span>
-                  <span className="block text-muted-foreground text-xs">The title and page number at the foot of each page.</span>
+                  <span className="block text-ui">Page numbers</span>
+                  <span className="block text-muted-foreground text-ui-sm">The title and page number at the foot of each page.</span>
                 </span>
                 <Switch checked={options.pageNumbers} onCheckedChange={(checked) => update("pageNumbers", checked)} />
               </label>
@@ -369,14 +369,14 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
           )}
 
           {options.format === "docx" ? (
-            <p className="text-muted-foreground text-xs leading-5">
+            <p className="text-muted-foreground text-ui-sm leading-5">
               Word lays out the pages itself, so breaks can fall a little differently. Where Newsreader or Geist
               isn't installed, Word shows Georgia or Arial instead.
             </p>
           ) : null}
 
           {prepared?.missingImages ? (
-            <p className="text-muted-foreground text-xs leading-5">
+            <p className="text-muted-foreground text-ui-sm leading-5">
               {prepared.missingImages === 1
                 ? "1 image couldn't be found. The export marks where it goes."
                 : `${prepared.missingImages} images couldn't be found. The export marks where they go.`}

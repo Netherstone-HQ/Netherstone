@@ -63,7 +63,7 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
       <div className="relative w-full min-w-0">
         <TreeGuides depth={depth} />
         <div
-          className="flex h-7 w-full min-w-0 items-center gap-1 pr-1 text-sm"
+          className="flex h-row w-full min-w-0 items-center gap-1 pr-1 text-ui"
           style={{ paddingLeft: `${getRowIndent(depth)}px` }}
         >
           <span
@@ -71,7 +71,7 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
             className="flex h-4 shrink-0 items-center justify-center"
             style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
           >
-            <ChevronRightIcon className="h-3.5 w-3.5 text-sidebar-foreground/70" />
+            <ChevronRightIcon className="size-3.5 text-muted-foreground" />
           </span>
           <Input
             autoFocus
@@ -80,7 +80,7 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={() => void create({ keepOpenOnError: false })}
-            className="h-6 min-w-0 flex-1 px-2 py-0 text-sm"
+            className="h-6 min-w-0 flex-1 px-2 py-0 text-ui"
           />
           <span
             aria-hidden="true"

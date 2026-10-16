@@ -136,13 +136,13 @@ export function NewShardDialog({
               disabled={isCreating}
               autoFocus
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-ui-sm text-muted-foreground">
               The .md extension will be added automatically.
             </p>
           </div>
 
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-md bg-destructive/10 p-3 text-ui text-destructive">
               {error}
             </div>
           )}

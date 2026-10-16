@@ -252,7 +252,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                       </div>
                     </div>
                   </div>
-                  <ChevronsUpDownIcon className="size-3.5 shrink-0 text-sidebar-foreground/60" />
+                  <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-56">

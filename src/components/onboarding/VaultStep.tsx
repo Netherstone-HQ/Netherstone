@@ -143,7 +143,7 @@ function LocationRow({
       <FieldLabel>{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <span
-          className="flex h-9 min-w-0 flex-1 items-center truncate rounded-md border bg-background px-2.5 text-muted-foreground text-sm dark:bg-input/30"
+          className="flex h-9 min-w-0 flex-1 items-center truncate rounded-md border bg-background px-2.5 text-muted-foreground text-ui dark:bg-input/30"
           title={location ?? undefined}
         >
           {location ?? "…"}
@@ -282,7 +282,7 @@ function RestoreVault({
 
   if (backups === null) {
     return (
-      <p className="inline-flex items-center gap-2 text-muted-foreground text-sm">
+      <p className="inline-flex items-center gap-2 text-muted-foreground text-ui">
         <LoaderCircleIcon className="size-4 animate-spin" />
         {copy.vault.restore.loading}
       </p>
@@ -305,12 +305,12 @@ function RestoreVault({
             onClick={() => setChosen(backup)}
             disabled={busy}
             className={cn(
-              "flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-left text-sm transition-colors hover:border-foreground/20 dark:bg-input/30",
+              "flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-left text-ui transition-colors hover:border-foreground/20 dark:bg-input/30",
               chosen?.fullName === backup.fullName && "border-foreground/40",
             )}
           >
             <span className="truncate font-medium">{backup.name}</span>
-            <span className="shrink-0 text-muted-foreground text-xs">
+            <span className="shrink-0 text-muted-foreground text-ui-sm">
               {backup.pushedAt
                 ? copy.vault.restore.lastSynced(
                     formatDistanceToNow(new Date(backup.pushedAt), { addSuffix: true }),

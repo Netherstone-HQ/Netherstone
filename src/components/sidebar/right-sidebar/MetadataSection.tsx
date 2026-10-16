@@ -23,11 +23,11 @@ export function MetadataSection({
       }
     >
       {!currentFilePath ? (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-ui-sm text-muted-foreground">
           Open a shard to see its metadata.
         </div>
       ) : !fileMetadata ? (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-ui-sm text-muted-foreground">
           Metadata is unavailable for this shard right now. It may have been
           renamed, moved, deleted, or may still be re-indexing.
         </div>
@@ -36,7 +36,7 @@ export function MetadataSection({
           {metadataRows.map((item) => (
             <div
               key={item.label}
-              className="flex items-start justify-between gap-3 text-xs"
+              className="flex items-start justify-between gap-3 text-ui-sm"
             >
               <span className="text-muted-foreground">{item.label}</span>
               <span className="max-w-36 text-right text-foreground">

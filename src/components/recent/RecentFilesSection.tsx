@@ -95,7 +95,7 @@ export function RecentFilesSection() {
                   <span className="min-w-0 flex-1 truncate">{fileName}</span>
                   <span
                     className={cn(
-                      "min-w-0 max-w-28 truncate text-[11px] text-sidebar-foreground/50",
+                      "min-w-0 max-w-28 truncate text-ui-sm text-muted-foreground",
                       file.path === currentFilePath &&
                         "text-sidebar-accent-foreground/70",
                     )}

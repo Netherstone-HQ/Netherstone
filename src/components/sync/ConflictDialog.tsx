@@ -72,7 +72,7 @@ export function ConflictDialog({ vaultPath }: { vaultPath: string }) {
         </DialogHeader>
 
         {error ? (
-          <p className="text-destructive text-sm">{error}</p>
+          <p className="text-destructive text-ui">{error}</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             <VersionPreview
@@ -135,15 +135,15 @@ function VersionPreview({
 }) {
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border">
-      <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-1.5 text-xs">
+      <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-1.5 text-ui-sm">
         <span className="font-medium">{label}</span>
         {bytes != null ? <span className="text-muted-foreground">{formatBytes(bytes)}</span> : null}
       </div>
       <div className="h-56 overflow-auto p-3">
         {loading ? null : text != null ? (
-          <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5">{text}</pre>
+          <pre className="whitespace-pre-wrap break-words font-mono text-ui-sm leading-5">{text}</pre>
         ) : (
-          <p className="text-muted-foreground text-xs">
+          <p className="text-muted-foreground text-ui-sm">
             {bytes == null ? "Not on this device anymore." : "No preview for this file type."}
           </p>
         )}

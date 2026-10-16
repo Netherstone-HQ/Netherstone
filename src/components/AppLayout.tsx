@@ -201,7 +201,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   className="absolute top-4 right-4 z-10 text-muted-foreground hover:text-accent-foreground"
                   aria-label="Close settings"
                 >
-                  <XIcon className="size-4" />
+                  <XIcon />
                 </Button>
                 <SettingsPage />
               </div>

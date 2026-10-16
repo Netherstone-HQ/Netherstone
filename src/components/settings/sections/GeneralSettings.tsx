@@ -33,7 +33,6 @@ export function GeneralSettings() {
           label="Reopen your last shard"
           description="Pick up where you left off when Netherstone opens."
         />
-        <WelcomeRow />
       </SettingsGroup>
 
       <SettingsGroup title="Sidebar">
@@ -82,21 +81,6 @@ function RecentShardsRows() {
   );
 }
 
-function WelcomeRow() {
-  const resetOnboarding = useSettingsStore((s) => s.resetOnboarding);
-
-  return (
-    <SettingRow
-      label="Welcome tour"
-      description="Go through the first-run setup again: configure your vault, customize Netherstone's look and set up sync."
-    >
-      <Button variant="outline" size="sm" onClick={resetOnboarding}>
-        Show welcome again
-      </Button>
-    </SettingRow>
-  );
-}
-
 function ResetRow() {
   const [open, setOpen] = useState(false);
   const resetSettings = useSettingsStore((s) => s.resetSettings);
@@ -104,7 +88,7 @@ function ResetRow() {
   return (
     <SettingRow
       label="Restore default settings"
-      description="Puts every setting back the way it was on first install. Your vault, shards and sync setup stay as they are."
+      description="Your vault, shards and sync stay as they are."
     >
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         Restore defaults

@@ -91,7 +91,7 @@ export function AboutSettings() {
         <PreferenceSwitch
           name="betaUpdates"
           label="Get beta updates"
-          description="Try new features before everyone else. Betas can have rough edges."
+          description="New features early, with a few rough edges."
         />
         {companionUnlocked ? (
           <PreferenceSwitch
@@ -103,6 +103,7 @@ export function AboutSettings() {
       </SettingsGroup>
 
       <SettingsGroup>
+        <WelcomeRow />
         <SettingRow
           label="Source code"
           description="Netherstone is built in the open."
@@ -117,7 +118,7 @@ export function AboutSettings() {
         </SettingRow>
         <SettingRow
           label="Report a problem"
-          description="Something not working? Let us know. Your version and OS are filled in for you."
+          description="Let us know when something isn't working."
         >
           <Button
             variant="outline"
@@ -190,6 +191,21 @@ function UpdateRow() {
           Check for updates
         </Button>
       )}
+    </SettingRow>
+  );
+}
+
+function WelcomeRow() {
+  const resetOnboarding = useSettingsStore((s) => s.resetOnboarding);
+
+  return (
+    <SettingRow
+      label="Welcome tour"
+      description="Go through the first-run setup again."
+    >
+      <Button variant="outline" size="sm" onClick={resetOnboarding}>
+        Show welcome again
+      </Button>
     </SettingRow>
   );
 }

@@ -17,15 +17,14 @@ const INSERT_OPTIONS: {
   {
     value: "vault-import",
     title: "Copy it into the vault",
-    description:
-      "The file travels with your shards and syncs with them. Best for most files.",
+    description: "Moves and syncs with your shards. Best for most files.",
     icon: FolderInput,
   },
   {
     value: "local-reference",
     title: "Link to where it is on your computer",
     description:
-      "Suits large files. The link breaks if the file moves, and other devices won't see it.",
+      "For large files. Moving the file breaks the link, and other devices won't have the file.",
     icon: Link2,
   },
 ];
@@ -38,7 +37,7 @@ export function FilesSettings() {
     <>
       <SettingsGroup
         title="Adding files"
-        description="What happens when you add an image, video or other file from your computer to a shard."
+        description="When you add a file from your computer to a shard."
       >
         <fieldset className="space-y-2 p-2">
           <legend className="sr-only">Adding files</legend>

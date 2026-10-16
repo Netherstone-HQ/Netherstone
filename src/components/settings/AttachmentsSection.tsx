@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { relinkAttachment } from "@/lib/shard-rewrite";
@@ -274,19 +275,17 @@ export function AttachmentsSection() {
   const currentReport = isCurrent ? report : null;
 
   return (
-    <section
+    <SettingsGroup
       id={ATTACHMENTS_SECTION_ID}
-      className="scroll-mt-8 rounded-xl border bg-card p-4 shadow-xs"
+      title="Attachments in this vault"
     >
-      <div className="mb-5 flex items-start gap-4">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <h3 className="font-medium text-ui">Attachments in this vault</h3>
-          <p className="text-muted-foreground text-ui-sm">
-            {currentReport
-              ? `${plural(currentReport.fileCount, "file")} · ${formatBytes(currentReport.totalBytes)} in this vault`
-              : "Files copied into this vault."}
-          </p>
-        </div>
+      <SettingRow
+        label={
+          currentReport
+            ? `${plural(currentReport.fileCount, "file")} · ${formatBytes(currentReport.totalBytes)}`
+            : "Files copied into this vault"
+        }
+      >
         <Button
           type="button"
           variant="outline"
@@ -301,16 +300,16 @@ export function AttachmentsSection() {
           )}
           Check again
         </Button>
-      </div>
+      </SettingRow>
 
       {isCurrent && error && !isChecking ? (
-        <p className="text-destructive text-ui">
+        <p className="px-4 py-3 text-destructive text-ui">
           Couldn't check attachments: {error}
         </p>
       ) : null}
 
       {currentReport ? (
-        <div className="divide-y rounded-lg border bg-background">
+        <>
           {currentReport.missing.length === 0 ? (
             <div className="flex items-center gap-3 px-4 py-3 text-ui">
               <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
@@ -382,10 +381,12 @@ export function AttachmentsSection() {
               vaultPath={currentVaultPath}
             />
           ) : null}
-        </div>
+        </>
       ) : isChecking ? (
-        <p className="text-muted-foreground text-ui">Checking attachments</p>
+        <p className="px-4 py-3 text-muted-foreground text-ui">
+          Checking attachments
+        </p>
       ) : null}
-    </section>
+    </SettingsGroup>
   );
 }

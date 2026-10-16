@@ -1,7 +1,4 @@
 import {
-  type Option,
-  PreferenceSegments,
-  PreferenceSelect,
   SettingRow,
   Stepper,
   SettingsGroup,
@@ -14,42 +11,11 @@ import {
 } from "@/components/theme/themes";
 import { cn } from "@/lib/utils";
 import {
-  type ContentWidth,
-  type ReadingFont,
-  type TextSize,
   stepZoom,
   useSettingsStore,
   type Zoom,
   ZOOM_LEVELS,
 } from "@/store/settings";
-
-const FONTS: Option<ReadingFont>[] = [
-  {
-    value: "newsreader",
-    label: "Newsreader",
-    className: "[font-family:'Newsreader_Variable',serif]",
-  },
-  { value: "geist", label: "Geist", className: "font-sans" },
-  {
-    value: "system",
-    label: "System font",
-    className: "[font-family:system-ui]",
-  },
-];
-
-const SIZES: Option<TextSize>[] = [
-  { value: "small", label: "Small" },
-  { value: "default", label: "Default" },
-  { value: "large", label: "Large" },
-];
-
-const WIDTHS: Option<ContentWidth>[] = [
-  { value: "narrow", label: "Narrow" },
-  { value: "default", label: "Default" },
-  { value: "wide", label: "Wide" },
-  { value: "full", label: "Full" },
-];
-
 
 export function AppearanceSettings() {
   return (
@@ -58,27 +24,8 @@ export function AppearanceSettings() {
         <ThemePicker />
       </SettingsGroup>
 
-      <SettingsGroup title="Interface">
+      <SettingsGroup>
         <ZoomRow />
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="Reading"
-        description="How shards look while you read and write."
-      >
-        <ReadingPreview />
-        <PreferenceSelect
-          name="readingFont"
-          label="Shard font"
-          options={FONTS}
-        />
-        <PreferenceSegments name="textSize" label="Text size" options={SIZES} />
-        <PreferenceSegments
-          name="contentWidth"
-          label="Line width"
-          description="How wide the text column gets in a large window."
-          options={WIDTHS}
-        />
       </SettingsGroup>
     </>
   );
@@ -214,20 +161,6 @@ function Window({
         <div className="h-1 w-5/6 rounded-full" style={{ background: line }} />
         <div className="h-1 w-2/3 rounded-full" style={{ background: line }} />
       </div>
-    </div>
-  );
-}
-
-/** Sample text in the chosen reading font and size. */
-function ReadingPreview() {
-  return (
-    <div className="px-4 py-5">
-      <p className="font-reading text-(length:--reading-size) leading-relaxed">
-        <span className="font-semibold">Your knowledge, set in stone.</span>{" "}
-        A shard is a Markdown document on your computer, and your vault is
-        the folder that holds them. A drawing is a sketch or diagram you can
-        place in any shard. Sync keeps your vault the same on every device.
-      </p>
     </div>
   );
 }

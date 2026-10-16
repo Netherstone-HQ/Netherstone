@@ -34,6 +34,8 @@ type Category = {
   label: string;
   icon: LucideIcon;
   Content: () => React.ReactNode;
+  /** Starts a new group of related categories, set apart by a gap. */
+  startsGroup?: boolean;
 };
 
 export const SETTINGS_CATEGORIES: Category[] = [
@@ -50,10 +52,24 @@ export const SETTINGS_CATEGORIES: Category[] = [
     Content: AppearanceSettings,
   },
   {
+    id: "shortcuts",
+    label: "Shortcuts",
+    icon: KeyboardIcon,
+    Content: ShortcutsSettings,
+  },
+  {
     id: "editor",
     label: "Editor",
     icon: PencilLineIcon,
     Content: EditorSettings,
+    startsGroup: true,
+  },
+  {
+    id: "vault",
+    label: "Vault",
+    icon: FolderIcon,
+    Content: VaultSettings,
+    startsGroup: true,
   },
   {
     id: "files",
@@ -68,22 +84,11 @@ export const SETTINGS_CATEGORIES: Category[] = [
     Content: SyncSettings,
   },
   {
-    id: "vault",
-    label: "Vault",
-    icon: FolderIcon,
-    Content: VaultSettings,
-  },
-  {
-    id: "shortcuts",
-    label: "Shortcuts",
-    icon: KeyboardIcon,
-    Content: ShortcutsSettings,
-  },
-  {
     id: "about",
     label: "About",
     icon: InfoIcon,
     Content: AboutSettings,
+    startsGroup: true,
   },
 ];
 
@@ -117,29 +122,31 @@ export function SettingsPage() {
           <h1 className="font-medium text-ui">Settings</h1>
         </div>
         <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {SETTINGS_CATEGORIES.map(({ id, label, icon: Icon }) => {
-            const active = id === category.id;
-            return (
-              <li key={id}>
-                <div
-                  className={cn(ROW_CLASS, active && ACTIVE_ROW_CLASS)}
-                  style={{ paddingLeft: `${getRowIndent(0)}px` }}
-                >
-                  <button
-                    type="button"
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => openSettings(id)}
-                    className={ROW_BUTTON_CLASS}
+          {SETTINGS_CATEGORIES.map(
+            ({ id, label, icon: Icon, startsGroup }) => {
+              const active = id === category.id;
+              return (
+                <li key={id} className={startsGroup ? "mt-3" : undefined}>
+                  <div
+                    className={cn(ROW_CLASS, active && ACTIVE_ROW_CLASS)}
+                    style={{ paddingLeft: `${getRowIndent(0)}px` }}
                   >
-                    <RowSlot>
-                      <Icon className="size-4 text-muted-foreground" />
-                    </RowSlot>
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+                    <button
+                      type="button"
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => openSettings(id)}
+                      className={ROW_BUTTON_CLASS}
+                    >
+                      <RowSlot>
+                        <Icon className="size-4 text-muted-foreground" />
+                      </RowSlot>
+                      <span className="min-w-0 flex-1 truncate">{label}</span>
+                    </button>
+                  </div>
+                </li>
+              );
+            },
+          )}
         </ul>
       </nav>
 

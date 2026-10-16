@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { describeUnsyncedFiles } from "@/lib/attachment-sync-status";
 import { cn } from "@/lib/utils";
 import type { PersistedMediaMetadata } from "./media-types";
 
@@ -13,57 +14,21 @@ type AttachmentBackupIndicatorProps = {
   metadata: PersistedMediaMetadata;
 };
 
-function formatBytes(bytes?: number): string | null {
-  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) {
-    return null;
-  }
-
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+const ICONS = {
+  blocked: AlertTriangleIcon,
+  pending_review: HelpCircleIcon,
+  local_only: CloudOffIcon,
+};
 
 function getIndicatorCopy(metadata: PersistedMediaMetadata) {
   const status = metadata.netherstoneSyncStatus;
-  const extension = metadata.netherstoneExtension?.trim().toUpperCase();
-  const size = formatBytes(metadata.netherstoneSizeBytes);
-
   if (!status || status === "syncable") return null;
 
-  if (status === "blocked") {
-    return {
-      icon: AlertTriangleIcon,
-      label: "Not backed up",
-      tone: "destructive" as const,
-      title: "Blocked from GitHub backup",
-      description:
-        extension || size
-          ? `${extension ? `${extension} file` : "This file"}${size ? ` (${size})` : ""} is stored locally but blocked from GitHub backup by policy.`
-          : "This attachment is stored locally but blocked from GitHub backup by policy.",
-    };
-  }
-
-  if (status === "pending_review") {
-    return {
-      icon: HelpCircleIcon,
-      label: "Review backup",
-      tone: "warning" as const,
-      title: "Backup needs review",
-      description:
-        "This attachment is stored locally and needs review before it can be backed up to GitHub.",
-    };
-  }
-
   return {
-    icon: CloudOffIcon,
-    label: "Local only",
-    tone: "warning" as const,
-    title: "Stored only on this device",
-    description:
-      extension || size
-        ? `${extension ? `${extension} file` : "This file"}${size ? ` (${size})` : ""} is not backed up to GitHub by default.`
-        : "This attachment is not backed up to GitHub by default.",
+    icon: ICONS[status],
+    tone: status === "blocked" ? ("destructive" as const) : ("warning" as const),
+    title: "Won't sync",
+    description: describeUnsyncedFiles(status, [metadata]),
   };
 }
 

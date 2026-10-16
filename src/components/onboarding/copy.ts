@@ -42,12 +42,11 @@ export const copy = {
       description: "Your files stay exactly where they are.",
     },
     restore: {
-      title: "Restore from a backup",
+      title: "Restore a synced vault",
       description: "Bring back a vault you synced on another device.",
-      signInFirst:
-        "Connect the GitHub account your backup is in. Netherstone keeps synced vaults there, in private storage only you can see.",
-      loading: "Looking for your backups",
-      empty: "There are no backups on this account yet.",
+      signInFirst: "Connect the GitHub account you synced with.",
+      loading: "Looking for your synced vaults",
+      empty: "No synced vaults on this account yet.",
       lastSynced: (when: string) => `Last synced ${when}`,
       neverSynced: "Not synced yet",
       locationLabel: "Restore to",
@@ -88,9 +87,9 @@ export const copy = {
     // The next four lines are the approved "How sync works" copy from
     // Settings (SyncHelpDialog). Keep them in step.
     explainer: [
-      "Netherstone keeps your vault in sync through GitHub, a service millions of people use to store files.",
-      "Your vault is saved there as a private repository: a folder that also keeps every earlier version of your shards.",
-      "Private means only you can see it. Nobody else can open it unless you invite them on GitHub yourself.",
+      "Netherstone syncs your vault through GitHub, where millions of people store their files.",
+      "It's saved there as a private repository, a folder that keeps every earlier version of your files.",
+      "Only you can see it, unless you invite someone on GitHub.",
       "A free GitHub account is all you need.",
     ],
     turnOn: "Turn on sync",
@@ -104,7 +103,7 @@ export const copy = {
     title: "You're all set",
     bodyNewVault:
       "Your vault is ready.",
-    bodyRestored: "Your vault is back, and it stays in sync from here on.",
+    bodyRestored: "Your vault is back and keeps syncing.",
     body: "Your vault is ready.",
     tips: {
       search: (shortcut: string) => `Press ${shortcut} to search across shards.`,

@@ -46,8 +46,8 @@ export function GitHubAppInstallNotice() {
       <p className="font-medium text-ui">One more step on GitHub</p>
       <p className="text-muted-foreground text-ui-sm leading-5">
         {elsewhere.length > 0
-          ? `Netherstone is installed on ${elsewhere.join(", ")}, but backups go to your personal account. Install it on ${login ? `@${login}` : "your account"} too.`
-          : "Install the Netherstone app so it can create your backup repository and keep it up to date."}{" "}
+          ? `Your vaults sync to your personal account. Install it on ${login ? `@${login}` : "your account"} too.`
+          : "Install the Netherstone app on GitHub so it can sync your vaults."}{" "}
         When GitHub asks, choose{" "}
         <span className="text-foreground">All repositories</span>. Netherstone
         only touches the repositories it creates.

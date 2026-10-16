@@ -156,16 +156,16 @@ pub async fn current_installation(
 ) -> Result<Option<app::Installation>, String> {
     let login = read_cached_account()
         .map(|account| account.login)
-        .ok_or_else(|| "Sign in to GitHub first.".to_string())?;
+        .ok_or_else(|| "Connect GitHub first.".to_string())?;
     app::find_installation(client, token, &login).await
 }
 
 /// Whether the GitHub App is installed on the signed-in user's account.
 pub async fn installation_status() -> Result<app::InstallationStatus, String> {
-    let token = access_token()?.ok_or_else(|| "Sign in to GitHub first.".to_string())?;
+    let token = access_token()?.ok_or_else(|| "Connect GitHub first.".to_string())?;
     let login = read_cached_account()
         .map(|account| account.login)
-        .ok_or_else(|| "Sign in to GitHub first.".to_string())?;
+        .ok_or_else(|| "Connect GitHub first.".to_string())?;
     let installations = app::list_installations(&http_client()?, &token).await?;
     Ok(app::InstallationStatus {
         installed: app::installation_for(&installations, &login).is_some(),

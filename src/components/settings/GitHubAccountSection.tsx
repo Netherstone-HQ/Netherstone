@@ -26,8 +26,7 @@ export function GitHubAccountSection() {
       title="GitHub account"
       description={
         <span className="inline-flex items-center gap-1.5">
-          Your vaults sync through private repositories on your own GitHub
-          account.
+          Your vaults sync through your GitHub account.
           <SyncHelpDialog />
         </span>
       }
@@ -71,17 +70,15 @@ function TokenStorageNote({ storage }: { storage: GitHubTokenStorage | null }) {
   if (storage === "file") {
     return (
       <p className="text-muted-foreground text-ui-sm leading-5">
-        Your sign-in is saved in a file only your account can read, because this
-        computer has no keyring. Install GNOME Keyring or KWallet and restart
-        Netherstone to move it there.
+        Saved in a file only you can read. To use a keyring, install GNOME
+        Keyring or KWallet and restart.
       </p>
     );
   }
   if (storage === "memory") {
     return (
       <p className="text-muted-foreground text-ui-sm leading-5">
-        Your sign-in isn't saved on this computer. You'll connect again the next
-        time you open Netherstone.
+        You'll connect again next time you open Netherstone.
       </p>
     );
   }

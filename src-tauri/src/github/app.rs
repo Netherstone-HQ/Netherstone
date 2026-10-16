@@ -73,7 +73,9 @@ pub async fn list_installations(
         .map_err(super::network_error)?;
 
     if response.status().as_u16() == 401 {
-        return Err("Your GitHub connection has expired. Reconnect GitHub in Settings.".to_string());
+        return Err(
+            "Your GitHub connection expired. Connect again in Settings › Sync.".to_string(),
+        );
     }
     if response.status().as_u16() == 403 {
         return Err(

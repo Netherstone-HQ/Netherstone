@@ -77,8 +77,7 @@ export function BackupPanel({
     body = (
       <div className="space-y-3">
         <p className="text-muted-foreground text-ui">
-          Connect GitHub to back up this vault to a private repository and
-          sync it between your devices.
+          Connect GitHub to sync this vault across your devices.
         </p>
         <GitHubSignIn compact />
         {accountError ? (
@@ -154,7 +153,7 @@ export function BackupPanel({
             onClick={() => setRestoring(true)}
             className="w-full text-center text-muted-foreground text-ui-sm hover:text-foreground disabled:pointer-events-none"
           >
-            Already backed up on another device? Use that backup
+            Use a vault you synced on another device
           </button>
         ) : null}
       </div>
@@ -181,9 +180,8 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
         {plan.includedCount > 0 ? (
           <span className="text-muted-foreground"> ({formatBytes(plan.includedBytes)})</span>
         ) : null}{" "}
-        will be backed up to a private repository on your GitHub account{" "}
-        <span className="font-medium">@{login}</span> and kept in sync across
-        your devices.
+        will sync privately through{" "}
+        <span className="font-medium">@{login}</span> on GitHub.
       </p>
 
       {skipped.length > 0 ? (
@@ -245,10 +243,10 @@ function SyncStatus({
       <div className="space-y-0.5">
         <div className="flex items-center gap-2 text-ui">
           <CloudOffIcon className="size-4 text-muted-foreground" />
-          Working offline
+          Offline
         </div>
         <p className="pl-6 text-muted-foreground text-ui-sm">
-          Changes sync when you're back online{since ? `. Last synced ${since}.` : "."}
+          Changes sync when you're back online.
         </p>
       </div>
     );
@@ -320,8 +318,8 @@ function BackupPicker({
     <div className="space-y-3">
       <p className="text-muted-foreground text-ui">
         {vaultHasFiles
-          ? "Choose a backup to sync with this vault. Its files are added here, and this vault's files are added to it."
-          : "Choose a backup to download into this vault. It stays in sync afterwards."}
+          ? "Choose a synced vault. Its files and this vault's files are combined."
+          : "Choose a synced vault to download here. It keeps syncing after that."}
       </p>
       {backups === null ? (
         <div className="flex h-16 items-center justify-center">

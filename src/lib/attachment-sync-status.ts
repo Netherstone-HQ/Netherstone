@@ -13,7 +13,10 @@ export type AttachmentSyncStatusLike = {
   syncStatus?: AttachmentSyncStatus;
 };
 
-function getStatus(
+/** Mirrors the attachment policy's soft limit in `db/attachments.rs`. */
+export const ATTACHMENT_SYNC_LIMIT_BYTES = 20 * 1024 * 1024;
+
+function getAttachmentSyncStatus(
   value: AttachmentSyncStatusLike,
 ): AttachmentSyncStatus | null {
   return value.netherstoneSyncStatus ?? value.syncStatus ?? null;
@@ -28,67 +31,49 @@ function getExtension(value: AttachmentSyncStatusLike): string {
   return (value.netherstoneExtension ?? value.extension ?? "").trim();
 }
 
+/**
+ * Why files that share a status stay on this device, naming their type when
+ * they're all one type.
+ */
+export function describeUnsyncedFiles(
+  status: Exclude<AttachmentSyncStatus, "syncable">,
+  items: AttachmentSyncStatusLike[],
+): string {
+  const extensions = new Set(
+    items
+      .map(getExtension)
+      .filter((extension) => extension.length > 0)
+      .map((extension) => extension.toUpperCase()),
+  );
+  const type = extensions.size === 1 ? `${[...extensions][0]} files` : null;
+
+  switch (status) {
+    case "blocked":
+      return `${type ?? "Apps and scripts"} stay on this device.`;
+    case "pending_review":
+      return "Files without a type stay on this device.";
+    case "local_only":
+      return items.some(
+        (item) => (getSizeBytes(item) ?? 0) > ATTACHMENT_SYNC_LIMIT_BYTES,
+      )
+        ? "Files over 20 MB stay on this device."
+        : `${type ?? "These file types"} stay on this device.`;
+  }
+}
+
+/** Says when files just added won't sync, most serious reason first. */
 export function notifyAttachmentSyncStatus(items: AttachmentSyncStatusLike[]) {
-  const statuses = items
-    .map(getStatus)
-    .filter(Boolean) as AttachmentSyncStatus[];
-
-  if (statuses.length === 0) return;
-
-  const blockedCount = statuses.filter((status) => status === "blocked").length;
-  const localOnlyCount = statuses.filter(
-    (status) => status === "local_only",
-  ).length;
-  const pendingReviewCount = statuses.filter(
-    (status) => status === "pending_review",
-  ).length;
-
-  if (blockedCount > 0) {
-    toast.warning("Some attachments need review", {
-      description:
-        blockedCount === 1
-          ? "This file was added locally but is blocked from GitHub backup by policy."
-          : `${blockedCount} files were added locally but are blocked from GitHub backup by policy.`,
-    });
-    return;
-  }
-
-  if (pendingReviewCount > 0) {
-    toast.warning("Some attachments need review", {
-      description:
-        pendingReviewCount === 1
-          ? "This file was added locally but needs review before GitHub backup."
-          : `${pendingReviewCount} files were added locally but need review before GitHub backup.`,
-    });
-    return;
-  }
-
-  if (localOnlyCount > 0) {
-    const localOnlyItems = items.filter(
-      (item) => getStatus(item) === "local_only",
+  for (const status of ["blocked", "pending_review", "local_only"] as const) {
+    const matching = items.filter(
+      (item) => getAttachmentSyncStatus(item) === status,
     );
-    const oversizedCount = localOnlyItems.filter((item) => {
-      const sizeBytes = getSizeBytes(item);
-      return sizeBytes !== null && sizeBytes > 20 * 1024 * 1024;
-    }).length;
-    const extensions = Array.from(
-      new Set(
-        localOnlyItems
-          .map(getExtension)
-          .filter((extension) => extension.length > 0)
-          .map((extension) => extension.toUpperCase()),
-      ),
-    );
+    if (matching.length === 0) continue;
 
-    toast.info("Stored only on this device", {
-      description:
-        oversizedCount > 0
-          ? localOnlyCount === 1
-            ? "This attachment is over the GitHub backup size limit."
-            : `${oversizedCount} attachments are over the GitHub backup size limit.`
-          : extensions.length === 1
-            ? `${extensions[0]} files are stored locally and are not backed up to GitHub by default.`
-            : "These file types are stored locally and are not backed up to GitHub by default.",
-    });
+    const notify = status === "local_only" ? toast.info : toast.warning;
+    notify(
+      matching.length === 1 ? "This file won't sync" : "Some files won't sync",
+      { description: describeUnsyncedFiles(status, matching) },
+    );
+    return;
   }
 }

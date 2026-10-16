@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { ATTACHMENT_SYNC_LIMIT_BYTES } from "@/lib/attachment-sync-status";
 
 export type VaultSyncRecord = {
   vaultId: string;
@@ -125,18 +126,15 @@ export function turnOffBackup(vaultPath: string) {
   return invoke<VaultSyncRecord>("sync_turn_off_backup", { vaultPath });
 }
 
-/** Mirrors the attachment policy's soft limit in `db/attachments.rs`. */
-const ATTACHMENT_SYNC_LIMIT_BYTES = 20 * 1024 * 1024;
-
 /** Why a file stays on this device, in plain words. */
 export function describeSkipReason(file: SkippedFile) {
   switch (file.reason) {
     case "localOnly":
       return file.sizeBytes > ATTACHMENT_SYNC_LIMIT_BYTES
         ? "Larger than 20 MB"
-        : "File type isn't backed up";
+        : "This file type doesn't sync";
     case "blocked":
-      return "Program files aren't backed up";
+      return "Apps and scripts don't sync";
     case "pendingReview":
       return "File has no type";
     case "tooLarge":

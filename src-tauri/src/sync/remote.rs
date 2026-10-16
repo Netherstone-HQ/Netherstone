@@ -10,7 +10,7 @@ use git2::{
 const REMOTE_NAME: &str = "origin";
 
 /// Returned by [`push`] when GitHub has commits this device hasn't merged yet.
-pub const BEHIND_MESSAGE: &str = "The backup on GitHub has changes this device doesn't have yet.";
+pub const BEHIND_MESSAGE: &str = "GitHub has changes this device doesn't have yet.";
 
 /// Network failures share this wording so the app can show "Working offline".
 pub const OFFLINE_MESSAGE: &str =
@@ -33,7 +33,7 @@ pub fn set_remote(repository: &Repository, url: &str) -> Result<(), String> {
 fn transfer_error_message(e: &git2::Error, action: &str) -> String {
     let message = e.message();
     if e.code() == ErrorCode::Auth || message.contains("401") || message.contains("403") {
-        "GitHub didn't accept the connection. Reconnect GitHub in Settings.".to_string()
+        "GitHub didn't accept the connection. Connect again in Settings › Sync.".to_string()
     } else if e.code() == ErrorCode::NotFastForward {
         BEHIND_MESSAGE.to_string()
     } else if matches!(
@@ -86,7 +86,10 @@ pub fn fetch(repository: &Repository, token: &str) -> Result<Option<Oid>, String
     match repository.find_reference(&remote_branch_ref()) {
         Ok(reference) => Ok(reference.target()),
         Err(e) if e.code() == ErrorCode::NotFound => Ok(None),
-        Err(e) => Err(format!("Failed to read the backup on GitHub: {}", e.message())),
+        Err(e) => Err(format!(
+            "Couldn't read your vault on GitHub: {}",
+            e.message()
+        )),
     }
 }
 

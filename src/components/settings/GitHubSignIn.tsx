@@ -79,11 +79,11 @@ function RememberChoice({
           checked={remember}
           onCheckedChange={(checked) => onChange(checked === true)}
         />
-        Remember this sign-in on this computer
+        Stay signed in on this computer
       </Label>
       <p className="text-muted-foreground text-ui-sm leading-5">
         {remember
-          ? "This computer has no keyring, so it's saved in a file only your account can read."
+          ? "Saved in a file only you can read, since this computer has no keyring."
           : "You'll connect again each time you open Netherstone."}
       </p>
     </div>

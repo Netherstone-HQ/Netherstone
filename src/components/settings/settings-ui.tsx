@@ -241,19 +241,30 @@ export function PreferenceSegments<K extends keyof Preferences>({
   );
 }
 
-/** A number with − and + buttons either side. */
+/**
+ * A number with − and + buttons either side. Counts by one unless `step`
+ * says where each button goes.
+ */
 export function Stepper({
   label,
   value,
   min,
   max,
   onChange,
+  step = (current, direction) => current + direction,
+  format = String,
+  decreaseLabel = "Fewer",
+  increaseLabel = "More",
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   onChange: (value: number) => void;
+  step?: (value: number, direction: 1 | -1) => number;
+  format?: (value: number) => string;
+  decreaseLabel?: string;
+  increaseLabel?: string;
 }) {
   const button =
     "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
@@ -266,24 +277,26 @@ export function Stepper({
     >
       <button
         type="button"
-        aria-label="Fewer"
+        aria-label={decreaseLabel}
         disabled={value <= min}
-        onClick={() => onChange(value - 1)}
+        onClick={() => onChange(step(value, -1))}
         className={button}
       >
         <MinusIcon className="size-3.5" />
       </button>
+      {/* As wide as the widest value, so the buttons stay put. */}
       <output
         aria-live="polite"
-        className="min-w-6 text-center text-ui tabular-nums"
+        className="text-center text-ui tabular-nums"
+        style={{ minWidth: `max(1.5rem, ${format(max).length}ch)` }}
       >
-        {value}
+        {format(value)}
       </output>
       <button
         type="button"
-        aria-label="More"
+        aria-label={increaseLabel}
         disabled={value >= max}
-        onClick={() => onChange(value + 1)}
+        onClick={() => onChange(step(value, 1))}
         className={button}
       >
         <PlusIcon className="size-3.5" />

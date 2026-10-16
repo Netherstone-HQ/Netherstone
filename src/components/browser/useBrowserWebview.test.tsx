@@ -43,6 +43,7 @@ vi.mock("@/components/browser/browserView", () => ({
     start() {}
     dispose() {}
   },
+  getZoomFactor: () => 1,
 }));
 
 beforeEach(() => {

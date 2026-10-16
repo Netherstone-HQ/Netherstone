@@ -42,8 +42,18 @@ describe("settings store", () => {
     const { setPreference } = useSettingsStore.getState();
     setPreference("recentFilesLimit", 99);
     setPreference("autoSyncInterval", 7 as never);
+    setPreference("zoom", 175 as never);
     expect(useSettingsStore.getState().recentFilesLimit).toBe(20);
     expect(useSettingsStore.getState().autoSyncInterval).toBe(5);
+    expect(useSettingsStore.getState().zoom).toBe(100);
+  });
+
+  it("steps zoom like a browser and stops at either end", async () => {
+    const { stepZoom } = await loadStore();
+    expect(stepZoom(110, 1)).toBe(125);
+    expect(stepZoom(100, -1)).toBe(90);
+    expect(stepZoom(150, 1)).toBe(150);
+    expect(stepZoom(80, -1)).toBe(80);
   });
 
   it("carries over the theme saved before it moved here", async () => {

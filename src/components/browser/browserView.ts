@@ -8,6 +8,24 @@ import {
   subscribeToLayoutOverlays,
   watchOverlays,
 } from "@/components/browser/browserOcclusion";
+import { useSettingsStore } from "@/store/settings";
+
+/**
+ * Chromium (WebView2, on Windows) counts the app's zoom in devicePixelRatio.
+ * WebKit (macOS and Linux) leaves it out, so it's multiplied in there.
+ */
+const RATIO_INCLUDES_ZOOM =
+  typeof navigator !== "undefined" && navigator.userAgent.includes("Chrome/");
+
+/** The app's zoom: window pixels per CSS pixel. */
+export function getZoomFactor(): number {
+  return useSettingsStore.getState().zoom / 100;
+}
+
+function getDeviceScale(): number {
+  const ratio = window.devicePixelRatio;
+  return RATIO_INCLUDES_ZOOM ? ratio : ratio * getZoomFactor();
+}
 
 /**
  * The element's box in device pixels. Edges are rounded, not sizes: rounding
@@ -15,7 +33,7 @@ import {
  */
 export function getElementPhysicalBounds(element: HTMLElement): BrowserBounds {
   const rect = element.getBoundingClientRect();
-  const scale = window.devicePixelRatio;
+  const scale = getDeviceScale();
   const left = Math.round(rect.left * scale);
   const top = Math.round(rect.top * scale);
 

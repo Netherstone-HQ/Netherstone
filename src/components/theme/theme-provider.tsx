@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect } from "react";
 
 import { useSettingsStore } from "@/store/settings";
@@ -6,13 +8,15 @@ import { isNamedTheme, resolveThemeMode } from "./themes";
 
 /**
  * Keeps the document in step with the Appearance settings: the light/dark
- * class, the named theme (`data-theme`), and the reading font, size and width the editor reads from CSS.
+ * class, the named theme (`data-theme`), the reading font, size and width the
+ * editor reads from CSS, and the webview's zoom.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useSettingsStore((s) => s.theme);
   const readingFont = useSettingsStore((s) => s.readingFont);
   const textSize = useSettingsStore((s) => s.textSize);
   const contentWidth = useSettingsStore((s) => s.contentWidth);
+  const zoom = useSettingsStore((s) => s.zoom);
 
   useEffect(() => {
     const { dataset } = window.document.documentElement;
@@ -20,6 +24,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     dataset.textSize = textSize;
     dataset.contentWidth = contentWidth;
   }, [readingFont, textSize, contentWidth]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    getCurrentWebview()
+      .setZoom(zoom / 100)
+      .catch((error) => console.error("Failed to set zoom:", error));
+  }, [zoom]);
 
   useEffect(() => {
     const root = window.document.documentElement;

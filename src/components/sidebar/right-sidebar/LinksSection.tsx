@@ -19,7 +19,7 @@ import { getLinkName } from "./link-utils";
 import type { DocumentLink, DocumentLinkKind } from "./types";
 
 const LINK_ROW_CLASS =
-  "flex h-row w-full min-w-0 items-center gap-2 rounded-sm px-1.5 text-left text-sidebar-foreground/85 text-ui-sm";
+  "flex h-row w-full min-w-0 items-center gap-1 rounded-sm px-1.5 text-left text-sidebar-foreground/85 text-ui-sm";
 
 const ICONS: Record<DocumentLinkKind, LucideIcon> = {
   "shard-mention": FileTextIcon,

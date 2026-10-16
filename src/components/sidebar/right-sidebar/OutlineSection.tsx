@@ -1,13 +1,15 @@
+import {
+  DISCLOSURE_SLOT_PX,
+  getGuideLeft,
+  getRowIndent,
+} from "@/components/vault/tree-layout";
 import { scrollPlateToHeading } from "@/lib/plate-toc-headings";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor";
 import { CollapsibleSection, SECTION_NOTE_CLASS } from "./CollapsibleSection";
 
-const INDENT_PX = 14;
-/** Where the top level's text starts. */
-const TEXT_PX = 8;
-/** How far past its heading's first letter a level's guide sits. */
-const GUIDE_INSET_PX = 3;
+/** The gap between a file tree row's slot and its name. */
+const SLOT_GAP_PX = 4;
 
 export function OutlineSection() {
   const plateEditor = useEditorStore((s) => s.plateEditor);
@@ -40,19 +42,22 @@ export function OutlineSection() {
                     ? "font-medium text-foreground"
                     : "text-sidebar-foreground/85",
                 )}
-                style={{ paddingLeft: TEXT_PX + level * INDENT_PX }}
+                style={{
+                  paddingLeft:
+                    getRowIndent(level) + DISCLOSURE_SLOT_PX + SLOT_GAP_PX,
+                }}
                 onClick={() =>
                   plateEditor && scrollPlateToHeading(plateEditor, heading)
                 }
               >
-                {/* One guide per level, under the heading it belongs to, like
-                    the file tree. */}
+                {/* Laid out like the file tree: each name after an empty slot,
+                    with one guide per level. */}
                 {Array.from({ length: level }, (_, i) => (
                   <span
                     key={i}
                     aria-hidden="true"
                     className="absolute inset-y-0 w-px bg-border"
-                    style={{ left: TEXT_PX + i * INDENT_PX + GUIDE_INSET_PX }}
+                    style={{ left: getGuideLeft(i) }}
                   />
                 ))}
                 {heading.title}

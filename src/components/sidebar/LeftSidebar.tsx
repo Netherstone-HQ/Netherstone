@@ -205,7 +205,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                 onClick={() => void handleRevealVaultLocation()}
               >
                 <FolderIcon />
-                <span>Open in Explorer</span>
+                <span>Open location</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -244,18 +244,19 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
           {currentVaultPath ? <ConflictDialog vaultPath={currentVaultPath} /> : null}
         </div>
 
-        <div className="shrink-0 p-2">
+        {/* Sized and placed like the editor toolbar's buttons beside it. */}
+        <div className="flex h-10 shrink-0 items-center px-2">
           <button
             type="button"
             onClick={() => setSearchModalOpen(true)}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/25 font-medium text-sidebar-foreground/85 text-ui shadow-xs outline-none transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-sidebar-border bg-sidebar-accent/25 font-medium text-sidebar-foreground/85 text-ui-sm shadow-xs outline-none transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
           >
-            <SearchIcon />
+            <SearchIcon className="size-4" />
             Search
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-2 pb-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
           <PinnedSection />
           <RecentFilesSection />
           <FileTree onNewShard={onNewShard} />

@@ -156,7 +156,7 @@ function LocationRow({
   );
 }
 
-function CreateVaultForm({
+export function CreateVaultForm({
   location,
   onLocationChange,
   onCreated,

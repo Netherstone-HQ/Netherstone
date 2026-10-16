@@ -45,8 +45,22 @@ function normalizePath(path: string) {
   return path.replace(/\\/g, "/");
 }
 
-function stripLinkDecorators(target: string) {
-  return target.split("#")[0]?.split("?")[0]?.trim() ?? "";
+/**
+ * Decodes a percent-encoded link target (`My%20note.md` is `My note.md`).
+ * A target that isn't valid percent-encoding, like `100% done.md`, is kept
+ * as written.
+ */
+function decodeLinkTarget(target: string) {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+/** The path a link points to, without its `#heading` or `?query`, decoded. */
+export function stripLinkDecorators(target: string) {
+  return decodeLinkTarget(target.split("#")[0]?.split("?")[0]?.trim() ?? "");
 }
 
 function removeMarkdownExtension(value: string) {
@@ -285,7 +299,7 @@ function normalizePathSegments(path: string) {
   return resolved.join("/");
 }
 
-function resolveInternalTargetPath(
+export function resolveInternalTargetPath(
   target: string,
   currentFilePath: string,
   currentVaultPath: string,

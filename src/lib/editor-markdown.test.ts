@@ -17,6 +17,12 @@ const CANONICAL: Record<string, string> = {
   math: "Inline $x^2$ math.\n\n$$\na+b\n$$\n",
   "bare URL": "Visit https://example.com/path now.\n",
   "relative note link": "Link to [other](./other.md).\n",
+  // Plate writes a link URL with spaces in angle brackets and leaves a
+  // percent-encoded one as written; link resolvers decode both the same way.
+  "note link with spaces":
+    "Link to [roadmap](<./Projects/Netherstone roadmap.md>).\n",
+  "percent-encoded note link":
+    "Link to [roadmap](./Projects/Netherstone%20roadmap.md).\n",
   "block image": "![alt text](attachments/image.png)\n",
   table: "| a | b |\n| - | - |\n| 1 | 2 |\n",
 };

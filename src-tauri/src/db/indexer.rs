@@ -50,15 +50,38 @@ fn normalize_link_validity(link_type: LinkType, target: &str, resolved_target: &
     }
 }
 
+/// Decodes a percent-encoded link target (`My%20note.md` is `My note.md`),
+/// keeping it as written when the decoded bytes aren't valid UTF-8.
+fn decode_link_target(target: &str) -> String {
+    decode(target)
+        .map(|value| value.into_owned())
+        .unwrap_or_else(|_| target.to_string())
+}
+
+/// Resolves an internal link target against the folder of the linking file.
+fn resolve_internal_target(file_path: &Path, target: &str) -> String {
+    let cleaned = decode_link_target(strip_link_target(target).trim());
+
+    if cleaned.is_empty() || cleaned.starts_with('/') || is_absolute_path_like(&cleaned) {
+        return normalize_path(&cleaned);
+    }
+
+    match file_path.parent() {
+        Some(parent) => {
+            let normalized = normalize_relative_path(&parent.join(&cleaned));
+            normalize_path(&normalized.to_string_lossy())
+        }
+        None => target.to_string(),
+    }
+}
+
 fn resolve_mention_target(target: &str) -> String {
     let raw_target = target.strip_prefix("mention:").unwrap_or(target).trim();
     if raw_target.is_empty() {
         return String::new();
     }
 
-    let decoded = decode(raw_target)
-        .map(|value| value.into_owned())
-        .unwrap_or_else(|_| raw_target.to_string());
+    let decoded = decode_link_target(raw_target);
 
     let without_suffix =
         decoded
@@ -75,26 +98,13 @@ fn resolve_mention_target(target: &str) -> String {
 }
 
 /// Where a link in the file at `file_path` points, as the `links` table stores
-/// it: a mention's shard, an internal link's path with forward slashes
-/// (resolved from the file's folder when relative), or any other link's
+/// it: a mention's shard, an internal link's decoded path with forward
+/// slashes (resolved from the file's folder when relative), or any other link's
 /// address without its `#` or `?` part.
 pub fn resolve_link_target(link_type: LinkType, target: &str, file_path: &Path) -> String {
     match link_type {
         LinkType::Mention => resolve_mention_target(target),
-        LinkType::Internal => {
-            let cleaned = strip_link_target(target).trim();
-            match file_path.parent() {
-                Some(parent)
-                    if !cleaned.is_empty()
-                        && !cleaned.starts_with('/')
-                        && !is_absolute_path_like(cleaned) =>
-                {
-                    let resolved = normalize_relative_path(&parent.join(cleaned));
-                    normalize_path(&resolved.to_string_lossy())
-                }
-                _ => normalize_path(cleaned),
-            }
-        }
+        LinkType::Internal => resolve_internal_target(file_path, target),
         LinkType::External
         | LinkType::Email
         | LinkType::Phone

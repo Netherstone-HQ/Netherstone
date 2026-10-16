@@ -15,7 +15,7 @@ import { useKeySequence } from "@/hooks/useKeySequence";
 import { installUpdateWithToast } from "@/hooks/useUpdateCheck";
 import { bugReportUrl, versionDetails } from "@/lib/bug-report";
 import { canUpdate } from "@/lib/updates";
-import { useCompanionStore } from "@/store/companion";
+import { useSettingsStore } from "@/store/settings";
 import { type UpdateStatus, useUpdatesStore } from "@/store/updates";
 
 const REPOSITORY_URL = "https://github.com/Netherstone-HQ/Netherstone";
@@ -47,8 +47,9 @@ async function copyVersionDetails(version: string) {
 
 export function AboutSettings() {
   const [version, setVersion] = useState<string | null>(null);
-  const showCompanion = useCompanionStore((s) => s.show);
-  useKeySequence(COMPANION_SEQUENCE, showCompanion);
+  const companionUnlocked = useSettingsStore((s) => s.companionUnlocked);
+  const unlockCompanion = useSettingsStore((s) => s.unlockCompanion);
+  useKeySequence(COMPANION_SEQUENCE, unlockCompanion);
 
   useEffect(() => {
     getVersion().then(setVersion, () => setVersion(null));
@@ -92,6 +93,13 @@ export function AboutSettings() {
           label="Get beta updates"
           description="Try new features before everyone else. Betas can have rough edges."
         />
+        {companionUnlocked ? (
+          <PreferenceSwitch
+            name="showCompanion"
+            label="Kevin"
+            description="He keeps you company in the corner."
+          />
+        ) : null}
       </SettingsGroup>
 
       <SettingsGroup>

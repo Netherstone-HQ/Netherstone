@@ -1,14 +1,17 @@
 name: CodeQL (Rust)
 
 # Scanning the Rust backend takes several minutes, so pull requests only run
-# it when they change it. Every push to main and the weekly run scan it all.
+# it when they change Rust code or its dependencies. Every push to main and
+# the weekly run scan it all.
 
 on:
   push:
     branches: [main]
   pull_request:
     paths:
-      - "src-tauri/**"
+      - "src-tauri/**/*.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
       - ".github/workflows/codeql-rust.yml"
   schedule:
     - cron: "17 4 * * 1"

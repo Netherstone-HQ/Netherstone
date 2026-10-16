@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ChevronRightIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import {
   ACTION_SLOT_PX,
-  DISCLOSURE_SLOT_PX,
+  FolderChevron,
+  RowSlot,
   TreeGuides,
   getRowIndent,
 } from "@/components/vault/tree-layout";
@@ -66,13 +66,9 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
           className="flex h-row w-full min-w-0 items-center gap-1 pr-1 text-ui"
           style={{ paddingLeft: `${getRowIndent(depth)}px` }}
         >
-          <span
-            aria-hidden="true"
-            className="flex h-4 shrink-0 items-center justify-center"
-            style={{ width: `${DISCLOSURE_SLOT_PX}px` }}
-          >
-            <ChevronRightIcon className="size-3.5 text-muted-foreground" />
-          </span>
+          <RowSlot>
+            <FolderChevron isOpen={false} />
+          </RowSlot>
           <Input
             autoFocus
             aria-label="Folder name"

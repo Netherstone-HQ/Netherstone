@@ -18,8 +18,13 @@ export type SettingsCategory =
   | "shortcuts"
   | "about";
 export type AppMode = "notes" | "canvas";
+/** The modes on the rail, in order. Tags shows in the notes layout. */
+export const RAIL_MODES = ["editor", "tags", "canvas"] as const;
+export type RailMode = (typeof RAIL_MODES)[number];
 /** Right sidebar sections that collapse. */
 export type RightSidebarSection = "outline" | "metadata";
+/** Left sidebar sections that collapse. */
+export type LeftSidebarSection = "pinned" | "recent";
 
 const MAX_RECENT_FILES_HISTORY = 25;
 
@@ -35,6 +40,9 @@ interface UIState {
   toggleSidebar: () => void;
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
+  /** Which left sidebar sections are collapsed. */
+  collapsedSections: Record<LeftSidebarSection, boolean>;
+  toggleSection: (section: LeftSidebarSection) => void;
 
   // ── Right Sidebar ──────────────────────────────────────────────────────────
   isRightSidebarOpen: boolean;
@@ -69,12 +77,17 @@ interface UIState {
   /** Opens Settings at `category`. */
   openSettings: (category?: SettingsCategory) => void;
 
-  // ── Recent Files ───────────────────────────────────────────────────────────
+  // ── Recent and Pinned Files ────────────────────────────────────────────────
   recentFiles: RecentFileEntry[];
   pushRecentFile: (file: RecentFileEntry) => void;
-  updateRecentFilePath: (previousPath: string, nextPath: string) => void;
-  removeRecentFile: (path: string) => void;
   clearRecentFiles: () => void;
+  /** Files pinned to the top of the sidebar, across vaults (shown per vault). */
+  pinnedFiles: RecentFileEntry[];
+  togglePinnedFile: (file: RecentFileEntry) => void;
+  /** Points recent and pinned files at `nextPath` after a rename or move. */
+  remapRememberedPaths: (previousPath: string, nextPath: string) => void;
+  /** Drops recent and pinned files at or inside `path` once it's deleted. */
+  forgetRememberedPaths: (path: string) => void;
 
   // ── Search Modal ───────────────────────────────────────────────────────────
   isSearchModalOpen: boolean;
@@ -84,6 +97,8 @@ interface UIState {
   // ── App Mode ───────────────────────────────────────────────────────────────
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
+  /** Shows a rail mode, closing Settings or Tags if they're open. */
+  openMode: (mode: RailMode) => void;
 
   // ── Canvas ─────────────────────────────────────────────────────────────────
   /** The `.excalidraw` file open in canvas mode, or null for a scratch canvas. */
@@ -109,6 +124,14 @@ export const useUIStore = create<UIState>()(
         set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       sidebarWidth: 256,
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
+      collapsedSections: { pinned: false, recent: false },
+      toggleSection: (section) =>
+        set((state) => ({
+          collapsedSections: {
+            ...state.collapsedSections,
+            [section]: !state.collapsedSections[section],
+          },
+        })),
 
       // ── Right Sidebar ──────────────────────────────────────────────────────────
       isRightSidebarOpen: true,
@@ -153,7 +176,7 @@ export const useUIStore = create<UIState>()(
           settingsCategory: category ?? state.settingsCategory,
         })),
 
-      // ── Recent Files ───────────────────────────────────────────────────────────
+      // ── Recent and Pinned Files ────────────────────────────────────────────────
       recentFiles: [],
       pushRecentFile: (file) =>
         set((state) => ({
@@ -164,28 +187,42 @@ export const useUIStore = create<UIState>()(
             ),
           ].slice(0, MAX_RECENT_FILES_HISTORY),
         })),
-      // Renaming or moving a folder also updates the recent files inside it.
-      updateRecentFilePath: (previousPath, nextPath) =>
+      clearRecentFiles: () => set({ recentFiles: [] }),
+      pinnedFiles: [],
+      togglePinnedFile: (file) =>
         set((state) => ({
-          recentFiles: state.recentFiles.map((entry) => {
+          pinnedFiles: state.pinnedFiles.some((entry) =>
+            isSamePath(entry.path, file.path),
+          )
+            ? state.pinnedFiles.filter(
+                (entry) => !isSamePath(entry.path, file.path),
+              )
+            : [...state.pinnedFiles, file],
+        })),
+      // Renaming or moving a folder also updates the files inside it.
+      remapRememberedPaths: (previousPath, nextPath) =>
+        set((state) => {
+          const remap = (entry: RecentFileEntry) => {
             const path = remapPathAfterMove(entry.path, previousPath, nextPath);
             return path
-              ? {
-                  ...entry,
-                  path,
-                  name: path.split(/[\\/]/).pop() ?? entry.name,
-                }
+              ? { path, name: path.split(/[\\/]/).pop() ?? entry.name }
               : entry;
-          }),
-        })),
-      // Removing a folder also removes the recent files inside it.
-      removeRecentFile: (path) =>
+          };
+          return {
+            recentFiles: state.recentFiles.map(remap),
+            pinnedFiles: state.pinnedFiles.map(remap),
+          };
+        }),
+      // Removing a folder also removes the files inside it.
+      forgetRememberedPaths: (path) =>
         set((state) => ({
           recentFiles: state.recentFiles.filter(
             (entry) => !isPathWithin(entry.path, path),
           ),
+          pinnedFiles: state.pinnedFiles.filter(
+            (entry) => !isPathWithin(entry.path, path),
+          ),
         })),
-      clearRecentFiles: () => set({ recentFiles: [] }),
 
       // ── Search Modal ───────────────────────────────────────────────────────────
       isSearchModalOpen: false,
@@ -196,6 +233,11 @@ export const useUIStore = create<UIState>()(
       // ── App Mode ───────────────────────────────────────────────────────────────
       appMode: "notes",
       setAppMode: (mode) => set({ appMode: mode }),
+      openMode: (mode) =>
+        set({
+          appMode: mode === "canvas" ? "canvas" : "notes",
+          activeNavItem: mode === "tags" ? "tags" : null,
+        }),
 
       // ── Canvas ─────────────────────────────────────────────────────────────────
       activeDrawingPath: null,
@@ -220,10 +262,19 @@ export const useUIStore = create<UIState>()(
         canvasBrowserLastUrl: state.canvasBrowserLastUrl,
         activeNavItem: state.activeNavItem,
         recentFiles: state.recentFiles,
+        pinnedFiles: state.pinnedFiles,
         sidebarWidth: state.sidebarWidth,
+        collapsedSections: state.collapsedSections,
         appMode: state.appMode,
         activeDrawingPath: state.activeDrawingPath,
       }),
     },
   ),
 );
+
+/** The rail mode on screen, or null while Settings covers it. */
+export function selectRailMode(state: UIState): RailMode | null {
+  if (state.activeNavItem === "settings") return null;
+  if (state.appMode === "canvas") return "canvas";
+  return state.activeNavItem === "tags" ? "tags" : "editor";
+}

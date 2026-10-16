@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { isPathWithin, resolveVaultRelativePath } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store/editor";
 import { useSettingsStore } from "@/store/settings";
+import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 import { openEditorFile } from "@/lib/open-editor-file";
 
@@ -76,6 +77,8 @@ export function NewShardDialog({
       });
 
       await openEditorFile(filePath);
+      // Ctrl+N works from any mode; the new shard opens in the editor.
+      useUIStore.getState().openMode("editor");
 
       // Trigger vault rescan to update file tree
       const fileTree = await invoke("scan_vault", {

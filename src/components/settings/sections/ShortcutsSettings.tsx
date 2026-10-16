@@ -8,7 +8,13 @@ type Shortcut = { keys: string; action: string };
 const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
   {
     title: "App",
-    shortcuts: [{ keys: "mod+k", action: "Search your vault" }],
+    shortcuts: [
+      { keys: "mod+k", action: "Search your vault" },
+      { keys: "mod+n", action: "New shard" },
+      { keys: "mod+1", action: "Editor" },
+      { keys: "mod+2", action: "Tags" },
+      { keys: "mod+3", action: "Canvas" },
+    ],
   },
   {
     title: "Text",

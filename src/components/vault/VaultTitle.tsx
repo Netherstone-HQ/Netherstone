@@ -62,7 +62,7 @@ export function VaultTitle() {
     })),
   );
 
-  const updateRecentFilePath = useUIStore((s) => s.updateRecentFilePath);
+  const remapRememberedPaths = useUIStore((s) => s.remapRememberedPaths);
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState("");
@@ -311,7 +311,7 @@ export function VaultTitle() {
         reason: "rename",
       });
 
-      updateRecentFilePath(currentFilePath, newPath);
+      remapRememberedPaths(currentFilePath, newPath);
       await refreshAstCache(newPath, content, "rename-save");
 
       applyOpenEditorSessionPathChange(newPath, content, {

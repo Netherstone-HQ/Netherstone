@@ -1,74 +1,84 @@
-import { NotebookIcon, SettingsIcon } from "lucide-react";
+import { Fragment } from "react";
+import { NotebookIcon, SettingsIcon, TagIcon } from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useUIStore } from "@/store/ui";
-import type { AppMode } from "@/store/ui";
+import { Hint } from "@/components/ui/tooltip";
+import { selectRailMode, useUIStore, type RailMode } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
-const modes: { mode: AppMode; label: string; icon: React.ElementType }[] = [
-  { mode: "notes", label: "Notes", icon: NotebookIcon },
+const MODES: { mode: RailMode; label: string; icon: React.ElementType }[] = [
+  { mode: "editor", label: "Editor", icon: NotebookIcon },
+  { mode: "tags", label: "Tags", icon: TagIcon },
   { mode: "canvas", label: "Canvas", icon: DrawingIcon },
 ];
 
+function RailButton({
+  label,
+  isActive,
+  onClick,
+  className,
+  children,
+}: {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Hint label={label} side="right">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex size-10 items-center justify-center rounded-md transition-colors [&_svg]:size-5",
+          isActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+          className,
+        )}
+        aria-label={label}
+        aria-pressed={isActive}
+      >
+        {children}
+      </button>
+    </Hint>
+  );
+}
+
 export function ModeSwitcher() {
-  const appMode = useUIStore((s) => s.appMode);
-  const setAppMode = useUIStore((s) => s.setAppMode);
+  const railMode = useUIStore(selectRailMode);
+  const openMode = useUIStore((s) => s.openMode);
   const activeNavItem = useUIStore((s) => s.activeNavItem);
   const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
 
   return (
     <div className="flex h-full w-12 shrink-0 flex-col items-center gap-1.5 border-r bg-sidebar pb-2.5 pt-1">
-      {modes.map(({ mode, label, icon: Icon }) => (
-        <Tooltip key={mode} delayDuration={300}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => setAppMode(mode)}
-              className={cn(
-                "flex size-10 items-center justify-center rounded-md transition-colors",
-                appMode === mode
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-              aria-label={label}
-              aria-pressed={appMode === mode}
-            >
-              <Icon className="size-5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={6}>
-            {label}
-          </TooltipContent>
-        </Tooltip>
+      {MODES.map(({ mode, label, icon: Icon }) => (
+        <Fragment key={mode}>
+          {/* A divider sets Canvas apart from the modes for shards. */}
+          {mode === "canvas" ? (
+            <div aria-hidden="true" className="my-0.5 h-px w-5 bg-input" />
+          ) : null}
+          <RailButton
+            label={label}
+            isActive={railMode === mode}
+            onClick={() => openMode(mode)}
+          >
+            <Icon />
+          </RailButton>
+        </Fragment>
       ))}
 
-      <Tooltip delayDuration={300}>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={() =>
-              setActiveNavItem(activeNavItem === "settings" ? null : "settings")
-            }
-            className={cn(
-              "mt-auto flex size-10 items-center justify-center rounded-md transition-colors",
-              activeNavItem === "settings"
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-            )}
-            aria-label="Settings"
-            aria-pressed={activeNavItem === "settings"}
-          >
-            <SettingsIcon className="size-5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={6}>
-          Settings
-        </TooltipContent>
-      </Tooltip>
+      <RailButton
+        label="Settings"
+        isActive={activeNavItem === "settings"}
+        onClick={() =>
+          setActiveNavItem(activeNavItem === "settings" ? null : "settings")
+        }
+        className="mt-auto"
+      >
+        <SettingsIcon />
+      </RailButton>
     </div>
   );
 }

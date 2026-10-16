@@ -1,6 +1,8 @@
 import { finishDrawingSession, isDrawingPath } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { createDrawingFile, scanVault } from "@/lib/commands";
 import { useUIStore } from "@/store/ui";
+import { useVaultStore } from "@/store/vault";
 
 /** Opens a `.excalidraw` drawing in canvas mode. */
 export async function openDrawingFile(filePath: string) {
@@ -29,4 +31,11 @@ export async function openVaultFile(filePath: string) {
   }
 
   await openEditorFile(filePath);
+}
+
+/** Creates an untitled drawing at the root of the vault and opens it. */
+export async function createDrawing(vaultPath: string) {
+  const filePath = await createDrawingFile(vaultPath, "Untitled");
+  await openDrawingFile(filePath);
+  useVaultStore.getState().setFileTree(await scanVault(vaultPath));
 }

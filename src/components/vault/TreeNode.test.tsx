@@ -105,6 +105,32 @@ describe("TreeNode right-click menu", () => {
     expect(screen.getByRole("menuitem", { name: "Move" })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: "New folder" })).toBeNull();
   });
+
+  it("puts Pin first on a shard, and Unpin once it's pinned", async () => {
+    useUIStore.setState({ pinnedFiles: [] });
+    renderNode(FOLDER.children![0]);
+
+    openMenuOn("Plan");
+    const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+    expect(items[0]).toBe("Pin");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+
+    await waitFor(() =>
+      expect(useUIStore.getState().pinnedFiles).toEqual([
+        { path: `${VAULT}/Work/Plan.md`, name: "Plan.md" },
+      ]),
+    );
+    openMenuOn("Plan");
+    expect(screen.getByRole("menuitem", { name: "Unpin" })).toBeTruthy();
+  });
+
+  it("doesn't offer pinning a folder", () => {
+    renderNode(FOLDER);
+
+    openMenuOn("Work");
+
+    expect(screen.queryByRole("menuitem", { name: "Pin" })).toBeNull();
+  });
 });
 
 describe("TreeNode path changes", () => {

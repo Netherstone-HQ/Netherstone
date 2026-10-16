@@ -5,6 +5,7 @@ import {
   FileTypeIcon,
   LoaderCircleIcon,
   XIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,7 +33,7 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   html: "Web page",
 };
 
-const FORMAT_ICONS: Record<ExportFormat, typeof FileTextIcon> = {
+const FORMAT_ICONS: Record<ExportFormat, LucideIcon> = {
   pdf: FileTextIcon,
   docx: FileTypeIcon,
   html: FileCodeIcon,

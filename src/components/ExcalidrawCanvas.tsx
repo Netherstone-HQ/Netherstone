@@ -3,9 +3,9 @@ import {
   Excalidraw,
   getSceneVersion,
   MainMenu,
-  restore,
   serializeAsJSON,
   useHandleLibrary,
+  WelcomeScreen,
 } from "@excalidraw/excalidraw";
 import type {
   AppState,
@@ -14,6 +14,7 @@ import type {
   ExcalidrawInitialDataState,
   ExcalidrawProps,
 } from "@excalidraw/excalidraw/types";
+import { FolderOpenIcon, Grid3x3Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { SaveState } from "@/components/SaveStatus";
@@ -25,9 +26,11 @@ import {
 } from "@/lib/commands";
 import {
   getDrawingAltText,
+  parseDrawing,
   refreshLinkedDrawingImages,
 } from "@/lib/drawing-exports";
 import { registerDrawingSaver } from "@/lib/drawing-files";
+import { IS_MAC } from "@/lib/platform";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
 
@@ -61,25 +64,6 @@ function getShardName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
-/** Parses a `.excalidraw` file into restored scene data. */
-function parseDrawing(json: string) {
-  const data = json.trim() ? JSON.parse(json) : {};
-
-  if (typeof data !== "object" || data === null || Array.isArray(data)) {
-    throw new Error("The file is not an Excalidraw drawing.");
-  }
-
-  return restore(
-    {
-      elements: Array.isArray(data.elements) ? data.elements : [],
-      appState: data.appState ?? {},
-      files: data.files ?? {},
-    },
-    null,
-    null,
-  );
-}
-
 /**
  * Identifies the saved parts of a scene. Scroll, zoom and selection are not
  * saved, so changing only those does not trigger a write.
@@ -108,6 +92,11 @@ const NEW_DRAWING_NAME = "Untitled";
 const UI_OPTIONS: ExcalidrawProps["UIOptions"] = {
   canvasActions: { loadScene: false, export: false },
 };
+
+/** Excalidraw's own shortcut for the grid. */
+const GRID_SHORTCUT = IS_MAC ? "⌘'" : "Ctrl+'";
+
+const showDrawings = () => useUIStore.getState().setSidebarOpen(true);
 
 /**
  * Loads the drawing open when the canvas mounts and autosaves changes to the
@@ -146,10 +135,10 @@ function useDrawingPersistence(drawingPath: string | null) {
     let cancelled = false;
 
     readDrawingFile(initialPath)
-      .then((json) => {
+      .then(parseDrawing)
+      .then((restored) => {
         if (cancelled) return;
 
-        const restored = parseDrawing(json);
         lastSavedKeyRef.current = getSceneSaveKey(restored);
         setInitialData(restored);
       })
@@ -357,8 +346,17 @@ export function ExcalidrawCanvas({
 }: ExcalidrawCanvasProps) {
   const { initialData, onSceneChange, status } =
     useDrawingPersistence(drawingPath);
+  const [isGridShown, setIsGridShown] = useState(false);
 
   useHandleLibrary({ excalidrawAPI });
+
+  const handleChange = useCallback(
+    (elements: SceneElements, appState: AppState, files: BinaryFiles) => {
+      onSceneChange(elements, appState, files);
+      setIsGridShown(appState.gridModeEnabled);
+    },
+    [onSceneChange],
+  );
 
   useEffect(() => {
     onSaveStateChange(status);
@@ -381,16 +379,47 @@ export function ExcalidrawCanvas({
         initialData={initialData}
         excalidrawAPI={onExcalidrawAPI}
         libraryReturnUrl={libraryReturnUrl}
-        onChange={onSceneChange}
+        onChange={handleChange}
         UIOptions={UI_OPTIONS}
       >
         {/* Saving and exporting go through the top bar's drawing menu, and
             the theme follows the app's. */}
         <MainMenu>
           <MainMenu.DefaultItems.ClearCanvas />
+          <MainMenu.Item
+            icon={<Grid3x3Icon />}
+            shortcut={GRID_SHORTCUT}
+            onSelect={() =>
+              excalidrawAPI?.updateScene({
+                appState: { gridModeEnabled: !isGridShown },
+              })
+            }
+          >
+            {isGridShown ? "Hide grid" : "Show grid"}
+          </MainMenu.Item>
           <MainMenu.DefaultItems.ChangeCanvasBackground />
           <MainMenu.DefaultItems.Help />
         </MainMenu>
+        {/* Shown on an empty canvas. Drawing on it is what saves it, which
+            nothing else on screen says. "Open an existing drawing" shows the
+            left sidebar, where the vault's drawings are. */}
+        <WelcomeScreen>
+          <WelcomeScreen.Hints.ToolbarHint />
+          <WelcomeScreen.Hints.HelpHint />
+          <WelcomeScreen.Center>
+            <WelcomeScreen.Center.Heading>
+              Your drawing is saved to your vault as you go.
+            </WelcomeScreen.Center.Heading>
+            <WelcomeScreen.Center.Menu>
+              <WelcomeScreen.Center.MenuItem
+                icon={<FolderOpenIcon />}
+                onSelect={showDrawings}
+              >
+                Open an existing drawing
+              </WelcomeScreen.Center.MenuItem>
+            </WelcomeScreen.Center.Menu>
+          </WelcomeScreen.Center>
+        </WelcomeScreen>
       </Excalidraw>
     </div>
   );

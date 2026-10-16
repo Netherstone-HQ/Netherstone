@@ -35,6 +35,15 @@ import { useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import type { RecentFileEntry } from "@/store/ui";
 
+/**
+ * Whether `scene` has something to add to a shard. Says so when it hasn't.
+ */
+export function hasSomethingToAdd(scene: ExportableScene) {
+  if (scene.elements.some((element) => !element.isDeleted)) return true;
+  toast("Draw something first, then add it to a shard.");
+  return false;
+}
+
 /** Enough to pick from; typing narrows a longer list. */
 const MAX_SHOWN_SHARDS = 100;
 

@@ -1,12 +1,18 @@
 import { useState } from "react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { ImageDownIcon, ImagePlusIcon } from "lucide-react";
-import { toast } from "sonner";
 
-import { AddToShardDialog } from "@/components/canvas/AddToShardDialog";
+import {
+  AddToShardDialog,
+  hasSomethingToAdd,
+} from "@/components/canvas/AddToShardDialog";
 import { DrawingIcon } from "@/components/icons";
-import { LeftSidebarToggle } from "@/components/PanelToggles";
+import {
+  BrowserPanelToggle,
+  LeftSidebarToggle,
+} from "@/components/PanelToggles";
 import { SaveStatus, type SaveState } from "@/components/SaveStatus";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { FileBreadcrumb } from "@/components/vault/FileBreadcrumb";
 import type { RowAction } from "@/components/vault/RowActions";
@@ -54,18 +60,18 @@ export function CanvasHeader({
         },
       ]
     : [];
+  const canAddToShard = !!drawingPath && !!excalidrawAPI;
+  const startAddingToShard = () => {
+    if (excalidrawAPI && hasSomethingToAdd(getScene(excalidrawAPI))) {
+      setIsAddingToShard(true);
+    }
+  };
   const exportActions: RowAction[] = excalidrawAPI
     ? [
         {
           label: "Add to shard…",
           icon: ImagePlusIcon,
-          onSelect: () => {
-            if (excalidrawAPI.getSceneElements().length === 0) {
-              toast("Draw something first, then add it to a shard.");
-            } else {
-              setIsAddingToShard(true);
-            }
-          },
+          onSelect: startAddingToShard,
         },
         {
           label: "Export image…",
@@ -91,11 +97,21 @@ export function CanvasHeader({
         leadingActions={leadingActions}
         exportActions={exportActions}
       />
-      {drawingPath ? (
-        <div className="ml-auto flex shrink-0 items-center">
-          <SaveStatus state={saveState} />
-        </div>
-      ) : null}
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {canAddToShard ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={startAddingToShard}
+            className="h-control gap-1.5 px-2 text-ui text-muted-foreground hover:text-foreground"
+          >
+            <ImagePlusIcon />
+            Add to shard
+          </Button>
+        ) : null}
+        {drawingPath ? <SaveStatus state={saveState} /> : null}
+        <BrowserPanelToggle isCanvas />
+      </div>
       {drawingPath && excalidrawAPI ? (
         <AddToShardDialog
           open={isAddingToShard}

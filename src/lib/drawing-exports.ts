@@ -9,6 +9,7 @@ import {
   appendMarkdownToFile,
   findShardsContaining,
   persistAttachmentBytes,
+  readDrawingFile,
   readMarkdownFile,
   saveMarkdownFile,
 } from "@/lib/commands";
@@ -44,6 +45,34 @@ function timestampedCanvasFileName() {
     .replace("Z", "");
 
   return `excalidraw-canvas-${timestamp}.png`;
+}
+
+/** Parses a `.excalidraw` file into restored scene data. */
+export async function parseDrawing(json: string) {
+  const data = json.trim() ? JSON.parse(json) : {};
+
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw new Error("The file is not an Excalidraw drawing.");
+  }
+
+  // Excalidraw is large; load it only when a drawing is read.
+  const { restore } = await import("@excalidraw/excalidraw");
+  return restore(
+    {
+      elements: Array.isArray(data.elements) ? data.elements : [],
+      appState: data.appState ?? {},
+      files: data.files ?? {},
+    },
+    null,
+    null,
+  );
+}
+
+/** The scene saved in the drawing at `drawingPath`. */
+export async function readDrawingScene(
+  drawingPath: string,
+): Promise<ExportableScene> {
+  return parseDrawing(await readDrawingFile(drawingPath));
 }
 
 /**

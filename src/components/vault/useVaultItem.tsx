@@ -6,6 +6,7 @@ import {
   FilePlusIcon,
   FolderOpenIcon,
   FolderPlusIcon,
+  ImagePlusIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
@@ -13,6 +14,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   AlertDialog,
@@ -23,11 +25,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  AddToShardDialog,
+  hasSomethingToAdd,
+} from "@/components/canvas/AddToShardDialog";
+import { DrawingIcon } from "@/components/icons";
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import type { RowAction } from "@/components/vault/RowActions";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
-import { relinkDrawingReferences } from "@/lib/drawing-exports";
+import {
+  readDrawingScene,
+  relinkDrawingReferences,
+  type ExportableScene,
+} from "@/lib/drawing-exports";
 import {
   flushPendingDrawingSave,
   getVaultFileDisplayName,
@@ -44,7 +55,7 @@ import {
   applyOpenEditorSessionPathChange,
   captureOpenEditorSessionPathChangeSnapshot,
 } from "@/lib/open-editor-session-path-change";
-import { openVaultFile } from "@/lib/open-vault-file";
+import { createDrawing, openVaultFile } from "@/lib/open-vault-file";
 import { refreshVault } from "@/lib/refresh-vault";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
 import {
@@ -152,6 +163,9 @@ export function useVaultItem(
   const [isMoving, setIsMoving] = useState(false);
   const [isConfirmingTrash, setIsConfirmingTrash] = useState(false);
   const [isCreatingShard, setIsCreatingShard] = useState(false);
+  // The drawing's scene, read when Add to shard… is picked, for its dialog.
+  const [sceneToAdd, setSceneToAdd] = useState<ExportableScene | null>(null);
+  const [isAddingToShard, setIsAddingToShard] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   // Enter commits the rename, and the input then loses focus (the editor
@@ -417,6 +431,23 @@ export function useVaultItem(
     setNewFolderParent(node.path);
   };
 
+  const startAddingToShard = async () => {
+    try {
+      // The drawing may be open in Canvas with changes not saved yet.
+      await flushDrawingAffectedBy(node.path);
+      const scene = await readDrawingScene(node.path);
+      if (hasSomethingToAdd(scene)) {
+        setSceneToAdd(scene);
+        setIsAddingToShard(true);
+      }
+    } catch (error) {
+      console.error("[Netherstone] Failed to read drawing:", error);
+      toast.error(`Couldn't open ${displayName}`, {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const shared: RowAction[] = [
     { label: "Rename", icon: PencilIcon, onSelect: startRename },
     { label: "Move", icon: ArrowDownUpIcon, onSelect: () => setIsMoving(true) },
@@ -443,6 +474,15 @@ export function useVaultItem(
             onSelect: () => setIsCreatingShard(true),
           },
           {
+            label: "New drawing",
+            icon: DrawingIcon,
+            onSelect: () => {
+              if (currentVaultPath) {
+                void createDrawing(currentVaultPath, node.path);
+              }
+            },
+          },
+          {
             label: "New folder",
             icon: FolderPlusIcon,
             onSelect: handleNewFolder,
@@ -464,7 +504,13 @@ export function useVaultItem(
           ...shared.slice(1),
           ...(exportActions ??
             (isDrawingPath(node.path)
-              ? []
+              ? [
+                  {
+                    label: "Add to shard…",
+                    icon: ImagePlusIcon,
+                    onSelect: () => void startAddingToShard(),
+                  },
+                ]
               : [
                   {
                     label: "Export…",
@@ -525,6 +571,14 @@ export function useVaultItem(
           open={isCreatingShard}
           onOpenChange={setIsCreatingShard}
           folder={node.path}
+        />
+      ) : null}
+      {sceneToAdd ? (
+        <AddToShardDialog
+          open={isAddingToShard}
+          onOpenChange={setIsAddingToShard}
+          drawingPath={node.path}
+          getScene={() => sceneToAdd}
         />
       ) : null}
       <MoveFileDialog

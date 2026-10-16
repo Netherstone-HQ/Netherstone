@@ -35,12 +35,12 @@ export async function openVaultFile(filePath: string) {
 }
 
 /**
- * Creates an untitled drawing at the root of the vault and opens it, saying
- * so if that fails.
+ * Creates an untitled drawing in `folder` (the vault's root by default) and
+ * opens it, saying so if that fails.
  */
-export async function createDrawing(vaultPath: string) {
+export async function createDrawing(vaultPath: string, folder = vaultPath) {
   try {
-    const filePath = await createDrawingFile(vaultPath, "Untitled");
+    const filePath = await createDrawingFile(folder, "Untitled");
     await openDrawingFile(filePath);
     useVaultStore.getState().setFileTree(await scanVault(vaultPath));
   } catch (error) {

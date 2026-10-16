@@ -79,7 +79,7 @@ export const SETTINGS_CATEGORIES: Category[] = [
   },
   {
     id: "sync",
-    label: "Sync & backup",
+    label: "Sync",
     icon: RefreshCwIcon,
     Content: SyncSettings,
   },

@@ -248,6 +248,10 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                 </>
               ) : null}
 
+              <DropdownMenuItem onSelect={() => void handleOpenShard()}>
+                <FileIcon />
+                Open shard
+              </DropdownMenuItem>
               {otherVaults.length > 0 ? (
                 <>
                   <DropdownMenuLabel>Recent vaults</DropdownMenuLabel>
@@ -273,14 +277,10 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                 <PlusIcon />
                 New vault
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
 
-              <DropdownMenuItem onSelect={() => void handleOpenShard()}>
-                <FileIcon />
-                Open shard
-              </DropdownMenuItem>
               {currentVaultPath ? (
                 <>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={() => void handleRevealVaultLocation()}
                   >

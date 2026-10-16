@@ -13,25 +13,13 @@ import { FileIcon, SearchIcon } from "lucide-react";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
-
-// Convert common markdown syntax to HTML for snippets
-function markdownToHtml(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") // Bold
-    .replace(/\*(.+?)\*/g, "<em>$1</em>") // Italic
-    .replace(/__(.+?)__/g, "<strong>$1</strong>") // Bold (underscore)
-    .replace(/_(.+?)_/g, "<em>$1</em>") // Italic (underscore)
-    .replace(/~~(.+?)~~/g, "<del>$1</del>") // Strikethrough
-    .replace(/`(.+?)`/g, "<code>$1</code>") // Inline code
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1") // Links (just show text)
-    .replace(/^#+\s+/gm, "") // Headings (strip markers)
-    .replace(/^>\s+/gm, ""); // Blockquotes (strip markers)
-}
+import { HighlightedText, type TextPart } from "./HighlightedText";
 
 interface SearchResult {
   path: string;
   name: string;
-  snippet: string;
+  /** The text around the words searched for, which are highlighted. */
+  snippet: TextPart[];
   rank: number;
 }
 
@@ -185,16 +173,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
                       <div className="text-ui-sm text-muted-foreground truncate">
                         {getRelativePath(result.path)}
                       </div>
-                      {result.snippet && (
-                        <div
-                          className="mt-1 text-ui-sm text-muted-foreground line-clamp-2"
-                          dangerouslySetInnerHTML={{
-                            __html: markdownToHtml(result.snippet).replace(
-                              /<mark>/g,
-                              '<mark class="bg-yellow-200 dark:bg-yellow-900">',
-                            ),
-                          }}
-                        />
+                      {result.snippet.length > 0 && (
+                        <div className="mt-1 text-ui-sm text-muted-foreground line-clamp-2">
+                          <HighlightedText parts={result.snippet} />
+                        </div>
                       )}
                     </div>
                   </div>

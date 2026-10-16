@@ -1,13 +1,20 @@
+use crate::markdown_text::{BlockKind, TextBlock, TextPart, excerpt, text_blocks, word_matches};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::path::Path;
+
+/// Characters an excerpt keeps before and after what it highlights.
+const EXCERPT_BEFORE: usize = 60;
+const EXCERPT_AFTER: usize = 200;
 
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
     pub path: String,
     pub name: String,
-    pub snippet: String,
+    /// The text around the words searched for, which are highlighted.
+    pub snippet: Vec<TextPart>,
     pub rank: f64,
 }
 
@@ -17,14 +24,14 @@ pub struct TaggedFile {
     pub name: String,
     pub last_modified: i64,
     /// In the order they first appear in the file.
-    pub tags: Vec<TagLine>,
+    pub tags: Vec<TagExcerpt>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct TagLine {
+pub struct TagExcerpt {
     pub tag: String,
-    /// The first line that contains `#tag`, trimmed.
-    pub line: Option<String>,
+    /// The text around the tag's first appearance, with the tag highlighted.
+    pub excerpt: Option<Vec<TextPart>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -70,12 +77,17 @@ pub fn search_files(
         .map(|word| format!("{}*", word))
         .collect::<Vec<_>>()
         .join(" ");
+    let terms: Vec<String> = query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .map(str::to_lowercase)
+        .collect();
 
     eprintln!("[Netherstone] FTS5 query: '{}'", fts_query);
 
     let mut stmt = conn
         .prepare(
-            "SELECT f.path, f.name, snippet(fts_search, 2, '<mark>', '</mark>', '...', 32) as snippet, rank
+            "SELECT f.path, f.name, fts_search.content, rank
              FROM fts_search
              INNER JOIN files f ON fts_search.rowid = f.id
              WHERE fts_search MATCH ?1
@@ -86,10 +98,11 @@ pub fn search_files(
 
     let results = stmt
         .query_map(params![fts_query, limit], |row| {
+            let content: String = row.get(2)?;
             Ok(SearchResult {
                 path: row.get(0)?,
                 name: row.get(1)?,
-                snippet: row.get(2)?,
+                snippet: search_snippet(&content, &terms),
                 rank: row.get(3)?,
             })
         })
@@ -101,12 +114,49 @@ pub fn search_files(
     Ok(results)
 }
 
+/// The block matching the most search terms, around its first match. With no
+/// match in the text (the name matched), the start of the first non-heading
+/// block.
+fn search_snippet(content: &str, terms: &[String]) -> Vec<TextPart> {
+    let blocks = text_blocks(content);
+    let best = blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(index, block)| {
+            let matches = word_matches(&block.text, terms);
+            let found = terms
+                .iter()
+                .filter(|term| {
+                    matches.iter().any(|m| {
+                        block.text[m.clone()]
+                            .to_lowercase()
+                            .starts_with(term.as_str())
+                    })
+                })
+                .count();
+            (found > 0).then_some((index, found, block, matches))
+        })
+        // The earliest of the blocks with the most terms.
+        .max_by_key(|(index, found, ..)| (*found, Reverse(*index)));
+
+    match best {
+        Some((_, _, block, matches)) => {
+            excerpt(&block.text, &matches, EXCERPT_BEFORE, EXCERPT_AFTER)
+        }
+        None => blocks
+            .iter()
+            .find(|block| !matches!(block.kind, BlockKind::Heading { .. }))
+            .map(|block| excerpt(&block.text, &[], EXCERPT_BEFORE, EXCERPT_AFTER))
+            .unwrap_or_default(),
+    }
+}
+
 fn normalize_path(path: &str) -> String {
     path.replace("\\", "/")
 }
 
-/// Every file with at least one tag, newest first, with the line each tag
-/// first appears on.
+/// Every file with at least one tag, newest first, with the text around each
+/// tag's first appearance.
 pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
     let mut tags_by_file: HashMap<i64, Vec<String>> = HashMap::new();
     let mut stmt = conn
@@ -141,7 +191,7 @@ pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
                 path: row.get(1)?,
                 name: row.get(2)?,
                 last_modified: row.get(3)?,
-                tags: locate_tags(content.as_deref().unwrap_or(""), tags),
+                tags: locate_tags(&text_blocks(content.as_deref().unwrap_or("")), tags),
             })
         })
         .map_err(|e| format!("Failed to query tagged files: {}", e))?
@@ -151,39 +201,26 @@ pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
     Ok(files)
 }
 
-/// Pairs each tag with the first line it appears on, ordered by where that is.
-/// Tags whose line can't be found go last, alphabetically.
-fn locate_tags(content: &str, tags: Vec<String>) -> Vec<TagLine> {
-    let mut located: Vec<((usize, usize), TagLine)> = tags
+/// Pairs each tag with the text around its first appearance, ordered by where
+/// that is. Tags that can't be found go last, alphabetically.
+fn locate_tags(blocks: &[TextBlock], tags: Vec<String>) -> Vec<TagExcerpt> {
+    let mut located: Vec<((usize, usize), TagExcerpt)> = tags
         .into_iter()
         .map(|tag| {
-            let found = content.lines().enumerate().find_map(|(index, line)| {
-                find_tag_in_line(line, &tag).map(|column| ((index, column), line.trim()))
+            let found = blocks.iter().enumerate().find_map(|(index, block)| {
+                let (at, _) = block.tags.iter().find(|(_, t)| *t == tag)?;
+                Some(((index, *at), block))
             });
             let position = found.map_or((usize::MAX, 0), |(position, _)| position);
-            let line = found.map(|(_, line)| line.to_string());
-            (position, TagLine { tag, line })
+            let excerpt = found.map(|((_, at), block)| {
+                let highlight = at..at + 1 + tag.len();
+                excerpt(&block.text, &[highlight], EXCERPT_BEFORE, EXCERPT_AFTER)
+            });
+            (position, TagExcerpt { tag, excerpt })
         })
         .collect();
     located.sort_by(|(a, x), (b, y)| a.cmp(b).then_with(|| x.tag.cmp(&y.tag)));
-    located.into_iter().map(|(_, tag_line)| tag_line).collect()
-}
-
-/// Where `#tag` starts in `line` as a whole tag: not inside a longer word, and
-/// followed only by punctuation before the next space, as the parser reads it.
-fn find_tag_in_line(line: &str, tag: &str) -> Option<usize> {
-    let needle = format!("#{}", tag);
-    line.match_indices(&needle)
-        .map(|(start, _)| start)
-        .find(|&start| {
-            let starts_word = line[..start]
-                .chars()
-                .next_back()
-                .is_none_or(|c| c.is_whitespace() || (c.is_ascii_punctuation() && c != '#'));
-            let rest = &line[start + needle.len()..];
-            let word_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            starts_word && rest[..word_end].chars().all(|c| c.is_ascii_punctuation())
-        })
+    located.into_iter().map(|(_, tag)| tag).collect()
 }
 
 /// Get all files that link to the specified file (backlinks).
@@ -288,31 +325,60 @@ pub fn get_file_metadata(
 mod tests {
     use super::*;
 
-    #[test]
-    fn finds_whole_tags_only() {
-        assert_eq!(find_tag_in_line("Plans #ideas", "ideas"), Some(6));
-        assert_eq!(find_tag_in_line("**#ideas**, later", "ideas"), Some(2));
-        assert_eq!(find_tag_in_line("#ideas-old #ideas.", "ideas"), Some(11));
-        assert_eq!(find_tag_in_line("#ideasbook", "ideas"), None);
-        assert_eq!(find_tag_in_line("issue#ideas", "ideas"), None);
+    fn shown(parts: &[TextPart]) -> String {
+        parts
+            .iter()
+            .map(|p| {
+                if p.highlight {
+                    format!("[{}]", p.text)
+                } else {
+                    p.text.clone()
+                }
+            })
+            .collect()
     }
 
     #[test]
     fn orders_tags_by_first_appearance() {
-        let content = "# Monday\n\nRead a chapter #reading\n- [ ] Call back #todo #reading";
+        let blocks = text_blocks(
+            "# Monday\n\nRead a **chapter** #reading\n- [ ] Call [Sam](mention:Sam.md) #todo #reading",
+        );
         let tags = locate_tags(
-            content,
+            &blocks,
             vec!["todo".into(), "missing".into(), "reading".into()],
         );
 
         let names: Vec<_> = tags.iter().map(|t| t.tag.as_str()).collect();
         assert_eq!(names, ["reading", "todo", "missing"]);
-        assert_eq!(tags[0].line.as_deref(), Some("Read a chapter #reading"));
         assert_eq!(
-            tags[1].line.as_deref(),
-            Some("- [ ] Call back #todo #reading")
+            shown(tags[0].excerpt.as_ref().unwrap()),
+            "Read a chapter [#reading]"
         );
-        assert_eq!(tags[2].line, None);
+        assert_eq!(
+            shown(tags[1].excerpt.as_ref().unwrap()),
+            "Call Sam [#todo] #reading"
+        );
+        assert_eq!(tags[2].excerpt, None);
+    }
+
+    #[test]
+    fn snippets_show_the_block_with_the_most_search_terms() {
+        let content =
+            "# Trip\n\nPack the bags.\n\nBook the **train** for the trip.\n\nTrain snacks.";
+        let terms = ["train".to_string(), "trip".to_string()];
+        assert_eq!(
+            shown(&search_snippet(content, &terms)),
+            "Book the [train] for the [trip]."
+        );
+    }
+
+    #[test]
+    fn snippets_fall_back_to_the_first_paragraph() {
+        let content = "# Trip\n\nPack the bags.";
+        assert_eq!(
+            shown(&search_snippet(content, &["zebra".to_string()])),
+            "Pack the bags."
+        );
     }
 
     #[test]
@@ -347,6 +413,9 @@ mod tests {
         let names: Vec<_> = files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, ["new.md", "old.md"]);
         assert_eq!(files[0].last_modified, 200);
-        assert_eq!(files[0].tags[0].line.as_deref(), Some("New #ideas"));
+        assert_eq!(
+            shown(files[0].tags[0].excerpt.as_ref().unwrap()),
+            "New [#ideas]"
+        );
     }
 }

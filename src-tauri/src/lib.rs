@@ -2,6 +2,7 @@ mod browser;
 mod db;
 mod export;
 mod github;
+mod markdown_text;
 mod splash;
 mod sync;
 mod updater;

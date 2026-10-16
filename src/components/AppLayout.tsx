@@ -66,7 +66,7 @@ const ModeAwareCanvas = React.memo(function ModeAwareCanvas() {
   );
 });
 
-// Mounted only while Tags is open, so each visit loads fresh results.
+// Mounted only while Tags is open, so its results cost nothing elsewhere.
 const ModeAwareTags = React.memo(function ModeAwareTags() {
   const appMode = useUIStore((s) => s.appMode);
   if (appMode !== "tags") return null;

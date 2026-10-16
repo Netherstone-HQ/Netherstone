@@ -18,13 +18,13 @@ import {
 } from "@/lib/media-source";
 import { cn } from "@/lib/utils";
 
-import { AttachmentBackupIndicator } from "./attachment-backup-indicator";
 import { Caption, CaptionTextarea } from "./caption";
 import {
-  MediaStatusCard,
-  MissingLocalMediaCard,
-  MissingVaultAttachmentCard,
-} from "./media-status-card";
+  MediaFileRow,
+  MissingLinkedFileRow,
+  MissingVaultFileRow,
+  UnsyncedTag,
+} from "./media-file-row";
 import { useMediaNodeActions } from "./media-node-actions";
 import { MediaToolbar } from "./media-toolbar";
 import type { WithPersistedMediaMetadata } from "./media-types";
@@ -171,32 +171,35 @@ export const ImageElement = withHOC(
         <PlateElement {...props} className="py-2.5">
           <figure className="group relative m-0" contentEditable={false}>
             {showMissingVaultState ? (
-              <MissingVaultAttachmentCard
+              <MissingVaultFileRow
                 name={(props.attributes.alt as string | undefined) ?? undefined}
                 attachmentPath={attachmentPath}
-                className="w-full"
-                onRelink={() => {
-                  void mediaActions.relinkVaultAttachment();
-                }}
-                onRelinkTo={(path) => {
-                  void mediaActions.relinkVaultAttachmentTo(path);
-                }}
-                onRemove={mediaActions.removeNode}
-                disableActions={!mediaActions.canRelinkVaultAttachment}
+                onRelink={
+                  mediaActions.canRelinkVaultAttachment
+                    ? () => void mediaActions.relinkVaultAttachment()
+                    : undefined
+                }
+                onRelinkTo={
+                  mediaActions.canRelinkVaultAttachment
+                    ? (path) => void mediaActions.relinkVaultAttachmentTo(path)
+                    : undefined
+                }
+                onRemove={
+                  mediaActions.canEdit ? mediaActions.removeNode : undefined
+                }
               />
             ) : (
-              <MissingLocalMediaCard
+              <MissingLinkedFileRow
                 name={(props.attributes.alt as string | undefined) ?? undefined}
                 path={attachmentPath}
-                className="w-full"
-                onLocate={() => {
-                  void mediaActions.relinkLocalFile();
-                }}
-                onImportToVault={() => {
-                  void mediaActions.importToVault();
-                }}
-                onRemove={mediaActions.removeNode}
-                disableActions={!mediaActions.canRelinkLocalFile}
+                onLocate={
+                  mediaActions.canRelinkLocalFile
+                    ? () => void mediaActions.relinkLocalFile()
+                    : undefined
+                }
+                onRemove={
+                  mediaActions.canEdit ? mediaActions.removeNode : undefined
+                }
               />
             )}
 
@@ -219,20 +222,7 @@ export const ImageElement = withHOC(
     if (!renderUrl) {
       return (
         <PlateElement {...props} className="py-2.5">
-          <MediaStatusCard
-            className="w-full"
-            tone="warning"
-            title="Image source unavailable"
-            badge="Image"
-            description="This image does not currently have a usable source."
-            meta={
-              source ? (
-                <span className="break-all">{source}</span>
-              ) : (
-                "No persisted source was found on this image node."
-              )
-            }
-          />
+          <MediaFileRow warning name="Image" details="No source found" />
 
           {props.children}
         </PlateElement>
@@ -243,11 +233,6 @@ export const ImageElement = withHOC(
       <MediaToolbar plugin={ImagePlugin}>
         <PlateElement {...props} className="py-2.5">
           <figure className="group relative m-0" contentEditable={false}>
-            <AttachmentBackupIndicator
-              className="absolute top-1/2 right-3 z-10 -translate-y-1/2 opacity-90 transition-opacity group-hover:opacity-100"
-              metadata={props.element}
-            />
-
             <Resizable
               align={align}
               options={{
@@ -277,6 +262,8 @@ export const ImageElement = withHOC(
                 options={{ direction: "right" }}
               />
             </Resizable>
+
+            <UnsyncedTag className="mt-1.5" metadata={props.element} />
 
             <Caption style={{ width }} align={align}>
               <CaptionTextarea

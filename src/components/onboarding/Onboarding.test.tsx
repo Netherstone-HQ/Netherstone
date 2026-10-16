@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
@@ -80,19 +81,19 @@ describe("Onboarding", () => {
     });
     expect(useVaultStore.getState().currentVaultPath).toBe(`${DOCUMENTS}/My Vault`);
 
-    expect(screen.queryByRole("radio", { name: copy.appearance.options.citadel })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Citadel" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: copy.appearance.moreThemes }));
-    fireEvent.click(screen.getByRole("radio", { name: copy.appearance.options.citadel }));
+    fireEvent.click(screen.getByRole("radio", { name: "Citadel" }));
     expect(useSettingsStore.getState().theme).toBe("citadel");
 
-    fireEvent.click(screen.getByRole("radio", { name: copy.appearance.options.light }));
+    fireEvent.click(screen.getByRole("radio", { name: "Light" }));
     expect(useSettingsStore.getState().theme).toBe("light");
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
 
     await screen.findByText(copy.sync.title);
     fireEvent.click(screen.getByRole("button", { name: copy.common.skip }));
 
-    await screen.findByText(copy.ready.bodyNewVault);
+    await screen.findByText(copy.ready.body);
     fireEvent.click(screen.getByRole("button", { name: copy.ready.finish }));
 
     expect(useSettingsStore.getState().onboardingCompletedAt).not.toBeNull();
@@ -133,7 +134,7 @@ describe("Onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
 
     await screen.findByText(copy.sync.alreadyOn);
-    expect(screen.getByText(copy.sync.explainer[0])).toBeTruthy();
+    expect(screen.getByText(copy.sync.note)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
 
     await screen.findByText(copy.ready.body);
@@ -180,5 +181,50 @@ describe("Onboarding", () => {
     await screen.findByText(copy.sync.later);
     expect(screen.queryByText(copy.sync.alreadyOn)).toBeNull();
     expect(screen.getByRole("button", { name: copy.common.skip })).toBeTruthy();
+  });
+
+  it("says when synced vaults can't be listed, and tries again", async () => {
+    let online = false;
+    mockCommands({
+      ...baseCommands,
+      github_get_account: () => ({ login: "octocat", name: null, avatarUrl: null }),
+      github_get_installation: () => ({ installed: true, installedOn: [], installUrl: "" }),
+      sync_list_backups: () => {
+        if (!online) {
+          throw "Couldn't reach GitHub. Check your internet connection and try again.";
+        }
+        return [{ fullName: "octocat/Notes", name: "Notes", cloneUrl: "", pushedAt: null }];
+      },
+    });
+    await renderOnboarding();
+
+    fireEvent.click(screen.getByRole("button", { name: /Restore a synced vault/ }));
+    await screen.findByText(/Couldn't reach GitHub/);
+    expect(screen.queryByText(copy.vault.restore.empty)).toBeNull();
+
+    online = true;
+    fireEvent.click(screen.getByRole("button", { name: copy.vault.restore.retry }));
+    expect(await screen.findByRole("radio", { name: /Notes/ })).toBeTruthy();
+  });
+
+  it("leaves the guide unticked when the tour is replayed", async () => {
+    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    mockCommands(baseCommands);
+    render(
+      <TooltipProvider>
+        <Onboarding onDone={vi.fn()} onClose={vi.fn()} />
+      </TooltipProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: copy.welcome.start }));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(copy.vault.keep.title("Research")) }),
+    );
+    await screen.findByText(copy.appearance.title);
+    fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
+    fireEvent.click(await screen.findByRole("button", { name: copy.common.skip }));
+
+    const guide = await screen.findByRole("checkbox", { name: copy.ready.addGuide });
+    expect(guide.getAttribute("aria-checked")).toBe("false");
   });
 });

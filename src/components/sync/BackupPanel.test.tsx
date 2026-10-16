@@ -110,7 +110,7 @@ describe("BackupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /2 files stay on this device/i }));
     expect(screen.getByText("movie.mp4")).toBeTruthy();
     expect(screen.getByText("Larger than 20 MB")).toBeTruthy();
-    expect(screen.getByText("Program files aren't backed up")).toBeTruthy();
+    expect(screen.getByText("Apps and scripts don't sync")).toBeTruthy();
 
     const turnOn = screen.getByRole("button", { name: /turn on sync/i });
     await vi.waitFor(() => expect(turnOn).toHaveProperty("disabled", false));
@@ -138,7 +138,7 @@ describe("BackupPanel", () => {
     render(<BackupPanel vaultPath={VAULT} />);
     expect(await screen.findByRole("button", { name: /install on github/i })).toBeTruthy();
     expect(
-      screen.getByText(/installed on Netherstone-HQ, but backups go to your personal account\. Install it on @octocat/),
+      screen.getByText(/sync to your personal account\. Install it on @octocat too/),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /turn on sync/i })).toHaveProperty(
       "disabled",
@@ -157,7 +157,7 @@ describe("BackupPanel", () => {
 
     render(<BackupPanel vaultPath={VAULT} />);
     fireEvent.click(await screen.findByRole("button", { name: /sync now/i }));
-    expect(await screen.findByText(/working offline/i)).toBeTruthy();
+    expect(await screen.findByText(/^offline$/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /sync now/i })).toHaveProperty(
       "disabled",
       false,
@@ -169,13 +169,13 @@ describe("BackupPanel", () => {
       github_get_account: async () => ACCOUNT,
       sync_get_vault_record: async () => RECORD,
       sync_now: async () => {
-        throw "GitHub didn't accept the connection. Reconnect GitHub in Settings.";
+        throw "GitHub didn't accept the connection. Connect again in Settings › Sync.";
       },
     });
 
     render(<BackupPanel vaultPath={VAULT} />);
     fireEvent.click(await screen.findByRole("button", { name: /sync now/i }));
-    expect(await screen.findByText(/reconnect github/i)).toBeTruthy();
+    expect(await screen.findByText(/connect again/i)).toBeTruthy();
   });
 
   it("lists files that need a decision", async () => {
@@ -209,8 +209,8 @@ describe("BackupPanel", () => {
     });
 
     render(<BackupPanel vaultPath={VAULT} />);
-    fireEvent.click(await screen.findByRole("button", { name: /use that backup/i }));
-    expect(await screen.findByText(/download into this vault/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: /use a vault you synced/i }));
+    expect(await screen.findByText(/download here/i)).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /notes/i }));
 
     expect(await screen.findByText(/synced 1 minute ago/i)).toBeTruthy();

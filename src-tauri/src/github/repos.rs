@@ -61,7 +61,7 @@ fn is_name_taken(body: &str) -> bool {
 async fn api_error(response: reqwest::Response, action: &str) -> String {
     let status = response.status();
     match status.as_u16() {
-        401 => "Your GitHub connection has expired. Reconnect GitHub in Settings.".to_string(),
+        401 => "Your GitHub connection expired. Connect again in Settings › Sync.".to_string(),
         403 | 404 => format!(
             "GitHub didn't allow Netherstone to {} ({}). Make sure the Netherstone app has access to All repositories in your GitHub settings.",
             action, status

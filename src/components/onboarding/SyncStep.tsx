@@ -4,6 +4,7 @@ import { CircleCheckIcon, LoaderCircleIcon } from "lucide-react";
 import { GitHubAvatar } from "@/components/settings/GitHubAccountSection";
 import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNotice";
 import { GitHubSignIn } from "@/components/settings/GitHubSignIn";
+import { SyncHelpDialog } from "@/components/settings/SyncHelpDialog";
 import { Button } from "@/components/ui/button";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
@@ -94,11 +95,9 @@ export function SyncStep({
         )
       }
     >
-      <div className="mb-8 -mt-4 space-y-3 text-muted-foreground text-ui leading-6">
-        {copy.sync.explainer.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
-      </div>
+      <p className="mb-8 -mt-4 text-muted-foreground text-ui leading-6">
+        {copy.sync.note} <SyncHelpDialog asLink />
+      </p>
       <div className="space-y-4">
         {body}
         {error ? <Hint tone="error">{error}</Hint> : null}

@@ -55,12 +55,12 @@ pub fn integrate(
     let local = head_commit(repository)?;
     let remote_commit = repository
         .find_commit(remote)
-        .map_err(|e| git_error("Failed to read the backup on GitHub", e))?;
+        .map_err(|e| git_error("Couldn't read your vault on GitHub", e))?;
 
     let descends = |a: Oid, b: Oid| {
         repository
             .graph_descendant_of(a, b)
-            .map_err(|e| git_error("Failed to compare with GitHub", e))
+            .map_err(|e| git_error("Couldn't check GitHub for changes", e))
     };
 
     let (target, mut conflicts) = match &local {
@@ -116,7 +116,7 @@ fn merge_diverged(
 ) -> Result<(Oid, Vec<IncomingConflict>), String> {
     let mut index = repository
         .merge_commits(local, remote, None)
-        .map_err(|e| git_error("Failed to merge changes from GitHub", e))?;
+        .map_err(|e| git_error("Couldn't bring in changes from GitHub", e))?;
 
     let mut conflicts = Vec::new();
     if index.has_conflicts() {
@@ -241,7 +241,7 @@ fn apply_to_vault(
 ) -> Result<Integration, String> {
     let diff = repository
         .diff_tree_to_tree(old, Some(new), None)
-        .map_err(|e| git_error("Failed to compare with GitHub", e))?;
+        .map_err(|e| git_error("Couldn't check GitHub for changes", e))?;
 
     let mut integration = Integration::default();
     for delta in diff.deltas() {
@@ -276,7 +276,7 @@ fn apply_to_vault(
             Some(id) => {
                 let blob = repository
                     .find_blob(id)
-                    .map_err(|e| git_error("Failed to read file from GitHub", e))?;
+                    .map_err(|e| git_error("Couldn't read a file from GitHub", e))?;
                 write_atomically(&path, blob.content())?;
             }
             None => {

@@ -202,11 +202,11 @@ describe("GitHubAccountSection", () => {
 
       render(<GitHubAccountSection />);
       const remember = await screen.findByRole("checkbox", {
-        name: /remember this sign-in/i,
+        name: /stay signed in/i,
       });
       expect(remember.getAttribute("aria-checked")).toBe("true");
       expect(
-        screen.getByText(/saved in a file only your account/i),
+        screen.getByText(/saved in a file only you can read/i),
       ).toBeTruthy();
 
       fireEvent.click(remember);
@@ -244,7 +244,7 @@ describe("GitHubAccountSection", () => {
       });
       render(<GitHubAccountSection />);
       expect(
-        await screen.findByText(/isn't saved on this computer/i),
+        await screen.findByText(/connect again next time/i),
       ).toBeTruthy();
     });
   });

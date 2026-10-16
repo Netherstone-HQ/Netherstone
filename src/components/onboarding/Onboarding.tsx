@@ -115,7 +115,12 @@ export function Onboarding({
             ) : step === "sync" && vault ? (
               <SyncStep vaultPath={vault.path} onBack={back} onNext={next} />
             ) : vault ? (
-              <ReadyStep vault={vault} onBack={back} onFinish={(addGuide) => void finish(addGuide)} />
+              <ReadyStep
+                vault={vault}
+                replay={onClose !== undefined}
+                onBack={back}
+                onFinish={(addGuide) => void finish(addGuide)}
+              />
             ) : null}
           </StepProgress.Provider>
         </div>

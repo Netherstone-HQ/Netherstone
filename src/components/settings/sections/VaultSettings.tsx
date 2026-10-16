@@ -3,18 +3,17 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { LoaderCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
+import {
+  PreferenceSegments,
+  SettingRow,
+  SettingsGroup,
+} from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { openVaultDialog } from "@/lib/commands";
-import { switchVault } from "@/lib/switch-vault";
+import { openVault } from "@/lib/open-vault";
+import { REVEAL_LABEL } from "@/lib/platform";
 import { indexVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store/vault";
-
-const REVEAL_LABEL = navigator.userAgent.includes("Mac")
-  ? "Show in Finder"
-  : navigator.userAgent.includes("Windows")
-    ? "Show in File Explorer"
-    : "Show in file manager";
 
 export function VaultSettings() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -28,7 +27,7 @@ export function VaultSettings() {
             vaultPath ? (
               <span className="break-all font-mono">{vaultPath}</span>
             ) : (
-              "A vault is a folder of Markdown documents. Open one to get started."
+              "Any folder works, even an empty one."
             )
           }
         >
@@ -44,12 +43,24 @@ export function VaultSettings() {
         </SettingRow>
         <SettingRow
           label="Open another vault"
-          description="Switch to a different folder. This vault stays exactly as it is on disk."
+          description="Switch to a different folder."
         >
           <Button variant="outline" size="sm" onClick={() => void openOther()}>
             Choose folder
           </Button>
         </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup title="New shards">
+        <PreferenceSegments
+          name="newShardLocation"
+          label="Create new shards in"
+          description="Where a shard goes when you create it from the sidebar or header."
+          options={[
+            { value: "vault-root", label: "Top of the vault" },
+            { value: "current-folder", label: "Current folder" },
+          ]}
+        />
       </SettingsGroup>
 
       {vaultPath ? (
@@ -79,7 +90,7 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
   return (
     <SettingRow
       label="Refresh search index"
-      description="Search, tags and links come from an index of your shards. Refresh it if results look out of date."
+      description="Use it when search, tags or links look out of date."
     >
       <Button
         variant="outline"
@@ -96,7 +107,7 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
 
 async function openOther() {
   const path = await openVaultDialog();
-  if (path) await switchVault(path);
+  if (path) await openVault(path).catch(showError);
 }
 
 function vaultName(path: string) {

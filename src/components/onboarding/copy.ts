@@ -34,6 +34,8 @@ export const copy = {
       nameLabel: "Name",
       defaultName: "My Vault",
       locationLabel: "Location",
+      chooseLocation: "Choose a folder",
+      choose: "Choose",
       change: "Change",
       submit: "Create vault",
     },
@@ -42,17 +44,18 @@ export const copy = {
       description: "Your files stay exactly where they are.",
     },
     restore: {
-      title: "Restore from a backup",
+      title: "Restore a synced vault",
       description: "Bring back a vault you synced on another device.",
-      signInFirst:
-        "Connect the GitHub account your backup is in. Netherstone keeps synced vaults there, in private storage only you can see.",
-      loading: "Looking for your backups",
-      empty: "There are no backups on this account yet.",
+      signInFirst: "Connect the GitHub account you synced with.",
+      loading: "Looking for your synced vaults",
+      empty: "No synced vaults on this account yet.",
+      retry: "Try again",
       lastSynced: (when: string) => `Last synced ${when}`,
       neverSynced: "Not synced yet",
       locationLabel: "Restore to",
       submit: "Restore vault",
       working: "Downloading your vault",
+      failed: "Couldn't download your vault. Try again.",
     },
 
     errors: {
@@ -63,21 +66,13 @@ export const copy = {
         "There's already a folder with files in it under that name. Pick another name or location.",
       "vault-location-missing":
         "That location doesn't exist anymore. Choose another one.",
-      unknown: "Something went wrong. Please try again.",
+      unknown: "Couldn't create the vault. Try again, or pick another location.",
     } satisfies Record<VaultFolderError | "unknown", string>,
   },
 
   appearance: {
     title: "Choose how it looks",
     body: "You can change this any time in Settings.",
-    options: {
-      light: "Light",
-      dark: "Dark",
-      system: "Match system",
-      tyrant: "Tyrant",
-      bloodline: "Bloodline",
-      citadel: "Citadel",
-    },
     moreThemes: "More themes",
     fewerThemes: "Fewer themes",
   },
@@ -85,14 +80,8 @@ export const copy = {
   sync: {
     title: "Take your vault everywhere",
     body: "Sync keeps your vault the same on every device.",
-    // The next four lines are the approved "How sync works" copy from
-    // Settings (SyncHelpDialog). Keep them in step.
-    explainer: [
-      "Netherstone keeps your vault in sync through GitHub, a service millions of people use to store files.",
-      "Your vault is saved there as a private repository: a folder that also keeps every earlier version of your shards.",
-      "Private means only you can see it. Nobody else can open it unless you invite them on GitHub yourself.",
-      "A free GitHub account is all you need.",
-    ],
+    /** The rest is behind "How sync works", the same dialog as in Settings. */
+    note: "A free GitHub account is all you need.",
     turnOn: "Turn on sync",
     working: "Setting up sync",
     done: "Sync is on. Your vault is backed up.",
@@ -102,9 +91,7 @@ export const copy = {
 
   ready: {
     title: "You're all set",
-    bodyNewVault:
-      "Your vault is ready.",
-    bodyRestored: "Your vault is back, and it stays in sync from here on.",
+    bodyRestored: "Your vault is back and keeps syncing.",
     body: "Your vault is ready.",
     tips: {
       search: (shortcut: string) => `Press ${shortcut} to search across shards.`,

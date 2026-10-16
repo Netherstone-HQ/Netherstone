@@ -267,7 +267,7 @@ export function BrowserPanel({
             void navigateTo(address);
           }}
         >
-          <Hint label="Go back" side="bottom">
+          <Hint label="Go back" side="top">
             <Button
               type="button"
               variant="ghost"
@@ -282,7 +282,7 @@ export function BrowserPanel({
             </Button>
           </Hint>
 
-          <Hint label="Go forward" side="bottom">
+          <Hint label="Go forward" side="top">
             <Button
               type="button"
               variant="ghost"
@@ -299,7 +299,7 @@ export function BrowserPanel({
             </Button>
           </Hint>
 
-          <Hint label={isPageLoading ? "Stop loading" : "Refresh"} side="bottom">
+          <Hint label={isPageLoading ? "Stop loading" : "Refresh"} side="top">
             <Button
               type="button"
               variant="ghost"
@@ -329,7 +329,7 @@ export function BrowserPanel({
             disabled={isBusy || !isBrowserReady}
           />
 
-          <Hint label="Close browser panel" side="bottom">
+          <Hint label="Close browser panel" side="top">
             <Button
               type="button"
               variant="ghost"

@@ -15,6 +15,7 @@ import {
   ROW_CLASS,
   getRowIndent,
 } from "@/components/vault/tree-layout";
+import { useOpenFilePath } from "@/components/vault/useOpenFilePath";
 import {
   getFolderInVault,
   getVaultFileDisplayName,
@@ -23,12 +24,7 @@ import {
 } from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
-import {
-  useEditorStore,
-  useSettingsStore,
-  useUIStore,
-  useVaultStore,
-} from "@/store";
+import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 
 function hideRecent() {
   const { setPreference } = useSettingsStore.getState();
@@ -42,8 +38,7 @@ function hideRecent() {
 }
 
 export function RecentFilesSection() {
-  const currentFilePath = useEditorStore((s) => s.currentFilePath);
-  const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
+  const openFilePath = useOpenFilePath();
   const recentFiles = useUIStore((s) => s.recentFiles);
   const isCollapsed = useUIStore((s) => s.collapsedSections.recent);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -77,7 +72,7 @@ export function RecentFilesSection() {
           {visibleRecentFiles.map((file) => {
             const folder = getFolderInVault(file.path, currentVaultPath);
             const isOpen =
-              !!currentFilePath && isSamePath(file.path, currentFilePath);
+              !!openFilePath && isSamePath(file.path, openFilePath);
 
             return (
               <li key={file.path}>
@@ -91,7 +86,6 @@ export function RecentFilesSection() {
                     onClick={async () => {
                       try {
                         await openVaultFile(file.path);
-                        setActiveNavItem(null);
                       } catch (error) {
                         console.error("Failed to open recent file:", error);
                       }

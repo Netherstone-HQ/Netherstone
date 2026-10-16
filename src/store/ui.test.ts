@@ -89,6 +89,26 @@ describe("rail modes", () => {
     setActiveNavItem(null);
     expect(selectRailMode(useUIStore.getState())).toBe("tags");
   });
+
+  it("hides the left sidebar in Canvas and brings it back on leaving", async () => {
+    const { useUIStore } = await loadStore();
+    const { openMode, setSidebarOpen } = useUIStore.getState();
+
+    openMode("canvas");
+    expect(useUIStore.getState().isSidebarOpen).toBe(false);
+
+    setSidebarOpen(true);
+    openMode("editor");
+    expect(useUIStore.getState().isSidebarOpen).toBe(true);
+
+    setSidebarOpen(false);
+    openMode("canvas");
+    setSidebarOpen(true);
+    openMode("canvas");
+    expect(useUIStore.getState().isSidebarOpen).toBe(true);
+    openMode("tags");
+    expect(useUIStore.getState().isSidebarOpen).toBe(false);
+  });
 });
 
 describe("revealing a folder in the tree", () => {

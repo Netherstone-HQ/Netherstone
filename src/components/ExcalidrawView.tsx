@@ -1,11 +1,14 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { BrowserPanel } from "@/components/browser/BrowserPanel";
 import {
   CANVAS_BROWSER_WEBVIEW_LABEL,
   LIBRARY_RETURN_EVENT,
   type LibraryReturnPayload,
 } from "@/components/browser/browserCommands";
+import { CanvasHeader } from "@/components/canvas/CanvasHeader";
+import type { SaveState } from "@/components/SaveStatus";
 import { useTheme } from "@/components/theme/theme-provider";
 import { resolveThemeMode } from "@/components/theme/themes";
 import { isPathWithin } from "@/lib/drawing-files";
@@ -49,6 +52,9 @@ export function ExcalidrawView() {
     ),
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [excalidrawAPI, setExcalidrawAPI] =
+    useState<ExcalidrawImperativeAPI | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
 
   useEffect(() => {
     if (theme !== "system") {
@@ -144,29 +150,45 @@ export function ExcalidrawView() {
   }, [setBrowserPanelOpen]);
 
   return (
-    <div ref={containerRef} className="flex h-full min-w-0 bg-background">
-      <div className="min-w-0 flex-1">
-        <Suspense
-          fallback={
-            <div className="flex h-full w-full items-center justify-center text-ui text-muted-foreground">
-              Loading canvas…
-            </div>
-          }
-        >
-          <ExcalidrawCanvas
-            key={drawingSessionKey}
-            drawingPath={drawingPath}
-            theme={excalidrawTheme}
-            libraryReturnUrl={window.location.origin + window.location.pathname}
-          />
-        </Suspense>
-      </div>
+    <div
+      ref={containerRef}
+      className="flex h-full min-w-0 flex-col bg-background"
+    >
+      <CanvasHeader
+        drawingPath={drawingPath}
+        saveState={saveState}
+        excalidrawAPI={excalidrawAPI}
+      />
 
-      {isBrowserPanelOpen && (
-        <div className="min-w-88 max-w-[60%] basis-[32%] border-l">
-          <BrowserPanel webviewLabel={CANVAS_BROWSER_WEBVIEW_LABEL} />
+      <div className="flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1">
+          <Suspense
+            fallback={
+              <div className="flex h-full w-full items-center justify-center text-ui text-muted-foreground">
+                Loading canvas…
+              </div>
+            }
+          >
+            <ExcalidrawCanvas
+              key={drawingSessionKey}
+              drawingPath={drawingPath}
+              theme={excalidrawTheme}
+              libraryReturnUrl={
+                window.location.origin + window.location.pathname
+              }
+              excalidrawAPI={excalidrawAPI}
+              onExcalidrawAPI={setExcalidrawAPI}
+              onSaveStateChange={setSaveState}
+            />
+          </Suspense>
         </div>
-      )}
+
+        {isBrowserPanelOpen && (
+          <div className="min-w-88 max-w-[60%] basis-[32%] border-l">
+            <BrowserPanel webviewLabel={CANVAS_BROWSER_WEBVIEW_LABEL} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

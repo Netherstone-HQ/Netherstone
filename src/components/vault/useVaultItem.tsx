@@ -123,18 +123,29 @@ async function relinkMovedDrawings(
   }
 }
 
+export type VaultItemOptions = {
+  onNewFolder?: () => void;
+  /** Adds Close, for the open file. */
+  onClose?: () => void;
+  /** Actions before the file's own, such as New drawing. */
+  leadingActions?: RowAction[];
+  /** Takes the place of Export…, for files that export differently. */
+  exportActions?: RowAction[];
+};
+
 /**
  * Everything a file or folder row can do, shared by the file tree, the
- * Pinned section and the top bar: its action list (for the "more" button and
+ * Pinned section and the top bars: its action list (for the "more" button and
  * the right-click menu), inline renaming, and the dialogs those actions open.
- * `onClose` adds Close, for the open file.
  */
 export function useVaultItem(
   node: FileTreeNode,
   {
     onNewFolder,
     onClose,
-  }: { onNewFolder?: () => void; onClose?: () => void } = {},
+    leadingActions = [],
+    exportActions,
+  }: VaultItemOptions = {},
 ) {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(getDisplayName(node));
@@ -153,7 +164,6 @@ export function useVaultItem(
   const plateEditor = useEditorStore((s) => s.plateEditor);
   const markSaved = useEditorStore((s) => s.markSaved);
   const closeFile = useEditorStore((s) => s.closeFile);
-  const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
   const remapRememberedPaths = useUIStore((s) => s.remapRememberedPaths);
   const forgetRememberedPaths = useUIStore((s) => s.forgetRememberedPaths);
   const togglePinnedFile = useUIStore((s) => s.togglePinnedFile);
@@ -171,7 +181,6 @@ export function useVaultItem(
 
     try {
       await openVaultFile(node.path);
-      setActiveNavItem(null);
     } catch (error) {
       console.error("Failed to load file:", error);
     }
@@ -443,23 +452,26 @@ export function useVaultItem(
           trash,
         ]
       : [
+          ...leadingActions,
           {
             label: isPinned ? "Unpin" : "Pin",
             icon: isPinned ? PinOffIcon : PinIcon,
             onSelect: () =>
               togglePinnedFile({ path: node.path, name: node.name }),
+            separated: leadingActions.length > 0,
           },
           { ...shared[0], separated: true },
           ...shared.slice(1),
-          ...(isDrawingPath(node.path)
-            ? []
-            : [
-                {
-                  label: "Export…",
-                  icon: ShareIcon,
-                  onSelect: () => openExportDialog(node.path),
-                },
-              ]),
+          ...(exportActions ??
+            (isDrawingPath(node.path)
+              ? []
+              : [
+                  {
+                    label: "Export…",
+                    icon: ShareIcon,
+                    onSelect: () => openExportDialog(node.path),
+                  },
+                ])),
           ...(onClose
             ? [
                 {

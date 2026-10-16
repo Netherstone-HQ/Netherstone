@@ -10,39 +10,24 @@ import {
 import type {
   AppState,
   BinaryFiles,
+  ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
   ExcalidrawProps,
 } from "@excalidraw/excalidraw/types";
-import { FileImageIcon, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { DrawingMenu } from "@/components/DrawingMenu";
-import { Button } from "@/components/ui/button";
+import type { SaveState } from "@/components/SaveStatus";
 import {
-  appendMarkdownToFile,
-  chooseExportTargetShardDialog,
   createDrawingFile,
   readDrawingFile,
-  readMarkdownFile,
   saveDrawingFile,
-  saveMarkdownFile,
   scanVault,
 } from "@/lib/commands";
 import {
   getDrawingAltText,
-  persistScenePng,
   refreshLinkedDrawingImages,
 } from "@/lib/drawing-exports";
-import {
-  buildDrawingImageTag,
-  isPathWithin,
-  registerDrawingSaver,
-  replaceLinkedDrawingImages,
-  toVaultRelativePath,
-} from "@/lib/drawing-files";
-import { flushPendingAutosave } from "@/hooks/useAutosave";
-import { useEditorStore } from "@/store/editor";
-import { openEditorFile } from "@/lib/open-editor-file";
+import { registerDrawingSaver } from "@/lib/drawing-files";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
 
@@ -66,13 +51,10 @@ interface ExcalidrawCanvasProps {
    * drawings remounts the canvas; a rename only updates this.
    */
   drawingPath: string | null;
-}
-
-function getShardVaultPath(filePath: string) {
-  const normalized = filePath.replace(/\\/g, "/");
-  const slashIndex = normalized.lastIndexOf("/");
-
-  return slashIndex >= 0 ? filePath.slice(0, slashIndex) : "";
+  excalidrawAPI: ExcalidrawImperativeAPI | null;
+  /** Receives Excalidraw's API once it's ready, and null when it's gone. */
+  onExcalidrawAPI: (api: ExcalidrawImperativeAPI | null) => void;
+  onSaveStateChange: (state: SaveState) => void;
 }
 
 function getShardName(filePath: string) {
@@ -116,9 +98,16 @@ function serializeScene({ elements, appState, files }: Scene) {
   return serializeAsJSON(elements, appState, files, "local");
 }
 
-export type DrawingSaveStatus = "saved" | "saving" | "error";
-
 const NEW_DRAWING_NAME = "Untitled";
+
+/**
+ * Drawings open from the vault and save themselves, so Excalidraw's own file
+ * actions are off, Ctrl+O included: a file opened over a drawing would be
+ * saved over it.
+ */
+const UI_OPTIONS: ExcalidrawProps["UIOptions"] = {
+  canvasActions: { loadScene: false, export: false },
+};
 
 /**
  * Loads the drawing open when the canvas mounts and autosaves changes to the
@@ -134,7 +123,7 @@ function useDrawingPersistence(drawingPath: string | null) {
   const [initialData, setInitialData] = useState<
     ExcalidrawInitialDataState | null | undefined
   >(initialPath ? undefined : null);
-  const [status, setStatus] = useState<DrawingSaveStatus>("saved");
+  const [status, setStatus] = useState<SaveState>("saved");
 
   const pathRef = useRef(drawingPath);
   const vaultPathRef = useRef(currentVaultPath);
@@ -243,7 +232,7 @@ function useDrawingPersistence(drawingPath: string | null) {
       },
       (error) => {
         pendingWritesRef.current -= 1;
-        setStatus("error");
+        setStatus("failed");
         console.error("[Netherstone] Failed to save drawing:", error);
         toast.error("Couldn't save drawing", {
           description: error instanceof Error ? error.message : String(error),
@@ -362,142 +351,20 @@ export function ExcalidrawCanvas({
   theme,
   libraryReturnUrl,
   drawingPath,
+  excalidrawAPI,
+  onExcalidrawAPI,
+  onSaveStateChange,
 }: ExcalidrawCanvasProps) {
-  const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
-  const [isExportingToShard, setIsExportingToShard] = useState(false);
-  const [isImageExportDialogOpen, setIsImageExportDialogOpen] = useState(false);
-  const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
-  const setAppMode = useUIStore((s) => s.setAppMode);
   const { initialData, onSceneChange, status } =
     useDrawingPersistence(drawingPath);
 
   useHandleLibrary({ excalidrawAPI });
 
-  const openImageExportDialog = () => {
-    if (!excalidrawAPI) {
-      toast.error("Canvas is not ready yet.");
-      return;
-    }
+  useEffect(() => {
+    onSaveStateChange(status);
+  }, [status, onSaveStateChange]);
 
-    excalidrawAPI.updateScene({
-      appState: {
-        openDialog: { name: "imageExport" },
-      },
-    });
-  };
-
-  const exportCanvasToShard = async () => {
-    if (!excalidrawAPI) {
-      toast.error("Canvas is not ready yet.");
-      return;
-    }
-
-    const elements = excalidrawAPI.getSceneElements();
-    if (!Array.isArray(elements) || elements.length === 0) {
-      toast.error("Draw something before exporting to a shard.");
-      return;
-    }
-
-    const shard = await chooseExportTargetShardDialog(currentVaultPath);
-    if (!shard) return;
-
-    const vaultPath = getShardVaultPath(shard.filePath) || shard.vaultPath;
-    if (!vaultPath) {
-      toast.error("Could not resolve the selected shard's vault folder.");
-      return;
-    }
-
-    setIsExportingToShard(true);
-    const toastId = toast.loading("Exporting canvas to shard…");
-
-    try {
-      const attachment = await persistScenePng(
-        {
-          elements,
-          appState: excalidrawAPI.getAppState(),
-          files: excalidrawAPI.getFiles(),
-        },
-        vaultPath,
-        drawingPath ? getDrawingAltText(drawingPath) : undefined,
-      );
-      const vaultPathOfShard = useVaultStore.getState().currentVaultPath;
-      // Link the image to its drawing so it can be edited and re-exported,
-      // as long as the shard is in the same vault as the drawing.
-      const drawingRef =
-        drawingPath &&
-        vaultPathOfShard &&
-        isPathWithin(shard.filePath, vaultPathOfShard)
-          ? toVaultRelativePath(drawingPath, vaultPathOfShard)
-          : null;
-      const altText = drawingPath
-        ? getDrawingAltText(drawingPath)
-        : attachment.originalName.replace(/\.[^.]+$/, "");
-      const buildTag = (width: string | null) =>
-        buildDrawingImageTag({
-          src: attachment.assetPath,
-          alt: altText,
-          width: width ?? "480",
-          drawingRef,
-        });
-
-      // The shard may be open in the editor: save its edits first, and
-      // reload it after writing so the editor doesn't save over the export.
-      await flushPendingAutosave();
-
-      const existing = drawingRef
-        ? replaceLinkedDrawingImages(
-            await readMarkdownFile(shard.filePath),
-            drawingRef,
-            buildTag,
-          )
-        : null;
-
-      if (existing !== null) {
-        await saveMarkdownFile(shard.filePath, existing);
-      } else {
-        await appendMarkdownToFile(shard.filePath, buildTag(null));
-      }
-
-      if (useEditorStore.getState().currentFilePath === shard.filePath) {
-        await openEditorFile(shard.filePath);
-      }
-
-      const shardName = getShardName(shard.filePath);
-
-      excalidrawAPI.updateScene({
-        appState: {
-          openDialog: null,
-        },
-      });
-      setIsImageExportDialogOpen(false);
-
-      toast.success(
-        existing !== null
-          ? "Updated drawing in shard"
-          : "Exported canvas to shard",
-        {
-          id: toastId,
-          description: shardName,
-          action: {
-            label: "Open shard",
-            onClick: () => {
-              setAppMode("notes");
-              void openEditorFile(shard.filePath);
-            },
-          },
-        },
-      );
-    } catch (error) {
-      console.error("[Netherstone] Failed to export canvas to shard:", error);
-      toast.error("Failed to export canvas to shard", {
-        id: toastId,
-        description:
-          error instanceof Error ? error.message : "Unknown export error.",
-      });
-    } finally {
-      setIsExportingToShard(false);
-    }
-  };
+  useEffect(() => () => onExcalidrawAPI(null), [onExcalidrawAPI]);
 
   if (initialData === undefined) {
     return (
@@ -509,59 +376,18 @@ export function ExcalidrawCanvas({
 
   return (
     <div className="relative h-full min-h-0">
-      {isImageExportDialogOpen && (
-        <div className="fixed inset-x-0 bottom-8 z-10000 flex justify-center pointer-events-none">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              void exportCanvasToShard();
-            }}
-            disabled={isExportingToShard}
-            className="pointer-events-auto shadow-lg"
-          >
-            <FileImageIcon />
-            Export current options to shard
-          </Button>
-        </div>
-      )}
-
       <Excalidraw
         theme={theme}
         initialData={initialData}
-        excalidrawAPI={setExcalidrawAPI}
+        excalidrawAPI={onExcalidrawAPI}
         libraryReturnUrl={libraryReturnUrl}
-        onChange={(elements, appState, files) => {
-          onSceneChange(elements, appState, files);
-
-          const isOpen = appState.openDialog?.name === "imageExport";
-          setIsImageExportDialogOpen((current) =>
-            current === isOpen ? current : isOpen,
-          );
-        }}
-        renderTopRightUI={() => (
-          <DrawingMenu
-            drawingPath={drawingPath}
-            saveStatus={status}
-            onExport={openImageExportDialog}
-          />
-        )}
+        onChange={onSceneChange}
+        UIOptions={UI_OPTIONS}
       >
+        {/* Saving and exporting go through the top bar's drawing menu, and
+            the theme follows the app's. */}
         <MainMenu>
-          <MainMenu.DefaultItems.LoadScene />
-          <MainMenu.DefaultItems.SaveAsImage />
-          <MainMenu.Item
-            icon={<ImageIcon />}
-            onSelect={() => {
-              openImageExportDialog();
-            }}
-          >
-            Export PNG to shard…
-          </MainMenu.Item>
-          <MainMenu.DefaultItems.Export />
           <MainMenu.DefaultItems.ClearCanvas />
-          <MainMenu.DefaultItems.ToggleTheme />
           <MainMenu.DefaultItems.ChangeCanvasBackground />
           <MainMenu.DefaultItems.Help />
         </MainMenu>

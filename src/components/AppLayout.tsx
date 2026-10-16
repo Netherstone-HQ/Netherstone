@@ -33,19 +33,7 @@ const MainEditorContent = React.memo(function MainEditorContent() {
   return <Editor />;
 });
 
-const ModeAwareLeftSidebar = React.memo(function ModeAwareLeftSidebar({
-  onNewShard,
-}: {
-  onNewShard: () => void;
-}) {
-  const appMode = useUIStore((s) => s.appMode);
-
-  return (
-    <div className={appMode === "canvas" ? "hidden" : ""}>
-      <LeftSidebar onNewShard={onNewShard} />
-    </div>
-  );
-});
+const MemoizedLeftSidebar = React.memo(LeftSidebar);
 
 // Mounted the first time canvas mode opens, then kept so a drawing keeps its
 // view and undo history while notes are shown.
@@ -153,7 +141,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <div className="flex min-h-0 flex-1">
           <ModeSwitcher />
-          <ModeAwareLeftSidebar onNewShard={openNewShardDialog} />
+          <MemoizedLeftSidebar onNewShard={openNewShardDialog} />
 
           <div className="relative flex h-full min-w-0 flex-1 flex-col">
             <ModeAwareCanvas />

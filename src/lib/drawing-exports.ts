@@ -4,7 +4,14 @@ import type {
   ExcalidrawProps,
 } from "@excalidraw/excalidraw/types";
 
-import { findShardsContaining, persistAttachmentBytes } from "@/lib/commands";
+import { flushPendingAutosave } from "@/hooks/useAutosave";
+import {
+  appendMarkdownToFile,
+  findShardsContaining,
+  persistAttachmentBytes,
+  readMarkdownFile,
+  saveMarkdownFile,
+} from "@/lib/commands";
 import {
   buildDrawingImageTag,
   getDrawingLinkNeedles,
@@ -13,7 +20,9 @@ import {
   replaceLinkedDrawingImages,
   toVaultRelativePath,
 } from "@/lib/drawing-files";
+import { openEditorFile } from "@/lib/open-editor-file";
 import { rewriteShards } from "@/lib/shard-rewrite";
+import { useEditorStore } from "@/store/editor";
 
 type ExportElements = Parameters<NonNullable<ExcalidrawProps["onChange"]>>[0];
 
@@ -107,6 +116,52 @@ export async function refreshLinkedDrawingImages(
   return rewriteShards(shardPaths, (markdown) =>
     replaceLinkedDrawingImages(markdown, drawingRef, buildTag),
   );
+}
+
+/**
+ * Adds `scene` to the end of the shard at `shardPath` as an image linked to
+ * its drawing, so the image follows later changes to the drawing. A shard
+ * that already shows the drawing gets its image replaced instead. Returns
+ * whether the image was added or replaced.
+ */
+export async function addDrawingToShard(
+  scene: ExportableScene,
+  drawingPath: string,
+  shardPath: string,
+  vaultPath: string,
+): Promise<"added" | "replaced"> {
+  const alt = getDrawingAltText(drawingPath);
+  const drawingRef = toVaultRelativePath(drawingPath, vaultPath);
+  const attachment = await persistScenePng(scene, vaultPath, alt);
+  const buildTag = (width: string | null) =>
+    buildDrawingImageTag({
+      src: attachment.assetPath,
+      alt,
+      width: width ?? "480",
+      drawingRef,
+    });
+
+  // Save the open shard's edits first, so they are part of what is read.
+  await flushPendingAutosave();
+
+  const replaced = replaceLinkedDrawingImages(
+    await readMarkdownFile(shardPath),
+    drawingRef,
+    buildTag,
+  );
+  if (replaced !== null) {
+    await saveMarkdownFile(shardPath, replaced);
+  } else {
+    await appendMarkdownToFile(shardPath, buildTag(null));
+  }
+
+  // Reload the open shard, so the editor shows the image and doesn't save
+  // over it.
+  if (useEditorStore.getState().currentFilePath === shardPath) {
+    await openEditorFile(shardPath);
+  }
+
+  return replaced !== null ? "replaced" : "added";
 }
 
 /**

@@ -101,16 +101,15 @@ fn create_vault(parent: String, name: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
-fn open_shard_dialog_with_options(
+fn open_shard_dialog(
     app: tauri::AppHandle,
     default_directory: Option<String>,
-    title: Option<String>,
 ) -> Option<vault::ShardDialogResult> {
-    let mut dialog = app.dialog().file().add_filter("Shard", &["md"]);
-
-    if let Some(title) = title {
-        dialog = dialog.set_title(title);
-    }
+    let mut dialog = app
+        .dialog()
+        .file()
+        .add_filter("Shard", &["md"])
+        .set_title("Open shard");
 
     if let Some(default_directory) = default_directory {
         let directory = std::path::Path::new(&default_directory);
@@ -129,26 +128,6 @@ fn open_shard_dialog_with_options(
         file_path: file_path.to_string_lossy().to_string(),
         vault_path,
     })
-}
-
-#[tauri::command(async)]
-fn open_shard_dialog(
-    app: tauri::AppHandle,
-    default_directory: Option<String>,
-) -> Option<vault::ShardDialogResult> {
-    open_shard_dialog_with_options(app, default_directory, Some("Open shard".to_string()))
-}
-
-#[tauri::command(async)]
-fn choose_export_target_shard_dialog(
-    app: tauri::AppHandle,
-    default_directory: Option<String>,
-) -> Option<vault::ShardDialogResult> {
-    open_shard_dialog_with_options(
-        app,
-        default_directory,
-        Some("Choose shard to receive exported canvas".to_string()),
-    )
 }
 
 #[tauri::command(async)]
@@ -1162,7 +1141,6 @@ pub fn run() {
             default_vault_location,
             create_vault,
             open_shard_dialog,
-            choose_export_target_shard_dialog,
             open_media_files_dialog,
             import_shard,
             persist_attachment_file,

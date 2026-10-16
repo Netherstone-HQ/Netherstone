@@ -146,10 +146,10 @@ function LocationRow({
           className="flex h-9 min-w-0 flex-1 items-center truncate rounded-md border bg-background px-2.5 text-muted-foreground text-ui dark:bg-input/30"
           title={location ?? undefined}
         >
-          {location ?? "…"}
+          {location ?? copy.vault.create.chooseLocation}
         </span>
         <Button type="button" variant="outline" onClick={() => void change()}>
-          {copy.vault.create.change}
+          {location ? copy.vault.create.change : copy.vault.create.choose}
         </Button>
       </div>
     </div>
@@ -196,7 +196,10 @@ export function CreateVaultForm({
         <FieldLabel>{copy.vault.create.nameLabel}</FieldLabel>
         <Input
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value);
+            setError(null);
+          }}
           aria-invalid={error ? true : undefined}
           autoFocus
         />
@@ -204,7 +207,10 @@ export function CreateVaultForm({
       <LocationRow
         label={copy.vault.create.locationLabel}
         location={location}
-        onChange={onLocationChange}
+        onChange={(next) => {
+          onLocationChange(next);
+          setError(null);
+        }}
       />
       {error ? <Hint tone="error">{error}</Hint> : null}
       <Button type="submit" disabled={busy || !location}>
@@ -231,9 +237,16 @@ function RestoreVault({
   const installed = useGitHubStore((s) => s.installation?.installed ?? false);
   const backups = useSyncStore((s) => s.backups);
   const loadBackups = useSyncStore((s) => s.loadBackups);
+  // The lookup failed when it came back empty with an error.
+  const listError = useSyncStore((s) =>
+    s.backups?.length === 0 ? s.error : null,
+  );
   const [chosen, setChosen] = useState<BackupSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The folder a failed restore already created, so trying again fills it
+  // in place of making a second one.
+  const [restorePath, setRestorePath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accountLoaded) void loadAccount();
@@ -247,21 +260,24 @@ function RestoreVault({
     if (!location) return;
     setBusy(true);
     setError(null);
+    let path = restorePath;
     try {
-      const path = await createVault(location, backup.name);
+      path ??= await createVault(location, backup.name);
+      setRestorePath(path);
       await openVault(path);
       const sync = useSyncStore.getState();
       await sync.load(path);
       await sync.connect(path, backup);
       const after = useSyncStore.getState();
       if (after.error || !after.record?.syncEnabled) {
-        setError(after.error ?? copy.vault.errors.unknown);
+        setError(after.error ?? copy.vault.restore.failed);
         setBusy(false);
         return;
       }
       onRestored({ path, kind: "restored" });
     } catch (e) {
-      setError(vaultErrorText(e));
+      // Once the folder exists, what failed is the download.
+      setError(path ? copy.vault.restore.failed : vaultErrorText(e));
       setBusy(false);
     }
   }
@@ -289,6 +305,17 @@ function RestoreVault({
     );
   }
 
+  if (listError) {
+    return (
+      <div className="space-y-3">
+        <Hint tone="error">{listError}</Hint>
+        <Button variant="outline" onClick={() => void loadBackups()}>
+          {copy.vault.restore.retry}
+        </Button>
+      </div>
+    );
+  }
+
   if (backups.length === 0) {
     return <Hint>{copy.vault.restore.empty}</Hint>;
   }
@@ -302,7 +329,11 @@ function RestoreVault({
             type="button"
             role="radio"
             aria-checked={chosen?.fullName === backup.fullName}
-            onClick={() => setChosen(backup)}
+            onClick={() => {
+              setChosen(backup);
+              setRestorePath(null);
+              setError(null);
+            }}
             disabled={busy}
             className={cn(
               "flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-left text-ui transition-colors hover:border-foreground/20 dark:bg-input/30",
@@ -326,7 +357,11 @@ function RestoreVault({
           <LocationRow
             label={copy.vault.restore.locationLabel}
             location={location}
-            onChange={onLocationChange}
+            onChange={(next) => {
+              onLocationChange(next);
+              setRestorePath(null);
+              setError(null);
+            }}
           />
           {error ? <Hint tone="error">{error}</Hint> : null}
           <Button onClick={() => void restore(chosen)} disabled={busy || !location}>

@@ -22,4 +22,4 @@ Everything lives in this folder as ordinary files. Open them in any other app, c
 
 ## Sync
 
-Sync is optional. Netherstone keeps your vault in sync through GitHub, in a private repository only you can see, and it keeps every earlier version of your shards. A free GitHub account is all you need. Turn it on from **Sync** in the sidebar or in Settings.
+Sync is optional. It keeps your vault the same on every device and saves every earlier version of your files. It works through a free GitHub account, and only you can see your vault there. Turn it on with the **Sync** button at the top of the sidebar.

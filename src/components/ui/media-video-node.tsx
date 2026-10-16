@@ -21,13 +21,13 @@ import {
 } from "@/lib/media-source";
 import { cn } from "@/lib/utils";
 
-import { AttachmentBackupIndicator } from "./attachment-backup-indicator";
 import { Caption, CaptionTextarea } from "./caption";
 import {
-  MediaStatusCard,
-  MissingLocalMediaCard,
-  MissingVaultAttachmentCard,
-} from "./media-status-card";
+  MediaFileRow,
+  MissingLinkedFileRow,
+  MissingVaultFileRow,
+  UnsyncedTag,
+} from "./media-file-row";
 import { useMediaNodeActions } from "./media-node-actions";
 import type { WithPersistedMediaMetadata } from "./media-types";
 import {
@@ -186,32 +186,35 @@ export const VideoElement = withHOC(
             contentEditable={false}
           >
             {showMissingVaultState ? (
-              <MissingVaultAttachmentCard
+              <MissingVaultFileRow
                 name={props.element.name}
                 attachmentPath={attachmentPath}
-                className="w-full"
-                onRelink={() => {
-                  void mediaActions.relinkVaultAttachment();
-                }}
-                onRelinkTo={(path) => {
-                  void mediaActions.relinkVaultAttachmentTo(path);
-                }}
-                onRemove={mediaActions.removeNode}
-                disableActions={!mediaActions.canRelinkVaultAttachment}
+                onRelink={
+                  mediaActions.canRelinkVaultAttachment
+                    ? () => void mediaActions.relinkVaultAttachment()
+                    : undefined
+                }
+                onRelinkTo={
+                  mediaActions.canRelinkVaultAttachment
+                    ? (path) => void mediaActions.relinkVaultAttachmentTo(path)
+                    : undefined
+                }
+                onRemove={
+                  mediaActions.canEdit ? mediaActions.removeNode : undefined
+                }
               />
             ) : (
-              <MissingLocalMediaCard
+              <MissingLinkedFileRow
                 name={props.element.name}
                 path={attachmentPath}
-                className="w-full"
-                onLocate={() => {
-                  void mediaActions.relinkLocalFile();
-                }}
-                onImportToVault={() => {
-                  void mediaActions.importToVault();
-                }}
-                onRemove={mediaActions.removeNode}
-                disableActions={!mediaActions.canRelinkLocalFile}
+                onLocate={
+                  mediaActions.canRelinkLocalFile
+                    ? () => void mediaActions.relinkLocalFile()
+                    : undefined
+                }
+                onRemove={
+                  mediaActions.canEdit ? mediaActions.removeNode : undefined
+                }
               />
             )}
 
@@ -230,20 +233,7 @@ export const VideoElement = withHOC(
     if (!renderUrl) {
       return (
         <PlateElement className="py-2.5" {...props}>
-          <MediaStatusCard
-            className="w-full"
-            tone="warning"
-            title="Video source unavailable"
-            badge="Video"
-            description="This video embed does not currently have a usable source."
-            meta={
-              source ? (
-                <span className="break-all">{source}</span>
-              ) : (
-                "No persisted source was found on this video node."
-              )
-            }
-          />
+          <MediaFileRow warning name="Video" details="No source found" />
           {props.children}
         </PlateElement>
       );
@@ -284,11 +274,6 @@ export const VideoElement = withHOC(
           className="group relative m-0 cursor-default"
           contentEditable={false}
         >
-          <AttachmentBackupIndicator
-            className="absolute top-1/2 right-3 z-10 -translate-y-1/2 opacity-90 transition-opacity group-hover:opacity-100"
-            metadata={props.element}
-          />
-
           <Resizable
             className={cn(isDragging && "opacity-50")}
             align={align}
@@ -357,6 +342,8 @@ export const VideoElement = withHOC(
               )}
             </div>
           </Resizable>
+
+          <UnsyncedTag className="mt-1.5" metadata={props.element} />
 
           <Caption style={{ width }} align={align}>
             <CaptionTextarea

@@ -95,6 +95,8 @@ const UI_OPTIONS: ExcalidrawProps["UIOptions"] = {
 
 /** Excalidraw's own shortcut for the grid. */
 const GRID_SHORTCUT = IS_MAC ? "⌘'" : "Ctrl+'";
+/** The app's shortcut for the left sidebar (see `SidebarProvider`). */
+const SIDEBAR_SHORTCUT = IS_MAC ? "⌘B" : "Ctrl+B";
 
 const showDrawings = () => useUIStore.getState().setSidebarOpen(true);
 
@@ -413,6 +415,7 @@ export function ExcalidrawCanvas({
             <WelcomeScreen.Center.Menu>
               <WelcomeScreen.Center.MenuItem
                 icon={<FolderOpenIcon />}
+                shortcut={SIDEBAR_SHORTCUT}
                 onSelect={showDrawings}
               >
                 Open an existing drawing

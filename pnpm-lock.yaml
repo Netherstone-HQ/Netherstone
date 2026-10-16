@@ -5,7 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@excalidraw/excalidraw': 63daa2f5f2caf687f5bad39b38924c737c19a1af3875c01427a44deb970e8aa5
+  '@excalidraw/excalidraw':
+    hash: 63daa2f5f2caf687f5bad39b38924c737c19a1af3875c01427a44deb970e8aa5
+    path: patches/@excalidraw__excalidraw.patch
 
 importers:
 

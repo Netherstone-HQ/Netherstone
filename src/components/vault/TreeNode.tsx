@@ -23,6 +23,7 @@ import {
   getGuideLeft,
   getRowIndent,
 } from "@/components/vault/tree-layout";
+import { useOpenFilePath } from "@/components/vault/useOpenFilePath";
 import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
 import { useVaultItem } from "@/components/vault/useVaultItem";
 import { isPathWithin, isSamePath } from "@/lib/drawing-files";
@@ -32,7 +33,7 @@ import {
   type TreeDragItem,
 } from "@/lib/tree-drag";
 import { cn } from "@/lib/utils";
-import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import { useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 
 /** How long a folder revealed from the breadcrumb stays highlighted. */
@@ -48,7 +49,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const rowButtonRef = useRef<HTMLButtonElement>(null);
 
-  const currentFilePath = useEditorStore((s) => s.currentFilePath);
+  const openFilePath = useOpenFilePath();
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
   // Only the folders on the way to a revealed folder see the reveal.
   const reveal = useUIStore((s) =>
@@ -132,8 +133,8 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       className={cn(
         ROW_CLASS,
         node.kind === "file" &&
-          !!currentFilePath &&
-          isSamePath(node.path, currentFilePath) &&
+          !!openFilePath &&
+          isSamePath(node.path, openFilePath) &&
           ACTIVE_ROW_CLASS,
         isRevealed && "bg-sidebar-primary/15",
       )}

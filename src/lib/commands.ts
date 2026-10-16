@@ -288,15 +288,6 @@ export async function openShardDialog(
   });
 }
 
-export async function chooseExportTargetShardDialog(
-  defaultDirectory?: string | null,
-): Promise<ShardDialogResult | null> {
-  assertTauri();
-  return invoke<ShardDialogResult | null>("choose_export_target_shard_dialog", {
-    defaultDirectory: defaultDirectory ?? null,
-  });
-}
-
 // ── Drawings ──────────────────────────────────────────────────────────────────
 
 /** Reads the raw JSON of a `.excalidraw` drawing in the vault. */

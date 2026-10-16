@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Hint } from "@/components/ui/tooltip";
 import { ActionsMenu } from "@/components/vault/RowActions";
-import { useVaultItem } from "@/components/vault/useVaultItem";
+import {
+  useVaultItem,
+  type VaultItemOptions,
+} from "@/components/vault/useVaultItem";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { useUIStore, useVaultStore } from "@/store";
 
@@ -17,6 +20,12 @@ function Slash() {
   );
 }
 
+/** What the file's name menu offers beyond the file tree's actions. */
+type FileMenuOptions = Pick<
+  VaultItemOptions,
+  "onClose" | "leadingActions" | "exportActions"
+>;
+
 /**
  * The open file's place in the vault: the vault itself while the left
  * sidebar is hidden (its top row names it otherwise), the folders, which
@@ -24,11 +33,8 @@ function Slash() {
  */
 export function FileBreadcrumb({
   path,
-  onClose,
-}: {
-  path: string | null;
-  onClose: () => void;
-}) {
+  ...menuOptions
+}: { path: string | null } & FileMenuOptions) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
 
@@ -50,7 +56,7 @@ export function FileBreadcrumb({
         </>
       )}
       {path ? (
-        <FileCrumbs path={path} vaultPath={vaultPath} onClose={onClose} />
+        <FileCrumbs path={path} vaultPath={vaultPath} {...menuOptions} />
       ) : null}
     </nav>
   );
@@ -59,17 +65,13 @@ export function FileBreadcrumb({
 function FileCrumbs({
   path,
   vaultPath,
-  onClose,
-}: {
-  path: string;
-  vaultPath: string;
-  onClose: () => void;
-}) {
+  ...menuOptions
+}: { path: string; vaultPath: string } & FileMenuOptions) {
   const revealInTree = useUIStore((s) => s.revealInTree);
   const segments = toVaultRelativePath(path, vaultPath).split("/");
   const name = segments[segments.length - 1];
   const folders = segments.slice(0, -1);
-  const item = useVaultItem({ name, path, kind: "file" }, { onClose });
+  const item = useVaultItem({ name, path, kind: "file" }, menuOptions);
 
   return (
     <>

@@ -11,17 +11,18 @@ import {
   ROW_CLASS,
   getRowIndent,
 } from "@/components/vault/tree-layout";
+import { useOpenFilePath } from "@/components/vault/useOpenFilePath";
 import { useVaultItem } from "@/components/vault/useVaultItem";
 import { isPathWithin, isSamePath } from "@/lib/drawing-files";
 import { cn } from "@/lib/utils";
-import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import { useUIStore, useVaultStore } from "@/store";
 import type { RecentFileEntry } from "@/store/ui";
 
 /** A pinned file, with the same actions as its row in the file tree. */
 function PinnedRow({ file }: { file: RecentFileEntry }) {
-  const currentFilePath = useEditorStore((s) => s.currentFilePath);
+  const openFilePath = useOpenFilePath();
   const item = useVaultItem({ name: file.name, path: file.path, kind: "file" });
-  const isOpen = !!currentFilePath && isSamePath(file.path, currentFilePath);
+  const isOpen = !!openFilePath && isSamePath(file.path, openFilePath);
 
   return (
     <li className="group/row">

@@ -1,5 +1,3 @@
-import type { FileTreeNode } from "@/store";
-
 // ── Paths ─────────────────────────────────────────────────────────────────────
 
 /** Excalidraw drawings live in the vault as `*.excalidraw` JSON files. */
@@ -89,27 +87,6 @@ export function remapPathAfterMove(
 
   // Normalizing separators keeps lengths, so the raw suffix can be reused.
   return `${newPath}${filePath.slice(oldPath.replace(/[\\/]+$/, "").length)}`;
-}
-
-export function flattenDrawingFiles(nodes: FileTreeNode[]): FileTreeNode[] {
-  const drawings: FileTreeNode[] = [];
-
-  const visit = (node: FileTreeNode) => {
-    if (node.kind === "file") {
-      if (isDrawingPath(node.path)) drawings.push(node);
-      return;
-    }
-
-    for (const child of node.children ?? []) {
-      visit(child);
-    }
-  };
-
-  for (const node of nodes) {
-    visit(node);
-  }
-
-  return drawings;
 }
 
 // ── Pending saves ─────────────────────────────────────────────────────────────

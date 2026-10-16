@@ -44,6 +44,11 @@ export interface RecentFileEntry {
 interface UIState {
   // ── Left Sidebar ───────────────────────────────────────────────────────────
   isSidebarOpen: boolean;
+  /**
+   * The left sidebar's state in the other modes while Canvas, which opens
+   * with it hidden, is on screen.
+   */
+  isSidebarOpenOutsideCanvas: boolean;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   sidebarWidth: number;
@@ -126,11 +131,32 @@ interface UIState {
   setActiveDrawingPath: (path: string | null) => void;
 }
 
+/**
+ * Shows `appMode`. Canvas gives the drawing the whole width: the left sidebar
+ * hides on the way in (its toggle still shows it) and comes back as it was on
+ * the way out.
+ */
+function switchAppMode(state: UIState, appMode: AppMode): Partial<UIState> {
+  if (appMode === state.appMode) return {};
+  if (appMode === "canvas") {
+    return {
+      appMode,
+      isSidebarOpen: false,
+      isSidebarOpenOutsideCanvas: state.isSidebarOpen,
+    };
+  }
+  if (state.appMode === "canvas") {
+    return { appMode, isSidebarOpen: state.isSidebarOpenOutsideCanvas };
+  }
+  return { appMode };
+}
+
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       // ── Left Sidebar ───────────────────────────────────────────────────────────
       isSidebarOpen: true,
+      isSidebarOpenOutsideCanvas: true,
       setSidebarOpen: (open) => set({ isSidebarOpen: open }),
       toggleSidebar: () =>
         set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
@@ -243,12 +269,12 @@ export const useUIStore = create<UIState>()(
 
       // ── App Mode ───────────────────────────────────────────────────────────────
       appMode: "notes",
-      setAppMode: (mode) => set({ appMode: mode }),
+      setAppMode: (mode) => set((state) => switchAppMode(state, mode)),
       openMode: (mode) =>
-        set({
-          appMode: mode === "editor" ? "notes" : mode,
+        set((state) => ({
+          ...switchAppMode(state, mode === "editor" ? "notes" : mode),
           activeNavItem: null,
-        }),
+        })),
 
       // ── Canvas ─────────────────────────────────────────────────────────────────
       activeDrawingPath: null,
@@ -265,6 +291,7 @@ export const useUIStore = create<UIState>()(
       storage: renamedLocalStorage("netherite-ui"),
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,
+        isSidebarOpenOutsideCanvas: state.isSidebarOpenOutsideCanvas,
         isRightSidebarOpen: state.isRightSidebarOpen,
         isBrowserPanelOpen: state.isBrowserPanelOpen,
         browserLastUrl: state.browserLastUrl,

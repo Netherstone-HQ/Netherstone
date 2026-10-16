@@ -10,6 +10,7 @@ const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
     shortcuts: [
       { keys: "mod+k", action: "Search your vault" },
       { keys: "mod+n", action: "New shard" },
+      { keys: "mod+b", action: "Show or hide the left sidebar" },
       { keys: "mod+1", action: "Editor" },
       { keys: "mod+2", action: "Tags" },
       { keys: "mod+3", action: "Canvas" },

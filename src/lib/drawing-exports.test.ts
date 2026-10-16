@@ -1,0 +1,66 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const files = new Map<string, string>();
+
+vi.mock("@excalidraw/excalidraw", () => ({
+  exportToBlob: async () => ({ arrayBuffer: async () => new ArrayBuffer(3) }),
+}));
+vi.mock("@/hooks/useAutosave", () => ({ flushPendingAutosave: vi.fn() }));
+vi.mock("@/lib/open-editor-file", () => ({ openEditorFile: vi.fn() }));
+vi.mock("@/lib/commands", () => ({
+  findShardsContaining: vi.fn(),
+  persistAttachmentBytes: async (fileName: string) => ({
+    assetPath: `_attachments/${fileName}`,
+  }),
+  readMarkdownFile: async (path: string) => files.get(path) ?? "",
+  saveMarkdownFile: async (path: string, content: string) => {
+    files.set(path, content);
+  },
+  appendMarkdownToFile: async (path: string, markdown: string) => {
+    files.set(path, `${files.get(path)}\n\n${markdown}\n`);
+  },
+}));
+
+const { addDrawingToShard } = await import("@/lib/drawing-exports");
+const { openEditorFile } = await import("@/lib/open-editor-file");
+const { useEditorStore } = await import("@/store/editor");
+
+const VAULT = "C:/Notes";
+const DRAWING = `${VAULT}/Sketches/Plan.excalidraw`;
+const SHARD = `${VAULT}/Ideas.md`;
+const scene = { elements: [], appState: {}, files: {} };
+
+describe("addDrawingToShard", () => {
+  beforeEach(() => {
+    files.clear();
+    vi.mocked(openEditorFile).mockClear();
+  });
+
+  it("adds the drawing to the end of the shard, linked to the drawing", async () => {
+    files.set(SHARD, "# Ideas");
+
+    const result = await addDrawingToShard(scene, DRAWING, SHARD, VAULT);
+
+    expect(result).toBe("added");
+    expect(files.get(SHARD)).toBe(
+      '# Ideas\n\n<img src="_attachments/Plan.png" alt="Plan" width="480" data-excalidraw="Sketches/Plan.excalidraw" />\n',
+    );
+  });
+
+  it("replaces the drawing's image when the shard already shows it, and reloads the open shard", async () => {
+    files.set(
+      SHARD,
+      '<img src="_attachments/old.png" alt="Plan" width="300" data-excalidraw="Sketches/Plan.excalidraw" />',
+    );
+    useEditorStore.setState({ currentFilePath: SHARD });
+
+    const result = await addDrawingToShard(scene, DRAWING, SHARD, VAULT);
+
+    expect(result).toBe("replaced");
+    expect(files.get(SHARD)).toBe(
+      '<img src="_attachments/Plan.png" alt="Plan" width="300" data-excalidraw="Sketches/Plan.excalidraw" />',
+    );
+    expect(openEditorFile).toHaveBeenCalledWith(SHARD);
+  });
+});

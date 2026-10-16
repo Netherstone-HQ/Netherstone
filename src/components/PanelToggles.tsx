@@ -62,9 +62,18 @@ export function RightSidebarToggle() {
   );
 }
 
-export function BrowserPanelToggle() {
-  const isOpen = useUIStore((s) => s.isBrowserPanelOpen);
-  const toggle = useUIStore((s) => s.toggleBrowserPanel);
+/** The Editor's browser panel, or Canvas's own with `isCanvas`. */
+export function BrowserPanelToggle({
+  isCanvas = false,
+}: {
+  isCanvas?: boolean;
+}) {
+  const isOpen = useUIStore((s) =>
+    isCanvas ? s.isCanvasBrowserPanelOpen : s.isBrowserPanelOpen,
+  );
+  const toggle = useUIStore((s) =>
+    isCanvas ? s.toggleCanvasBrowserPanel : s.toggleBrowserPanel,
+  );
 
   return (
     <PanelToggle

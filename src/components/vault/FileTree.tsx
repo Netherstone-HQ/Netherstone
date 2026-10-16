@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { FilePlusIcon, FolderPlusIcon, PlusIcon } from "lucide-react";
-import { toast } from "sonner";
 
 import { DrawingIcon } from "@/components/icons";
 import { SectionHeader } from "@/components/sidebar/SectionHeader";
@@ -47,16 +46,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
 
   const isNamingRootFolder = newFolderParent === currentVaultPath;
   const startRootFolder = () => setNewFolderParent(currentVaultPath);
-  const newDrawing = async () => {
-    try {
-      await createDrawing(currentVaultPath);
-    } catch (error) {
-      console.error("[Netherstone] Failed to create drawing:", error);
-      toast.error("Couldn't create drawing", {
-        description: error instanceof Error ? error.message : String(error),
-      });
-    }
-  };
+  const newDrawing = () => createDrawing(currentVaultPath);
 
   return (
     <section

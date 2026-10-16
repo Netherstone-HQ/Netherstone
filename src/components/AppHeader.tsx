@@ -19,13 +19,19 @@ export function AppHeader() {
   return (
     <header className="flex h-header shrink-0 items-center gap-1.5 border-b px-2.5">
       <LeftSidebarToggle />
-      <Separator orientation="vertical" className="mx-1 h-4" />
+      <Separator
+        orientation="vertical"
+        className="mx-1 h-4 data-vertical:self-center"
+      />
       <FileBreadcrumb path={currentFilePath} onClose={closeShard} />
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <WordCount />
         <AutosaveIndicator />
         <BrowserPanelToggle />
-        <Separator orientation="vertical" className="mx-0.5 h-4" />
+        <Separator
+          orientation="vertical"
+          className="mx-0.5 h-4 data-vertical:self-center"
+        />
         <RightSidebarToggle />
       </div>
     </header>

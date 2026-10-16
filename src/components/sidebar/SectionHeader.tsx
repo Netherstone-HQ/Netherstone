@@ -1,28 +1,31 @@
 import { ChevronRightIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useUIStore, type LeftSidebarSection } from "@/store/ui";
+import { useUIStore, type SidebarSection } from "@/store/ui";
 
 const LABEL_CLASS =
   "flex h-full min-w-0 items-center gap-1 rounded-sm px-1.5 text-ui-sm text-muted-foreground";
 
 /**
- * A left sidebar section's label. With `section`, clicking it collapses or
+ * A sidebar section's label. With `section`, clicking it collapses or
  * expands the section, and the choice is remembered.
  */
 export function SectionHeader({
   label,
   section,
+  count,
   children,
   ...props
 }: {
   label: string;
-  section?: LeftSidebarSection;
+  section?: SidebarSection;
+  /** How many items the section holds, shown at the right end. */
+  count?: number;
   /** Controls at the right end, such as Files' + menu. */
   children?: React.ReactNode;
 } & Omit<React.ComponentProps<"button">, "children">) {
   const isCollapsed = useUIStore((s) =>
-    section ? s.collapsedSections[section] : false,
+    section ? !!s.collapsedSections[section] : false,
   );
   const toggleSection = useUIStore((s) => s.toggleSection);
 
@@ -50,7 +53,14 @@ export function SectionHeader({
       ) : (
         <span className={LABEL_CLASS}>{label}</span>
       )}
-      <div className="ml-auto flex items-center">{children}</div>
+      <div className="ml-auto flex items-center">
+        {count ? (
+          <span className="px-1.5 text-ui-sm text-muted-foreground tabular-nums">
+            {count}
+          </span>
+        ) : null}
+        {children}
+      </div>
     </div>
   );
 }

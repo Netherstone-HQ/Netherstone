@@ -1,5 +1,6 @@
 //! Shard Markdown as people read it, for showing text outside the editor:
-//! plain-text blocks, the tags in them, word matches and highlighted excerpts.
+//! plain-text blocks, the tags and links in them, word matches and highlighted
+//! excerpts.
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use serde::Serialize;
@@ -42,6 +43,8 @@ pub struct TextBlock {
     pub text: String,
     /// Each tag with the byte offset of its `#` in `text`.
     pub tags: Vec<(usize, String)>,
+    /// Each link's text in `text`, with where the link goes.
+    pub links: Vec<(Range<usize>, String)>,
 }
 
 /// Gathers the text of the block being read.
@@ -50,6 +53,9 @@ struct Blocks {
     done: Vec<TextBlock>,
     text: String,
     tags: Vec<(usize, String)>,
+    links: Vec<(Range<usize>, String)>,
+    /// Where the open link's text starts, and where it goes.
+    link: Option<(usize, String)>,
 }
 
 impl Blocks {
@@ -62,19 +68,37 @@ impl Blocks {
         self.text.push_str(text);
     }
 
+    fn start_link(&mut self, destination: &str) {
+        self.link = Some((self.text.len(), destination.to_string()));
+    }
+
+    fn end_link(&mut self) {
+        if let Some((start, destination)) = self.link.take() {
+            self.links.push((start..self.text.len(), destination));
+        }
+    }
+
     fn finish(&mut self, kind: BlockKind) {
         let leading = self.text.len() - self.text.trim_start().len();
         let text = self.text.trim().replace(['\r', '\n'], " ");
         if !text.is_empty() {
             let tags = self.tags.drain(..).map(|(at, tag)| (at - leading, tag));
+            let in_text = |at: usize| at.saturating_sub(leading).min(text.len());
+            let links = self
+                .links
+                .drain(..)
+                .map(|(range, to)| (in_text(range.start)..in_text(range.end), to))
+                .filter(|(range, _)| !range.is_empty());
             self.done.push(TextBlock {
                 kind,
-                text,
+                links: links.collect(),
                 tags: tags.collect(),
+                text,
             });
         }
         self.text.clear();
         self.tags.clear();
+        self.links.clear();
     }
 }
 
@@ -113,6 +137,8 @@ pub fn text_blocks(markdown: &str) -> Vec<TextBlock> {
                     *item = Some(done);
                 }
             }
+            Event::Start(Tag::Link { dest_url, .. }) => blocks.start_link(&dest_url),
+            Event::End(TagEnd::Link) => blocks.end_link(),
             Event::Text(text) => blocks.push(&text, true),
             Event::Code(code) => blocks.push(&code, false),
             Event::SoftBreak | Event::HardBreak => blocks.push(" ", false),
@@ -297,6 +323,20 @@ mod tests {
         assert_eq!(blocks[0].tags, [(10, "ideas".to_string())]);
         assert_eq!(&blocks[0].text[10..16], "#ideas");
         assert_eq!(blocks[1].tags, [(5, "todo".to_string())]);
+    }
+
+    #[test]
+    fn finds_links_and_where_they_go() {
+        let blocks = text_blocks("  Ask [Sam](mention:Sam.md) about **[the plan](./Plan.md)**.");
+        let links: Vec<_> = blocks[0]
+            .links
+            .iter()
+            .map(|(range, to)| (&blocks[0].text[range.clone()], to.as_str()))
+            .collect();
+        assert_eq!(
+            links,
+            [("Sam", "mention:Sam.md"), ("the plan", "./Plan.md")]
+        );
     }
 
     #[test]

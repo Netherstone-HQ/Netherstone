@@ -55,10 +55,7 @@ describe("pinned files", () => {
 
     const { useUIStore } = await loadStore();
     expect(useUIStore.getState().pinnedFiles).toEqual([PLAN]);
-    expect(useUIStore.getState().collapsedSections).toEqual({
-      pinned: false,
-      recent: true,
-    });
+    expect(useUIStore.getState().collapsedSections).toEqual({ recent: true });
   });
 });
 

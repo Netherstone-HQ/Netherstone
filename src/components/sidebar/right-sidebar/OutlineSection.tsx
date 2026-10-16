@@ -1,18 +1,19 @@
-import { ListIcon } from "lucide-react";
+import {
+  DISCLOSURE_SLOT_PX,
+  getGuideLeft,
+  getRowIndent,
+} from "@/components/vault/tree-layout";
 import { scrollPlateToHeading } from "@/lib/plate-toc-headings";
 import { cn } from "@/lib/utils";
-import { CollapsibleSection } from "./CollapsibleSection";
-import type { OutlineSectionProps } from "./types";
+import { useEditorStore } from "@/store/editor";
+import { CollapsibleSection, SECTION_NOTE_CLASS } from "./CollapsibleSection";
 
-const INDENT_PX = 12;
-/** Where the first level's guide sits; each level's text starts 7px past it. */
-const RAIL_PX = 3;
+/** The gap between a file tree row's slot and its name. */
+const SLOT_GAP_PX = 4;
 
-export function OutlineSection({
-  currentFilePath,
-  plateEditor,
-  tocHeadings,
-}: OutlineSectionProps) {
+export function OutlineSection() {
+  const plateEditor = useEditorStore((s) => s.plateEditor);
+  const tocHeadings = useEditorStore((s) => s.tocHeadings);
   // Indent from the shallowest heading, so a shard that starts at H2 isn't
   // pushed in by a level it doesn't use.
   const topDepth = Math.min(...tocHeadings.map((h) => h.depth));
@@ -20,23 +21,11 @@ export function OutlineSection({
   return (
     <CollapsibleSection
       section="outline"
-      title="Outline"
-      icon={<ListIcon className="size-4" />}
-      adornment={
-        tocHeadings.length > 0 ? (
-          <span className="font-normal text-muted-foreground text-ui-sm tabular-nums">
-            {tocHeadings.length}
-          </span>
-        ) : null
-      }
-      className="mb-6"
+      label="Outline"
+      count={tocHeadings.length}
     >
-      {!currentFilePath ? (
-        <p className="text-muted-foreground text-ui-sm">
-          Open a shard to see its outline.
-        </p>
-      ) : tocHeadings.length === 0 ? (
-        <p className="text-muted-foreground text-ui-sm">
+      {tocHeadings.length === 0 ? (
+        <p className={SECTION_NOTE_CLASS}>
           Headings you add to this shard show up here.
         </p>
       ) : (
@@ -48,19 +37,27 @@ export function OutlineSection({
                 key={heading.id}
                 type="button"
                 className={cn(
-                  "relative block w-full truncate rounded-sm py-1 pr-1 text-left text-ui-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
-                  level === 0 ? "text-foreground/75" : "text-muted-foreground",
+                  "relative block w-full truncate rounded-sm py-1 pr-1 text-left text-ui-sm outline-none transition-colors hover:bg-accent/40 hover:text-foreground focus-visible:bg-accent/40",
+                  level === 0
+                    ? "font-medium text-foreground"
+                    : "text-sidebar-foreground/85",
                 )}
-                style={{ paddingLeft: RAIL_PX + 7 + level * INDENT_PX }}
-                onClick={() => scrollPlateToHeading(plateEditor, heading)}
+                style={{
+                  paddingLeft:
+                    getRowIndent(level) + DISCLOSURE_SLOT_PX + SLOT_GAP_PX,
+                }}
+                onClick={() =>
+                  plateEditor && scrollPlateToHeading(plateEditor, heading)
+                }
               >
-                {/* One guide per level, like the file tree. */}
+                {/* Laid out like the file tree: each name after an empty slot,
+                    with one guide per level. */}
                 {Array.from({ length: level }, (_, i) => (
                   <span
                     key={i}
                     aria-hidden="true"
                     className="absolute inset-y-0 w-px bg-border"
-                    style={{ left: RAIL_PX + i * INDENT_PX }}
+                    style={{ left: getGuideLeft(i) }}
                   />
                 ))}
                 {heading.title}

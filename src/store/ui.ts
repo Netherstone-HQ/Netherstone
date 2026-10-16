@@ -22,10 +22,17 @@ export type AppMode = "notes" | "tags" | "canvas";
 /** The modes on the rail, in order. */
 export const RAIL_MODES = ["editor", "tags", "canvas"] as const;
 export type RailMode = (typeof RAIL_MODES)[number];
-/** Right sidebar sections that collapse. */
-export type RightSidebarSection = "outline" | "metadata";
-/** Left sidebar sections that collapse. */
-export type LeftSidebarSection = "pinned" | "recent";
+/**
+ * Sidebar sections that collapse: Pinned and Recent on the left,
+ * the others on the right.
+ */
+export type SidebarSection =
+  | "pinned"
+  | "recent"
+  | "outline"
+  | "links"
+  | "linkedFrom"
+  | "details";
 
 const MAX_RECENT_FILES_HISTORY = 25;
 
@@ -41,9 +48,9 @@ interface UIState {
   toggleSidebar: () => void;
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
-  /** Which left sidebar sections are collapsed. */
-  collapsedSections: Record<LeftSidebarSection, boolean>;
-  toggleSection: (section: LeftSidebarSection) => void;
+  /** Which sidebar sections are collapsed. Missing ones are expanded. */
+  collapsedSections: Partial<Record<SidebarSection, boolean>>;
+  toggleSection: (section: SidebarSection) => void;
   /**
    * A folder to show in the file tree: its folders open down to it, and it
    * scrolls into view and flashes. A new object each time, so picking the
@@ -59,12 +66,6 @@ interface UIState {
   isRightSidebarOpen: boolean;
   setRightSidebarOpen: (open: boolean) => void;
   toggleRightSidebar: () => void;
-  /** Which collapsible right sidebar sections are expanded. */
-  rightSidebarSections: Record<RightSidebarSection, boolean>;
-  setRightSidebarSectionOpen: (
-    section: RightSidebarSection,
-    open: boolean,
-  ) => void;
 
   // ── Notes Browser Panel ────────────────────────────────────────────────────
   isBrowserPanelOpen: boolean;
@@ -135,7 +136,7 @@ export const useUIStore = create<UIState>()(
         set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       sidebarWidth: 256,
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
-      collapsedSections: { pinned: false, recent: false },
+      collapsedSections: {},
       toggleSection: (section) =>
         set((state) => ({
           collapsedSections: {
@@ -156,14 +157,6 @@ export const useUIStore = create<UIState>()(
       setRightSidebarOpen: (open) => set({ isRightSidebarOpen: open }),
       toggleRightSidebar: () =>
         set((state) => ({ isRightSidebarOpen: !state.isRightSidebarOpen })),
-      rightSidebarSections: { outline: true, metadata: true },
-      setRightSidebarSectionOpen: (section, open) =>
-        set((state) => ({
-          rightSidebarSections: {
-            ...state.rightSidebarSections,
-            [section]: open,
-          },
-        })),
 
       // ── Notes Browser Panel ────────────────────────────────────────────────────
       isBrowserPanelOpen: false,
@@ -273,7 +266,6 @@ export const useUIStore = create<UIState>()(
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,
         isRightSidebarOpen: state.isRightSidebarOpen,
-        rightSidebarSections: state.rightSidebarSections,
         isBrowserPanelOpen: state.isBrowserPanelOpen,
         browserLastUrl: state.browserLastUrl,
         isCanvasBrowserPanelOpen: state.isCanvasBrowserPanelOpen,

@@ -97,6 +97,22 @@ fn resolve_mention_target(target: &str) -> String {
     normalize_path(without_suffix)
 }
 
+/// Where a link in the file at `file_path` points, as the `links` table stores
+/// it: a mention's shard, an internal link's decoded path with forward
+/// slashes (resolved from the file's folder when relative), or any other link's
+/// address without its `#` or `?` part.
+pub fn resolve_link_target(link_type: LinkType, target: &str, file_path: &Path) -> String {
+    match link_type {
+        LinkType::Mention => resolve_mention_target(target),
+        LinkType::Internal => resolve_internal_target(file_path, target),
+        LinkType::External
+        | LinkType::Email
+        | LinkType::Phone
+        | LinkType::Anchor
+        | LinkType::Other => strip_link_target(target).trim().to_string(),
+    }
+}
+
 use super::parser::{LinkType, parse_markdown};
 
 /// Index a single markdown file into the database.
@@ -210,39 +226,12 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
 
     // Insert links
     for link in parsed.links {
-        let link_type_str = match link.link_type {
-            LinkType::Mention => "mention",
-            LinkType::Internal => "internal",
-            LinkType::External => "external",
-            LinkType::Email => "email",
-            LinkType::Phone => "phone",
-            LinkType::Anchor => "anchor",
-            LinkType::Other => "other",
-        };
-
-        let mut final_target = link.target.clone();
-
-        match link.link_type {
-            LinkType::Mention => {
-                final_target = resolve_mention_target(&link.target);
-            }
-            LinkType::Internal => {
-                final_target = resolve_internal_target(file_path, &link.target);
-            }
-            LinkType::External
-            | LinkType::Email
-            | LinkType::Phone
-            | LinkType::Anchor
-            | LinkType::Other => {
-                final_target = strip_link_target(&link.target).trim().to_string();
-            }
-        }
-
+        let final_target = resolve_link_target(link.link_type, &link.target, file_path);
         let is_valid = normalize_link_validity(link.link_type, &link.target, &final_target);
 
         conn.execute(
             "INSERT INTO links (source_file_id, target_path, link_text, link_type, is_valid) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![file_id, final_target, link.text, link_type_str, if is_valid { 1 } else { 0 }],
+            params![file_id, final_target, link.text, link.link_type.as_str(), if is_valid { 1 } else { 0 }],
         )
         .map_err(|e| format!("Failed to insert link: {}", e))?;
     }

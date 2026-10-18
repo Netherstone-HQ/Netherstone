@@ -49,6 +49,8 @@ const BLOCKS: BlockCase[] = [
   { value: "h6" },
   { value: KEYS.ul, type: KEYS.p, props: { listStyleType: KEYS.ul } },
   { value: KEYS.ol, type: KEYS.p, props: { listStyleType: KEYS.ol } },
+  { value: KEYS.listTodo, type: KEYS.p, props: { listStyleType: KEYS.listTodo } },
+  { value: KEYS.toggle },
   { value: KEYS.codeBlock, type: KEYS.codeBlock },
   { value: KEYS.blockquote },
   { value: KEYS.callout, props: { icon: "💡" } },
@@ -97,19 +99,6 @@ const BLOCKS: BlockCase[] = [
     insert: (editor) => insertMedia(editor, KEYS.mediaEmbed, "https://example.com/embed"),
   },
 ];
-
-/**
- * Menu items whose save rule is still missing. Each one is a known data loss
- * tracked in the editor plan; the branch that fixes it moves the item up
- * into BLOCKS. Nothing else belongs here.
- */
-const BLOCKS_WITHOUT_SAVE_RULE: Record<string, string> = {
-  [KEYS.toggle]: "fix/markdown-data-loss saves toggles as <details>",
-  [KEYS.listTodo]:
-    "fix/markdown-data-loss saves an untouched to-do (checked undefined) as a task, not a bullet",
-  [KEYS.codeDrawing]:
-    "fix/markdown-data-loss decides whether code drawings get a rule or leave the menu",
-};
 
 type InlineCase = {
   value: string;
@@ -302,7 +291,6 @@ describe("menu coverage guard", () => {
   it("has a case for every menu and toolbar feature", () => {
     const covered = new Set<string>([
       ...BLOCKS.map((b) => b.value),
-      ...Object.keys(BLOCKS_WITHOUT_SAVE_RULE),
       ...INLINES.map((i) => i.value),
       ...MARKS.map((m) => m.key),
       ...MODE_KEYS,

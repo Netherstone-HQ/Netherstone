@@ -15,6 +15,7 @@ import { ExitBreakKit } from "./kits/exit-break-kit";
 import { FixedToolbarKit } from "./kits/fixed-toolbar-kit";
 import { FloatingToolbarKit } from "./kits/floating-toolbar-kit";
 import { FontKit } from "./kits/font-kit";
+import { FrontMatterKit } from "./kits/front-matter-kit";
 import { LineHeightKit } from "./kits/line-height-kit";
 import { LinkKit } from "./kits/link-kit";
 import { ListKit } from "./kits/list-kit";
@@ -50,6 +51,7 @@ export const EditorKit = [
   ...FixedToolbarKit,
   ...FloatingToolbarKit,
   ...FontKit, // marked for testing - using features besides font family (?) - okay this says it supports applying font styling and other things, not just family
+  ...FrontMatterKit, // YAML front matter, kept as it is in the file
   ...LineHeightKit,
   ...LinkKit,
   ...ListKit,

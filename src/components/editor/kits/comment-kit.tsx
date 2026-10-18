@@ -89,9 +89,9 @@ export const commentPlugin = toTPlatePlugin<CommentConfig>(BaseCommentPlugin, {
   )
   .configure({
     node: { component: CommentLeaf },
-    shortcuts: {
-      setDraft: { keys: 'mod+shift+m' },
-    },
+    // Comments have nowhere to live in a Markdown file yet, so the shortcut
+    // (like the toolbar buttons) is off until collaboration stores them.
+    shortcuts: {},
   });
 
 export const CommentKit = [commentPlugin];

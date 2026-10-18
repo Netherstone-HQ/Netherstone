@@ -298,6 +298,61 @@ describe("table cells", () => {
   });
 });
 
+describe("formatting the editor has no Markdown for", () => {
+  it("saves alignment, line height and indent as a wrapper, and reads it back", () => {
+    const value = [
+      { type: "h2", align: "center", children: [{ text: "Title" }] },
+      { type: "p", align: "center", children: [{ text: "Under it" }] },
+      { type: "p", lineHeight: 2, indent: 1, children: [{ text: "Spaced" }] },
+    ];
+    const markdown = saveValue(value);
+    expect(markdown).toBe(
+      '<div align="center">\n\n## Title\n\nUnder it\n\n</div>\n\n<div style="line-height: 2; margin-left: 24px">\n\nSpaced\n\n</div>\n',
+    );
+    const loaded = loadMarkdown(markdown);
+    expect(loaded.map(({ id: _id, ...block }) => block)).toEqual(value);
+  });
+
+  it("keeps a list item's indent as list nesting", () => {
+    const value = [
+      { type: "p", listStyleType: "disc", indent: 1, children: [{ text: "one" }] },
+      { type: "p", listStyleType: "disc", indent: 2, children: [{ text: "two" }] },
+    ];
+    expect(saveValue(value)).toBe("- one\n  - two\n");
+  });
+
+  it("keeps a resized image's width and a link's title", () => {
+    const value = [
+      {
+        type: "img",
+        url: "a.png",
+        width: 320.4,
+        caption: [{ text: "cap" }],
+        children: [{ text: "" }],
+      },
+      {
+        type: "p",
+        children: [
+          { type: "a", url: "https://x.y", title: "The site", children: [{ text: "x" }] },
+        ],
+      },
+    ];
+    const markdown = saveValue(value);
+    expect(markdown).toBe(
+      '<img src="a.png" alt="cap" width="320" />\n\n[x](https://x.y "The site")\n',
+    );
+    const loaded = loadMarkdown(markdown);
+    expect(loaded[0]).toMatchObject({ type: "img", url: "a.png", width: 320 });
+    expect(loaded[1].children[0]).toMatchObject({ url: "https://x.y", title: "The site" });
+  });
+
+  it("writes an image without a width the plain way", () => {
+    expect(
+      saveValue([{ type: "img", url: "a.png", caption: [{ text: "cap" }], children: [{ text: "" }] }]),
+    ).toBe("![cap](a.png)\n");
+  });
+});
+
 describe("shard links", () => {
   const FILE = "C:/Vault/Daily/Today.md";
   const load = (markdown: string) =>

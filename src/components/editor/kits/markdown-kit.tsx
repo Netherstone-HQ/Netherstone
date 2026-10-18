@@ -19,16 +19,20 @@ import { toggleRules } from "@/lib/markdown-toggles";
 import { remarkLiteralMdxExpressions } from "@/lib/remark-literal-mdx-expressions";
 
 /**
- * Images exported from a canvas link back to their drawing. Plate saves
- * images as `![alt](src)`, which would drop that link (and the width), so
- * linked images are saved as `<img>` tags instead.
+ * Plate saves images as `![alt](src)`, which has no room for a width. An
+ * image that was resized, or that links back to the drawing it was exported
+ * from, is saved as an `<img>` tag instead, which Markdown renderers show
+ * at that width.
  */
 const imageRule: MdRules["img"] = {
   deserialize: defaultRules.img?.deserialize,
   serialize: (node, options) => {
     const drawing = (node as Record<string, unknown>)[DRAWING_LINK_ATTRIBUTE];
+    const hasDrawing = typeof drawing === "string" && drawing.length > 0;
+    const width =
+      typeof node.width === "number" && node.width > 0 ? Math.round(node.width) : null;
 
-    if (typeof drawing !== "string" || drawing.length === 0) {
+    if (!hasDrawing && width === null) {
       return defaultRules.img!.serialize!(node, options);
     }
 
@@ -40,8 +44,8 @@ const imageRule: MdRules["img"] = {
       attributes: propsToAttributes({
         src: node.url,
         ...(alt ? { alt } : {}),
-        ...(node.width != null ? { width: node.width } : {}),
-        [DRAWING_LINK_ATTRIBUTE]: drawing,
+        ...(width !== null ? { width: String(width) } : {}),
+        ...(hasDrawing ? { [DRAWING_LINK_ATTRIBUTE]: drawing } : {}),
       }),
       children: [],
     } as never;

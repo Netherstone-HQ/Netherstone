@@ -233,7 +233,7 @@ fn locate_tags(blocks: &[TextBlock], tags: Vec<String>) -> Vec<TagExcerpt> {
 }
 
 /// A shard as the links to it name it.
-struct LinkedShard {
+pub(crate) struct LinkedShard {
     /// With forward slashes.
     path: String,
     name: String,
@@ -241,7 +241,7 @@ struct LinkedShard {
 }
 
 impl LinkedShard {
-    fn new(path: &str) -> Self {
+    pub(crate) fn new(path: &str) -> Self {
         let path = normalize_path(path);
         let file = Path::new(&path);
         let part = |part: Option<&std::ffi::OsStr>| {
@@ -257,7 +257,7 @@ impl LinkedShard {
     /// Whether a link whose target the `links` table stores as `target`
     /// points here: an internal link by its path, with or without `.md`, or
     /// a mention by its path or the shard's name. Case is ignored.
-    fn is_target(&self, link_type: LinkType, target: &str) -> bool {
+    pub(crate) fn is_target(&self, link_type: LinkType, target: &str) -> bool {
         let same = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
         match link_type {
             LinkType::Internal => {
@@ -627,4 +627,47 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&vault);
     }
+}
+
+/// The indexed files holding a link or mention to any of `shards`, as their
+/// paths. The index is only as current as the last pass; a file edited since
+/// may be missing.
+pub fn files_linking_to_any(
+    conn: &Connection,
+    shards: &[LinkedShard],
+) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT f.path, l.link_type, l.target_path FROM links l
+             JOIN files f ON f.id = l.source_file_id
+             WHERE l.link_type IN ('internal', 'mention')",
+        )
+        .map_err(|e| format!("Failed to prepare links query: {}", e))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| format!("Failed to query links: {}", e))?;
+
+    let mut sources: Vec<String> = Vec::new();
+    for row in rows {
+        let (source, link_type, target) = row.map_err(|e| format!("Failed to read link: {}", e))?;
+        let link_type = if link_type == LinkType::Mention.as_str() {
+            LinkType::Mention
+        } else {
+            LinkType::Internal
+        };
+        if shards
+            .iter()
+            .any(|shard| shard.is_target(link_type, &target))
+            && !sources.contains(&source)
+        {
+            sources.push(source);
+        }
+    }
+    Ok(sources)
 }

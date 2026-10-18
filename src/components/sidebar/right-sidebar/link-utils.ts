@@ -2,6 +2,10 @@ import { KEYS } from "platejs";
 
 import type { FileTreeNode } from "@/store";
 import { getVaultFileDisplayName, isMarkdownPath } from "@/lib/drawing-files";
+import {
+  isAbsolutePathLike,
+  normalizeSlashes,
+} from "@/lib/markdown-shard-links";
 import type { DocumentLink, DocumentLinkKind } from "./types";
 
 const MAX_LINKS = 100;
@@ -112,11 +116,12 @@ function extractDocumentLinksFromValue(
 
     if (record.type === KEYS.mention && typeof record.value === "string") {
       const shardName = record.value.trim();
+      const key = typeof record.key === "string" ? record.key.trim() : "";
 
-      if (shardName) {
+      if (shardName || key) {
         links.push({
-          label: shardName,
-          target: shardName,
+          label: shardName || key,
+          target: key || shardName,
           kind: "shard-mention",
         });
       }
@@ -169,7 +174,12 @@ export function resolveDocumentLinks(
   for (const link of extractDocumentLinksFromValue(value)) {
     const resolvedPath =
       link.kind === "shard-mention"
-        ? resolveShardReferencePath(link.target, shardFiles)
+        ? resolveMentionPath(
+            link.target,
+            currentFilePath,
+            currentVaultPath,
+            shardFiles,
+          )
         : link.kind === "internal"
           ? resolveInternalTargetPath(
               link.target,
@@ -387,4 +397,40 @@ export function resolveShardReferencePath(
   }
 
   return null;
+}
+
+/**
+ * The shard an @ link points to. `target` is the mention's key: the shard's
+ * absolute path, a path relative to the linking shard, or, from older files,
+ * just the shard's name.
+ */
+export function resolveMentionPath(
+  target: string,
+  currentFilePath: string,
+  currentVaultPath: string,
+  shardFiles: FileTreeNode[],
+) {
+  const cleaned = stripLinkDecorators(target);
+  if (!cleaned) return null;
+
+  if (isAbsolutePathLike(cleaned)) {
+    const wanted = normalizeSlashes(cleaned).toLowerCase();
+    const exact = shardFiles.find(
+      (file) => normalizeSlashes(file.path).toLowerCase() === wanted,
+    );
+    if (exact) return exact.path;
+    // The shard moved or was renamed since: the one with that name, if only one.
+    return resolveShardReferencePath(cleaned.split("/").pop() ?? cleaned, shardFiles);
+  }
+
+  if (/\.md$/i.test(cleaned) || cleaned.includes("/")) {
+    return resolveInternalTargetPath(
+      cleaned,
+      currentFilePath,
+      currentVaultPath,
+      shardFiles,
+    );
+  }
+
+  return resolveShardReferencePath(cleaned, shardFiles);
 }

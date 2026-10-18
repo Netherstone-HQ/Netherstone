@@ -16,13 +16,14 @@ import {
 
 import {
   flattenShardFiles,
-  resolveShardReferencePath,
+  resolveMentionPath,
 } from '@/components/sidebar/right-sidebar/link-utils';
 import { openEditorFile } from '@/lib/open-editor-file';
 import { cn } from '@/lib/utils';
 import { isMarkdownPath } from '@/lib/drawing-files';
+import { isAbsolutePathLike } from '@/lib/markdown-shard-links';
 import { useMounted } from '@/hooks/use-mounted';
-import { useVaultStore } from '@/store';
+import { useEditorStore, useVaultStore } from '@/store';
 import type { FileTreeNode } from '@/store';
 
 import {
@@ -64,8 +65,21 @@ export function MentionElement(
         draggable: true,
         onClick: () => {
           // Resolved the same way as mentions in the right sidebar's Links.
-          const files = flattenShardFiles(useVaultStore.getState().fileTree);
-          const path = resolveShardReferencePath(element.value, files);
+          const { fileTree, currentVaultPath } = useVaultStore.getState();
+          const currentFilePath = useEditorStore.getState().currentFilePath;
+          const key =
+            typeof element.key === 'string' && element.key.trim()
+              ? element.key
+              : element.value;
+          // A path the file tree doesn't list yet (it may still be loading)
+          // is opened as it is.
+          const path =
+            resolveMentionPath(
+              key,
+              currentFilePath ?? '',
+              currentVaultPath ?? '',
+              flattenShardFiles(fileTree),
+            ) ?? (isAbsolutePathLike(key) ? key : null);
           if (!path) return;
 
           void openEditorFile(path).catch((error) => {
@@ -116,8 +130,9 @@ export function MentionInputElement(
       return result;
     };
 
-    return flatten(shardFiles).map((file, index) => ({
-      key: `${file.path}-${index}`,
+    // The key is what the link is saved as: the shard's path.
+    return flatten(shardFiles).map((file) => ({
+      key: file.path,
       text: file.name.replace(/\.md$/i, ''),
       path: file.path,
     }));

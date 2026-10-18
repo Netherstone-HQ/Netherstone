@@ -321,9 +321,9 @@ describe("Editor", () => {
       "[Anchor](#weekly-notes)",
     ].join(" and ");
 
+    // A link to another shard shows as an @ chip, not an anchor.
     const click = (name: string) => {
-      const link = screen.getByText(name).closest("a")!;
-      fireEvent.click(link);
+      fireEvent.click(screen.getByText(name));
     };
 
     it("opens a linked note relative to the current one", async () => {

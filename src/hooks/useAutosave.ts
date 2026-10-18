@@ -109,7 +109,8 @@ export function useAutosave() {
         timeoutMs: SERIALIZATION_WORKER_TIMEOUT_MS,
         filePath,
         requestKey: filePath ? `autosave:${filePath}` : "autosave",
-        fallback: () => getSaveMarkdownContent(editor, fallbackMarkdown),
+        fallback: () =>
+          getSaveMarkdownContent(editor, fallbackMarkdown, { filePath }),
       });
     };
 

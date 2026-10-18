@@ -3,6 +3,7 @@ mod db;
 mod export;
 mod github;
 mod markdown_text;
+mod shard_links;
 mod splash;
 mod sync;
 mod updater;
@@ -812,6 +813,106 @@ fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) 
     }
 }
 
+/// Rewrites the links between shards after `old_path` became `new_path`:
+/// the moved shards' own relative links, and the links to them in the
+/// shards the index knows link there. Rewritten files are re-indexed and
+/// their cached editor state dropped, since it names the old paths.
+fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str) {
+    let moved: Vec<shard_links::MovedShard> = moved_markdown_paths(old_path, new_path)
+        .into_iter()
+        .filter(|(_, new)| vault::is_markdown_path(Path::new(new)))
+        .map(|(old, new)| shard_links::MovedShard { old, new })
+        .collect();
+    if moved.is_empty() {
+        return;
+    }
+
+    let conn = match db::open_connection() {
+        Ok(conn) => conn,
+        Err(error) => {
+            eprintln!(
+                "[Netherstone] Failed to open database to rewrite links after {}: {}",
+                action, error
+            );
+            return;
+        }
+    };
+
+    let mut files: Vec<(String, String)> = moved
+        .iter()
+        .map(|m| (m.old.clone(), m.new.clone()))
+        .collect();
+    let shards: Vec<db::queries::LinkedShard> = moved
+        .iter()
+        .map(|m| db::queries::LinkedShard::new(&m.old))
+        .collect();
+    match db::queries::files_linking_to_any(&conn, &shards) {
+        Ok(linking) => {
+            for path in linking {
+                let is_moved = moved.iter().any(|m| {
+                    m.old
+                        .replace('\\', "/")
+                        .eq_ignore_ascii_case(&path.replace('\\', "/"))
+                        || m.new
+                            .replace('\\', "/")
+                            .eq_ignore_ascii_case(&path.replace('\\', "/"))
+                });
+                if !is_moved {
+                    files.push((path.clone(), path));
+                }
+            }
+        }
+        Err(error) => eprintln!(
+            "[Netherstone] Failed to find shards linking to moved files after {}: {}",
+            action, error
+        ),
+    }
+
+    for (file_old, file_new) in files {
+        let content = match std::fs::read_to_string(&file_new) {
+            Ok(content) => content,
+            Err(error) => {
+                eprintln!(
+                    "[Netherstone] Failed to read {} to rewrite links after {}: {}",
+                    file_new, action, error
+                );
+                continue;
+            }
+        };
+        let Some(rewritten) =
+            shard_links::rewrite_moved_links(&content, &file_old, &file_new, &moved)
+        else {
+            continue;
+        };
+        if let Err(error) = write_markdown_file_and_sync_references(&file_new, &rewritten) {
+            eprintln!(
+                "[Netherstone] Failed to rewrite links in {} after {}: {}",
+                file_new, action, error
+            );
+            continue;
+        }
+        if let Err(error) = db::ast_cache::delete_ast_cache(&conn, &file_new) {
+            eprintln!(
+                "[Netherstone] Failed to drop the cached editor state of {}: {}",
+                file_new, error
+            );
+        }
+        if let Err(error) = db::indexer::index_file(&conn, Path::new(&file_new)) {
+            eprintln!(
+                "[Netherstone] Failed to re-index {} after rewriting links: {}",
+                file_new, error
+            );
+        }
+        eprintln!(
+            "[Netherstone] Rewrote shard links in {} after {} {} -> {}",
+            file_new,
+            action,
+            old_path,
+            new_path.display()
+        );
+    }
+}
+
 #[tauri::command(async)]
 fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
     let old_file = std::path::Path::new(&old_path);
@@ -861,6 +962,7 @@ fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
 
     let new_path_string = new_path.to_string_lossy().to_string();
     sync_caches_after_path_change(&old_path, &new_path, "rename");
+    rewrite_links_after_path_change(&old_path, &new_path, "rename");
 
     Ok(new_path_string)
 }
@@ -903,6 +1005,7 @@ fn move_file(source_path: String, destination_dir: String) -> Result<String, Str
 
     let new_path_string = new_path.to_string_lossy().to_string();
     sync_caches_after_path_change(&source_path, &new_path, "move");
+    rewrite_links_after_path_change(&source_path, &new_path, "move");
 
     Ok(new_path_string)
 }

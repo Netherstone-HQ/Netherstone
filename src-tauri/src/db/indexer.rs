@@ -59,7 +59,7 @@ fn decode_link_target(target: &str) -> String {
 }
 
 /// Resolves an internal link target against the folder of the linking file.
-fn resolve_internal_target(file_path: &Path, target: &str) -> String {
+pub(crate) fn resolve_internal_target(file_path: &Path, target: &str) -> String {
     let cleaned = decode_link_target(strip_link_target(target).trim());
 
     if cleaned.is_empty() || cleaned.starts_with('/') || is_absolute_path_like(&cleaned) {
@@ -75,7 +75,7 @@ fn resolve_internal_target(file_path: &Path, target: &str) -> String {
     }
 }
 
-fn resolve_mention_target(target: &str) -> String {
+pub(crate) fn resolve_mention_target(target: &str) -> String {
     let raw_target = target.strip_prefix("mention:").unwrap_or(target).trim();
     if raw_target.is_empty() {
         return String::new();

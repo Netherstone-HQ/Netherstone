@@ -117,13 +117,58 @@ describe("code and empty notes", () => {
     ).toBe("");
   });
 
-  it("keeps empty paragraphs between content", () => {
+  it("saves an empty line between content as <br>", () => {
     const value = [
       { type: "p", children: [{ text: "a" }] },
       { type: "p", children: [{ text: "" }] },
+      { type: "p", children: [{ text: "" }] },
       { type: "p", children: [{ text: "b" }] },
     ];
-    expect(saveValue(value)).toBe("a\n\n\u200B\n\nb\n");
+    expect(saveValue(value)).toBe("a\n\n<br>\n\n<br>\n\nb\n");
+    expect(loadMarkdown("a\n\n<br>\n\nb\n").map((node) => node.children[0].text)).toEqual([
+      "a",
+      "",
+      "b",
+    ]);
+  });
+
+  it("never writes a zero-width space", () => {
+    const cell = (text: string) => ({
+      type: "td",
+      children: [{ type: "p", children: [{ text }] }],
+    });
+    const table = {
+      type: "table",
+      children: [
+        { type: "tr", children: [cell("a"), cell("b")] },
+        { type: "tr", children: [cell("1"), cell("")] },
+      ],
+    };
+    const mention = {
+      type: "p",
+      children: [
+        { text: "see " },
+        { type: "mention", value: "Other", children: [{ text: "" }] },
+        { text: "" },
+      ],
+    };
+    const saved = saveValue([table, mention]);
+    expect(saved).not.toContain("\u200B");
+    expect(saved).toContain("| 1 |  |");
+    expect(saved).toContain("see [Other](mention:Other)\n");
+  });
+
+  it("drops block ids before saving", () => {
+    const saved = saveValue([
+      {
+        type: "callout",
+        icon: "💡",
+        id: "static-0001",
+        children: [{ type: "p", id: "static-0002", children: [{ text: "Body" }] }],
+      },
+      { type: "video", id: "static-0003", url: "clip.mp4", children: [{ text: "" }] },
+    ]);
+    expect(saved).toBe('<callout icon="💡">\n  Body\n</callout>\n\n<video src="clip.mp4" />\n');
   });
 
   // The editor always ends a shard with an empty line to type into.
@@ -166,10 +211,22 @@ describe("conversions by design", () => {
     );
   });
 
-  it("turns raw HTML into literal text", () => {
-    // Plate has no HTML node; its markdown rule loads HTML as plain text.
-    expect(roundTrip("<div>raw html</div>\n")).toBe(
-      "\\<div>raw html\\</div>\n",
+  it("keeps an HTML block and a comment exactly as written", () => {
+    const markdown =
+      "<!-- a note to self -->\n\n<div class=\"x\">raw html</div>\n\n<table><tr><td>cell</td></tr></table>\n";
+    const value = loadMarkdown(markdown);
+    expect(value.map((node) => node.type)).toEqual(["raw_block", "raw_block", "raw_block"]);
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("keeps inline HTML as marks, not raw blocks", () => {
+    expect(loadMarkdown("<u>whole line</u>\n")[0].type).toBe("p");
+    expect(roundTrip("Some <mark>text</mark> here.\n")).toBe("Some <mark>text</mark> here.\n");
+  });
+
+  it("fences indented code", () => {
+    expect(roundTrip("Para\n\n    indented code\n    line two\n\nAfter\n")).toBe(
+      "Para\n\n```\nindented code\nline two\n```\n\nAfter\n",
     );
   });
 

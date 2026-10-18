@@ -23,6 +23,7 @@ import { MarkdownKit } from "./kits/markdown-kit";
 import { MathKit } from "./kits/math-kit";
 import { MediaKit } from "./kits/media-kit";
 import { MentionKit } from "./kits/mention-kit";
+import { RawBlockKit } from "./kits/raw-block-kit";
 import { SlashKit } from "./kits/slash-kit";
 import { SuggestionKit } from "./kits/suggestion-kit";
 import { TableKit } from "./kits/table-kit";
@@ -59,6 +60,7 @@ export const EditorKit = [
   ...MathKit,
   ...MediaKit, // marked for debug
   ...MentionKit, // marked for customization
+  ...RawBlockKit, // HTML the editor has no block for, kept as written
   ...SlashKit,
   ...SuggestionKit,
   ...TableKit,

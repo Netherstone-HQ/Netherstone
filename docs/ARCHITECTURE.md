@@ -26,6 +26,11 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
   and from Plate's document tree in a web worker
   (`src/components/editor/serialize.worker.ts`), so large shards don't block
   typing.
+- Shards are plain Markdown. What Markdown has no syntax for is written as a
+  little HTML any renderer copes with: alignment, line height and indent as
+  a `<div align style>` wrapper around the blocks (`src/lib/markdown-block-formatting.ts`),
+  a resized image as `<img width>`, a table's widths, merges and colours in a
+  `<!-- netherstone: … -->` comment above it (`src/lib/markdown-tables.ts`).
 - Opening a shard can skip parsing: the last parsed tree is cached in SQLite,
   keyed by path and content hash (`src-tauri/src/db/ast_cache.rs`,
   `src/lib/editor-ast-cache.ts`). A changed file is parsed again.

@@ -10,6 +10,10 @@ import {
   joinFrontMatter,
   splitFrontMatter,
 } from "@/lib/markdown-front-matter";
+import {
+  applyBlockFormatting,
+  wrapFormattedBlocks,
+} from "@/lib/markdown-block-formatting";
 import { BLANK_LINE_PROP, isEmptyParagraph } from "@/lib/markdown-empty-lines";
 import {
   isRawHtmlBlock,
@@ -267,10 +271,12 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const sanitized = prepareMarkdownInput(markdown, { maskVerbatim, rawBlocks });
   const masked = maskVerbatim && sanitized.includes(VERBATIM_LESS_THAN);
   const unmask = <T,>(value: T): T =>
-    applyTableMeta(
-      restoreRawBlocks(
-        masked ? (restoreVerbatimLessThan(value) as T) : value,
-        rawBlocks,
+    applyBlockFormatting(
+      applyTableMeta(
+        restoreRawBlocks(
+          masked ? (restoreVerbatimLessThan(value) as T) : value,
+          rawBlocks,
+        ),
       ),
     );
   let mdxError: Error | null = null;
@@ -578,8 +584,9 @@ export function serializeMarkdownValue(
   const frontMatter = isFrontMatterNode(first) ? first.value : null;
   const body = frontMatter === null ? value : rest;
 
+  // Toggles first, so a block's indent is its own and not its toggle's.
   const serialized = editor.getApi(MarkdownPlugin).markdown.serialize({
-    value: groupToggles(body),
+    value: wrapFormattedBlocks(groupToggles(body)),
   });
 
   return joinFrontMatter(frontMatter, finalizeSerializedMarkdown(serialized));

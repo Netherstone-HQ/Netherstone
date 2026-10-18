@@ -200,7 +200,12 @@ export const shardLinkRules: MdRules = {
   a: {
     deserialize: (node, deco, options) => {
       if (!isShardLinkTarget(node.url)) {
-        return defaultRules.a!.deserialize!(node, deco, options);
+        const link = defaultRules.a!.deserialize!(node, deco, options);
+        // A link's title (`[x](url "title")`) has no editor UI yet, but it
+        // is the author's and stays in the file.
+        return typeof node.title === "string" && node.title
+          ? { ...link, title: node.title }
+          : link;
       }
 
       const key = resolveShardLinkKey(
@@ -216,7 +221,18 @@ export const shardLinkRules: MdRules = {
         children: [{ text: "" }],
       } as never;
     },
-    serialize: defaultRules.a!.serialize,
+    serialize: (node, options) => {
+      const link = defaultRules.a!.serialize!(node, options) as unknown as Record<
+        string,
+        unknown
+      >;
+      const title = (node as Record<string, unknown>).title;
+      return (
+        link.type === "link" && typeof title === "string" && title
+          ? { ...link, title }
+          : link
+      ) as never;
+    },
   },
   mention: {
     deserialize: (node, _deco, options) => ({

@@ -50,6 +50,15 @@ pnpm test          # run the tests
 pnpm tauri build   # build an installer
 ```
 
+The editor also has browser tests. Build the frontend once, then run them
+in a real Chromium (the first run downloads it):
+
+```sh
+pnpm exec vite build
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
 ## Learn more
 
 [Architecture](docs/ARCHITECTURE.md) ·

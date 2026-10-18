@@ -36,6 +36,39 @@ jobs:
       - name: Test
         run: pnpm test
 
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm exec vite build
+
+      # Editor tests in a real Chromium against the built app, with the
+      # desktop bridge mocked (see e2e/vault.ts).
+      - name: Test
+        run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results
+          retention-days: 7
+
   rust:
     name: Rust tests
     runs-on: ubuntu-24.04

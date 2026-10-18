@@ -18,6 +18,11 @@ import {
 } from "@/lib/markdown-raw-blocks";
 import { inlineReferenceLinks } from "@/lib/markdown-reference-links";
 import { setShardLinkFilePath } from "@/lib/markdown-shard-links";
+import {
+  applyTableMeta,
+  prepareTableForMarkdown,
+  tableMetaBlock,
+} from "@/lib/markdown-tables";
 import { groupToggles } from "@/lib/markdown-toggles";
 
 // Plate parses markdown as MDX, which is stricter than the plain markdown in a
@@ -262,9 +267,11 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const sanitized = prepareMarkdownInput(markdown, { maskVerbatim, rawBlocks });
   const masked = maskVerbatim && sanitized.includes(VERBATIM_LESS_THAN);
   const unmask = <T,>(value: T): T =>
-    restoreRawBlocks(
-      masked ? (restoreVerbatimLessThan(value) as T) : value,
-      rawBlocks,
+    applyTableMeta(
+      restoreRawBlocks(
+        masked ? (restoreVerbatimLessThan(value) as T) : value,
+        rawBlocks,
+      ),
     );
   let mdxError: Error | null = null;
 
@@ -441,6 +448,23 @@ export function prepareSerializableMarkdownValue(
         if (!next) {
           next = value.slice(0, index);
         }
+        continue;
+      }
+
+      // A table saves as a rectangular pipe table, with its widths, merges,
+      // colours and borders in a hidden comment on the line above.
+      if (type === "table") {
+        const { table, meta } = prepareTableForMarkdown(record as never);
+        const inner = walk(table.children, true);
+        if (!next) {
+          next = value.slice(0, index);
+        }
+        if (meta) next.push(tableMetaBlock(meta));
+        const { id: _tableId, ...tableRest } = table;
+        next.push({
+          ...tableRest,
+          children: inner.changed ? inner.value : table.children,
+        });
         continue;
       }
 

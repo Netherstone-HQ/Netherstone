@@ -126,6 +126,8 @@ type TableResizeDragState = {
 };
 
 type TableResizeContextValue = {
+  /** No column widths saved yet: the table fills the text column and sizes by content. */
+  autoLayout: boolean;
   disableMarginLeft: boolean;
   clearResizePreview: (handleKey: string) => void;
   setResizePreview: (
@@ -140,6 +142,8 @@ type TableResizeContextValue = {
 
 const TABLE_CONTROL_COLUMN_WIDTH = 8;
 const TABLE_DEFAULT_COLUMN_WIDTH = 120;
+/** Narrowest a column gets while the table sizes by content; wider tables scroll. */
+const TABLE_MIN_COLUMN_WIDTH = 64;
 const TABLE_DEFERRED_COLUMN_RESIZE_CELL_COUNT = 1200;
 const TABLE_MULTI_SELECTION_TOOLBAR_DELAY_MS = 150;
 
@@ -158,6 +162,7 @@ function useTableResizeContext() {
 }
 
 function useTableResizeController({
+  autoLayout,
   deferColumnResize,
   dragIndicatorRef,
   hoverIndicatorRef,
@@ -167,6 +172,7 @@ function useTableResizeController({
   tableRef,
   wrapperRef,
 }: {
+  autoLayout: boolean;
   deferColumnResize: boolean;
   dragIndicatorRef: React.RefObject<HTMLDivElement | null>;
   hoverIndicatorRef: React.RefObject<HTMLDivElement | null>;
@@ -494,11 +500,53 @@ function useTableResizeController({
 
   React.useEffect(() => stopResize, [stopResize]);
 
+  /**
+   * The first drag of a column edge on a table that sizes by content keeps
+   * the widths it has at that moment, so the drag has something to move and
+   * the result is saved with the table.
+   */
+  const freezeMeasuredColSizes = React.useCallback(() => {
+    const table = tableRef.current;
+
+    if (!table) return;
+
+    const rows = Array.from(table.rows);
+    const widestRow = rows.reduce<HTMLTableRowElement | null>(
+      (best, row) => (!best || row.cells.length > best.cells.length ? row : best),
+      null,
+    );
+
+    if (!widestRow) return;
+
+    const measured: number[] = [];
+
+    Array.from(widestRow.cells).forEach((cell) => {
+      // The row handle column is not a table column.
+      if (!cell.hasAttribute("data-table-cell-id")) return;
+
+      const span = Math.max(1, cell.colSpan);
+      const width = cell.getBoundingClientRect().width / span;
+
+      for (let index = 0; index < span; index += 1) {
+        measured.push(Math.max(TABLE_MIN_COLUMN_WIDTH, Math.round(width)));
+      }
+    });
+
+    if (measured.length === 0) return;
+
+    effectiveColSizesRef.current = measured;
+    editor.tf.setNodes<TTableElement>({ colSizes: measured }, { at: tablePath });
+  }, [editor, tablePath, tableRef]);
+
   const startResize = React.useCallback(
     (
       event: React.PointerEvent<HTMLDivElement>,
       { colIndex, direction, handleKey, rowIndex }: TableResizeStartOptions,
     ) => {
+      if (autoLayout && direction !== "bottom") {
+        freezeMeasuredColSizes();
+      }
+
       const rowHeight =
         tableRef.current?.rows.item(rowIndex)?.getBoundingClientRect().height ??
         0;
@@ -577,8 +625,10 @@ function useTableResizeController({
       event.stopPropagation();
     },
     [
+      autoLayout,
       controlColumnWidth,
       deferColumnResize,
+      freezeMeasuredColSizes,
       getColumnBoundaryOffset,
       hideResizeIndicator,
       showDeferredResizeIndicator,
@@ -592,12 +642,13 @@ function useTableResizeController({
 
   return React.useMemo(
     () => ({
+      autoLayout,
       clearResizePreview,
       disableMarginLeft,
       setResizePreview,
       startResize,
     }),
-    [clearResizePreview, disableMarginLeft, setResizePreview, startResize],
+    [autoLayout, clearResizePreview, disableMarginLeft, setResizePreview, startResize],
   );
 }
 
@@ -615,6 +666,10 @@ export const TableElement = withHOC(
     const hasControls = !readOnly && !isSelectionAreaVisible;
     const { marginLeft, props: tableProps } = useTableElement();
     const colSizes = useTableColSizes();
+    // Markdown carries no column widths, so most tables fill the text column
+    // and size their columns by content. Widths exist once an edge was
+    // dragged (or the file's table comment holds them).
+    const autoLayout = !props.element.colSizes?.some((size) => size > 0);
     const controlColumnWidth = hasControls ? TABLE_CONTROL_COLUMN_WIDTH : 0;
     const dragIndicatorRef = React.useRef<HTMLDivElement>(null);
     const hoverIndicatorRef = React.useRef<HTMLDivElement>(null);
@@ -628,6 +683,7 @@ export const TableElement = withHOC(
     const wrapperRef = React.useRef<HTMLDivElement>(null);
     useTableSelectionDom(tableRef);
     const resizeController = useTableResizeController({
+      autoLayout,
       controlColumnWidth,
       deferColumnResize,
       dragIndicatorRef,
@@ -638,6 +694,8 @@ export const TableElement = withHOC(
       wrapperRef,
     });
     const resolvedColSizes = React.useMemo(() => {
+      if (autoLayout) return [];
+
       if (colSizes.length > 0) {
         return colSizes.map((colSize) => colSize || TABLE_DEFAULT_COLUMN_WIDTH);
       }
@@ -646,7 +704,7 @@ export const TableElement = withHOC(
         { length: getTableColumnCount(props.element) },
         () => TABLE_DEFAULT_COLUMN_WIDTH,
       );
-    }, [colSizes, props.element]);
+    }, [autoLayout, colSizes, props.element]);
     const tableVariableStyle = React.useMemo(() => {
       if (resolvedColSizes.length === 0) {
         return;
@@ -663,13 +721,15 @@ export const TableElement = withHOC(
     }, [resolvedColSizes]);
     const tableStyle = React.useMemo(
       () =>
-        ({
-          width: `${
-            resolvedColSizes.reduce((total, colSize) => total + colSize, 0) +
-            controlColumnWidth
-          }px`,
-        }) as React.CSSProperties,
-      [controlColumnWidth, resolvedColSizes],
+        (autoLayout
+          ? { width: "100%" }
+          : {
+              width: `${
+                resolvedColSizes.reduce((total, colSize) => total + colSize, 0) +
+                controlColumnWidth
+              }px`,
+            }) as React.CSSProperties,
+      [autoLayout, controlColumnWidth, resolvedColSizes],
     );
 
     const isSelectingTable = useBlockSelected(props.element.id as string);
@@ -702,7 +762,8 @@ export const TableElement = withHOC(
             <table
               ref={tableRef}
               className={cn(
-                "mr-0 ml-px table h-px table-fixed border-collapse",
+                "mr-0 ml-px table h-px border-collapse",
+                autoLayout ? "table-auto" : "table-fixed",
                 "data-[table-selecting=true]:[&_*::selection]:!bg-transparent",
                 "data-[table-selecting=true]:[&_*::selection]:!text-inherit",
                 "data-[table-selecting=true]:[&_*::-moz-selection]:!bg-transparent",
@@ -712,7 +773,7 @@ export const TableElement = withHOC(
               style={tableStyle}
               {...tableProps}
             >
-              {resolvedColSizes.length > 0 && (
+              {(hasControls || resolvedColSizes.length > 0) && (
                 <colgroup>
                   {hasControls && (
                     <col
@@ -1298,6 +1359,7 @@ export function TableCellElement({
 
   const { borders, colIndex, colSpan, rowIndex, rowSpan, width } =
     useTableCellPresentation(element);
+  const { autoLayout } = useTableResizeContext();
 
   return (
     <PlateElement
@@ -1319,9 +1381,10 @@ export function TableCellElement({
       style={
         {
           "--cellBackground": element.background,
-          maxWidth: width,
-          minWidth: width,
-        } as React.CSSProperties
+          ...(autoLayout
+            ? { minWidth: TABLE_MIN_COLUMN_WIDTH * colSpan }
+            : { maxWidth: width, minWidth: width }),
+        } as unknown as React.CSSProperties
       }
       attributes={{
         ...props.attributes,

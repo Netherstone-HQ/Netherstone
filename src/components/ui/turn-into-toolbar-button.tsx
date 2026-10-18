@@ -24,7 +24,9 @@ import {
   SquareIcon,
 } from 'lucide-react';
 import { KEYS } from 'platejs';
-import { useEditorRef, useSelectionFragmentProp } from 'platejs/react';
+import { useEditorRef } from 'platejs/react';
+
+import { useSelectionBlockProp } from '@/components/ui/use-selection-block-prop';
 
 import {
   DropdownMenu,
@@ -129,9 +131,9 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
   const editor = useEditorRef();
   const [open, setOpen] = React.useState(false);
 
-  const value = useSelectionFragmentProp({
+  const value = useSelectionBlockProp({
     defaultValue: KEYS.p,
-    getProp: (node) => getBlockType(node as TElement),
+    getProp: getBlockType,
   });
   const selectedItem = React.useMemo(
     () =>

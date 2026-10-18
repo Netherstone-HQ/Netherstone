@@ -9,6 +9,7 @@ import {
 } from "@platejs/selection/react";
 import { resizeLengthClampStatic } from "@platejs/resizable";
 import {
+  getTableCellBorders,
   getTableColumnCount,
   setCellBackground,
   setTableColSize,
@@ -23,7 +24,6 @@ import {
   useOverrideColSize,
   useOverrideMarginLeft,
   useOverrideRowSize,
-  useTableCellBorders,
   useTableBordersDropdownMenuContentState,
   useTableColSizes,
   useTableElement,
@@ -129,6 +129,16 @@ type TableResizeContextValue = {
   /** No column widths saved yet: the table fills the text column and sizes by content. */
   autoLayout: boolean;
   disableMarginLeft: boolean;
+  /** Editable, and no block selection being dragged: rows get grips. */
+  hasControls: boolean;
+  /**
+   * The pointer is over the table, the caret is in it, or an edge is being
+   * dragged. Only then do the cells carry their resize handles, which keeps
+   * a shard with hundreds of tables light.
+   */
+  showResizeHandles: boolean;
+  /** The whole table is block-selected. */
+  isSelectingTable: boolean;
   clearResizePreview: (handleKey: string) => void;
   setResizePreview: (
     event: React.PointerEvent<HTMLDivElement>,
@@ -150,6 +160,10 @@ const TABLE_MULTI_SELECTION_TOOLBAR_DELAY_MS = 150;
 const TableResizeContext = React.createContext<TableResizeContextValue | null>(
   null,
 );
+
+const TableRowContext = React.createContext<{ isSelectingRow: boolean }>({
+  isSelectingRow: false,
+});
 
 function useTableResizeContext() {
   const context = React.useContext(TableResizeContext);
@@ -202,6 +216,7 @@ function useTableResizeController({
   const overrideColSize = useOverrideColSize();
   const overrideMarginLeft = useOverrideMarginLeft();
   const overrideRowSize = useOverrideRowSize();
+  const [resizing, setResizing] = React.useState(false);
 
   React.useEffect(() => {
     effectiveColSizesRef.current = effectiveColSizes;
@@ -482,6 +497,7 @@ function useTableResizeController({
   );
 
   const stopResize = React.useCallback(() => {
+    setResizing(false);
     cleanupListenersRef.current?.();
     cleanupListenersRef.current = null;
     activeHandleKeyRef.current = null;
@@ -546,6 +562,7 @@ function useTableResizeController({
       if (autoLayout && direction !== "bottom") {
         freezeMeasuredColSizes();
       }
+      setResizing(true);
 
       const rowHeight =
         tableRef.current?.rows.item(rowIndex)?.getBoundingClientRect().height ??
@@ -645,10 +662,11 @@ function useTableResizeController({
       autoLayout,
       clearResizePreview,
       disableMarginLeft,
+      resizing,
       setResizePreview,
       startResize,
     }),
-    [autoLayout, clearResizePreview, disableMarginLeft, setResizePreview, startResize],
+    [autoLayout, clearResizePreview, disableMarginLeft, resizing, setResizePreview, startResize],
   );
 }
 
@@ -733,6 +751,14 @@ export const TableElement = withHOC(
     );
 
     const isSelectingTable = useBlockSelected(props.element.id as string);
+    const selected = useSelected();
+    const [hovered, setHovered] = React.useState(false);
+    const showResizeHandles =
+      hasControls && (hovered || selected || resizeController.resizing);
+    const tableContext = React.useMemo<TableResizeContextValue>(() => {
+      const { resizing: _resizing, ...handlers } = resizeController;
+      return { ...handlers, hasControls, isSelectingTable, showResizeHandles };
+    }, [resizeController, hasControls, isSelectingTable, showResizeHandles]);
 
     const content = (
       <PlateElement
@@ -743,11 +769,13 @@ export const TableElement = withHOC(
         )}
         style={{ paddingLeft: marginLeft }}
       >
-        <TableResizeContext.Provider value={resizeController}>
+        <TableResizeContext.Provider value={tableContext}>
           <div
             ref={wrapperRef}
             className="group/table relative w-full"
             style={tableVariableStyle}
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => setHovered(false)}
           >
             <div
               ref={dragIndicatorRef}
@@ -805,6 +833,7 @@ export const TableElement = withHOC(
                 contentEditable={false}
               />
             )}
+            {selected && <TableSelectionDom tableRef={tableRef} />}
           </div>
         </TableResizeContext.Provider>
       </PlateElement>
@@ -818,19 +847,74 @@ export const TableElement = withHOC(
   },
 );
 
+/**
+ * Marks the cells the selection covers in the DOM. Only a table holding the
+ * caret watches the selection; when the caret leaves, the marks go with it.
+ */
+function TableSelectionDom({
+  tableRef,
+}: {
+  tableRef: React.RefObject<HTMLTableElement | null>;
+}) {
+  useTableSelectionDom(tableRef);
+
+  React.useEffect(
+    () => () => {
+      const table = tableRef.current;
+      if (!table) return;
+      table.removeAttribute("data-table-selecting");
+      for (const cell of table.querySelectorAll("[data-table-cell-selected]")) {
+        cell.removeAttribute("data-table-cell-selected");
+      }
+    },
+    [tableRef],
+  );
+
+  return null;
+}
+
+type TableToolbarKind = "collapsed" | "expanded" | "none";
+
 function TableFloatingToolbar({
   children,
   ...props
 }: React.ComponentProps<typeof PopoverContent>) {
+  const selected = useSelected();
+  const [kind, setKind] = React.useState<TableToolbarKind>("none");
+  const open = selected && kind !== "none";
+
+  return (
+    <Popover open={open} modal={false}>
+      <PopoverAnchor asChild>{children}</PopoverAnchor>
+      {selected && <TableFloatingToolbarState onChange={setKind} />}
+      {open && kind === "collapsed" && (
+        <CollapsedTableFloatingToolbarContent {...props} />
+      )}
+      {open && kind === "expanded" && (
+        <ExpandedSelectionTableFloatingToolbarContent {...props} />
+      )}
+    </Popover>
+  );
+}
+
+/**
+ * Follows the selection while the caret is in the table. A table without
+ * the caret has nothing to follow, so it subscribes to nothing: with
+ * hundreds of tables in a shard, that is what keeps typing quick.
+ */
+function TableFloatingToolbarState({
+  onChange,
+}: {
+  onChange: (kind: TableToolbarKind) => void;
+}) {
   const selectedCellCount = useEditorSelector(
     (editor) =>
       editor.getApi(TablePlugin).table.getSelectedCellIds()?.length ?? 0,
     [],
   );
-  const selected = useSelected();
   const collapsedInside = useEditorSelector(
-    (editor) => selected && editor.api.isCollapsed(),
-    [selected],
+    (editor) => editor.api.isCollapsed(),
+    [],
   );
   const isFocusedLast = useFocusedLast();
   const [isExpandedSelectionToolbarReady, setIsExpandedSelectionToolbarReady] =
@@ -855,22 +939,18 @@ function TableFloatingToolbar({
     };
   }, [isExpandedSelectionPending]);
 
-  const shouldRenderExpandedSelectionToolbar =
-    isExpandedSelectionToolbarReady && isExpandedSelectionPending;
-  const isToolbarOpen =
-    isCollapsedToolbarOpen || shouldRenderExpandedSelectionToolbar;
+  const kind: TableToolbarKind = isCollapsedToolbarOpen
+    ? "collapsed"
+    : isExpandedSelectionToolbarReady && isExpandedSelectionPending
+      ? "expanded"
+      : "none";
 
-  return (
-    <Popover open={isToolbarOpen} modal={false}>
-      <PopoverAnchor asChild>{children}</PopoverAnchor>
-      {isCollapsedToolbarOpen && (
-        <CollapsedTableFloatingToolbarContent {...props} />
-      )}
-      {shouldRenderExpandedSelectionToolbar && (
-        <ExpandedSelectionTableFloatingToolbarContent {...props} />
-      )}
-    </Popover>
-  );
+  React.useEffect(() => {
+    onChange(kind);
+  }, [kind, onChange]);
+  React.useEffect(() => () => onChange("none"), [onChange]);
+
+  return null;
 }
 
 function ExpandedSelectionTableFloatingToolbarContent(
@@ -1206,8 +1286,10 @@ export function TableRowElement({
   ...props
 }: PlateElementProps<TTableRowElement>) {
   const { element } = props;
-  const readOnly = useReadOnly();
   const editor = useEditorRef();
+  const { hasControls, isSelectingTable } = useTableResizeContext();
+  const isSelectingRow = useBlockSelected() || isSelectingTable;
+  const rowContext = React.useMemo(() => ({ isSelectingRow }), [isSelectingRow]);
   const rowIndex = useElementSelector(([, path]) => path.at(-1) as number, [], {
     key: KEYS.tr,
   });
@@ -1220,11 +1302,6 @@ export function TableRowElement({
   );
   const rowSizeOverrides = useTableValue("rowSizeOverrides");
   const rowMinHeight = rowSizeOverrides.get?.(rowIndex) ?? rowSize;
-  const isSelectionAreaVisible = usePluginOption(
-    BlockSelectionPlugin,
-    "isSelectionAreaVisible",
-  );
-  const hasControls = !readOnly && !isSelectionAreaVisible;
 
   const { isDragging, nodeRef, previewRef, handleRef } = useDraggable({
     element,
@@ -1267,15 +1344,19 @@ export function TableRowElement({
         </td>
       )}
 
-      {children}
+      <TableRowContext.Provider value={rowContext}>{children}</TableRowContext.Provider>
     </PlateElement>
   );
 }
 
 function useTableCellPresentation(element: TTableCellElement) {
-  const { api } = useEditorPlugin(TablePlugin);
-  const borders = useTableCellBorders({ element });
-  const { col, row } = useCellIndices();
+  const { api, editor } = useEditorPlugin(TablePlugin);
+  const cellIndices = useCellIndices();
+  const { col, row } = cellIndices;
+  const borders = React.useMemo(
+    () => getTableCellBorders(editor, { cellIndices, element }),
+    [cellIndices, editor, element],
+  );
 
   const colSpan = api.table.getColSpan(element);
   const rowSpan = api.table.getRowSpan(element);
@@ -1341,25 +1422,14 @@ export function TableCellElement({
 }: PlateElementProps<TTableCellElement> & {
   isHeader?: boolean;
 }) {
-  const readOnly = useReadOnly();
   const element = props.element;
-
-  const tableId = useElementSelector(([node]) => node.id as string, [], {
-    key: KEYS.table,
-  });
-  const rowId = useElementSelector(([node]) => node.id as string, [], {
-    key: KEYS.tr,
-  });
-  const isSelectingTable = useBlockSelected(tableId);
-  const isSelectingRow = useBlockSelected(rowId) || isSelectingTable;
-  const isSelectionAreaVisible = usePluginOption(
-    BlockSelectionPlugin,
-    "isSelectionAreaVisible",
-  );
+  // What the table and row already know is read from them, not looked up
+  // again in every cell.
+  const { autoLayout, showResizeHandles } = useTableResizeContext();
+  const { isSelectingRow } = React.useContext(TableRowContext);
 
   const { borders, colIndex, colSpan, rowIndex, rowSpan, width } =
     useTableCellPresentation(element);
-  const { autoLayout } = useTableResizeContext();
 
   return (
     <PlateElement
@@ -1404,7 +1474,7 @@ export function TableCellElement({
         {props.children}
       </div>
 
-      {!readOnly && !isSelectionAreaVisible && (
+      {showResizeHandles && (
         <TableCellResizeControls colIndex={colIndex} rowIndex={rowIndex} />
       )}
 

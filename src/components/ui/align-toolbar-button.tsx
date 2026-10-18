@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import type { Alignment } from '@platejs/basic-styles';
+import type { TElement } from 'platejs';
 import type { DropdownMenuProps } from '@radix-ui/react-dropdown-menu';
 
 import { TextAlignPlugin } from '@platejs/basic-styles/react';
@@ -12,7 +13,9 @@ import {
   AlignLeftIcon,
   AlignRightIcon,
 } from 'lucide-react';
-import { useEditorPlugin, useSelectionFragmentProp } from 'platejs/react';
+import { useEditorPlugin } from 'platejs/react';
+
+import { useSelectionBlockProp } from '@/components/ui/use-selection-block-prop';
 
 import {
   DropdownMenu,
@@ -43,12 +46,14 @@ const items = [
   },
 ];
 
+const getAlign = (node: TElement) => node.align as string | undefined;
+
 export function AlignToolbarButton(props: DropdownMenuProps) {
   const { editor, tf } = useEditorPlugin(TextAlignPlugin);
   const value =
-    useSelectionFragmentProp({
+    useSelectionBlockProp({
       defaultValue: 'start',
-      getProp: (node) => node.align,
+      getProp: getAlign,
     }) ?? 'left';
 
   const [open, setOpen] = React.useState(false);

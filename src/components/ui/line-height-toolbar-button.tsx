@@ -3,11 +3,14 @@
 import * as React from 'react';
 
 import type { DropdownMenuProps } from '@radix-ui/react-dropdown-menu';
+import type { TElement } from 'platejs';
 
 import { LineHeightPlugin } from '@platejs/basic-styles/react';
 import { DropdownMenuItemIndicator } from '@radix-ui/react-dropdown-menu';
 import { CheckIcon, WrapText } from 'lucide-react';
-import { useEditorRef, useSelectionFragmentProp } from 'platejs/react';
+import { useEditorRef } from 'platejs/react';
+
+import { useSelectionBlockProp } from '@/components/ui/use-selection-block-prop';
 
 import {
   DropdownMenu,
@@ -19,14 +22,16 @@ import {
 
 import { ToolbarButton } from './toolbar';
 
+const getLineHeight = (node: TElement) => node.lineHeight as number | undefined;
+
 export function LineHeightToolbarButton(props: DropdownMenuProps) {
   const editor = useEditorRef();
   const { defaultNodeValue, validNodeValues: values = [] } =
     editor.getInjectProps(LineHeightPlugin);
 
-  const value = useSelectionFragmentProp({
+  const value = useSelectionBlockProp({
     defaultValue: defaultNodeValue,
-    getProp: (node) => node.lineHeight,
+    getProp: getLineHeight,
   });
 
   const [open, setOpen] = React.useState(false);

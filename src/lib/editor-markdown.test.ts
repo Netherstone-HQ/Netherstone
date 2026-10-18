@@ -210,6 +210,38 @@ describe("autolinks", () => {
   });
 });
 
+describe("table cells", () => {
+  // Plate markdown 53.3.15 fixed both: a list in a cell used to save as the
+  // literal text `- item` and a line break as a space.
+  it("saves a list inside a cell as HTML and loads it back as a list", () => {
+    const cell = {
+      type: "td",
+      children: [
+        { type: "p", indent: 1, listStyleType: "disc", children: [{ text: "one" }] },
+        { type: "p", indent: 1, listStyleType: "disc", children: [{ text: "two" }] },
+      ],
+    };
+    const saved = saveValue([
+      { type: "table", children: [{ type: "tr", children: [cell] }] },
+    ]);
+    expect(saved).toContain("| <ul><li>one</li><li>two</li></ul> |");
+
+    const [table] = loadMarkdown(saved);
+    const items = table.children[0].children[0].children;
+    expect(items.map((item: any) => [item.listStyleType, item.children[0].text])).toEqual([
+      ["disc", "one"],
+      ["disc", "two"],
+    ]);
+  });
+
+  it("keeps a line break inside a cell", () => {
+    const [table] = loadMarkdown("| a |\n| - |\n| line<br>break |\n");
+    const [paragraph] = table.children[1].children[0].children;
+    expect(paragraph.children.map((leaf: any) => leaf.text)).toEqual(["line", "\n", "break"]);
+    expect(roundTrip("| a |\n| - |\n| x<br/>y |\n")).toBe("| a       |\n| ------- |\n| x<br/>y |\n");
+  });
+});
+
 describe("to-do lists", () => {
   it("saves an untouched to-do as an open task, not a bullet", () => {
     expect(

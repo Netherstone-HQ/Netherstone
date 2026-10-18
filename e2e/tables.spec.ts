@@ -122,3 +122,34 @@ test("a very wide table scrolls sideways instead of squeezing its columns", asyn
     });
   expect(scrolls).toBe(true);
 });
+
+test("the table toolbar and resize handles exist only for the table in use", async ({
+  page,
+}) => {
+  await mockVault(page, {
+    files: { "Tables.md": `${TABLE_NOTE}\n| x | y |\n| - | - |\n| 1 | 2 |\n` },
+    open: "Tables.md",
+  });
+
+  const tables = editor(page).locator("table");
+  await expect(tables).toHaveCount(2);
+  const popover = page.locator("[data-slot='popover-content']");
+  const handles = editor(page).locator(".cursor-col-resize");
+
+  // Nothing is in use yet: no toolbar, and no handles on any cell.
+  await expect(popover).toHaveCount(0);
+  await expect(handles).toHaveCount(0);
+
+  await caretAfter(page, "Short");
+  await expect(popover).toHaveCount(1);
+  // Only the table with the caret carries handles: 3 rows, each with a
+  // handle after every column and one before the first.
+  await expect(handles).toHaveCount(12);
+
+  await caretAfter(page, "After the table.");
+  await expect(popover).toHaveCount(0);
+  await expect(handles).toHaveCount(0);
+
+  await tables.nth(1).hover();
+  await expect(handles).toHaveCount(6);
+});

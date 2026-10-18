@@ -56,6 +56,11 @@ export const MountedEditor = memo(function MountedEditor({
     plugins: EditorKit,
     value: initialValue,
     chunking: { chunkSize: EDITOR_CHUNK_SIZE },
+    // Plate's navigation feedback (the flash on a block a table of contents
+    // panel jumps to) subscribes every block to every change. Nothing here
+    // uses it, and in a long shard it was most of the time between a
+    // keypress and the screen.
+    navigationFeedback: false,
   });
   const usePlateEditorDurationMs = getEditorLifecycleDurationMs(
     usePlateEditorStartMs,

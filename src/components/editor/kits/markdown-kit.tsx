@@ -11,6 +11,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
 import { DRAWING_LINK_ATTRIBUTE } from "@/lib/drawing-files";
+import { emptyLineRules } from "@/lib/markdown-empty-lines";
+import { rawBlockRules } from "@/lib/markdown-raw-blocks";
 import { toggleRules } from "@/lib/markdown-toggles";
 import { remarkLiteralMdxExpressions } from "@/lib/remark-literal-mdx-expressions";
 
@@ -51,7 +53,7 @@ export const MarkdownKit = [
       // Match common markdown style (and most hand-written notes): `-` for
       // bullets and `---` for rules, instead of remark's `*` defaults.
       remarkStringifyOptions: { bullet: "-", rule: "-" },
-      rules: { img: imageRule, ...toggleRules },
+      rules: { img: imageRule, ...toggleRules, ...emptyLineRules, ...rawBlockRules },
       remarkPlugins: [
         remarkMath,
         remarkGfm,

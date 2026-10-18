@@ -50,4 +50,16 @@ $$
 E = mc^2
 $$
 
+<callout icon="💡">
+  A callout body.
+</callout>
+
 <toc />
+
+A paragraph, then two empty lines, then another.
+
+<br>
+
+<br>
+
+The end.

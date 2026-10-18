@@ -16,8 +16,24 @@ test("editing a shard with a callout keeps the callout", async ({ page }) => {
 
   const saved = await lastSave(page, "Callout.md");
   expect(saved).toContain("# Callout");
-  expect(saved).toMatch(/<callout icon="💡"[^>]*>\n  Body\n<\/callout>/);
+  expect(saved).toContain('<callout icon="💡">\n  Body\n</callout>');
+  expect(saved).not.toContain("id=");
   expect(saved).toContain("End edited");
+});
+
+test("empty lines and HTML comments survive an edit", async ({ page }) => {
+  const note = "# Note\n\n<!-- keep me -->\n\nOne\n\n<br>\n\nTwo\n";
+  await mockVault(page, { files: { "Note.md": note }, open: "Note.md" });
+
+  await expect(editor(page)).toContainText("keep me");
+  await caretAfter(page, "Two");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Three");
+
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toBe("# Note\n\n<!-- keep me -->\n\nOne\n\n<br>\n\nTwo\n\n<br>\n\nThree\n");
+  expect(saved).not.toContain("\u200B");
 });
 
 test("editing a mixed shard keeps every block", async ({ page }) => {

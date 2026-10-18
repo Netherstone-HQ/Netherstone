@@ -1,5 +1,5 @@
 import { MarkdownPlugin } from "@platejs/markdown";
-import type { Descendant, SlateEditor } from "platejs";
+import type { Descendant, SlateEditor, TElement } from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
@@ -10,6 +10,12 @@ import {
   joinFrontMatter,
   splitFrontMatter,
 } from "@/lib/markdown-front-matter";
+import { BLANK_LINE_PROP, isEmptyParagraph } from "@/lib/markdown-empty-lines";
+import {
+  isRawHtmlBlock,
+  rawBlockPlaceholder,
+  restoreRawBlocks,
+} from "@/lib/markdown-raw-blocks";
 import { inlineReferenceLinks } from "@/lib/markdown-reference-links";
 import { groupToggles } from "@/lib/markdown-toggles";
 
@@ -36,6 +42,9 @@ const NON_TAG_AFTER_LESS_THAN = /[\s0-9=]/;
 // An HTML/JSX tag, e.g. `<callout icon="x">` or `<video width={640} />`.
 const HTML_TAG = /<\/?[A-Za-z][^>]*>/g;
 
+// Containers whose HTML children are blocks, not inline HTML in text.
+const BLOCK_PARENTS = new Set(["root", "blockquote", "listItem", "footnoteDefinition"]);
+
 // Fenced code fence at the start of a code block's source.
 const FENCED_CODE_START = /^ {0,3}(?:```|~~~)/;
 
@@ -45,7 +54,7 @@ const sourceRangeParser = unified().use(remarkParse).use(remarkGfm).use(remarkMa
 type SourceRange = {
   start: number;
   end: number;
-  kind: "verbatim" | "html" | "autolink";
+  kind: "verbatim" | "html" | "raw-block" | "indented-code" | "autolink";
 };
 
 // MDX reads an autolink (`<https://…>`) as a tag and fails on it, which
@@ -57,6 +66,7 @@ const WEB_AUTOLINK = /^<https?:\/\//i;
 
 type MdastSourceNode = {
   type: string;
+  value?: string;
   children?: MdastSourceNode[];
   position?: { start: { offset?: number }; end: { offset?: number } };
 };
@@ -101,6 +111,7 @@ function escapeMdxUnsafeHtmlText(html: string): string {
 function getSourceRangeKind(
   node: MdastSourceNode,
   source: string,
+  parent: MdastSourceNode | null,
 ): SourceRange["kind"] | null {
   switch (node.type) {
     case "inlineCode":
@@ -108,15 +119,19 @@ function getSourceRangeKind(
     case "inlineMath":
       return "verbatim";
     case "code":
-      // MDX has no indented code blocks; it parses them as paragraphs.
-      return FENCED_CODE_START.test(source) ? "verbatim" : null;
+      // MDX has no indented code blocks, so those are fenced before parsing.
+      return FENCED_CODE_START.test(source) ? "verbatim" : "indented-code";
     case "link":
       // Autolinks (`<https://...>`) and bare URLs don't support backslash
       // escapes; only `[text](url)` links can be escaped safely.
       if (source.startsWith("[")) return null;
       return source.startsWith("<") ? "autolink" : "verbatim";
     case "html":
-      return "html";
+      // Inline HTML (in a paragraph, heading or table cell) is marks Plate
+      // reads; a block the editor has no node for is kept verbatim.
+      return parent && BLOCK_PARENTS.has(parent.type) && isRawHtmlBlock(source)
+        ? "raw-block"
+        : "html";
     default:
       return null;
   }
@@ -134,22 +149,31 @@ const VERBATIM_LESS_THAN = "\uE000";
  * and `{` in prose, leaving code, math, autolinks and HTML/JSX tags untouched.
  */
 export function sanitizeMarkdownInput(markdown: string): string {
-  return prepareMarkdownInput(markdown, { maskVerbatim: false });
+  return prepareMarkdownInput(markdown, { maskVerbatim: false, rawBlocks: [] });
 }
+
+// Indented code needs no `<` or `{` to matter: MDX would read it as prose.
+const INDENTED_CODE_LINE = /^(?: {4}|\t)/m;
 
 function prepareMarkdownInput(
   markdown: string,
-  { maskVerbatim }: { maskVerbatim: boolean },
+  { maskVerbatim, rawBlocks }: { maskVerbatim: boolean; rawBlocks: string[] },
 ): string {
-  if (!markdown.includes("<") && !markdown.includes("{")) return markdown;
+  if (
+    !markdown.includes("<") &&
+    !markdown.includes("{") &&
+    !INDENTED_CODE_LINE.test(markdown)
+  ) {
+    return markdown;
+  }
 
   const ranges: SourceRange[] = [];
-  const collectRanges = (node: MdastSourceNode) => {
+  const collectRanges = (node: MdastSourceNode, parent: MdastSourceNode | null) => {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
 
     if (start !== undefined && end !== undefined) {
-      const kind = getSourceRangeKind(node, markdown.slice(start, end));
+      const kind = getSourceRangeKind(node, markdown.slice(start, end), parent);
 
       if (kind) {
         ranges.push({ start, end, kind });
@@ -158,11 +182,20 @@ function prepareMarkdownInput(
     }
 
     for (const child of node.children ?? []) {
-      collectRanges(child);
+      collectRanges(child, node);
     }
   };
 
-  collectRanges(sourceRangeParser.parse(markdown) as MdastSourceNode);
+  const tree = sourceRangeParser.parse(markdown) as MdastSourceNode;
+  collectRanges(tree, null);
+  const codeValues = new Map<number, string>();
+  const visitCode = (node: MdastSourceNode) => {
+    if (node.type === "code" && node.position?.start.offset !== undefined) {
+      codeValues.set(node.position.start.offset, node.value ?? "");
+    }
+    node.children?.forEach(visitCode);
+  };
+  if (ranges.some((range) => range.kind === "indented-code")) visitCode(tree);
 
   let sanitized = "";
   let cursor = 0;
@@ -173,6 +206,11 @@ function prepareMarkdownInput(
     sanitized += escapeMdxUnsafeProse(markdown.slice(cursor, start));
     if (kind === "html") {
       sanitized += escapeMdxUnsafeHtmlText(source);
+    } else if (kind === "raw-block") {
+      rawBlocks.push(source);
+      sanitized += rawBlockPlaceholder(rawBlocks.length - 1);
+    } else if (kind === "indented-code") {
+      sanitized += `\`\`\`\n${codeValues.get(start) ?? source}\n\`\`\``;
     } else if (kind === "autolink") {
       const target = source.slice(1, -1);
       sanitized += WEB_AUTOLINK.test(source)
@@ -209,10 +247,14 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const api = editor.getApi(MarkdownPlugin).markdown;
   // A note that already contains the placeholder can't be masked safely.
   const maskVerbatim = !markdown.includes(VERBATIM_LESS_THAN);
-  const sanitized = prepareMarkdownInput(markdown, { maskVerbatim });
+  const rawBlocks: string[] = [];
+  const sanitized = prepareMarkdownInput(markdown, { maskVerbatim, rawBlocks });
   const masked = maskVerbatim && sanitized.includes(VERBATIM_LESS_THAN);
   const unmask = <T,>(value: T): T =>
-    masked ? (restoreVerbatimLessThan(value) as T) : value;
+    restoreRawBlocks(
+      masked ? (restoreVerbatimLessThan(value) as T) : value,
+      rawBlocks,
+    );
   let mdxError: Error | null = null;
 
   const value = api.deserialize(sanitized, {
@@ -356,10 +398,15 @@ export function isBlankParagraph(node: unknown): boolean {
   );
 }
 
+const TABLE_CELL_TYPES = new Set(["td", "th"]);
+
 export function prepareSerializableMarkdownValue(
   nodes: unknown,
 ): SerializableMarkdownPreparation {
-  const walk = (value: unknown): { changed: boolean; value: unknown } => {
+  const walk = (
+    value: unknown,
+    inCell = false,
+  ): { changed: boolean; value: unknown } => {
     if (!Array.isArray(value)) {
       return { changed: false, value };
     }
@@ -386,11 +433,19 @@ export function prepareSerializableMarkdownValue(
         continue;
       }
 
-      const childResult = walk(record.children);
+      const childResult = walk(
+        record.children,
+        inCell || (type !== null && TABLE_CELL_TYPES.has(type)),
+      );
       // A to-do that was never ticked has no `checked`; without it the save
       // rule writes a plain bullet.
       const isUncheckedTodo =
         record.listStyleType === "todo" && record.checked === undefined;
+      // Block ids only mean something while the editor is open; Plate's
+      // HTML-style rules would write them into the file.
+      const hasId = type !== null && "id" in record;
+      // An empty line outside a table saves as `<br>`.
+      const isBlankLine = !inCell && isEmptyParagraph(record as TElement);
       const durableMediaSource =
         type && MEDIA_TYPES.has(type) ? getDurableMediaSource(record) : null;
       const hasTransientMediaUrl =
@@ -402,18 +457,22 @@ export function prepareSerializableMarkdownValue(
         childResult.changed ||
         hasTransientMediaUrl ||
         isMediaWithDeviceProps ||
-        isUncheckedTodo
+        isUncheckedTodo ||
+        hasId ||
+        isBlankLine
       ) {
         if (!next) {
           next = value.slice(0, index);
         }
 
+        const { id: _id, ...rest } = isMediaWithDeviceProps
+          ? withoutDeviceMediaProps(record)
+          : record;
         next.push({
-          ...(isMediaWithDeviceProps
-            ? withoutDeviceMediaProps(record)
-            : record),
+          ...rest,
           ...(durableMediaSource ? { url: durableMediaSource } : {}),
           ...(isUncheckedTodo ? { checked: false } : {}),
+          ...(isBlankLine ? { [BLANK_LINE_PROP]: true } : {}),
           children: childResult.changed ? childResult.value : record.children,
         });
         continue;
@@ -446,16 +505,15 @@ export function prepareSerializableMarkdownValue(
   };
 }
 
-// Plate saves an empty paragraph as a zero-width space so blank lines
-// survive a round-trip (`preserveEmptyParagraphs`).
-const EMPTY_PARAGRAPHS_ONLY = /^[\s\u200B]*$/;
+// Plate writes a zero-width space wherever a paragraph is empty (an empty
+// table cell, the end of a line that ends in a mention). Empty lines are
+// saved as `<br>` instead, so no invisible character ever reaches a file.
+const ZERO_WIDTH_SPACE = /\u200B/g;
 
 export function finalizeSerializedMarkdown(markdown: string): string {
-  // A note with nothing but empty paragraphs is an empty file, not one
-  // holding invisible characters.
-  if (EMPTY_PARAGRAPHS_ONLY.test(markdown)) return "";
-
-  return markdown;
+  const clean = markdown.replace(ZERO_WIDTH_SPACE, "");
+  // A note with nothing in it is an empty file.
+  return clean.trim() === "" ? "" : clean;
 }
 
 export function getSerializableMarkdownValue(

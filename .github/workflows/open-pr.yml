@@ -1,0 +1,41 @@
+name: Open pull request
+
+# A branch pushed to this repository gets its pull request opened here, with
+# the title and description taken from the branch's commit, so none has to
+# be typed by hand. Branches that already have an open pull request are left
+# alone, as are pushes from forks, which never run this workflow.
+on:
+  push:
+    branches:
+      - "chore/**"
+      - "docs/**"
+      - "feat/**"
+      - "fix/**"
+      - "perf/**"
+      - "test/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open:
+    name: Open the pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Open a pull request if the branch has none
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          open=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --base main --state open --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "A pull request for $BRANCH is already open."
+            exit 0
+          fi
+          git log -1 --format=%s > title.txt
+          git log -1 --format=%b > body.md
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+            --title "$(cat title.txt)" --body-file body.md

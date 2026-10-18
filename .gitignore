@@ -1,3 +1,7 @@
+# Browser test output
+test-results
+playwright-report
+
 # Logs
 logs
 *.log

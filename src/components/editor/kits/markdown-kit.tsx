@@ -14,6 +14,7 @@ import { DRAWING_LINK_ATTRIBUTE } from "@/lib/drawing-files";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
 import { shardLinkRules } from "@/lib/markdown-shard-links";
+import { tableRules } from "@/lib/markdown-tables";
 import { toggleRules } from "@/lib/markdown-toggles";
 import { remarkLiteralMdxExpressions } from "@/lib/remark-literal-mdx-expressions";
 
@@ -60,6 +61,7 @@ export const MarkdownKit = [
         ...emptyLineRules,
         ...rawBlockRules,
         ...shardLinkRules,
+        ...tableRules,
       },
       remarkPlugins: [
         remarkMath,

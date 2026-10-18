@@ -242,7 +242,13 @@ export type TableMeasure = {
 export async function measureTables(page: Page): Promise<TableMeasure[]> {
   return page.evaluate(() => {
     const root = document.querySelector("[data-slate-editor]")!;
-    const editorWidth = Math.round(root.getBoundingClientRect().width);
+    // The text column: the editor's width without the gutters around it.
+    const rootStyle = getComputedStyle(root);
+    const editorWidth = Math.round(
+      root.getBoundingClientRect().width -
+        parseFloat(rootStyle.paddingLeft) -
+        parseFloat(rootStyle.paddingRight),
+    );
     return [...root.querySelectorAll("table")].map((table) => ({
       editorWidth,
       tableWidth: Math.round(table.getBoundingClientRect().width),

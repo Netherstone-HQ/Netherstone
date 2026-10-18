@@ -33,6 +33,7 @@ import { BaseTocPlugin } from "@platejs/toc";
 import { BaseTogglePlugin } from "@platejs/toggle";
 import { KEYS, TrailingBlockPlugin, createSlatePlugin } from "platejs";
 
+import { BaseFrontMatterPlugin } from "@/lib/markdown-front-matter";
 import { MarkdownKit } from "./kits/markdown-kit";
 
 // `@platejs/math` imports KaTeX's CSS at module scope, which can't load in a
@@ -138,4 +139,5 @@ export const SerializationKit = [
   BaseTablePlugin,
   BaseTocPlugin.configure({ options: { topOffset: 80 } }),
   BaseTogglePlugin,
+  BaseFrontMatterPlugin,
 ];

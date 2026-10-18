@@ -1,9 +1,7 @@
-import { MarkdownPlugin } from "@platejs/markdown";
 import { createSlateEditor, normalizeStaticValue } from "platejs";
 import {
   deserializeEditorMarkdown,
-  finalizeSerializedMarkdown,
-  prepareSerializableMarkdownValue,
+  serializeMarkdownValue,
 } from "../../lib/editor-markdown";
 import { SerializationKit } from "./serialization-kit";
 
@@ -49,14 +47,7 @@ type MarkdownWorkerErrorResponse = {
 };
 
 function serializeChildren(children: unknown[]): string {
-  const preparation = prepareSerializableMarkdownValue(children);
-  const serialized = serializerEditor
-    .getApi(MarkdownPlugin)
-    .markdown.serialize({
-      value: preparation.value as any,
-    });
-
-  return finalizeSerializedMarkdown(serialized);
+  return serializeMarkdownValue(serializerEditor, children);
 }
 
 function deserializeMarkdown(markdown: string): unknown[] {

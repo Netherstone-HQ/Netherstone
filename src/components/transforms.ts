@@ -4,7 +4,6 @@ import type { PlateEditor } from "platejs/react";
 
 import { insertCallout } from "@platejs/callout";
 import { insertCodeBlock, toggleCodeBlock } from "@platejs/code-block";
-import { insertCodeDrawing } from "@platejs/code-drawing";
 import { insertDate } from "@platejs/date";
 import { insertColumnGroup, toggleColumnGroup } from "@platejs/layout";
 import { triggerFloatingLink } from "@platejs/link/react";
@@ -50,8 +49,6 @@ const insertBlockMap: Record<
   [KEYS.audio]: (editor) => insertAudioPlaceholder(editor, { select: true }),
   [KEYS.callout]: (editor) => insertCallout(editor, { select: true }),
   [KEYS.codeBlock]: (editor) => insertCodeBlock(editor, { select: true }),
-  [KEYS.codeDrawing]: (editor) =>
-    insertCodeDrawing(editor, {}, { select: true }),
   [KEYS.equation]: (editor) => insertEquation(editor, { select: true }),
   [KEYS.file]: (editor) => insertFilePlaceholder(editor, { select: true }),
   [KEYS.img]: (editor) =>

@@ -187,6 +187,39 @@ describe("conversions by design", () => {
   });
 });
 
+describe("autolinks", () => {
+  // MDX reads `<https://…>` as a tag and fails, which used to make the whole
+  // shard load through the plain parser, turning custom blocks into text.
+  it("keeps callouts in a shard that also has an autolink", () => {
+    const value = loadMarkdown(
+      "See <https://example.com/path>.\n\n<callout icon=\"💡\">\n  Body\n</callout>\n",
+    );
+    expect(value.map((node) => node.type)).toEqual(["p", "callout"]);
+  });
+
+  it("saves a web autolink as a bare URL and an email as a link", () => {
+    expect(roundTrip("Go to <https://example.com/x>.\n")).toBe(
+      "Go to https://example.com/x.\n",
+    );
+    const value = loadMarkdown("Mail <someone@example.com> or <mailto:a@b.com>.\n");
+    const links = value[0].children.filter((child: any) => child.type === "a");
+    expect(links.map((link: any) => link.url)).toEqual([
+      "mailto:someone@example.com",
+      "mailto:a@b.com",
+    ]);
+  });
+});
+
+describe("to-do lists", () => {
+  it("saves an untouched to-do as an open task, not a bullet", () => {
+    expect(
+      saveValue([
+        { type: "p", indent: 1, listStyleType: "todo", children: [{ text: "task" }] },
+      ]),
+    ).toBe("- [ ] task\n");
+  });
+});
+
 describe("sanitizeMarkdownInput", () => {
   it("returns markdown without < or { unchanged", () => {
     const markdown = "# Title\n\nPlain text.\n";
@@ -216,9 +249,12 @@ describe("sanitizeMarkdownInput", () => {
     );
   });
 
-  it("unwraps an autolink containing a brace", () => {
+  it("unwraps autolinks, which MDX can't parse", () => {
     expect(sanitizeMarkdownInput("<https://a.com/{id}>")).toBe(
       "https://a.com/{id}",
+    );
+    expect(sanitizeMarkdownInput("<https://a.com/x> <a@b.com>")).toBe(
+      "https://a.com/x [a@b.com](mailto:a@b.com)",
     );
   });
 });

@@ -2,17 +2,12 @@
 
 import * as React from 'react';
 
-import { SuggestionPlugin } from '@platejs/suggestion/react';
 import {
   type DropdownMenuProps,
   DropdownMenuItemIndicator,
 } from '@radix-ui/react-dropdown-menu';
-import { CheckIcon, EyeIcon, PencilLineIcon, PenIcon } from 'lucide-react';
-import {
-  useEditorReadOnly,
-  useEditorRef,
-  usePluginOption,
-} from 'platejs/react';
+import { CheckIcon, EyeIcon, PenIcon } from 'lucide-react';
+import { useEditorReadOnly, useEditorRef } from 'platejs/react';
 
 import {
   DropdownMenu,
@@ -29,22 +24,14 @@ export function ModeToolbarButton(props: DropdownMenuProps) {
   const readOnly = useEditorReadOnly();
   const [open, setOpen] = React.useState(false);
 
-  const isSuggesting = usePluginOption(SuggestionPlugin, 'isSuggesting');
-
-  let value = 'editing';
-
-  if (readOnly) value = 'viewing';
-
-  if (isSuggesting) value = 'suggestion';
+  // Suggestion mode is off until collaboration gives suggestions a place to
+  // be stored; a Markdown file can't hold them.
+  const value = readOnly ? 'viewing' : 'editing';
 
   const item: Record<string, { icon: React.ReactNode; label: string }> = {
     editing: {
       icon: <PenIcon />,
       label: 'Editing',
-    },
-    suggestion: {
-      icon: <PencilLineIcon />,
-      label: 'Suggestion',
     },
     viewing: {
       icon: <EyeIcon />,
@@ -70,19 +57,7 @@ export function ModeToolbarButton(props: DropdownMenuProps) {
               return;
             }
             editor.store.setReadOnly(false);
-
-            if (newValue === 'suggestion') {
-              editor.setOption(SuggestionPlugin, 'isSuggesting', true);
-
-              return;
-            }
-            editor.setOption(SuggestionPlugin, 'isSuggesting', false);
-
-            if (newValue === 'editing') {
-              editor.tf.focus();
-
-              return;
-            }
+            editor.tf.focus();
           }}
           value={value}
         >
@@ -102,15 +77,6 @@ export function ModeToolbarButton(props: DropdownMenuProps) {
             <Indicator />
             {item.viewing.icon}
             {item.viewing.label}
-          </DropdownMenuRadioItem>
-
-          <DropdownMenuRadioItem
-            className="pl-2 *:first:[span]:hidden *:[svg]:text-muted-foreground"
-            value="suggestion"
-          >
-            <Indicator />
-            {item.suggestion.icon}
-            {item.suggestion.label}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>

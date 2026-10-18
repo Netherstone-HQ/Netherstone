@@ -4,6 +4,14 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import {
+  createFrontMatterNode,
+  isFrontMatterNode,
+  joinFrontMatter,
+  splitFrontMatter,
+} from "@/lib/markdown-front-matter";
+import { inlineReferenceLinks } from "@/lib/markdown-reference-links";
+import { groupToggles } from "@/lib/markdown-toggles";
 
 // Plate parses markdown as MDX, which is stricter than the plain markdown in a
 // vault. Two prose constructs make the MDX parse fail or mangle text:
@@ -40,9 +48,12 @@ type SourceRange = {
   kind: "verbatim" | "html" | "autolink";
 };
 
-// MDX can't parse a `{` inside an autolink, but the bare URL form (which is
-// how Plate saves links anyway) parses fine.
-const HTTP_AUTOLINK_WITH_BRACE = /^<https?:\/\/[^>]*\{[^>]*>$/i;
+// MDX reads an autolink (`<https://…>`) as a tag and fails on it, which
+// makes the whole shard fall back to the plain parser (callouts, columns and
+// media then load as text). A web autolink becomes the bare URL, which is
+// how Plate saves links anyway; any other (`<mailto:…>`, `<user@host>`)
+// becomes an explicit link.
+const WEB_AUTOLINK = /^<https?:\/\//i;
 
 type MdastSourceNode = {
   type: string;
@@ -162,8 +173,11 @@ function prepareMarkdownInput(
     sanitized += escapeMdxUnsafeProse(markdown.slice(cursor, start));
     if (kind === "html") {
       sanitized += escapeMdxUnsafeHtmlText(source);
-    } else if (kind === "autolink" && HTTP_AUTOLINK_WITH_BRACE.test(source)) {
-      sanitized += source.slice(1, -1);
+    } else if (kind === "autolink") {
+      const target = source.slice(1, -1);
+      sanitized += WEB_AUTOLINK.test(source)
+        ? target
+        : `[${target}](${target.includes(":") ? target : `mailto:${target}`})`;
     } else if (kind === "verbatim" && maskVerbatim) {
       sanitized += source.replaceAll("<", VERBATIM_LESS_THAN);
     } else {
@@ -183,7 +197,15 @@ function prepareMarkdownInput(
  * MDX elements (callouts, TOC, ...) then show up as literal text, but no
  * content is lost.
  */
-export function deserializeEditorMarkdown(editor: SlateEditor, markdown: string) {
+export function deserializeEditorMarkdown(editor: SlateEditor, source: string) {
+  const { frontMatter, body } = splitFrontMatter(source);
+  const value = deserializeMarkdownBody(editor, inlineReferenceLinks(body));
+  return frontMatter === null
+    ? value
+    : [createFrontMatterNode(frontMatter), ...value];
+}
+
+function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const api = editor.getApi(MarkdownPlugin).markdown;
   // A note that already contains the placeholder can't be masked safely.
   const maskVerbatim = !markdown.includes(VERBATIM_LESS_THAN);
@@ -365,6 +387,10 @@ export function prepareSerializableMarkdownValue(
       }
 
       const childResult = walk(record.children);
+      // A to-do that was never ticked has no `checked`; without it the save
+      // rule writes a plain bullet.
+      const isUncheckedTodo =
+        record.listStyleType === "todo" && record.checked === undefined;
       const durableMediaSource =
         type && MEDIA_TYPES.has(type) ? getDurableMediaSource(record) : null;
       const hasTransientMediaUrl =
@@ -375,7 +401,8 @@ export function prepareSerializableMarkdownValue(
       if (
         childResult.changed ||
         hasTransientMediaUrl ||
-        isMediaWithDeviceProps
+        isMediaWithDeviceProps ||
+        isUncheckedTodo
       ) {
         if (!next) {
           next = value.slice(0, index);
@@ -386,6 +413,7 @@ export function prepareSerializableMarkdownValue(
             ? withoutDeviceMediaProps(record)
             : record),
           ...(durableMediaSource ? { url: durableMediaSource } : {}),
+          ...(isUncheckedTodo ? { checked: false } : {}),
           children: childResult.changed ? childResult.value : record.children,
         });
         continue;
@@ -442,13 +470,28 @@ export function getSerializableEditorValue(
   return getSerializableMarkdownValue(editor.children);
 }
 
-export function serializeEditorMarkdown(editor: SlateEditor): string {
-  const preparation = prepareSerializableMarkdownValue(editor.children);
+/**
+ * Serializes an editor value to the file's Markdown: front matter first,
+ * then the document with toggles gathered up and transient nodes dropped.
+ */
+export function serializeMarkdownValue(
+  editor: SlateEditor,
+  children: unknown,
+): string {
+  const { value } = prepareSerializableMarkdownValue(children);
+  const [first, ...rest] = value;
+  const frontMatter = isFrontMatterNode(first) ? first.value : null;
+  const body = frontMatter === null ? value : rest;
+
   const serialized = editor.getApi(MarkdownPlugin).markdown.serialize({
-    value: preparation.value,
+    value: groupToggles(body),
   });
 
-  return finalizeSerializedMarkdown(serialized);
+  return joinFrontMatter(frontMatter, finalizeSerializedMarkdown(serialized));
+}
+
+export function serializeEditorMarkdown(editor: SlateEditor): string {
+  return serializeMarkdownValue(editor, editor.children);
 }
 
 export function getSaveMarkdownContent(

@@ -47,7 +47,11 @@ async function loadValue(source: ExportSource): Promise<unknown[]> {
   const markdown = await readMarkdownFile(source.filePath);
   const parseHere = () =>
     normalizeStaticValue(
-      deserializeEditorMarkdown(createSlateEditor({ plugins: SerializationKit }), markdown),
+      deserializeEditorMarkdown(
+        createSlateEditor({ plugins: SerializationKit }),
+        markdown,
+        { filePath: source.filePath },
+      ),
     ) as unknown[];
   return deserializeMarkdownInWorker(markdown, { filePath: source.filePath, fallback: parseHere });
 }

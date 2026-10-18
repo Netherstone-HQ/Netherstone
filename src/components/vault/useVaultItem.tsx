@@ -57,6 +57,7 @@ import {
 } from "@/lib/open-editor-session-path-change";
 import { createDrawing, openVaultFile } from "@/lib/open-vault-file";
 import { refreshVault } from "@/lib/refresh-vault";
+import { remapShardLinkKeys } from "@/lib/shard-link-keys";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
 import {
   useEditorStore,
@@ -238,7 +239,10 @@ export function useVaultItem(
           timeoutMs: 5000,
           filePath: currentFilePath,
           requestKey: `${reason}:${currentFilePath}`,
-          fallback: () => getSaveMarkdownContent(plateEditor, markdownContent),
+          fallback: () =>
+            getSaveMarkdownContent(plateEditor, markdownContent, {
+              filePath: currentFilePath,
+            }),
         })
       : markdownContent;
 
@@ -320,6 +324,12 @@ export function useVaultItem(
     }
 
     remapRememberedPaths(node.path, newPath);
+
+    // The files on disk already point at the new paths; the open editor's
+    // @ links follow, so its next save agrees with them.
+    if (plateEditor) {
+      remapShardLinkKeys(plateEditor, node.path, newPath);
+    }
 
     await refreshVault(currentVaultPath);
     await relinkMovedDrawings(node, newPath, currentVaultPath);

@@ -17,10 +17,7 @@ const CANONICAL: Record<string, string> = {
   math: "Inline $x^2$ math.\n\n$$\na+b\n$$\n",
   "bare URL": "Visit https://example.com/path now.\n",
   "relative note link": "Link to [other](./other.md).\n",
-  // Plate writes a link URL with spaces in angle brackets and leaves a
-  // percent-encoded one as written; link resolvers decode both the same way.
-  "note link with spaces":
-    "Link to [roadmap](<./Projects/Netherstone roadmap.md>).\n",
+  // A shard link's path is percent-encoded, never put in angle brackets.
   "percent-encoded note link":
     "Link to [roadmap](./Projects/Netherstone%20roadmap.md).\n",
   "block image": "![alt text](attachments/image.png)\n",
@@ -31,6 +28,8 @@ const CANONICAL: Record<string, string> = {
 const HAND_WRITTEN: Record<string, string> = {
   ...CANONICAL,
   "star bullets and italics": "* one\n* *two*\n",
+  "note link with spaces":
+    "Link to [roadmap](<./Projects/Netherstone roadmap.md>).\n",
   "long table delimiter": "| a | b |\n| --- | --- |\n| 1 | 2 |\n",
   "less-than in prose": "Values <1 and a <= b.\n",
   "braces in prose": "x { y } and {unclosed\n",
@@ -155,7 +154,7 @@ describe("code and empty notes", () => {
     const saved = saveValue([table, mention]);
     expect(saved).not.toContain("\u200B");
     expect(saved).toContain("| 1 |  |");
-    expect(saved).toContain("see [Other](mention:Other)\n");
+    expect(saved).toContain("see [Other](Other.md)\n");
   });
 
   it("drops block ids before saving", () => {
@@ -230,10 +229,10 @@ describe("conversions by design", () => {
     );
   });
 
-  it("turns @-text into a mention", () => {
+  it("turns @-text into a shard link", () => {
     // remarkMention: mentions replaced wikilinks for linking notes.
     expect(roundTrip("Hi @wassim there.\n")).toBe(
-      "Hi [wassim](mention:wassim) there.\n",
+      "Hi [wassim](wassim.md) there.\n",
     );
   });
 
@@ -296,6 +295,84 @@ describe("table cells", () => {
     const [paragraph] = table.children[1].children[0].children;
     expect(paragraph.children.map((leaf: any) => leaf.text)).toEqual(["line", "\n", "break"]);
     expect(roundTrip("| a |\n| - |\n| x<br/>y |\n")).toBe("| a       |\n| ------- |\n| x<br/>y |\n");
+  });
+});
+
+describe("shard links", () => {
+  const FILE = "C:/Vault/Daily/Today.md";
+  const load = (markdown: string) =>
+    loadMarkdown(markdown, undefined, { filePath: FILE });
+  const save = (value: any[]) =>
+    saveValue(value, undefined, { filePath: FILE });
+  const mentions = (value: any[]) =>
+    value.flatMap((block) =>
+      (block.children as any[]).filter((child) => child.type === "mention"),
+    );
+
+  it("loads a relative link to a shard as an @ link to its path", () => {
+    const value = load("See [the plan](../Projects/Plan.md) and [Me](Me.md).\n");
+    expect(mentions(value)).toEqual([
+      expect.objectContaining({ value: "the plan", key: "C:/Vault/Projects/Plan.md" }),
+      expect.objectContaining({ value: "Me", key: "C:/Vault/Daily/Me.md" }),
+    ]);
+  });
+
+  it("saves an @ link as a link relative to the shard's folder", () => {
+    const paragraph = {
+      type: "p",
+      children: [
+        { text: "See " },
+        {
+          type: "mention",
+          value: "Plan",
+          key: "C:\\Vault\\Projects\\Big (draft) plan.md",
+          children: [{ text: "" }],
+        },
+        { text: " and " },
+        {
+          type: "mention",
+          value: "Me",
+          key: "C:/Vault/Daily/Me.md",
+          children: [{ text: "" }],
+        },
+        { text: "." },
+      ],
+    };
+    expect(save([paragraph])).toBe(
+      "See [Plan](../Projects/Big%20%28draft%29%20plan.md) and [Me](Me.md).\n",
+    );
+  });
+
+  it("round-trips relative links unchanged, however deep", () => {
+    const markdown =
+      "See [the plan](../Projects/Plan.md), [Me](Me.md) and [Far](../../Other%20vault/Far.md).\n";
+    expect(save(load(markdown))).toBe(markdown);
+  });
+
+  it("leaves links with a heading, a query or a scheme alone", () => {
+    const markdown =
+      "[Heading](Plan.md#goals) [Query](Plan.md?x=1) [Site](https://example.com/a.md) [Image](img.png)\n";
+    expect(mentions(load(markdown))).toEqual([]);
+    expect(save(load(markdown))).toBe(markdown);
+  });
+
+  it("upgrades old mention: links to relative links", () => {
+    const old =
+      "A [Plan](mention:C%3A%2FVault%2FProjects%2FPlan.md-3) and a [Name](mention:Name) link.\n";
+    const value = load(old);
+    expect(mentions(value)).toEqual([
+      expect.objectContaining({ value: "Plan", key: "C:/Vault/Projects/Plan.md" }),
+      expect.objectContaining({ value: "Name", key: "Name" }),
+    ]);
+    expect(save(value)).toBe(
+      "A [Plan](../Projects/Plan.md) and a [Name](Name.md) link.\n",
+    );
+  });
+
+  it("keeps a link written without a file path as it was", () => {
+    expect(roundTrip("See [Plan](./Projects/Plan.md).\n")).toBe(
+      "See [Plan](./Projects/Plan.md).\n",
+    );
   });
 });
 

@@ -40,7 +40,9 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
 vault open, files whose modified time changed are re-parsed with
 `pulldown-cmark`: full text goes into an FTS5 table, and headings, `#tags`
 and links into their own tables for the outline, tag view and link checks.
-Links to other shards are `@` mentions, saved as `[label](mention:target)`.
+Links to other shards are `@` mentions, saved as ordinary Markdown links to
+the shard's path relative to the linking file, `[label](../Projects/Plan.md)`.
+Renaming or moving a shard rewrites the links to it (`shard_links.rs`).
 
 ## Exports
 

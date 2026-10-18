@@ -7,6 +7,7 @@ import { SerializationKit } from "@/components/editor/serialization-kit";
 import {
   deserializeEditorMarkdown,
   serializeEditorMarkdown,
+  type MarkdownFileOptions,
 } from "@/lib/editor-markdown";
 
 type Kit = Parameters<typeof createSlateEditor>[0] extends infer O
@@ -16,20 +17,40 @@ type Kit = Parameters<typeof createSlateEditor>[0] extends infer O
   : never;
 
 /** Loads markdown the way a note is opened (see `resolveSessionValue`). */
-export function loadMarkdown(markdown: string, plugins: Kit = SerializationKit) {
+export function loadMarkdown(
+  markdown: string,
+  plugins: Kit = SerializationKit,
+  options: MarkdownFileOptions = {},
+) {
   return normalizeStaticValue(
-    deserializeEditorMarkdown(createSlateEditor({ plugins }), markdown),
+    deserializeEditorMarkdown(createSlateEditor({ plugins }), markdown, options),
   ) as any[];
 }
 
 /** Serializes a Plate value the way autosave writes it to disk. */
-export function saveValue(value: any[], plugins: Kit = SerializationKit) {
-  return serializeEditorMarkdown(createSlateEditor({ plugins, value }));
+export function saveValue(
+  value: any[],
+  plugins: Kit = SerializationKit,
+  options: MarkdownFileOptions = {},
+) {
+  return serializeEditorMarkdown(createSlateEditor({ plugins, value }), options);
 }
 
 /** One open-and-save cycle with no edits in between. */
-export function roundTrip(markdown: string, plugins: Kit = SerializationKit) {
-  return saveValue(loadMarkdown(markdown, plugins), plugins);
+export function roundTrip(
+  markdown: string,
+  plugins: Kit = SerializationKit,
+  options: MarkdownFileOptions = {},
+) {
+  return saveValue(loadMarkdown(markdown, plugins, options), plugins, options);
+}
+
+function decodeTarget(url: string) {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
 }
 
 const textParser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
@@ -52,7 +73,8 @@ export function readableText(markdown: string): string {
 
   const visit = (node: MdastNode) => {
     if (typeof node.value === "string") parts.push(node.value);
-    if (node.url) parts.push(node.url);
+    // `<a b.md>` and `a%20b.md` are the same target written two ways.
+    if (node.url) parts.push(decodeTarget(node.url));
     if (node.alt) parts.push(node.alt);
     node.children?.forEach(visit);
   };

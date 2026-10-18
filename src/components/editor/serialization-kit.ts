@@ -35,6 +35,7 @@ import { KEYS, TrailingBlockPlugin, createSlatePlugin } from "platejs";
 
 import { BaseFrontMatterPlugin } from "@/lib/markdown-front-matter";
 import { BaseRawBlockPlugin } from "@/lib/markdown-raw-blocks";
+import { BaseShardLinkPlugin } from "@/lib/markdown-shard-links";
 import { MarkdownKit } from "./kits/markdown-kit";
 
 // `@platejs/math` imports KaTeX's CSS at module scope, which can't load in a
@@ -142,4 +143,5 @@ export const SerializationKit = [
   BaseTogglePlugin,
   BaseFrontMatterPlugin,
   BaseRawBlockPlugin,
+  BaseShardLinkPlugin,
 ];

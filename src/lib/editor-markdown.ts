@@ -17,6 +17,7 @@ import {
   restoreRawBlocks,
 } from "@/lib/markdown-raw-blocks";
 import { inlineReferenceLinks } from "@/lib/markdown-reference-links";
+import { setShardLinkFilePath } from "@/lib/markdown-shard-links";
 import { groupToggles } from "@/lib/markdown-toggles";
 
 // Plate parses markdown as MDX, which is stricter than the plain markdown in a
@@ -235,7 +236,17 @@ function prepareMarkdownInput(
  * MDX elements (callouts, TOC, ...) then show up as literal text, but no
  * content is lost.
  */
-export function deserializeEditorMarkdown(editor: SlateEditor, source: string) {
+export type MarkdownFileOptions = {
+  /** The shard's path, which @ links are resolved against and written from. */
+  filePath?: string | null;
+};
+
+export function deserializeEditorMarkdown(
+  editor: SlateEditor,
+  source: string,
+  options: MarkdownFileOptions = {},
+) {
+  setShardLinkFilePath(editor, options.filePath);
   const { frontMatter, body } = splitFrontMatter(source);
   const value = deserializeMarkdownBody(editor, inlineReferenceLinks(body));
   return frontMatter === null
@@ -535,7 +546,9 @@ export function getSerializableEditorValue(
 export function serializeMarkdownValue(
   editor: SlateEditor,
   children: unknown,
+  options: MarkdownFileOptions = {},
 ): string {
+  setShardLinkFilePath(editor, options.filePath);
   const { value } = prepareSerializableMarkdownValue(children);
   const [first, ...rest] = value;
   const frontMatter = isFrontMatterNode(first) ? first.value : null;
@@ -548,17 +561,21 @@ export function serializeMarkdownValue(
   return joinFrontMatter(frontMatter, finalizeSerializedMarkdown(serialized));
 }
 
-export function serializeEditorMarkdown(editor: SlateEditor): string {
-  return serializeMarkdownValue(editor, editor.children);
+export function serializeEditorMarkdown(
+  editor: SlateEditor,
+  options: MarkdownFileOptions = {},
+): string {
+  return serializeMarkdownValue(editor, editor.children, options);
 }
 
 export function getSaveMarkdownContent(
   editor: SlateEditor | null,
   fallbackMarkdown: string,
+  options: MarkdownFileOptions = {},
 ): string {
   if (!editor) {
     return fallbackMarkdown;
   }
 
-  return serializeEditorMarkdown(editor);
+  return serializeEditorMarkdown(editor, options);
 }

@@ -46,13 +46,19 @@ type MarkdownWorkerErrorResponse = {
   error: string;
 };
 
-function serializeChildren(children: unknown[]): string {
-  return serializeMarkdownValue(serializerEditor, children);
+function serializeChildren(
+  children: unknown[],
+  filePath: string | null,
+): string {
+  return serializeMarkdownValue(serializerEditor, children, { filePath });
 }
 
-function deserializeMarkdown(markdown: string): unknown[] {
+function deserializeMarkdown(
+  markdown: string,
+  filePath: string | null,
+): unknown[] {
   return normalizeStaticValue(
-    deserializeEditorMarkdown(deserializerEditor, markdown),
+    deserializeEditorMarkdown(deserializerEditor, markdown, { filePath }),
   ) as unknown[];
 }
 
@@ -75,7 +81,7 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>): void => {
       const children = Array.isArray(event.data.children)
         ? event.data.children
         : [];
-      const markdown = serializeChildren(children);
+      const markdown = serializeChildren(children, filePath);
 
       const response: MarkdownWorkerSuccessResponse = {
         type: "success",
@@ -91,7 +97,7 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>): void => {
     if (event.data?.type === "deserialize") {
       const markdown =
         typeof event.data.markdown === "string" ? event.data.markdown : "";
-      const plateValue = deserializeMarkdown(markdown);
+      const plateValue = deserializeMarkdown(markdown, filePath);
 
       const response: MarkdownWorkerSuccessResponse = {
         type: "success",

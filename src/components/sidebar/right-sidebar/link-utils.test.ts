@@ -5,6 +5,7 @@ import {
   getLinkName,
   resolveDocumentLinks,
   resolveInternalTargetPath,
+  resolveMentionPath,
 } from "./link-utils";
 
 const file = (path: string): FileTreeNode => ({
@@ -19,9 +20,10 @@ const FILES = [
 ];
 
 const paragraph = (...children: object[]) => ({ type: "p", children });
-const mention = (value: string) => ({
+const mention = (value: string, key?: string) => ({
   type: "mention",
   value,
+  ...(key ? { key } : {}),
   children: [{ text: "" }],
 });
 const link = (url: string, text: string) => ({
@@ -54,6 +56,48 @@ describe("resolveDocumentLinks", () => {
       ["excalidraw.com", true],
       ["Old plan", false],
     ]);
+  });
+
+  it("resolves an @ link by its path, and shows the shard's current name", () => {
+    const value = [
+      paragraph(
+        mention("the plan", "C:/Vault/Work/Plan.md"),
+        mention("Ideas", "../Ideas.md"),
+        mention("Gone", "C:/Vault/Work/Gone.md"),
+      ),
+    ];
+    const links = resolveDocumentLinks(value, "C:/Vault/Work/Today.md", "C:/Vault", FILES);
+
+    expect(links.map((l) => [getLinkName(l), l.isValid, l.resolvedPath])).toEqual([
+      ["Plan", true, "C:/Vault/Work/Plan.md"],
+      ["Ideas", true, "C:/Vault/Ideas.md"],
+      ["Gone", false, null],
+    ]);
+  });
+});
+
+describe("resolveMentionPath", () => {
+  const SHARDS = FILES.filter((f) => f.path.endsWith(".md"));
+
+  it("matches an absolute path whatever its slashes and case", () => {
+    expect(resolveMentionPath("c:\\vault\\work\\plan.md", "C:/Vault/Today.md", "C:/Vault", SHARDS)).toBe(
+      "C:/Vault/Work/Plan.md",
+    );
+  });
+
+  it("falls back to the shard's name when the path is stale", () => {
+    expect(resolveMentionPath("C:/Vault/Old/Plan.md", "C:/Vault/Today.md", "C:/Vault", SHARDS)).toBe(
+      "C:/Vault/Work/Plan.md",
+    );
+  });
+
+  it("resolves a relative path and an old bare name", () => {
+    expect(resolveMentionPath("Work/Plan.md", "C:/Vault/Today.md", "C:/Vault", SHARDS)).toBe(
+      "C:/Vault/Work/Plan.md",
+    );
+    expect(resolveMentionPath("Ideas", "C:/Vault/Work/Today.md", "C:/Vault", SHARDS)).toBe(
+      "C:/Vault/Ideas.md",
+    );
   });
 });
 

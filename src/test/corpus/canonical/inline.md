@@ -4,8 +4,8 @@ Combined: _**bold italic**_, **`bold code`** and _~~italic strike~~_.
 
 Colours: <span style="color: #ff0000;">red</span> and <span style="background-color: #ffff00;">yellow</span>, <span style="font-size: 24px;">big</span>, <span style="font-family: monospace;">mono</span>.
 
-Links: [a web page](https://example.com), [a shard](./Other.md), [a shard with spaces](<./Projects/Other note.md>) and https://example.com/bare.
+Links: [a web page](https://example.com), [a shard](./Other.md), [a shard with spaces](./Projects/Other%20note.md) and https://example.com/bare.
 
 Inline math $x^2 + y^2 = z^2$ and a date <date value="2026-10-18" />.
 
-A shard link [Other](mention:Other) in text.
+A shard link [Other](Other.md) in text, and one in a folder [Plan](../Projects/Plan.md).

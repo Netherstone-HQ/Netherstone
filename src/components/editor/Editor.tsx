@@ -18,7 +18,8 @@ import {
 } from "@/lib/editor-markdown";
 import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
-import { useEditorStore } from "@/store";
+import { resolveShardLinkKeys } from "@/lib/shard-link-keys";
+import { useEditorStore, useVaultStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
 import { EditorKit } from "./editor-kit";
@@ -103,12 +104,14 @@ async function resolveSessionValue(
 ): Promise<any[]> {
   // Values cached before device-specific media props stopped being saved
   // may still carry them.
-  if (cachedValue) return stripDeviceMediaProps(cachedValue);
+  if (cachedValue) return withCurrentShardLinks(filePath, stripDeviceMediaProps(cachedValue));
 
   const startMs = getEditorLifecycleNowMs();
   const deserializeInMainThread = () =>
     normalizeStaticValue(
-      deserializeEditorMarkdown(createSlateEditor({ plugins: EditorKit }), content),
+      deserializeEditorMarkdown(createSlateEditor({ plugins: EditorKit }), content, {
+        filePath,
+      }),
     ) as any[];
 
   try {
@@ -123,14 +126,23 @@ async function resolveSessionValue(
       duration: formatEditorLifecycleDurationMs(startMs),
     });
 
-    return Array.isArray(value) ? (value as any[]) : [];
+    return withCurrentShardLinks(
+      filePath,
+      Array.isArray(value) ? (value as any[]) : [],
+    );
   } catch (error) {
     console.error("Failed to deserialize markdown in worker:", {
       filePath,
       error,
     });
-    return deserializeInMainThread();
+    return withCurrentShardLinks(filePath, deserializeInMainThread());
   }
+}
+
+/** Points the @ links of a loaded shard at where their shards are now. */
+function withCurrentShardLinks(filePath: string, value: any[]): any[] {
+  const { fileTree, currentVaultPath } = useVaultStore.getState();
+  return resolveShardLinkKeys(value, fileTree, filePath, currentVaultPath ?? "");
 }
 
 /**

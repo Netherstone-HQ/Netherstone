@@ -1,5 +1,6 @@
 //! What the Data page shows: the words written each day, kept on this device
-//! only, and the @ links that point to shards that don't exist.
+//! only, the @ links that point to shards that don't exist, and the shards
+//! with charts.
 
 use super::parser::{LinkType, parse_markdown};
 use rusqlite::{Connection, params};
@@ -39,6 +40,29 @@ pub struct BrokenLink {
     /// The shard holding the link.
     pub path: String,
     pub name: String,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ChartShard {
+    pub path: String,
+    pub name: String,
+    pub charts: i64,
+}
+
+/// The shards holding a chart, by name.
+pub fn get_chart_shards(conn: &Connection) -> rusqlite::Result<Vec<ChartShard>> {
+    let mut stmt = conn.prepare(
+        "SELECT f.path, f.name, COUNT(*) FROM charts c JOIN files f ON f.id = c.file_id
+         GROUP BY f.id ORDER BY f.name COLLATE NOCASE, f.path",
+    )?;
+    stmt.query_map([], |row| {
+        Ok(ChartShard {
+            path: row.get(0)?,
+            name: row.get(1)?,
+            charts: row.get(2)?,
+        })
+    })?
+    .collect()
 }
 
 /// Today's date on this device, as `YYYY-MM-DD`.
@@ -317,6 +341,28 @@ mod tests {
         record_writing(&conn, "2026-10-19", "/v/a.md", "a b", || None).unwrap();
         rename_writing_path(&conn, "/v/a.md", "/v/b.md").unwrap();
         assert_eq!(logged_words(&conn, "2026-10-19", "/v/b.md"), Some((0, 2)));
+    }
+
+    #[test]
+    fn lists_shards_with_charts() {
+        let dir = std::env::temp_dir().join(format!("netherstone-charts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("Runs.md"),
+            "| a | b |\n| - | - |\n| 1 | 2 |\n\n<!-- netherstone chart: bar; x a; y b; title km -->\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("Plain.md"), "<!-- netherstone: widths 100 -->\n").unwrap();
+
+        let conn = memory_db();
+        for name in ["Runs.md", "Plain.md"] {
+            crate::db::indexer::index_file(&conn, &dir.join(name)).unwrap();
+        }
+        let shards = get_chart_shards(&conn).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        let shown: Vec<_> = shards.iter().map(|s| (s.name.as_str(), s.charts)).collect();
+        assert_eq!(shown, [("Runs.md", 1)]);
     }
 
     #[test]

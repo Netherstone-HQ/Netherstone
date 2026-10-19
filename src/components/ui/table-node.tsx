@@ -36,6 +36,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  ChartColumnIcon,
   CombineIcon,
   EraserIcon,
   Grid2X2Icon,
@@ -85,6 +86,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { createChartNode, defaultChartSpec, readTable } from "@/lib/chart";
 import { cn } from "@/lib/utils";
 
 import { blockSelectionVariants } from "./block-selection";
@@ -988,7 +990,7 @@ function ExpandedSelectionTableFloatingToolbarContent(
 function CollapsedTableFloatingToolbarContent(
   props: React.ComponentProps<typeof PopoverContent>,
 ) {
-  const { tf } = useEditorPlugin(TablePlugin);
+  const { editor, tf } = useEditorPlugin(TablePlugin);
   const element = useElement<TTableElement>();
   const { props: buttonProps } = useRemoveNodeButton({ element });
   const { canSplit } = useTableMergeState();
@@ -996,6 +998,14 @@ function CollapsedTableFloatingToolbarContent(
   return (
     <TableFloatingToolbarContent
       buttonProps={buttonProps}
+      onAddChart={() => {
+        const path = editor.api.findPath(element);
+        if (!path) return;
+        editor.tf.insertNodes(
+          createChartNode(defaultChartSpec(readTable(element))),
+          { at: PathApi.next(path), select: true },
+        );
+      }}
       canSplit={canSplit}
       collapsedInside
       onDeleteColumn={() => {
@@ -1024,6 +1034,7 @@ function CollapsedTableFloatingToolbarContent(
 
 function TableFloatingToolbarContent({
   buttonProps,
+  onAddChart,
   canMerge = false,
   canSplit = false,
   collapsedInside = false,
@@ -1038,6 +1049,8 @@ function TableFloatingToolbarContent({
   ...props
 }: React.ComponentProps<typeof PopoverContent> & {
   buttonProps?: React.ComponentProps<typeof ToolbarButton>;
+  /** Draws the table as a chart under it. */
+  onAddChart?: () => void;
   canMerge?: boolean;
   canSplit?: boolean;
   collapsedInside?: boolean;
@@ -1098,6 +1111,16 @@ function TableFloatingToolbarContent({
 
           {collapsedInside && (
             <ToolbarGroup>
+              {onAddChart ? (
+                <ToolbarButton
+                  onClick={onAddChart}
+                  onMouseDown={(e) => e.preventDefault()}
+                  tooltip="Add a chart of this table"
+                  aria-label="Add a chart of this table"
+                >
+                  <ChartColumnIcon />
+                </ToolbarButton>
+              ) : null}
               <ToolbarButton tooltip="Delete table" {...buttonProps}>
                 <Trash2Icon />
               </ToolbarButton>

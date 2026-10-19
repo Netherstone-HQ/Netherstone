@@ -12,6 +12,7 @@ use rusqlite::Connection;
 /// - `ast_cache`: Legacy path-keyed AST cache rows retained for migration/backfill
 /// - `ast_cache_index`: Path-to-content index for the content-addressed AST cache
 /// - `ast_cache_blobs`: Content-addressed AST payload store keyed by hash + version
+/// - `charts`: The charts drawn from tables in each file
 /// - `writing_log`: Words each shard started and ended a day with, from saves
 ///   in the editor on this device. Never synced.
 /// - `writing_log_start`: The day this device started counting for each vault
@@ -145,6 +146,18 @@ CREATE TABLE IF NOT EXISTS ast_cache_blobs (
 
 CREATE INDEX IF NOT EXISTS idx_ast_cache_blobs_updated_at
     ON ast_cache_blobs(updated_at);
+
+-- ── Charts ──────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS charts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id INTEGER NOT NULL,
+    -- Empty for a chart named after its columns.
+    title TEXT NOT NULL,
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_charts_file_id ON charts(file_id);
 
 -- ── Writing Log ─────────────────────────────────────────────────────────────
 

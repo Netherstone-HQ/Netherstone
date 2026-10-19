@@ -6,6 +6,8 @@ use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 pub struct MarkdownMetadata {
     pub links: Vec<Link>,
     pub tags: Vec<String>,
+    /// The titles of the charts drawn from tables, empty for an untitled one.
+    pub charts: Vec<String>,
     pub word_count: usize,
     pub line_count: usize,
     pub character_count: usize,
@@ -72,6 +74,24 @@ pub fn classify_link_target(target: &str) -> LinkType {
     }
 }
 
+/// The title of the chart a `<!-- netherstone chart: … -->` comment draws
+/// (see `src/lib/chart.ts`), or None when `html` isn't one.
+pub fn chart_title(html: &str) -> Option<String> {
+    let settings = html
+        .trim()
+        .strip_prefix("<!--")?
+        .strip_suffix("-->")?
+        .trim()
+        .strip_prefix("netherstone chart:")?;
+    Some(
+        settings
+            .split(';')
+            .find_map(|part| part.trim().strip_prefix("title "))
+            .map(|title| title.trim().to_string())
+            .unwrap_or_default(),
+    )
+}
+
 /// Parse markdown content and extract metadata.
 ///
 /// Extracts:
@@ -124,7 +144,16 @@ pub fn parse_markdown(content: &str) -> MarkdownMetadata {
                 word_count += text.split_whitespace().count();
             }
 
-            Event::Code(text) | Event::Html(text) => {
+            Event::Html(text) => {
+                // A chart's comment is settings, not words.
+                if let Some(title) = chart_title(&text) {
+                    metadata.charts.push(title);
+                } else {
+                    word_count += text.split_whitespace().count();
+                }
+            }
+
+            Event::Code(text) => {
                 word_count += text.split_whitespace().count();
             }
 
@@ -141,6 +170,15 @@ pub fn parse_markdown(content: &str) -> MarkdownMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_chart_titles_without_counting_their_words() {
+        let meta = parse_markdown(
+            "One two\n\n<!-- netherstone chart: bar; x a; y b; title Weekly km -->\n\n<!-- netherstone chart: line -->\n",
+        );
+        assert_eq!(meta.charts, ["Weekly km", ""]);
+        assert_eq!(meta.word_count, 2);
+    }
 
     #[test]
     fn test_parse_links() {

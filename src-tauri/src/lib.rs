@@ -1161,6 +1161,13 @@ fn get_writing_log(vault_path: String) -> Result<db::data::WritingLog, String> {
 }
 
 #[tauri::command(async)]
+fn get_chart_shards() -> Result<Vec<db::data::ChartShard>, String> {
+    let db = db::Database::new()?;
+
+    db.with_connection(db::data::get_chart_shards)
+}
+
+#[tauri::command(async)]
 fn get_broken_links() -> Result<Vec<db::data::BrokenLink>, String> {
     let db = db::Database::new()?;
 
@@ -1407,6 +1414,7 @@ pub fn run() {
             get_tagged_files,
             get_writing_log,
             get_broken_links,
+            get_chart_shards,
             get_file_metadata,
             get_backlinks,
             rename_file,

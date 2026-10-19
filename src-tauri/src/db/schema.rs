@@ -5,7 +5,8 @@ use rusqlite::Connection;
 /// Tables:
 /// - `files`: Core metadata and editor stats for each markdown file in the vault
 /// - `links`: Indexed outbound links including mentions, internal links, and external URLs
-/// - `tags`: Extracted hashtags from file content
+/// - `tags`: Extracted hashtags from file content, each with the text around
+///   its first appearance
 /// - `attachments`: Managed vault asset metadata for `_attachments` files
 /// - `attachment_references`: Saved markdown references to managed attachments
 /// - `ast_cache`: Legacy path-keyed AST cache rows retained for migration/backfill
@@ -54,6 +55,11 @@ CREATE TABLE IF NOT EXISTS tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL,
     tag TEXT NOT NULL,
+    -- Where the tag first appears among the file's tags, from 0.
+    position INTEGER NOT NULL DEFAULT 0,
+    -- JSON list of text parts around that first appearance, or NULL when
+    -- it can't be found.
+    excerpt TEXT,
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
@@ -146,28 +152,25 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts_search USING fts5(
 );
 "#;
 
-/// Initialize the database schema.
-///
-/// Creates all tables, indexes, and triggers if they don't exist.
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, rusqlite::Error> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let existing_column_name: String = row.get(1)?;
+        if existing_column_name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn ensure_column_exists(
     conn: &Connection,
     table: &str,
     column: &str,
     definition: &str,
 ) -> Result<(), rusqlite::Error> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
-    let mut rows = stmt.query([])?;
-    let mut exists = false;
-
-    while let Some(row) = rows.next()? {
-        let existing_column_name: String = row.get(1)?;
-        if existing_column_name == column {
-            exists = true;
-            break;
-        }
-    }
-
-    if !exists {
+    if !column_exists(conn, table, column)? {
         conn.execute(
             &format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, definition),
             [],
@@ -237,6 +240,10 @@ fn migrate_links_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
+/// Initialize the database schema.
+///
+/// Creates all tables and indexes if they don't exist, and brings older
+/// databases up to date.
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(SCHEMA)?;
     migrate_links_table(conn)?;
@@ -244,5 +251,13 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     ensure_column_exists(conn, "files", "line_count", "INTEGER DEFAULT 0")?;
     ensure_column_exists(conn, "files", "character_count", "INTEGER DEFAULT 0")?;
     ensure_column_exists(conn, "files", "file_size", "INTEGER DEFAULT 0")?;
+
+    // Tags indexed before excerpts were stored get theirs from the indexed
+    // text, so the Tags view shows them without re-indexing every file.
+    if !column_exists(conn, "tags", "excerpt")? {
+        ensure_column_exists(conn, "tags", "position", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column_exists(conn, "tags", "excerpt", "TEXT")?;
+        super::indexer::backfill_tag_excerpts(conn)?;
+    }
     Ok(())
 }

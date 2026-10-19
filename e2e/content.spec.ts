@@ -359,3 +359,75 @@ test("a web picture dropped from the browser panel as a link shows", async ({ pa
   await expect(editor(page).locator("img[src='https://example.com/linked.png']")).toHaveCount(1);
   await expect.poll(() => requests.includes("https://example.com/linked.png")).toBe(true);
 });
+
+/** The status each asset protocol request got. */
+function recordAssetResponses(page: Page) {
+  const statuses = new Map<string, number>();
+  page.on("response", (response) => {
+    if (response.url().startsWith("http://asset.localhost/")) {
+      statuses.set(decodeURIComponent(new URL(response.url()).pathname.slice(1)), response.status());
+    }
+  });
+  return statuses;
+}
+
+const SONG = "/home/me/Music/tone.wav";
+const CLIP = "/home/me/Videos/clip.mp4";
+const REPORT = "/home/me/Documents/Report.pdf";
+
+test("sound, video and other files outside the vault show and open", async ({ page }) => {
+  const statuses = recordAssetResponses(page);
+  await asInApp(page);
+  await mockVault(page, {
+    files: {
+      "Outside.md": `# Outside\n\n<audio src="${SONG}" />\n\n<video src="${CLIP}" />\n\n<file name="Report.pdf" src="${REPORT}" />\n`,
+    },
+    assets: { [SONG]: wav(), [CLIP]: Buffer.alloc(16), [REPORT]: pdf() },
+    open: "Outside.md",
+  });
+
+  await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
+  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  await expect.poll(() => statuses.get(SONG)).toBe(200);
+  await expect.poll(() => statuses.get(CLIP)).toBe(200);
+
+  // Other files aren't served; they open in their own app, as before.
+  const file = editor(page).getByText("Report.pdf").first();
+  await expect(file).toBeVisible();
+  await expect(editor(page).getByText(/missing|not found/i)).toHaveCount(0);
+  await file.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.__commands.some(
+          ({ command, args }) =>
+            command.startsWith("plugin:opener|open_path") &&
+            JSON.stringify(args).includes("Report.pdf"),
+        ),
+      ),
+    )
+    .toBe(true);
+});
+
+test("dropped sound, video and other files are added and show", async ({ page }) => {
+  const statuses = recordAssetResponses(page);
+  await asInApp(page);
+  await mockVault(page, { files: { "Drops.md": "# Drops\n" }, open: "Drops.md" });
+
+  for (const file of [
+    { name: "tone.wav", base64: wav().toString("base64"), type: "audio/wav" },
+    { name: "clip.mp4", base64: Buffer.alloc(16).toString("base64"), type: "video/mp4" },
+    { name: "Report.pdf", base64: pdf().toString("base64"), type: "application/pdf" },
+  ]) {
+    await drop(page, { file });
+    await expect
+      .poll(() => page.evaluate((name) => `_attachments/${name}` in window.__binaries, file.name))
+      .toBe(true);
+  }
+
+  await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
+  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  await expect(editor(page).getByText("Report.pdf").first()).toBeVisible();
+  await expect.poll(() => statuses.get("/home/me/Vault/_attachments/tone.wav")).toBe(200);
+  await expect.poll(() => statuses.get("/home/me/Vault/_attachments/clip.mp4")).toBe(200);
+});

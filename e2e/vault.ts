@@ -93,6 +93,8 @@ declare global {
     __saves: Save[];
     /** The first bytes of each file an export wrote. */
     __exports: string[];
+    /** Every backend command the app sent, in order. */
+    __commands: { command: string; args: unknown }[];
     /** Binary files by vault-relative (or, outside the vault, absolute) path, in base64. */
     __binaries: Record<string, string>;
     /** What the asset protocol may serve, as the desktop app's scope does. */
@@ -124,6 +126,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
 
       window.__saves = [];
       window.__exports = [];
+      window.__commands = [];
       window.__binaries = binaries;
       window.__assetScope = { folders: [], files: [] };
       const allowFolder = (folder: string) => {
@@ -296,6 +299,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         convertFileSrc: (path: string) =>
           `http://asset.localhost/${encodeURIComponent(path)}`,
         invoke: async (command: string, args: Args = {}) => {
+          window.__commands.push({ command, args });
           if (handlers[command]) return handlers[command](args);
           if (command.startsWith("plugin:event|listen")) return ++callbackId;
           if (command === "plugin:app|version") return "0.0.0-e2e";

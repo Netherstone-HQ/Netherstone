@@ -47,9 +47,9 @@ describe("chart comment", () => {
         kind: "bar",
         x: "a;b",
         y: ["c,d"],
-        title: "x --> y",
+        title: "x --> y --!> z",
       }),
-    ).toBe("<!-- netherstone chart: bar; x a b; y c d; title x y -->");
+    ).toBe("<!-- netherstone chart: bar; x a b; y c d; title x y z -->");
   });
 
   it("is saved under its table exactly as written", () => {

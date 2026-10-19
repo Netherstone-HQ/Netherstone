@@ -69,7 +69,7 @@ export function parseChartComment(value: string): ChartSpec | null {
 /** Names can't hold the comment's separators or end it early. */
 function clean(text: string) {
   return text
-    .replace(/[;,]|-->/g, " ")
+    .replace(/[;,]|--!?>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

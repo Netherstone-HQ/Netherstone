@@ -3,6 +3,8 @@ import { create } from "zustand";
 import type { Heading } from "@platejs/toc";
 import type { Descendant, SlateEditor } from "platejs";
 
+import { isSamePath } from "@/lib/drawing-files";
+
 const EDITOR_STORE_LOG_PREFIX = "[Netherstone][Editor Store]";
 
 function logEditorStoreLifecycle(
@@ -33,6 +35,13 @@ interface EditorState {
    */
   openingFilePath: string | null;
   setOpeningFilePath: (path: string | null) => void;
+
+  /**
+   * An @ link to scroll to and select once `path` is on screen, by its text.
+   * Opening any other file drops it.
+   */
+  pendingLinkReveal: { path: string; text: string } | null;
+  setPendingLinkReveal: (reveal: { path: string; text: string } | null) => void;
 
   /**
    * Stable session key for the currently open editor document.
@@ -105,6 +114,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   openingFilePath: null,
   setOpeningFilePath: (path) => set({ openingFilePath: path }),
 
+  pendingLinkReveal: null,
+  setPendingLinkReveal: (pendingLinkReveal) => set({ pendingLinkReveal }),
+
   editorSessionTick: 0,
   editTick: 0,
   bumpEditTick: () => set((state) => ({ editTick: state.editTick + 1 })),
@@ -156,6 +168,11 @@ export const useEditorStore = create<EditorState>((set) => ({
       return {
         currentFilePath: path,
         editorSessionTick: nextEditorSessionTick,
+        pendingLinkReveal:
+          state.pendingLinkReveal &&
+          isSamePath(state.pendingLinkReveal.path, path)
+            ? state.pendingLinkReveal
+            : null,
         editTick: 0,
         content,
         markdownContent: content,
@@ -208,6 +225,7 @@ export const useEditorStore = create<EditorState>((set) => ({
       return {
         currentFilePath: null,
         editorSessionTick: nextEditorSessionTick,
+        pendingLinkReveal: null,
         editTick: 0,
         content: "",
         markdownContent: "",

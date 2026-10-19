@@ -22,7 +22,7 @@ import {
 import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
 import { cn } from "@/lib/utils";
-import { useUIStore, useVaultStore } from "@/store";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { DATA_SECTIONS, useDataStore, type DataSection } from "@/store/data";
 import { CalendarKey, WritingCalendar } from "./WritingCalendar";
 
@@ -33,12 +33,14 @@ function plural(count: number, one: string, many: string) {
   return `${count.toLocaleString()} ${count === 1 ? one : many}`;
 }
 
-async function openShard(path: string) {
+async function openShard(path: string): Promise<boolean> {
   try {
     await openEditorFile(path);
     useUIStore.getState().openMode("editor");
+    return true;
   } catch (error) {
     console.error("[Netherstone] Failed to open shard from Data:", error);
+    return false;
   }
 }
 
@@ -249,6 +251,13 @@ function Writing({ vaultPath }: { vaultPath: string }) {
   );
 }
 
+/** Opens the shard holding `link`, scrolled to the link. */
+async function openBrokenLink(link: BrokenLink) {
+  const { setPendingLinkReveal } = useEditorStore.getState();
+  setPendingLinkReveal({ path: link.path, text: link.text });
+  if (!(await openShard(link.path))) setPendingLinkReveal(null);
+}
+
 function BrokenLinks({ links }: { links: BrokenLink[] }) {
   if (links.length === 0) {
     return (
@@ -267,7 +276,7 @@ function BrokenLinks({ links }: { links: BrokenLink[] }) {
             <button
               type="button"
               className={LINK_ROW_CLASS}
-              onClick={() => void openShard(link.path)}
+              onClick={() => void openBrokenLink(link)}
             >
               <span className="min-w-0 truncate">@{link.text}</span>
               <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">

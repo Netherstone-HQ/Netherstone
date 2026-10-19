@@ -15,6 +15,7 @@ import {
   H6Plugin,
   HorizontalRulePlugin,
 } from '@platejs/basic-nodes/react';
+import { ElementApi, KEYS, type Descendant, type Path } from 'platejs';
 import { ParagraphPlugin } from 'platejs/react';
 
 import { BlockquoteElement } from '@/components/ui/blockquote-node';
@@ -95,7 +96,43 @@ export const BasicBlocksKit = [
     inputRules: [BlockquoteRules.markdown()],
     node: { component: BlockquoteElement },
     shortcuts: { toggle: { keys: 'mod+shift+period' } },
-  }),
+  }).overrideEditor(({ editor, tf: { normalizeNode }, type }) => ({
+    transforms: {
+      /**
+       * A quote holds paragraphs. A new or turned-into quote starts with bare
+       * text, and Plate's own fix replaces all of the quote's children, which
+       * drops the caret to the end of the block before it. Moving the text
+       * into a paragraph instead keeps the caret where it was.
+       */
+      normalizeNode([node, path]) {
+        if (ElementApi.isElement(node) && node.type === type) {
+          const runs = inlineRuns(node.children, (child) =>
+            ElementApi.isElement(child) && editor.api.isBlock(child),
+          );
+          if (runs.length > 0) {
+            editor.tf.withoutNormalizing(() => {
+              // Last run first, so the earlier runs keep their indexes.
+              for (const [start, end] of runs.reverse()) {
+                const at: Path = [...path, start];
+                editor.tf.insertNodes(
+                  { type: editor.getType(KEYS.p), children: [] },
+                  { at },
+                );
+                for (let index = 0; index < end - start; index++) {
+                  editor.tf.moveNodes({
+                    at: [...path, start + 1],
+                    to: [...at, index],
+                  });
+                }
+              }
+            });
+            return;
+          }
+        }
+        normalizeNode([node, path]);
+      },
+    },
+  })),
   HorizontalRulePlugin.configure({
     inputRules: [
       HorizontalRuleRules.markdown({ variant: '-' }),
@@ -106,3 +143,22 @@ export const BasicBlocksKit = [
     },
   }),
 ];
+
+/** The [start, end) index ranges of the children that are not blocks. */
+function inlineRuns(
+  children: Descendant[],
+  isBlock: (child: Descendant) => boolean,
+): [number, number][] {
+  const runs: [number, number][] = [];
+  let start = -1;
+  children.forEach((child, index) => {
+    if (isBlock(child)) {
+      if (start !== -1) runs.push([start, index]);
+      start = -1;
+    } else if (start === -1) {
+      start = index;
+    }
+  });
+  if (start !== -1) runs.push([start, children.length]);
+  return runs;
+}

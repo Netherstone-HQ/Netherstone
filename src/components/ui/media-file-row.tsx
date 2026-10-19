@@ -22,6 +22,7 @@ import { Hint } from "@/components/ui/tooltip";
 import {
   type AttachmentSyncStatusLike,
   describeUnsyncedFiles,
+  getAttachmentSyncStatus,
 } from "@/lib/attachment-sync-status";
 import {
   describeMissingAttachment,
@@ -166,7 +167,7 @@ export function UnsyncedTag({
   metadata: AttachmentSyncStatusLike;
   className?: string;
 }) {
-  const status = metadata.netherstoneSyncStatus;
+  const status = getAttachmentSyncStatus(metadata);
   if (!status || status === "syncable") return null;
 
   return (
@@ -199,7 +200,7 @@ export function VaultFileDetails({
   metadata: AttachmentSyncStatusLike;
 }) {
   const described = describeFile(metadata);
-  const status = metadata.netherstoneSyncStatus;
+  const status = getAttachmentSyncStatus(metadata);
   const syncs = !status || status === "syncable";
   return (
     <>

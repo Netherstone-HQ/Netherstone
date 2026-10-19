@@ -67,6 +67,26 @@ describe("MediaFileRow", () => {
     expect(screen.getByText("Won't sync")).toBeTruthy();
   });
 
+  it("goes by today's rules, not the status saved when the file was added", () => {
+    renderRow(
+      <MediaFileRow
+        name="Interview.mp3"
+        details={
+          <VaultFileDetails
+            metadata={{
+              netherstoneExtension: "mp3",
+              netherstoneSizeBytes: 4_200_000,
+              netherstoneSyncStatus: "local_only",
+            }}
+          />
+        }
+      />,
+    );
+
+    expect(screen.getByText("MP3 · 4.0 MB")).toBeTruthy();
+    expect(screen.queryByText("Won't sync")).toBeNull();
+  });
+
   it("marks a linked file", () => {
     renderRow(
       <MediaFileRow

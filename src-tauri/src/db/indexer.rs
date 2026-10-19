@@ -1,5 +1,7 @@
-use rusqlite::{Connection, params};
-use std::collections::HashSet;
+use super::queries::locate_tags;
+use crate::markdown_text::text_blocks;
+use rusqlite::{Connection, OptionalExtension, params};
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use urlencoding::decode;
@@ -236,15 +238,10 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to insert link: {}", e))?;
     }
 
-    // Insert tags (deduplicated)
+    // Insert tags (deduplicated), with the text around each one
     let unique_tags: HashSet<String> = parsed.tags.into_iter().collect();
-    for tag in unique_tags {
-        conn.execute(
-            "INSERT INTO tags (file_id, tag) VALUES (?1, ?2)",
-            params![file_id, tag],
-        )
+    insert_tags(conn, file_id, &content, unique_tags.into_iter().collect())
         .map_err(|e| format!("Failed to insert tag: {}", e))?;
-    }
 
     super::attachments::sync_references_for_saved_markdown(conn, path_str, &content)?;
 
@@ -261,6 +258,65 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
     .map_err(|e| format!("Failed to insert into search index: {}", e))?;
 
     Ok(())
+}
+
+/// Stores a file's tags in the order they first appear, each with the text
+/// around that first appearance, so the Tags view doesn't have to read every
+/// tagged file when it opens.
+fn insert_tags(
+    conn: &Connection,
+    file_id: i64,
+    content: &str,
+    tags: Vec<String>,
+) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare_cached(
+        "INSERT INTO tags (file_id, tag, position, excerpt) VALUES (?1, ?2, ?3, ?4)",
+    )?;
+    for (position, tag) in locate_tags(&text_blocks(content), tags)
+        .into_iter()
+        .enumerate()
+    {
+        let excerpt = tag
+            .excerpt
+            .map(|parts| serde_json::to_string(&parts))
+            .transpose()
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        stmt.execute(params![file_id, tag.tag, position as i64, excerpt])?;
+    }
+    Ok(())
+}
+
+/// Fills in positions and excerpts for tags indexed before they were stored,
+/// from the text already in the search index.
+pub(crate) fn backfill_tag_excerpts(conn: &Connection) -> rusqlite::Result<()> {
+    let mut tags_by_file: HashMap<i64, Vec<String>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare("SELECT file_id, tag FROM tags")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (file_id, tag) = row?;
+            tags_by_file.entry(file_id).or_default().push(tag);
+        }
+    }
+    if tags_by_file.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    for (file_id, tags) in tags_by_file {
+        let content: Option<String> = tx
+            .query_row(
+                "SELECT content FROM fts_search WHERE rowid = ?1",
+                params![file_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        tx.execute("DELETE FROM tags WHERE file_id = ?1", params![file_id])?;
+        insert_tags(&tx, file_id, content.as_deref().unwrap_or(""), tags)?;
+    }
+    tx.commit()
 }
 
 /// Check if a file needs to be re-indexed.

@@ -3,7 +3,7 @@
 //! excerpts.
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 /// The parser options for every reader of shard Markdown, matching the
@@ -181,7 +181,7 @@ pub fn word_matches(text: &str, terms: &[String]) -> Vec<Range<usize>> {
 }
 
 /// A stretch of text, highlighted or not.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextPart {
     pub text: String,
     pub highlight: bool,

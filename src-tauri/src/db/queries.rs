@@ -165,42 +165,47 @@ fn normalize_path(path: &str) -> String {
 }
 
 /// Every file with at least one tag, newest first, with the text around each
-/// tag's first appearance.
+/// tag's first appearance as the indexer stored it.
 pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
-    let mut tags_by_file: HashMap<i64, Vec<String>> = HashMap::new();
+    let mut tags_by_file: HashMap<i64, Vec<TagExcerpt>> = HashMap::new();
     let mut stmt = conn
-        .prepare("SELECT file_id, tag FROM tags")
+        .prepare("SELECT file_id, tag, excerpt FROM tags ORDER BY file_id, position, tag")
         .map_err(|e| format!("Failed to prepare tags query: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
         })
         .map_err(|e| format!("Failed to query tags: {}", e))?;
     for row in rows {
-        let (file_id, tag) = row.map_err(|e| format!("Failed to read tag: {}", e))?;
-        tags_by_file.entry(file_id).or_default().push(tag);
+        let (file_id, tag, excerpt) = row.map_err(|e| format!("Failed to read tag: {}", e))?;
+        let excerpt = excerpt.and_then(|json| serde_json::from_str(&json).ok());
+        tags_by_file
+            .entry(file_id)
+            .or_default()
+            .push(TagExcerpt { tag, excerpt });
     }
 
     let mut stmt = conn
         .prepare(
-            "SELECT f.id, f.path, f.name, f.last_modified, s.content
-             FROM files f
-             LEFT JOIN fts_search s ON s.rowid = f.id
-             WHERE f.id IN (SELECT file_id FROM tags)
-             ORDER BY f.last_modified DESC, f.name ASC",
+            "SELECT id, path, name, last_modified
+             FROM files
+             WHERE id IN (SELECT file_id FROM tags)
+             ORDER BY last_modified DESC, name ASC",
         )
         .map_err(|e| format!("Failed to prepare tagged files query: {}", e))?;
 
     let files = stmt
         .query_map([], |row| {
             let file_id: i64 = row.get(0)?;
-            let content: Option<String> = row.get(4)?;
-            let tags = tags_by_file.remove(&file_id).unwrap_or_default();
             Ok(TaggedFile {
                 path: row.get(1)?,
                 name: row.get(2)?,
                 last_modified: row.get(3)?,
-                tags: locate_tags(&text_blocks(content.as_deref().unwrap_or("")), tags),
+                tags: tags_by_file.remove(&file_id).unwrap_or_default(),
             })
         })
         .map_err(|e| format!("Failed to query tagged files: {}", e))?
@@ -212,7 +217,7 @@ pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
 
 /// Pairs each tag with the text around its first appearance, ordered by where
 /// that is. Tags that can't be found go last, alphabetically.
-fn locate_tags(blocks: &[TextBlock], tags: Vec<String>) -> Vec<TagExcerpt> {
+pub(crate) fn locate_tags(blocks: &[TextBlock], tags: Vec<String>) -> Vec<TagExcerpt> {
     let mut located: Vec<((usize, usize), TagExcerpt)> = tags
         .into_iter()
         .map(|tag| {
@@ -503,37 +508,117 @@ mod tests {
     fn lists_tagged_files_newest_first() {
         let conn = Connection::open_in_memory().unwrap();
         crate::db::schema::init_schema(&conn).unwrap();
-        for (id, name, modified, content, tag) in [
-            (1, "old.md", 100, "Old #ideas", Some("ideas")),
-            (2, "new.md", 200, "New #ideas", Some("ideas")),
-            (3, "plain.md", 300, "No tags here", None),
-        ] {
+        for (id, name, modified) in [(1, "old.md", 100), (2, "new.md", 200), (3, "plain.md", 300)] {
             conn.execute(
                 "INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (?1, ?2, ?2, ?3, ?3, '')",
                 params![id, name, modified],
             )
             .unwrap();
+        }
+        for (file_id, tag, position, excerpt) in [
+            (
+                1,
+                "ideas",
+                0,
+                Some(r##"[{"text":"Old ","highlight":false},{"text":"#ideas","highlight":true}]"##),
+            ),
+            (2, "work", 1, None),
+            (
+                2,
+                "ideas",
+                0,
+                Some(r##"[{"text":"New ","highlight":false},{"text":"#ideas","highlight":true}]"##),
+            ),
+        ] {
             conn.execute(
-                "INSERT INTO fts_search (rowid, path, name, content) VALUES (?1, ?2, ?2, ?3)",
-                params![id, name, content],
+                "INSERT INTO tags (file_id, tag, position, excerpt) VALUES (?1, ?2, ?3, ?4)",
+                params![file_id, tag, position, excerpt],
             )
             .unwrap();
-            if let Some(tag) = tag {
-                conn.execute(
-                    "INSERT INTO tags (file_id, tag) VALUES (?1, ?2)",
-                    params![id, tag],
-                )
-                .unwrap();
-            }
         }
 
         let files = get_tagged_files(&conn).unwrap();
         let names: Vec<_> = files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, ["new.md", "old.md"]);
         assert_eq!(files[0].last_modified, 200);
+        let tags: Vec<_> = files[0].tags.iter().map(|t| t.tag.as_str()).collect();
+        assert_eq!(tags, ["ideas", "work"]);
         assert_eq!(
             shown(files[0].tags[0].excerpt.as_ref().unwrap()),
             "New [#ideas]"
+        );
+        assert_eq!(files[0].tags[1].excerpt, None);
+    }
+
+    #[test]
+    fn stores_tag_excerpts_when_a_file_is_indexed() {
+        let vault =
+            std::env::temp_dir().join(format!("netherstone-tag-excerpts-{}", std::process::id()));
+        std::fs::create_dir_all(&vault).unwrap();
+        let file = vault.join("Monday.md");
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+
+        std::fs::write(
+            &file,
+            "# Monday\n\nRead a **chapter** #reading\n\nCall Sam #todo",
+        )
+        .unwrap();
+        crate::db::indexer::index_file(&conn, &file).unwrap();
+        // Re-indexing replaces what was stored.
+        std::fs::write(
+            &file,
+            "# Monday\n\nCall Sam #todo\n\nRead a **chapter** #reading",
+        )
+        .unwrap();
+        crate::db::indexer::index_file(&conn, &file).unwrap();
+        // The view reads only what the index stored.
+        conn.execute("DELETE FROM fts_search", []).unwrap();
+
+        let files = get_tagged_files(&conn).unwrap();
+        let tags: Vec<_> = files[0]
+            .tags
+            .iter()
+            .map(|t| (t.tag.as_str(), shown(t.excerpt.as_ref().unwrap())))
+            .collect();
+        assert_eq!(
+            tags,
+            [
+                ("todo", "Call Sam [#todo]".to_string()),
+                ("reading", "Read a chapter [#reading]".to_string()),
+            ]
+        );
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn fills_in_excerpts_for_tags_indexed_without_them() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE files (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, last_modified INTEGER NOT NULL, last_indexed INTEGER NOT NULL, content_hash TEXT NOT NULL);
+             CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL, tag TEXT NOT NULL);
+             CREATE VIRTUAL TABLE fts_search USING fts5(path UNINDEXED, name, content);
+             INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, 'a.md', 'a.md', 0, 0, '');
+             INSERT INTO fts_search (rowid, path, name, content) VALUES (1, 'a.md', 'a.md', 'First #one\n\nThen #two');
+             INSERT INTO tags (file_id, tag) VALUES (1, 'two'), (1, 'one'), (1, 'gone');",
+        )
+        .unwrap();
+
+        crate::db::schema::init_schema(&conn).unwrap();
+
+        let files = get_tagged_files(&conn).unwrap();
+        let tags: Vec<_> = files[0]
+            .tags
+            .iter()
+            .map(|t| (t.tag.as_str(), t.excerpt.as_deref().map(shown)))
+            .collect();
+        assert_eq!(
+            tags,
+            [
+                ("one", Some("First [#one]".to_string())),
+                ("two", Some("Then [#two]".to_string())),
+                ("gone", None),
+            ]
         );
     }
 

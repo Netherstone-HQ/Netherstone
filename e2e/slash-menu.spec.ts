@@ -51,3 +51,16 @@ test("a table from the / menu is saved as a pipe table", async ({ page }) => {
   expect(saved).toContain("| cell one");
   expect(saved).toMatch(/\n\| -+ \| -+ \|/);
 });
+
+test("a quote from the / menu keeps the caret inside it", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await caretAfter(page, "Start");
+  await page.keyboard.press("Enter");
+
+  await slash(page, "quote");
+  await page.keyboard.type("Quoted line");
+
+  await expect(editor(page).locator("blockquote")).toContainText("Quoted line");
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toContain("Start\n\n> Quoted line");
+});

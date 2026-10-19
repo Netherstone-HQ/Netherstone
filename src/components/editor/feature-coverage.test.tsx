@@ -220,8 +220,6 @@ describe("every block the editor can insert survives a save", () => {
       const editor = createEditor();
       if (block.insert) block.insert(editor);
       else insertBlock(editor, block.value, { upsert: true });
-      // A container block (blockquote) can leave the selection unset.
-      if (!editor.selection) editor.tf.select(editor.api.start([0])!);
       block.prepare?.(editor);
       if (!block.void) editor.tf.insertText(PROBE);
 

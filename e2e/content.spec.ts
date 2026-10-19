@@ -1,0 +1,264 @@
+import type { Page } from "@playwright/test";
+import { editor, expect, mockVault, test } from "./vault";
+
+/**
+ * Everything a shard, a drawing, an export or an import loads, under the
+ * app's security policy. The policy check itself runs after every test (see
+ * `test` in ./vault): these make sure each kind of content is loaded at all.
+ */
+
+// A 1×1 PNG.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** A short silent WAV. */
+function wav() {
+  const samples = 800;
+  const bytes = Buffer.alloc(44 + samples);
+  bytes.write("RIFF", 0);
+  bytes.writeUInt32LE(36 + samples, 4);
+  bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(1, 20);
+  bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(8000, 24);
+  bytes.writeUInt32LE(8000, 28);
+  bytes.writeUInt16LE(1, 32);
+  bytes.writeUInt16LE(8, 34);
+  bytes.write("data", 36);
+  bytes.writeUInt32LE(samples, 40);
+  bytes.fill(128, 44);
+  return bytes;
+}
+
+/** A one-page PDF with a heading and a paragraph in the standard fonts. */
+function pdf() {
+  const content = [
+    "BT /F2 22 Tf 72 712 Td (Field notes) Tj ET",
+    "BT /F1 11 Tf 72 672 Td (The river was high after the rain.) Tj ET",
+  ].join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ];
+  let out = "%PDF-1.4\n";
+  const offsets = objects.map((object, index) => {
+    const offset = out.length;
+    out += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(out, "latin1");
+}
+
+/** Every URL the page asks for, whether or not it is answered. */
+function recordRequests(page: Page) {
+  const urls: string[] = [];
+  page.on("request", (request) => urls.push(request.url()));
+  return urls;
+}
+
+const MEDIA = `# Media
+
+![Photo](_attachments/photo.png)
+
+![From the web](https://example.com/web.png)
+
+<audio src="_attachments/tone.wav" />
+
+<video src="_attachments/clip.mp4" />
+
+<video src="https://www.youtube.com/watch?v=aqz-KE-bpKQ" />
+
+$$
+e^{i\\pi} + 1 = 0
+$$
+`;
+
+test("pictures, sound, video, embeds and math in a shard load", async ({ page }) => {
+  const requests = recordRequests(page);
+  // As in the app, so vault files are shown through the asset protocol.
+  await page.addInitScript(() => {
+    (window as unknown as { isTauri: boolean }).isTauri = true;
+  });
+  await mockVault(page, {
+    files: { "Media.md": MEDIA },
+    assets: {
+      "_attachments/photo.png": PNG,
+      "_attachments/tone.wav": wav(),
+      "_attachments/clip.mp4": Buffer.alloc(16),
+    },
+    open: "Media.md",
+  });
+
+  // Vault files come through the asset protocol.
+  const photo = editor(page).locator("img[src*='photo.png']");
+  await expect(photo).toHaveJSProperty("naturalWidth", 1);
+  await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
+  await expect.poll(() => requests.some((url) => url.startsWith("http://asset.localhost/") && url.includes("tone.wav"))).toBe(true);
+  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  await expect.poll(() => requests.some((url) => url.startsWith("http://asset.localhost/") && url.includes("clip.mp4"))).toBe(true);
+
+  // Pictures and videos from the web are asked for (the test answers none).
+  await expect.poll(() => requests.includes("https://example.com/web.png")).toBe(true);
+  await expect.poll(() => requests.some((url) => url.includes("ytimg.com"))).toBe(true);
+  await editor(page).locator(".lty-playbtn").click();
+  await expect(editor(page).locator("iframe[src*='youtube']")).toHaveCount(1);
+
+  // Math draws with the bundled KaTeX fonts.
+  await expect(editor(page).locator(".katex").first()).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.fonts.check("16px KaTeX_Main"))).toBe(true);
+});
+
+test("the light theme styles the editor", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Light.md": "# Light\n\nSome **bold** text and `code`.\n" },
+    open: "Light.md",
+    theme: "light",
+  });
+
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  const heading = editor(page).locator("h1");
+  await expect(heading).toHaveText("Light");
+  const looks = await heading.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { size: parseFloat(style.fontSize) };
+  });
+  expect(looks.size).toBeGreaterThan(20);
+  await expect.poll(() => page.evaluate(() => document.fonts.check("16px 'Geist Variable'"))).toBe(true);
+});
+
+const DRAWING = JSON.stringify({
+  type: "excalidraw",
+  version: 2,
+  source: "netherstone",
+  elements: [
+    {
+      id: "text-1",
+      type: "text",
+      x: 100,
+      y: 100,
+      width: 120,
+      height: 25,
+      angle: 0,
+      strokeColor: "#1e1e1e",
+      backgroundColor: "transparent",
+      fillStyle: "solid",
+      strokeWidth: 2,
+      strokeStyle: "solid",
+      roughness: 1,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 1,
+      version: 1,
+      versionNonce: 1,
+      isDeleted: false,
+      boundElements: null,
+      updated: 1,
+      link: null,
+      locked: false,
+      text: "Hello",
+      fontSize: 20,
+      fontFamily: 5,
+      textAlign: "left",
+      verticalAlign: "top",
+      containerId: null,
+      originalText: "Hello",
+      autoResize: true,
+      lineHeight: 1.25,
+    },
+  ],
+  appState: { viewBackgroundColor: "#ffffff" },
+  files: {},
+});
+
+test("a drawing opens, and adds to a shard as a picture", async ({ page }) => {
+  const requests = recordRequests(page);
+  await mockVault(page, {
+    files: { "Notes.md": "# Notes\n", "Sketch.excalidraw": DRAWING },
+    open: "Notes.md",
+  });
+
+  await page.getByText("Sketch", { exact: true }).first().click();
+  await expect(page.locator(".excalidraw canvas").first()).toBeVisible({ timeout: 30_000 });
+  // The hand-drawn font comes from esm.sh, as Excalidraw ships it.
+  await expect.poll(() => requests.some((url) => url.startsWith("https://esm.sh/"))).toBe(true);
+
+  // Adding it to a shard draws it as a picture.
+  await page.getByRole("button", { name: "Add to shard", exact: true }).click();
+  await page.getByRole("option", { name: /Notes/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add to shard", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__saves.at(-1)?.content ?? ""), { timeout: 30_000 })
+    .toContain('data-excalidraw="Sketch.excalidraw"');
+});
+
+test("the export preview draws each format, and Word and web pages save", async ({ page }) => {
+  await mockVault(page, {
+    files: {
+      "Report.md": "# Report\n\nA paragraph with **bold** text.\n\n- One\n- Two\n\n$$\nx^2\n$$\n",
+    },
+    open: "Report.md",
+  });
+
+  await page.getByRole("button", { name: "Actions for Report" }).first().click();
+  await page.getByRole("menuitem", { name: "Export…" }).click();
+
+  const preview = page.locator("iframe[title='Preview of Report']");
+  const formats = page.getByRole("radiogroup", { name: "Format" });
+  for (const format of ["PDF", "Word", "Web page"]) {
+    await formats.getByRole("radio", { name: new RegExp(format) }).click();
+    // The preview shows once its own script has laid it out.
+    await expect(preview).toHaveClass(/opacity-100/, { timeout: 30_000 });
+    await expect(preview.contentFrame().locator("h1").first()).toHaveText("Report");
+    if (format !== "Web page") await expect(page.getByText(/1 page/).first()).toBeVisible();
+  }
+
+  // Word documents and web pages are written here; PDFs by the desktop app.
+  await page.getByRole("button", { name: "Export web page" }).click();
+  await expect.poll(() => page.evaluate(() => window.__exports)).toEqual([
+    expect.stringMatching(/^<!doctype html>/i),
+  ]);
+  await page.getByRole("button", { name: "Actions for Report" }).first().click();
+  await page.getByRole("menuitem", { name: "Export…" }).click();
+  await formats.getByRole("radio", { name: /Word/ }).click();
+  await page.getByRole("button", { name: "Export Word document" }).click();
+  await expect.poll(() => page.evaluate(() => window.__exports.at(-1))).toMatch(/^PK/);
+});
+
+test("a PDF imports into a shard", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Notes.md": "# Notes\n" },
+    assets: { "Field notes.pdf": pdf() },
+    folders: ["Inbox"],
+    open: "Notes.md",
+  });
+
+  await page.getByText("Inbox", { exact: true }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Import here…" }).click();
+  await page.getByRole("button", { name: /Files/ }).click();
+
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          window.__saves.find((save) => save.filePath.endsWith("Inbox/Field notes.md")),
+        ),
+      { timeout: 30_000 },
+    )
+    .toMatchObject({ content: expect.stringContaining("Field notes") });
+  const saved = await page.evaluate(
+    () => window.__saves.find((save) => save.filePath.endsWith("Inbox/Field notes.md"))!.content,
+  );
+  expect(saved).toContain("The river was high after the rain.");
+});

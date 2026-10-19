@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { caretAfter, editor, lastSave, mockVault, openShard } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, openShard, test } from "./vault";
 
 /**
  * A shard with hundreds of tables must still open and take typing. The

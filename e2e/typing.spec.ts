@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { caretAfter, editor, lastSave, mockVault, savesFor } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, savesFor, test } from "./vault";
 
 const FILES = {
   "Note.md": "# Note\n\nStart here.\n",

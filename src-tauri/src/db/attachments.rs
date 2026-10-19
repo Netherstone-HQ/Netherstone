@@ -1035,6 +1035,30 @@ fn resolve_local_link(link: &str, shard_dir: &Path) -> Option<PathBuf> {
     resolved.is_file().then_some(resolved)
 }
 
+/// Every file on this device that a shard links to: its attachments and any
+/// other local file, in the vault or outside it.
+pub fn linked_local_files(shard_path: &Path, content: &str) -> Vec<PathBuf> {
+    let shard_dir = shard_path.parent().unwrap_or(shard_path);
+    let vault_root = find_vault_root_for_markdown_file(shard_dir);
+    let mut files = Vec::new();
+
+    for link in parse_link_destinations(content) {
+        let resolved = match (normalize_attachment_path(&link), &vault_root) {
+            (Some(asset_path), Some(root)) => path_from_asset_path(root, &asset_path)
+                .ok()
+                .filter(|p| p.is_file()),
+            _ => resolve_local_link(&link, shard_dir),
+        };
+        if let Some(path) = resolved {
+            if !files.contains(&path) {
+                files.push(path);
+            }
+        }
+    }
+
+    files
+}
+
 /// Shard links to files that are not managed attachments: files elsewhere
 /// in the vault or on this device. Notes and drawings are not attachments.
 fn find_external_files(vault_path: &Path, shards: &[(String, String)]) -> Vec<ExternalFile> {
@@ -1958,6 +1982,35 @@ mod tests {
         assert!(vault.join("_attachments").is_dir());
 
         std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn linked_local_files_finds_attachments_and_files_outside_the_vault() {
+        let vault = temp_vault("linked");
+        std::fs::write(vault.join("_attachments/ab/photo.png"), b"a").unwrap();
+        std::fs::write(vault.join("sub/clip.mp4"), b"v").unwrap();
+        let outside =
+            std::env::temp_dir().join(format!("netherstone-linked-{}.wav", std::process::id()));
+        std::fs::write(&outside, b"w").unwrap();
+
+        let shard = vault.join("sub").join("note.md");
+        let content = format!(
+            "![a](_attachments/ab/photo.png)\n\n![b](clip.mp4)\n\n<audio src=\"{}\"></audio>\n\n\
+             ![web](https://example.com/a.png) ![gone](_attachments/missing.png) ![up](../../etc/passwd)",
+            outside.display()
+        );
+        let files = linked_local_files(&shard, &content);
+        let _ = std::fs::remove_file(&outside);
+        let _ = std::fs::remove_dir_all(&vault);
+
+        assert_eq!(
+            files,
+            vec![
+                vault.join("_attachments/ab/photo.png"),
+                vault.join("sub/clip.mp4"),
+                outside.clone(),
+            ]
+        );
     }
 
     #[test]

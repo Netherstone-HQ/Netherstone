@@ -1,3 +1,4 @@
+mod asset_scope;
 mod browser;
 mod db;
 mod export;
@@ -163,10 +164,20 @@ fn open_media_files_dialog(
         .unwrap_or_default()
         .into_iter()
         .filter_map(|file_path| file_path.into_path().ok())
-        .map(|path| path.to_string_lossy().to_string())
         .collect::<Vec<_>>();
 
-    Ok(selected_files)
+    // A picked file can stay where it is (relinking a moved file), so the
+    // shard shows it from there.
+    use tauri::Manager;
+    let scope = app.asset_protocol_scope();
+    for path in &selected_files {
+        let _ = scope.allow_file(path);
+    }
+
+    Ok(selected_files
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect())
 }
 
 #[tauri::command(async)]
@@ -231,11 +242,13 @@ fn save_imported_shard(vault_path: String, file_path: String, content: String) -
 
 #[tauri::command(async)]
 fn persist_attachment_file(
+    app: tauri::AppHandle,
     source_path: String,
     vault_path: String,
 ) -> Result<db::attachments::PersistedAttachment, String> {
     let source = std::path::Path::new(&source_path);
     let vault = std::path::Path::new(&vault_path);
+    asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
 
     db::attachments::persist_attachment_file(&conn, vault, source)
@@ -243,11 +256,13 @@ fn persist_attachment_file(
 
 #[tauri::command(async)]
 fn persist_attachment_bytes(
+    app: tauri::AppHandle,
     file_name: String,
     bytes: Vec<u8>,
     vault_path: String,
 ) -> Result<db::attachments::PersistedAttachment, String> {
     let vault = std::path::Path::new(&vault_path);
+    asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
 
     db::attachments::persist_attachment_bytes(&conn, vault, &file_name, &bytes)
@@ -432,7 +447,7 @@ fn github_sign_out() -> Result<(), String> {
 }
 
 #[tauri::command(async)]
-fn scan_vault(vault_path: String) -> Result<Vec<vault::FileNode>, String> {
+fn scan_vault(app: tauri::AppHandle, vault_path: String) -> Result<Vec<vault::FileNode>, String> {
     let path = std::path::Path::new(&vault_path);
 
     if !path.exists() {
@@ -442,11 +457,13 @@ fn scan_vault(vault_path: String) -> Result<Vec<vault::FileNode>, String> {
         return Err(format!("Path is not a directory: {}", vault_path));
     }
 
+    asset_scope::allow_vault(&app, path);
     Ok(vault::scan_dir(path))
 }
 
 #[tauri::command(async)]
 fn start_vault_watcher(app: tauri::AppHandle, vault_path: String) -> Result<(), String> {
+    asset_scope::allow_vault(&app, Path::new(&vault_path));
     watcher::watch_vault(&app, &vault_path)
 }
 
@@ -456,16 +473,20 @@ fn stop_vault_watcher(app: tauri::AppHandle) {
 }
 
 #[tauri::command(async)]
-fn read_markdown_file(file_path: String) -> Result<String, String> {
-    read_markdown_from_disk(&file_path)
+fn read_markdown_file(app: tauri::AppHandle, file_path: String) -> Result<String, String> {
+    let markdown = read_markdown_from_disk(&file_path)?;
+    asset_scope::allow_linked_files(&app, Path::new(&file_path), &markdown);
+    Ok(markdown)
 }
 
 #[tauri::command(async)]
 fn open_markdown_file(
+    app: tauri::AppHandle,
     file_path: String,
     cache_version: Option<i64>,
 ) -> Result<OpenMarkdownFileResult, String> {
     let markdown = read_markdown_from_disk(&file_path)?;
+    asset_scope::allow_linked_files(&app, Path::new(&file_path), &markdown);
     let content_hash = hash_markdown_content(&markdown);
     let expected_cache_version = resolve_ast_cache_version(cache_version);
     let conn = db::open_connection()?;

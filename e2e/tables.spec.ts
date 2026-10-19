@@ -1,11 +1,12 @@
-import { expect, test } from "@playwright/test";
 import {
   caretAfter,
   cellsOf,
   editor,
+  expect,
   lastSave,
   measureTables,
   mockVault,
+  test,
 } from "./vault";
 
 const TABLE_NOTE = `# Tables

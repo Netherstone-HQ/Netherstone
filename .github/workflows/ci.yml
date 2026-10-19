@@ -36,10 +36,15 @@ jobs:
       - name: Test
         run: pnpm test
 
-  browser:
-    name: Browser tests
+  # The slowest job, so its tests are split across two runners.
+  browser-shard:
+    name: Browser tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -60,14 +65,25 @@ jobs:
       # Editor tests in a real Chromium against the built app, with the
       # desktop bridge mocked (see e2e/vault.ts).
       - name: Test
-        run: pnpm test:e2e
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.shard }}
           path: test-results
           retention-days: 7
+
+  # One check that passes only when every shard did, so the check keeps its
+  # name however many shards there are.
+  browser:
+    name: Browser tests
+    needs: browser-shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - if: needs.browser-shard.result != 'success'
+        run: exit 1
 
   rust:
     name: Rust tests

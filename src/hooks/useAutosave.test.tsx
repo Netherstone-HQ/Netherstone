@@ -41,7 +41,13 @@ function savedFiles() {
   return vi
     .mocked(invoke)
     .mock.calls.filter(([command]) => command === "save_markdown_file")
-    .map(([, args]) => args as { filePath: string; content: string });
+    .map(([, args]) => {
+      const { filePath, content } = args as {
+        filePath: string;
+        content: string;
+      };
+      return { filePath, content };
+    });
 }
 
 /**
@@ -96,6 +102,18 @@ describe("autosave", () => {
     openNote(NOTE_A, "Hello\n");
     await wait(AUTOSAVE_DELAY_MS * 3);
     expect(savedFiles()).toEqual([]);
+  });
+
+  it("counts what you type as writing", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+
+    type(editor, " world");
+    await wait(AUTOSAVE_DELAY_MS * 3);
+
+    const saves = vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === "save_markdown_file");
+    expect(saves[0]?.[1]).toMatchObject({ recordWriting: true });
   });
 
   it("saves the edit once typing has paused", async () => {

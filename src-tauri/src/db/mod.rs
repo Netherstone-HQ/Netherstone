@@ -1,5 +1,6 @@
 pub mod ast_cache;
 pub mod attachments;
+pub mod data;
 pub mod indexer;
 pub mod parser;
 pub mod queries;

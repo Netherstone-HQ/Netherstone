@@ -654,9 +654,35 @@ fn write_markdown_file_and_sync_references(file_path: &str, content: &str) -> Re
     Ok(())
 }
 
+/// Saves a shard. `record_writing` is set by saves of what you type in the
+/// editor, which the Data page counts as writing on this device.
 #[tauri::command(async)]
-fn save_markdown_file(file_path: String, content: String) -> Result<(), String> {
+fn save_markdown_file(
+    file_path: String,
+    content: String,
+    record_writing: Option<bool>,
+) -> Result<(), String> {
+    if record_writing == Some(true) {
+        record_writing_before_save(&file_path, &content);
+    }
     write_markdown_file_and_sync_references(&file_path, &content)
+}
+
+/// Logs the words written today, before the save replaces the words the shard
+/// started the day with. A failure only costs the count.
+fn record_writing_before_save(file_path: &str, content: &str) {
+    let result = db::open_connection().and_then(|conn| {
+        db::data::record_writing(&conn, &db::data::local_today(), file_path, content, || {
+            std::fs::read_to_string(file_path).ok()
+        })
+        .map_err(|e| e.to_string())
+    });
+    if let Err(error) = result {
+        eprintln!(
+            "[Netherstone] Failed to log writing for {}: {}",
+            file_path, error
+        );
+    }
 }
 
 #[tauri::command(async)]
@@ -853,6 +879,13 @@ fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) 
         if let Err(error) = db::attachments::rename_reference_file_path(&conn, &previous, &next) {
             eprintln!(
                 "[Netherstone] Failed to update attachment references {} -> {}: {}",
+                previous, next, error
+            );
+        }
+
+        if let Err(error) = db::data::rename_writing_path(&conn, &previous, &next) {
+            eprintln!(
+                "[Netherstone] Failed to update the writing log {} -> {}: {}",
                 previous, next, error
             );
         }
@@ -1119,6 +1152,22 @@ fn get_tagged_files() -> Result<Vec<db::queries::TaggedFile>, String> {
 }
 
 #[tauri::command(async)]
+fn get_writing_log(vault_path: String) -> Result<db::data::WritingLog, String> {
+    let db = db::Database::new()?;
+
+    db.with_connection(|conn| {
+        db::data::get_writing_log(conn, &vault_path, &db::data::local_today())
+    })
+}
+
+#[tauri::command(async)]
+fn get_broken_links() -> Result<Vec<db::data::BrokenLink>, String> {
+    let db = db::Database::new()?;
+
+    db.with_connection(db::data::get_broken_links)
+}
+
+#[tauri::command(async)]
 fn get_backlinks(file_path: String) -> Result<Vec<db::queries::Backlink>, String> {
     let db = db::Database::new()?;
 
@@ -1206,6 +1255,10 @@ fn index_vault(vault_path: String) -> Result<String, String> {
                     error_count += 1;
                 }
             }
+        }
+
+        if let Err(e) = db::data::start_writing_log(conn, &vault_path, &db::data::local_today()) {
+            eprintln!("[Netherstone] Failed to start the writing log: {}", e);
         }
 
         // Prune deleted files
@@ -1352,6 +1405,8 @@ pub fn run() {
             index_vault,
             search_files,
             get_tagged_files,
+            get_writing_log,
+            get_broken_links,
             get_file_metadata,
             get_backlinks,
             rename_file,

@@ -14,6 +14,7 @@ const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
       { keys: "mod+1", action: "Editor" },
       { keys: "mod+2", action: "Tags" },
       { keys: "mod+3", action: "Canvas" },
+      { keys: "mod+4", action: "Data" },
       { keys: "mod+=", action: "Zoom in" },
       { keys: "mod+minus", action: "Zoom out" },
       { keys: "mod+0", action: "Reset zoom" },

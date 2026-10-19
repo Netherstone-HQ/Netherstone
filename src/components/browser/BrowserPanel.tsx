@@ -76,6 +76,12 @@ export function BrowserPanel({
     isCanvasBrowser ? s.setCanvasBrowserLastUrl : s.setBrowserLastUrl,
   );
 
+  // Links clicked in shards go to the notes panel only.
+  const browserUrlRequest = useUIStore((s) =>
+    isCanvasBrowser ? null : s.browserUrlRequest,
+  );
+  const clearBrowserUrlRequest = useUIStore((s) => s.clearBrowserUrlRequest);
+
   const initialBrowserUrl = browserLastUrl ?? DEFAULT_BROWSER_URL;
   const [currentUrl, setCurrentUrl] = useState(initialBrowserUrl);
   const [address, setAddress] = useState(initialBrowserUrl);
@@ -179,6 +185,14 @@ export function BrowserPanel({
     },
     [currentUrl, runBrowserCommand, webviewLabel],
   );
+
+  // Waits for the webview, so a link clicked while it loads isn't lost.
+  useEffect(() => {
+    if (!browserUrlRequest || !isBrowserReady) return;
+
+    clearBrowserUrlRequest();
+    void navigateTo(browserUrlRequest);
+  }, [browserUrlRequest, clearBrowserUrlRequest, isBrowserReady, navigateTo]);
 
   const closeBrowserPanel = useCallback(() => {
     setBrowserLastUrl(currentUrl);

@@ -16,8 +16,14 @@ import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { openEditorFile } from "@/lib/open-editor-file";
-import { useEditorStore, useVaultStore } from "@/store";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { Editor } from "./Editor";
+
+vi.mock("@tauri-apps/plugin-opener", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tauri-apps/plugin-opener")>()),
+  openUrl: vi.fn(async () => {}),
+}));
 
 // The AST cache lives in the Tauri backend.
 vi.mock("@/lib/editor-ast-cache", () => ({
@@ -317,7 +323,7 @@ describe("Editor", () => {
     const LINKS = [
       "[Sibling](./other.md)",
       "[Parent](../up.md)",
-      "[Site](https://example.com)",
+      "[Site](https://example.com/docs)",
       "[Anchor](#weekly-notes)",
     ].join(" and ");
 
@@ -392,14 +398,67 @@ describe("Editor", () => {
       );
     });
 
-    it("leaves web links and in-page anchors to the browser", async () => {
+    describe("web links", () => {
+      beforeEach(() =>
+        useUIStore.setState({
+          isBrowserPanelOpen: false,
+          browserLastUrl: null,
+          browserUrlRequest: null,
+        }),
+      );
+      afterEach(() => vi.mocked(openUrl).mockClear());
+
+      it("opens a web link in the browser panel", async () => {
+        await openNote(`${LINKS}\n`);
+
+        click("Site");
+
+        await waitFor(() =>
+          expect(useUIStore.getState().isBrowserPanelOpen).toBe(true),
+        );
+        expect(useUIStore.getState().browserLastUrl).toBe(
+          "https://example.com/docs",
+        );
+        expect(openUrl).not.toHaveBeenCalled();
+        expect(useEditorStore.getState().currentFilePath).toBe(NOTE_PATH);
+      });
+
+      it("sends a web link to the open panel", async () => {
+        act(() => useUIStore.setState({ isBrowserPanelOpen: true }));
+        await openNote(`${LINKS}\n`);
+
+        click("Site");
+
+        await waitFor(() =>
+          expect(useUIStore.getState().browserUrlRequest).toBe(
+            "https://example.com/docs",
+          ),
+        );
+      });
+
+      it.each([
+        ["Ctrl", { ctrlKey: true }],
+        ["Cmd", { metaKey: true }],
+      ])("opens a web link in the system browser with %s", async (_, keys) => {
+        await openNote(`${LINKS}\n`);
+
+        fireEvent.click(screen.getByText("Site"), keys);
+
+        await waitFor(() =>
+          expect(openUrl).toHaveBeenCalledWith("https://example.com/docs"),
+        );
+        expect(useUIStore.getState().isBrowserPanelOpen).toBe(false);
+      });
+    });
+
+    it("leaves in-page anchors alone", async () => {
       await openNote(`${LINKS}\n`);
 
-      click("Site");
       click("Anchor");
       await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
       expect(openMarkdownFile).not.toHaveBeenCalled();
+      expect(useUIStore.getState().browserUrlRequest).toBeNull();
       expect(useEditorStore.getState().currentFilePath).toBe(NOTE_PATH);
     });
   });

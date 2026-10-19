@@ -1,0 +1,115 @@
+// @vitest-environment jsdom
+import JSZip from "jszip";
+import { describe, expect, it } from "vitest";
+
+import { fixtureDocument, fixtureImages } from "@/lib/export/__fixtures__/fixture";
+import { renderDocx } from "@/lib/export/docx";
+import { memoryImport } from "@/test/import";
+
+const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+/** A Word file with just a body, styles and numbering, as Word itself would write them. */
+async function wordFile(body: string, extra: { numbering?: string; rels?: string } = {}) {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${extra.rels ?? ""}</Relationships>`,
+  );
+  zip.file(
+    "word/styles.xml",
+    `<?xml version="1.0"?><w:styles ${W}>
+      <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style>
+      <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>
+    </w:styles>`,
+  );
+  zip.file("word/numbering.xml", `<?xml version="1.0"?><w:numbering ${W}>${extra.numbering ?? ""}</w:numbering>`);
+  zip.file("word/document.xml", `<?xml version="1.0"?><w:document ${W}><w:body>${body}</w:body></w:document>`);
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+const run = (text: string, props = "") => `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${text}</w:t></w:r>`;
+const para = (content: string, props = "") => `<w:p>${props ? `<w:pPr>${props}</w:pPr>` : ""}${content}</w:p>`;
+const cell = (content: string, props = "") => `<w:tc>${props ? `<w:tcPr>${props}</w:tcPr>` : ""}${para(content)}</w:tc>`;
+
+async function importWord(bytes: Uint8Array) {
+  const vault = memoryImport({ "Doc.docx": bytes });
+  const report = await vault.run();
+  expect(report.failed).toEqual([]);
+  return { markdown: vault.shards.get("/vault/Doc.md")!, vault, report };
+}
+
+describe("Word import", () => {
+  it("brings back what Netherstone's own Word export wrote", async () => {
+    const doc = fixtureDocument();
+    const exported = await renderDocx(doc, {
+      images: fixtureImages(doc),
+      options: { format: "docx", typeface: "newsreader", textSize: "default", pageSize: "a4", margins: "normal", pageNumbers: true, theme: "light" },
+      toPng: async () => null,
+    });
+    const { markdown, vault } = await importWord(exported);
+
+    expect(markdown).toMatch(/^# Field notes on export\n/);
+    expect(markdown).toContain("**bold**, _italic_, <u>underlined</u>, ~~struck~~ and `inline code`");
+    expect(markdown).toContain("H<sub>2</sub>O and E = mc<sup>2</sup>");
+    expect(markdown).toContain("[the release notes](https://example.com/notes)");
+    expect(markdown).toContain("<toc />");
+    expect(markdown).toContain("- Second point with a nested list\n  - Nested once\n    - Nested twice");
+    expect(markdown).toContain("2. Write the shard\n   1. Draft\n   2. Revise\n3. Export it");
+    expect(markdown).toContain("- [ ] Check every page");
+    expect(markdown).toContain('<callout icon="💡">');
+    expect(markdown).toContain("```typescript\n// Greets someone by name.\nexport function greet(name: string): string {\n  const message");
+    expect(markdown).toContain("$\\int_{- \\infty}^{\\infty} e^{- x^{2}}dx=\\sqrt{\\pi}$");
+    expect(markdown).toContain("fill A1=#f7f5f2 B1=#f7f5f2 C1=#f7f5f2");
+    expect(markdown).toContain("| PDF        | System webview | The app's own, **shared** |");
+    expect(markdown).toContain('<img src="_attachments/Doc 1.png" width="480" />');
+    expect(markdown).toContain("Привет, 日本語のテキスト, and an emoji 🎉.");
+    expect(vault.attachments.size).toBe(1);
+  });
+
+  it("reads merged cells, nested numbering and links", async () => {
+    const numbering = `
+      <w:abstractNum w:abstractNumId="0">
+        <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
+        <w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/></w:lvl>
+      </w:abstractNum>
+      <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>`;
+    const list = (text: string, level: number) => para(run(text), `<w:numPr><w:ilvl w:val="${level}"/><w:numId w:val="1"/></w:numPr>`);
+    const body = [
+      para(run("Plan"), '<w:pStyle w:val="Heading1"/>'),
+      para(`${run("Read ")}<w:hyperlink r:id="rLink">${run("the site")}</w:hyperlink>${run(" now.", "<w:i/>")}`, '<w:jc w:val="center"/>'),
+      list("First", 0),
+      list("Detail", 1),
+      list("Second", 0),
+      `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>
+        <w:tr>${cell(run("Both"), '<w:gridSpan w:val="2"/><w:shd w:val="clear" w:fill="FFEEDD"/>')}</w:tr>
+        <w:tr>${cell(run("Tall"), '<w:vMerge w:val="restart"/>')}${cell(run("x"))}</w:tr>
+        <w:tr>${cell("", "<w:vMerge/>")}${cell(run("y"))}</w:tr>
+      </w:tbl>`,
+    ].join("");
+    const bytes = await wordFile(body, {
+      numbering,
+      rels: '<Relationship Id="rLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>',
+    });
+    const { markdown } = await importWord(bytes);
+
+    expect(markdown).toContain("# Plan");
+    expect(markdown).toContain('<div align="center">\n\nRead [the site](https://example.com) _now\\._\n\n</div>');
+    expect(markdown).toContain("1. First\n   - Detail\n2. Second");
+    expect(markdown).toContain("<!-- netherstone: widths 133 133; merge A1:B1 A2:A3; fill A1=#ffeedd -->");
+    expect(markdown).toContain("| Tall | x |\n|     | y |");
+  });
+
+  it("explains files that aren't Word documents", async () => {
+    const vault = memoryImport({ "Fake.docx": "not a zip" });
+    const report = await vault.run();
+    expect(report.failed[0].error).toMatch(/Word/);
+  });
+});

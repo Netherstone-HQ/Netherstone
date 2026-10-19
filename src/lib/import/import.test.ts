@@ -1,0 +1,107 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from "vitest";
+
+import { memoryImport } from "@/test/import";
+
+const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+
+describe("import engine", () => {
+  it("keeps folders, links imported files to each other and stores pictures once", async () => {
+    const vault = memoryImport({
+      "Notes/Home.md": "# Home\n\nSee [[Plans]], [[Plans#Goals|the goals]] and [[Missing]].\n\n![[cat.png]]\n",
+      "Notes/Sub/Plans.md": "# Plans\n\nBack to [home](../Home.md).\n\n![](../cat.png)\n",
+      "Notes/cat.png": PNG,
+    });
+    const report = await vault.run();
+
+    expect(report.created.map((shard) => shard.path)).toEqual(["/vault/Notes/Home.md", "/vault/Notes/Sub/Plans.md"]);
+    expect(report.skipped).toEqual([]);
+    expect(vault.shards.get("/vault/Notes/Home.md")).toContain(
+      "See [Plans](Sub/Plans.md), [the goals](Sub/Plans.md) and Missing.",
+    );
+    expect(vault.shards.get("/vault/Notes/Home.md")).toContain("![](_attachments/cat.png)");
+    expect(vault.shards.get("/vault/Notes/Sub/Plans.md")).toContain("[home](../Home.md)");
+    expect([...vault.attachments.keys()]).toEqual(["_attachments/cat.png"]);
+    expect(report.created[0].warnings).toEqual(["1 link points to a note that wasn't imported; it's plain text now."]);
+  });
+
+  it("reports files it can't read and leaves out ones it doesn't import", async () => {
+    const vault = memoryImport({ "Old.doc": "x", "data.bin": "x", "ok.txt": "Fine" });
+    const report = await vault.run();
+
+    expect(report.created.map((shard) => shard.source)).toEqual(["ok.txt"]);
+    expect(report.skipped).toEqual(["data.bin"]);
+    expect(report.failed).toEqual([
+      { source: "Old.doc", error: "Old Word files (.doc) can't be imported. Open it in Word and save it as .docx first." },
+    ]);
+  });
+
+  it("never overwrites a shard", async () => {
+    const vault = memoryImport({ "a/Note.txt": "One", "b/Note.txt": "Two" });
+    vault.shards.set("/vault/a/Note.md", "Already here");
+    await vault.run();
+
+    expect(vault.shards.get("/vault/a/Note.md")).toBe("Already here");
+    expect(vault.shards.get("/vault/a/Note_1.md")).toBe("One\n");
+    expect(vault.shards.get("/vault/b/Note.md")).toBe("Two\n");
+  });
+
+  it("stops when cancelled", async () => {
+    const vault = memoryImport({ "a.txt": "A", "b.txt": "B" });
+    const controller = new AbortController();
+    controller.abort();
+    const report = await vault.run({ signal: controller.signal });
+
+    expect(report.cancelled).toBe(true);
+    expect(vault.shards.size).toBe(0);
+  });
+});
+
+describe("formats", () => {
+  it("brings Obsidian notes over as Netherstone writes them", async () => {
+    const vault = memoryImport({
+      "Note.md": "---\ntags: [a]\n---\n> [!warning] Careful\n> Mind the gap.\n\n==marked== %%hidden%% text ^abc123\n",
+    });
+    await vault.run();
+    const markdown = vault.shards.get("/vault/Note.md")!;
+
+    expect(markdown).toMatch(/^---\ntags: \[a\]\n---\n/);
+    expect(markdown).toContain('<callout icon="⚠️">\n  **Careful**\n\n  Mind the gap.\n</callout>');
+    expect(markdown).toContain("<mark>marked</mark> text\n");
+  });
+
+  it("reads web pages with their formatting", async () => {
+    const vault = memoryImport({
+      "page.html": `<h1>Title</h1>
+        <p style="text-align:center"><b>Bold</b> and <span style="color:#ff0000">red</span> <a href="Plans.md">plans</a></p>
+        <ul><li>One<ul><li>Two</li></ul></li></ul>
+        <table><tr><td colspan="2" bgcolor="#eeeeee">Wide</td></tr><tr><td>a</td><td>b</td></tr></table>
+        <img src="data:image/png;base64,iVBORw0KGgo=">`,
+      "Plans.md": "# Plans",
+    });
+    await vault.run();
+    const markdown = vault.shards.get("/vault/page.md")!;
+
+    expect(markdown).toContain("# Title");
+    expect(markdown).toContain(
+      '<div align="center">\n\n**Bold** and <span style="color: #ff0000;">red</span> [plans](Plans.md)\n\n</div>',
+    );
+    expect(markdown).toContain("- One\n  - Two");
+    expect(markdown).toContain("<!-- netherstone: merge A1:B1; fill A1=#eeeeee -->");
+    expect(markdown).toContain("![](_attachments/image-1.png)");
+  });
+
+  it("makes CSV files a table", async () => {
+    const vault = memoryImport({ "list.csv": 'Name,Age\nAda,36\n"Lovelace, A","2"""\n' });
+    await vault.run();
+
+    expect(vault.shards.get("/vault/list.md")).toContain("| Lovelace, A | 2\"  |");
+  });
+
+  it("keeps the lines of text files", async () => {
+    const vault = memoryImport({ "plain.txt": "First line\nsecond line\n\nNew paragraph" });
+    await vault.run();
+
+    expect(vault.shards.get("/vault/plain.md")).toBe("First line\\\nsecond line\n\nNew paragraph\n");
+  });
+});

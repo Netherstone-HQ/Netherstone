@@ -8,6 +8,7 @@ import {
   FolderOpenIcon,
   FolderPlusIcon,
   GitBranchIcon,
+  ImportIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -40,6 +41,7 @@ import { TagFilterField, TagList } from "../tags/TagList";
 import { FileTree } from "../vault/FileTree";
 import { ImportShardDialog } from "../vault/ImportShardDialog";
 import { NewVaultDialog } from "../vault/NewVaultDialog";
+import { openImportDialog } from "@/lib/import";
 import { openEditorFile } from "@/lib/open-editor-file";
 import {
   fileExists,
@@ -243,6 +245,14 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
                   <DropdownMenuItem onSelect={vaultMenu.defer(newFolder)}>
                     <FolderPlusIcon />
                     New folder
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={vaultMenu.defer(() =>
+                      openImportDialog(currentVaultPath),
+                    )}
+                  >
+                    <ImportIcon />
+                    Import…
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>

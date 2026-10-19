@@ -15,6 +15,8 @@ export interface TextPiece {
   mono: boolean;
   /** The link this piece sits under, if any. */
   href?: string;
+  /** Fill colour as `#rrggbb`, when the operators could be matched to the text. */
+  color?: string;
 }
 
 export interface PagePicture {
@@ -186,17 +188,30 @@ export async function extractPages(
       // Hollow bullets are stroked, solid ones filled.
       const PAINTS = new Set([OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke, OPS.stroke, OPS.closeStroke]);
       let matrix: Matrix = [1, 0, 0, 1, 0, 0];
-      const stack: Matrix[] = [];
+      let fill = "#000000";
+      const stack: { matrix: Matrix; fill: string }[] = [];
+      // Every character drawn, with its fill colour, in drawing order.
+      let drawn = "";
+      const drawnColors: string[] = [];
       for (let index = 0; index < operators.fnArray.length; index += 1) {
         const op = operators.fnArray[index];
         const args = operators.argsArray[index] as unknown[];
-        if (op === OPS.save) stack.push(matrix);
-        else if (op === OPS.restore) matrix = stack.pop() ?? matrix;
+        if (op === OPS.save) stack.push({ matrix, fill });
+        else if (op === OPS.restore) ({ matrix, fill } = stack.pop() ?? { matrix, fill });
         else if (op === OPS.transform) matrix = multiply(matrix, args as Matrix);
-        else if (op === OPS.paintFormXObjectBegin) {
-          stack.push(matrix);
+        else if (op === OPS.setFillRGBColor && typeof args[0] === "string") fill = args[0];
+        else if (op === OPS.showText && Array.isArray(args[0])) {
+          for (const glyph of args[0] as unknown[]) {
+            const unicode = (glyph as { unicode?: unknown } | null)?.unicode;
+            if (typeof unicode !== "string") continue;
+            const characters = comparable(unicode);
+            drawn += characters;
+            for (let count = 0; count < characters.length; count += 1) drawnColors.push(fill);
+          }
+        } else if (op === OPS.paintFormXObjectBegin) {
+          stack.push({ matrix, fill });
           if (Array.isArray(args[0]) && args[0].length === 6) matrix = multiply(matrix, args[0] as Matrix);
-        } else if (op === OPS.paintFormXObjectEnd) matrix = stack.pop() ?? matrix;
+        } else if (op === OPS.paintFormXObjectEnd) ({ matrix, fill } = stack.pop() ?? { matrix, fill });
         else if (op === OPS.constructPath) {
           const [pathOp, , minMax] = args as [number, unknown, ArrayLike<number> | null];
           if (PAINTS.has(pathOp) && minMax && minMax.length === 4) {
@@ -233,6 +248,7 @@ export async function extractPages(
         }
       }
 
+      colorPieces(pieces, drawn, drawnColors);
       pages.push({ width: viewport.width, height: viewport.height, pieces, pictures, marks });
       page.cleanup();
     }
@@ -241,6 +257,30 @@ export async function extractPages(
   }
 
   return { pages, failedPictures };
+}
+
+/** Text with spaces removed and ligatures split, so drawn glyphs and text pieces compare. */
+function comparable(value: string) {
+  return value.normalize("NFKC").replace(/\s+/g, "");
+}
+
+/**
+ * pdf.js reports text without its colour, and colour only in the drawing
+ * operators. Both list the text in the order it is drawn, so each piece is
+ * found in the drawn characters a little after the previous one and takes
+ * the colour of its first character. A piece that can't be found (right to
+ * left text, glyphs without Unicode) keeps the ordinary text colour.
+ */
+function colorPieces(pieces: TextPiece[], drawn: string, colors: string[]) {
+  let position = 0;
+  for (const piece of pieces) {
+    const characters = comparable(piece.text);
+    if (!characters) continue;
+    const found = drawn.indexOf(characters.slice(0, 12), position);
+    if (found === -1 || found - position > 400) continue;
+    piece.color = colors[found];
+    position = found + characters.length;
+  }
 }
 
 function objectOf(page: { objs: { get(id: string, callback: (value: unknown) => void): void }; commonObjs: { get(id: string, callback: (value: unknown) => void): void } }, id: string): Promise<PdfImage | null> {

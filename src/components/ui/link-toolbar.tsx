@@ -199,7 +199,7 @@ function LinkOpenButton() {
       onMouseOver={(e) => {
         e.stopPropagation();
       }}
-      aria-label="Open link in a new tab"
+      aria-label="Open link"
       target="_blank"
     >
       <ExternalLink width={18} />

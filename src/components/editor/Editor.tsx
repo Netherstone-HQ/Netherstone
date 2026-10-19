@@ -18,6 +18,11 @@ import {
 } from "@/lib/editor-markdown";
 import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
+import {
+  isWebPageUrl,
+  openWebLink,
+  wantsSystemBrowser,
+} from "@/lib/open-web-link";
 import { resolveShardLinkKeys } from "@/lib/shard-link-keys";
 import { useEditorStore, useVaultStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
@@ -300,7 +305,21 @@ export function Editor() {
       if (!link) return;
 
       const href = link.getAttribute("href")?.trim();
-      if (!href || href.startsWith("#") || isExternalLink(href)) return;
+      if (!href || href.startsWith("#")) return;
+
+      if (isWebPageUrl(href)) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+          await openWebLink(href, { systemBrowser: wantsSystemBrowser(event) });
+        } catch (error) {
+          console.error("Failed to open web link:", href, error);
+        }
+        return;
+      }
+
+      if (isExternalLink(href)) return;
 
       const resolvedPath = resolveInternalLinkPath(currentFilePath, href);
       if (!resolvedPath) return;

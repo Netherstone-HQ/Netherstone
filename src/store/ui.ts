@@ -78,6 +78,11 @@ interface UIState {
   toggleBrowserPanel: () => void;
   browserLastUrl: string | null;
   setBrowserLastUrl: (url: string | null) => void;
+  /** A page the open panel should go to next. */
+  browserUrlRequest: string | null;
+  /** Shows a page in the browser panel, opening the panel if needed. */
+  openInBrowserPanel: (url: string) => void;
+  clearBrowserUrlRequest: () => void;
 
   // ── Canvas Browser Panel ───────────────────────────────────────────────────
   isCanvasBrowserPanelOpen: boolean;
@@ -191,6 +196,19 @@ export const useUIStore = create<UIState>()(
         set((state) => ({ isBrowserPanelOpen: !state.isBrowserPanelOpen })),
       browserLastUrl: null,
       setBrowserLastUrl: (url) => set({ browserLastUrl: url }),
+      browserUrlRequest: null,
+      openInBrowserPanel: (url) =>
+        set((state) =>
+          // A closed panel starts on its last URL, so that's all it needs.
+          state.isBrowserPanelOpen
+            ? { browserUrlRequest: url }
+            : {
+                isBrowserPanelOpen: true,
+                browserLastUrl: url,
+                browserUrlRequest: null,
+              },
+        ),
+      clearBrowserUrlRequest: () => set({ browserUrlRequest: null }),
 
       // ── Canvas Browser Panel ───────────────────────────────────────────────────
       isCanvasBrowserPanelOpen: false,

@@ -79,4 +79,11 @@ describe("Word export", () => {
     expect(latexToOmml(String.raw`\mathbb{R}`)).toContain("ℝ");
     expect(latexToOmml(String.raw`\frac{`)).toBeNull();
   });
+
+  it("keeps everything after a sum or integral in its body, up to the next relation", () => {
+    const sum = latexToOmml(String.raw`\sum_{i=1}^{n} i = \frac{n(n+1)}{2}`)!;
+    expect(sum).toContain('<m:e><m:r><m:t xml:space="preserve">i</m:t></m:r></m:e></m:nary><m:r><m:t xml:space="preserve">=</m:t>');
+    const integral = latexToOmml(String.raw`\int_0^1 x^2\,dx + 1`)!;
+    expect(integral).toMatch(/<m:e><m:sSup>.*dx<\/m:t><\/m:r><\/m:e><\/m:nary><m:r><m:t xml:space="preserve">\+1/);
+  });
 });

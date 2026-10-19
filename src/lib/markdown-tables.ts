@@ -10,7 +10,8 @@ import { createRawBlockNode, RAW_BLOCK_KEY } from "@/lib/markdown-raw-blocks";
  *
  *     <!-- netherstone: widths 120 240; merge A1:B1 C2:C3; fill A1=#fee; noborder B2 top left -->
  *
- * - `widths`: the column widths in pixels, once a column edge was dragged.
+ * - `widths`: the column widths in pixels, once a column edge was dragged,
+ *   or as shares of the text column when written by hand (`widths 25% 75%`).
  *   A table without them fills the text column and sizes by content.
  * - `merge`: each merged cell as the range it covers, spreadsheet style.
  *   The pipe table keeps an empty cell for every covered position, so it
@@ -30,7 +31,12 @@ type Cell = TElement & {
   borders?: Partial<Record<Side, { size?: number }>>;
 };
 
-type Table = TElement & { colSizes?: number[]; children: TElement[] };
+type Table = TElement & {
+  colSizes?: number[];
+  /** Hand-written percentage widths, kept until a column edge is dragged. */
+  colPercents?: number[];
+  children: TElement[];
+};
 
 const SIDES = ["top", "right", "bottom", "left"] as const;
 type Side = (typeof SIDES)[number];
@@ -122,8 +128,11 @@ export function prepareTableForMarkdown(table: Table): {
   const parts: string[] = [];
 
   const widths = (table.colSizes ?? []).filter((w) => Number.isFinite(w) && w > 0);
+  const percents = (table.colPercents ?? []).filter((w) => Number.isFinite(w) && w > 0);
   if (widths.length > 0 && widths.length === cols) {
     parts.push(`widths ${widths.map((w) => Math.round(w)).join(" ")}`);
+  } else if (percents.length > 0 && percents.length === cols) {
+    parts.push(`widths ${percents.map((w) => `${roundPercent(w)}%`).join(" ")}`);
   }
 
   const merges = placed
@@ -165,11 +174,16 @@ export function prepareTableForMarkdown(table: Table): {
         return { ...row, children: cells };
       });
 
-  const { colSizes: _sizes, ...rest } = table;
+  const { colSizes: _sizes, colPercents: _percents, ...rest } = table;
   return {
     table: { ...rest, children } as Table,
     meta: parts.length > 0 ? `<!-- netherstone: ${parts.join("; ")} -->` : null,
   };
+}
+
+/** At most two decimals, without trailing zeros (`33.33`, `25`). */
+function roundPercent(value: number): string {
+  return String(Math.round(value * 100) / 100);
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────────
@@ -180,6 +194,7 @@ function parseMeta(comment: string) {
 
   const meta = {
     widths: [] as number[],
+    percents: [] as number[],
     merges: [] as { row: number; col: number; rowSpan: number; colSpan: number }[],
     fills: [] as { row: number; col: number; color: string }[],
     hidden: [] as { row: number; col: number; sides: Side[] }[],
@@ -189,9 +204,16 @@ function parseMeta(comment: string) {
     const [keyword, ...tokens] = part.trim().split(/\s+/).filter(Boolean);
     if (!keyword) continue;
     switch (keyword.toLowerCase()) {
-      case "widths":
-        meta.widths = tokens.map(Number).filter((w) => Number.isFinite(w) && w > 0);
+      case "widths": {
+        // All pixels (`120`, `120px`) or all percentages (`25%`). Anything
+        // else is ignored, and the table sizes by content.
+        const unit = tokens.every((t) => t.endsWith("%")) ? "%" : "px";
+        const values = tokens.map((t) => Number(t.replace(unit === "%" ? /%$/ : /px$/i, "")));
+        if (!values.every((w) => Number.isFinite(w) && w > 0)) break;
+        if (unit === "%") meta.percents = values;
+        else meta.widths = values;
         break;
+      }
       case "merge":
         for (const token of tokens) {
           const [from, to] = token.split(":").map((ref) => parseCellRef(ref));
@@ -282,6 +304,7 @@ function applyMetaToTable(table: Table, comment: string): Table {
   return {
     ...table,
     ...(meta.widths.length === cols ? { colSizes: meta.widths } : {}),
+    ...(meta.percents.length === cols ? { colPercents: meta.percents } : {}),
     children,
   };
 }

@@ -551,7 +551,10 @@ function useTableResizeController({
     if (measured.length === 0) return;
 
     effectiveColSizesRef.current = measured;
-    editor.tf.setNodes<TTableElement>({ colSizes: measured }, { at: tablePath });
+    editor.tf.withoutNormalizing(() => {
+      editor.tf.setNodes<TTableElement>({ colSizes: measured }, { at: tablePath });
+      editor.tf.unsetNodes("colPercents", { at: tablePath });
+    });
   }, [editor, tablePath, tableRef]);
 
   const startResize = React.useCallback(
@@ -688,6 +691,13 @@ export const TableElement = withHOC(
     // and size their columns by content. Widths exist once an edge was
     // dragged (or the file's table comment holds them).
     const autoLayout = !props.element.colSizes?.some((size) => size > 0);
+    // Widths written by hand as percentages (`widths 25% 75%`) share out
+    // the text column until an edge is dragged, which switches to pixels.
+    const colPercents = props.element.colPercents as number[] | undefined;
+    const percentWidths =
+      autoLayout && colPercents?.length === getTableColumnCount(props.element)
+        ? colPercents
+        : null;
     const controlColumnWidth = hasControls ? TABLE_CONTROL_COLUMN_WIDTH : 0;
     const dragIndicatorRef = React.useRef<HTMLDivElement>(null);
     const hoverIndicatorRef = React.useRef<HTMLDivElement>(null);
@@ -801,7 +811,7 @@ export const TableElement = withHOC(
               style={tableStyle}
               {...tableProps}
             >
-              {(hasControls || resolvedColSizes.length > 0) && (
+              {(hasControls || resolvedColSizes.length > 0 || percentWidths) && (
                 <colgroup>
                   {hasControls && (
                     <col
@@ -812,6 +822,9 @@ export const TableElement = withHOC(
                       }}
                     />
                   )}
+                  {percentWidths?.map((percent, index) => (
+                    <col key={index} style={{ width: `${percent}%` }} />
+                  ))}
                   {resolvedColSizes.map((colSize, index) => (
                     <col
                       key={index}

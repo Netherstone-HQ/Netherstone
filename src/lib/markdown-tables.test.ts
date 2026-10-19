@@ -48,6 +48,42 @@ describe("table comment", () => {
     expect(saveValue([loaded])).toBe(saved);
   });
 
+  it("keeps hand-written percentage widths", () => {
+    const markdown =
+      "<!-- netherstone: widths 25% 75% -->\n\n| a | b |\n| - | - |\n| 1 | 2 |\n";
+    const [loaded] = loadMarkdown(markdown);
+    expect(loaded.colPercents).toEqual([25, 75]);
+    expect(loaded.colSizes).toBeUndefined();
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("reads pixel widths written with px", () => {
+    const [loaded] = loadMarkdown(
+      "<!-- netherstone: widths 120px 240px -->\n\n| a | b |\n| - | - |\n| 1 | 2 |\n",
+    );
+    expect(loaded.colSizes).toEqual([120, 240]);
+  });
+
+  it("saves dragged widths over hand-written percentages", () => {
+    const table = {
+      type: "table",
+      colSizes: [100, 300],
+      colPercents: [25, 75],
+      children: [row(cell("th", "a"), cell("th", "b")), row(cell("td", "1"), cell("td", "2"))],
+    };
+    expect(saveValue([table])).toBe(
+      "<!-- netherstone: widths 100 300 -->\n\n| a | b |\n| - | - |\n| 1 | 2 |\n",
+    );
+  });
+
+  it("ignores widths that mix pixels and percentages", () => {
+    const [loaded] = loadMarkdown(
+      "<!-- netherstone: widths 120 75% -->\n\n| a | b |\n| - | - |\n| 1 | 2 |\n",
+    );
+    expect(loaded.colSizes).toBeUndefined();
+    expect(loaded.colPercents).toBeUndefined();
+  });
+
   it("keeps the pipe table rectangular around merged cells", () => {
     const table = {
       type: "table",

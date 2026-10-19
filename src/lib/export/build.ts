@@ -283,8 +283,13 @@ class Builder {
       )
       .filter((row) => row.length > 0);
 
-    const sizes = Array.isArray(node.colSizes) ? (node.colSizes as unknown[]).map(Number) : [];
-    const columnWidths = sizes.length && sizes.every((size) => Number.isFinite(size) && size > 0) ? sizes : null;
+    // Only the proportions matter, so dragged pixels and hand-written
+    // percentages both work.
+    const known = (value: unknown) => {
+      const sizes = Array.isArray(value) ? (value as unknown[]).map(Number) : [];
+      return sizes.length && sizes.every((size) => Number.isFinite(size) && size > 0) ? sizes : null;
+    };
+    const columnWidths = known(node.colSizes) ?? known(node.colPercents);
 
     return { type: "table", rows, columnWidths };
   }

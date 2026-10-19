@@ -21,6 +21,10 @@ available offline.
 Get the latest version for Windows, macOS or Linux from
 [Releases](https://github.com/Netherstone-HQ/Netherstone/releases/latest).
 
+On Windows, the installer shows "Windows protected your PC". Click
+**More info**, then **Run anyway**. Windows shows this because the installer
+isn't code-signed yet. We plan to sign it in a future version.
+
 ## Features
 
 - **Your files, your folder.** A vault is an ordinary folder of Markdown

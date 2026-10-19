@@ -7,7 +7,8 @@ import { Progress } from "@/components/ui/progress";
 import { listImportSources, pickImportPaths } from "@/lib/commands";
 import { useImportDialogStore } from "@/lib/import";
 import { appImportIO } from "@/lib/import/app-io";
-import { runImport, type ImportProgress, type ImportReport } from "@/lib/import/engine";
+import { carriesFiles, readDrop } from "@/lib/import/dropped";
+import { runImport, type ImportIO, type ImportProgress, type ImportReport, type ImportSource } from "@/lib/import/engine";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
@@ -18,7 +19,7 @@ type Step =
   | { kind: "importing"; progress: ImportProgress | null }
   | { kind: "done"; report: ImportReport };
 
-/** The import window: pick files or a folder, watch them convert, see what came in. */
+/** The import window: pick or drop files or a folder, watch them convert, see what came in. */
 export function ImportDialog() {
   const targetDir = useImportDialogStore((s) => s.targetDir);
   const close = useImportDialogStore((s) => s.close);
@@ -33,13 +34,14 @@ export function ImportDialog() {
 function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () => void }) {
   const [step, setStep] = useState<Step>({ kind: "pick" });
   const [isPicking, setIsPicking] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const isImporting = step.kind === "importing";
 
   // Closing the window mid-import stops it.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const start = async (folder: boolean) => {
+  const pick = async (folder: boolean) => {
     const vaultPath = useVaultStore.getState().currentVaultPath;
     if (!vaultPath) return;
 
@@ -51,7 +53,32 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
       setIsPicking(false);
     }
     if (!paths.length) return;
+    await start(vaultPath, () => listImportSources(paths), appImportIO(vaultPath));
+  };
 
+  const drop = async (event: React.DragEvent) => {
+    setIsDragOver(false);
+    if (!carriesFiles(event.dataTransfer)) return;
+    // Left alone, a dropped file would replace the app in the window.
+    event.preventDefault();
+    const vaultPath = useVaultStore.getState().currentVaultPath;
+    if (step.kind !== "pick" || isPicking || !vaultPath) return;
+    const dropped = readDrop(event.dataTransfer);
+    await start(vaultPath, async () => (await dropped).sources, {
+      ...appImportIO(vaultPath),
+      readFile: async (path) => (await dropped).read(path),
+    });
+  };
+
+  const dragOver = (event: React.DragEvent) => {
+    if (!carriesFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    const accepts = step.kind === "pick" && !isPicking;
+    event.dataTransfer.dropEffect = accepts ? "copy" : "none";
+    setIsDragOver(accepts);
+  };
+
+  const start = async (vaultPath: string, listSources: () => Promise<ImportSource[]>, io: ImportIO) => {
     const controller = new AbortController();
     abortRef.current = controller;
     setStep({ kind: "importing", progress: null });
@@ -59,9 +86,9 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
     let report: ImportReport;
     try {
       report = await runImport({
-        sources: await listImportSources(paths),
+        sources: await listSources(),
         targetDir,
-        io: appImportIO(vaultPath),
+        io,
         signal: controller.signal,
         onProgress: (progress) => setStep({ kind: "importing", progress }),
       });
@@ -95,6 +122,11 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
       showCloseButton={!isImporting}
       onEscapeKeyDown={(event) => isImporting && event.preventDefault()}
       onPointerDownOutside={(event) => event.preventDefault()}
+      onDragOver={dragOver}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragOver(false);
+      }}
+      onDrop={(event) => void drop(event)}
     >
       <div className="space-y-1">
         <DialogTitle className="font-medium text-base">Import</DialogTitle>
@@ -105,13 +137,18 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
 
       {step.kind === "pick" ? (
         <>
-          <div className="grid grid-cols-2 gap-2">
-            <SourceButton icon={FilesIcon} label="Files" disabled={isPicking} onClick={() => void start(false)} />
-            <SourceButton icon={FolderIcon} label="A folder" disabled={isPicking} onClick={() => void start(true)} />
+          <div className="relative grid grid-cols-2 gap-2">
+            <SourceButton icon={FilesIcon} label="Files" disabled={isPicking} onClick={() => void pick(false)} />
+            <SourceButton icon={FolderIcon} label="A folder" disabled={isPicking} onClick={() => void pick(true)} />
+            {isDragOver ? (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg border border-primary border-dashed bg-background text-ui-sm">
+                Drop to import
+              </div>
+            ) : null}
           </div>
           <p className="text-muted-foreground text-ui-sm leading-5">
             Word, PDF, web pages, Markdown, text and CSV files each become a shard. A folder keeps its folders, and
-            pictures go in your attachments.
+            pictures go in your attachments. You can also drop files or folders here.
           </p>
         </>
       ) : null}

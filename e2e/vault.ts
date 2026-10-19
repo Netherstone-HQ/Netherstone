@@ -195,13 +195,15 @@ export const cellsOf = (row: Locator) =>
 /** Waits for autosave and returns the content it wrote for the shard. */
 export async function lastSave(page: Page, name: string): Promise<string> {
   const filePath = `${VAULT_PATH}/${name}`;
+  // Autosave is debounced, so a save can still be pending after the first
+  // one lands. The top bar shows "Saved" only once nothing is left to write.
   await page.waitForFunction(
-    (filePath) => window.__saves.some((save) => save.filePath === filePath),
+    (filePath) =>
+      window.__saves.some((save) => save.filePath === filePath) &&
+      document.querySelector('[aria-label="Saved"]') !== null,
     filePath,
     { timeout: 10_000 },
   );
-  // Autosave is debounced; let a save that is still pending land too.
-  await page.waitForTimeout(2500);
   return page.evaluate(
     (filePath) =>
       window.__saves.filter((save) => save.filePath === filePath).at(-1)!

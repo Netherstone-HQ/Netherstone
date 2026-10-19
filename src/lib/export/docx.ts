@@ -120,6 +120,40 @@ function styleMathLetters(mathml: string) {
   );
 }
 
+const NARY_OPERATOR = /^[\u220f-\u2211\u2229-\u2233\u22c0-\u22c3]$/;
+const SCRIPT_TAGS = new Set(["msub", "msup", "msubsup", "munder", "mover", "munderover"]);
+/** Operators that end the body of a sum or integral: relations, `+`, `−` and separators. */
+const NARY_BODY_END = new Set([..."=<>≤≥≠≈≡∼≃≅∝→←↔⇒⇐⇔↦∈∉⊂⊃⊆⊇+−-±∓,;"]);
+
+/**
+ * mathml2omml puts only the element right after a `∑` or `∫` in its body,
+ * so `\sum_{i=1}^{n} i = …` lost the `i`. The body is wrapped in one
+ * `<mrow>`: everything up to the next relation, `+` or `−`.
+ */
+function groupNaryBodies(mathml: string) {
+  const document = new DOMParser().parseFromString(mathml, "application/xml");
+  if (document.getElementsByTagName("parsererror").length > 0) return mathml;
+  const isNary = (node: Element) =>
+    SCRIPT_TAGS.has(node.localName) &&
+    node.firstElementChild?.localName === "mo" &&
+    NARY_OPERATOR.test(node.firstElementChild.textContent?.trim() ?? "");
+  const endsBody = (node: Element) => node.localName === "mo" && NARY_BODY_END.has(node.textContent?.trim() ?? "");
+  const visit = (parent: Element) => {
+    for (let child = parent.firstElementChild; child; child = child.nextElementSibling) {
+      if (!isNary(child)) continue;
+      const body: Element[] = [];
+      for (let next = child.nextElementSibling; next && !endsBody(next); next = next.nextElementSibling) body.push(next);
+      if (body.length === 0) continue;
+      const row = document.createElementNS(parent.namespaceURI, "mrow");
+      child.after(row);
+      row.append(...body);
+    }
+    for (const child of [...parent.children]) visit(child);
+  };
+  visit(document.documentElement);
+  return new XMLSerializer().serializeToString(document);
+}
+
 /**
  * One XML element for the document. `fromXmlString` parses into a nameless
  * document node, which would be written out as `<undefined>`; the element
@@ -139,7 +173,7 @@ export function latexToOmml(tex: string): string | null {
     const math = /<math[\s\S]*<\/math>/.exec(html)?.[0];
     if (!math) return null;
     const cleaned = styleMathLetters(
-      math
+      groupNaryBodies(math)
         .replace(/<annotation[\s\S]*?<\/annotation>/g, "")
         .replace(/<\/?semantics>/g, "")
         .replace(/<mpadded[^>]*>/g, "<mrow>")

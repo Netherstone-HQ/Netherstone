@@ -2,6 +2,7 @@ import {
   codeBlock,
   heading,
   image,
+  isTextColor,
   link,
   listItem,
   paragraph,
@@ -41,6 +42,7 @@ interface Run {
   superscript: boolean;
   subscript: boolean;
   href?: string;
+  color?: string;
 }
 
 interface Segment {
@@ -180,7 +182,7 @@ function toLine(pieces: TextPiece[], page: number, cellGap = 1.5): Line {
     const smaller = piece.size < size * 0.9 && value.trim().length <= 4;
     const superscript = smaller && baseline - piece.y > size * 0.15;
     const subscript = smaller && piece.y - baseline > size * 0.08;
-    const run: Run = { text: value, bold: piece.bold, italic: piece.italic, mono: piece.mono, superscript, subscript, href: piece.href };
+    const run: Run = { text: value, bold: piece.bold, italic: piece.italic, mono: piece.mono, superscript, subscript, href: piece.href, color: piece.color };
     const last = segment.runs[segment.runs.length - 1];
     if (
       last &&
@@ -189,7 +191,8 @@ function toLine(pieces: TextPiece[], page: number, cellGap = 1.5): Line {
       last.mono === run.mono &&
       last.superscript === run.superscript &&
       last.subscript === run.subscript &&
-      last.href === run.href
+      last.href === run.href &&
+      (last.color === run.color || !/\S/.test(run.text))
     ) {
       last.text += run.text;
     } else {
@@ -498,7 +501,24 @@ export interface LayoutResult {
   hasText: boolean;
 }
 
+/**
+ * Keeps only colours someone picked: the colour most of the text is in,
+ * black and near-black are the ordinary text colour, and near-white text sat
+ * on a coloured box that doesn't come along.
+ */
+function keepPickedColors(pages: PageData[]) {
+  const pieces = pages.flatMap((page) => page.pieces);
+  const amounts = new Map<string, number>();
+  for (const piece of pieces) if (piece.color) amounts.set(piece.color, (amounts.get(piece.color) ?? 0) + piece.text.length);
+  const body = [...amounts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const nearWhite = (color: string) => Math.min(...[1, 3, 5].map((start) => parseInt(color.slice(start, start + 2), 16))) > 0xe0;
+  for (const piece of pieces) {
+    if (piece.color && (piece.color === body || isTextColor(piece.color) || nearWhite(piece.color))) delete piece.color;
+  }
+}
+
 export function layoutPages(pages: PageData[]): LayoutResult {
+  keepPickedColors(pages);
   const ruled = pages.map((page, index) => findRuledTables(page, index));
   const inRuledTable = (piece: TextPiece, tables: RuledTable[]) =>
     tables.some((box) => piece.x >= box.left - 2 && piece.x <= box.right + 2 && piece.y - piece.size / 3 >= box.top - 2 && piece.y - piece.size / 3 <= box.bottom + 2);
@@ -823,6 +843,7 @@ function inlines(lines: Line[], options: { skip?: number; headingText?: boolean 
       if (run.mono) marks.code = true;
       if (run.superscript) marks.superscript = true;
       if (run.subscript) marks.subscript = true;
+      if (run.color && !run.href) marks.color = run.color;
       const node = text(value, marks);
       const previous = out[out.length - 1];
       if (run.href) {

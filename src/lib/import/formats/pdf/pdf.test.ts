@@ -7,13 +7,13 @@ import type { PageData, TextPiece } from "./extract";
 import { layoutPages } from "./layout";
 
 /**
- * A one-page PDF in the standard fonts. `lines` are [font, size, x, y, text]
- * with y from the top of a US Letter page.
+ * A one-page PDF in the standard fonts. `lines` are [font, size, x, y, text,
+ * fill as "r g b"] with y from the top of a US Letter page.
  */
-function pdfFile(lines: [("F1" | "F2"), number, number, number, string][], links: { rect: number[]; url: string }[] = []) {
+function pdfFile(lines: [("F1" | "F2"), number, number, number, string, string?][], links: { rect: number[]; url: string }[] = []) {
   const height = 792;
   const content = lines
-    .map(([font, size, x, y, text]) => `BT /${font} ${size} Tf ${x} ${height - y} Td (${text.replace(/[()\\]/g, "\\$&").replace(/\u2022/g, "\\225")}) Tj ET`)
+    .map(([font, size, x, y, text, fill = "0 0 0"]) => `BT ${fill} rg /${font} ${size} Tf ${x} ${height - y} Td (${text.replace(/[()\\]/g, "\\$&").replace(/\u2022/g, "\\225")}) Tj ET`)
     .join("\n");
   const annotations = links.map(
     (link) => `<< /Type /Annot /Subtype /Link /Rect [${link.rect.join(" ")}] /Border [0 0 0] /A << /S /URI /URI (${link.url}) >> >>`,
@@ -76,6 +76,21 @@ describe("PDF import", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  it("keeps text colours someone picked, but not the colour of the body text", async () => {
+    const grey = "0.2 0.2 0.2";
+    const bytes = pdfFile([
+      ["F1", 11, 72, 100, "Most of this document is set in dark grey.", grey],
+      ["F1", 11, 72, 114, "Only one line here is red.", "0.8 0 0"],
+      ["F1", 11, 72, 128, "And the rest goes back to dark grey again.", grey],
+    ]);
+    const vault = memoryImport({ "Colours.pdf": bytes });
+    await vault.run();
+    const shard = vault.shards.get("/vault/Colours.md")!;
+
+    expect(shard).toMatch(/#cc0000[^<]*>Only one line here is red\./);
+    expect(shard).not.toContain("#333333");
   });
 
   it("says when a file isn't a PDF", async () => {

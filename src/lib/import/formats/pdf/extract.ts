@@ -36,12 +36,21 @@ export interface PageMark {
   height: number;
 }
 
+/** A straight horizontal or vertical line drawn on the page: a table border, a rule. */
+export interface PageRule {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 export interface PageData {
   width: number;
   height: number;
   pieces: TextPiece[];
   pictures: PagePicture[];
   marks: PageMark[];
+  rules: PageRule[];
 }
 
 type Matrix = [number, number, number, number, number, number];
@@ -184,9 +193,11 @@ export async function extractPages(
       // Pictures: follow the drawing state to know where each one lands.
       const pictures: PagePicture[] = [];
       const marks: PageMark[] = [];
+      const rules: PageRule[] = [];
       const { OPS } = pdfjs;
       // Hollow bullets are stroked, solid ones filled.
       const PAINTS = new Set([OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke, OPS.stroke, OPS.closeStroke]);
+      const STROKES = new Set([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
       let matrix: Matrix = [1, 0, 0, 1, 0, 0];
       let fill = "#000000";
       const stack: { matrix: Matrix; fill: string }[] = [];
@@ -213,9 +224,11 @@ export async function extractPages(
           if (Array.isArray(args[0]) && args[0].length === 6) matrix = multiply(matrix, args[0] as Matrix);
         } else if (op === OPS.paintFormXObjectEnd) ({ matrix, fill } = stack.pop() ?? { matrix, fill });
         else if (op === OPS.constructPath) {
-          const [pathOp, , minMax] = args as [number, unknown, ArrayLike<number> | null];
+          const [pathOp, data, minMax] = args as [number, unknown, ArrayLike<number> | null];
           if (PAINTS.has(pathOp) && minMax && minMax.length === 4) {
             const device = multiply(toPage, matrix);
+            const path = Array.isArray(data) ? (data[0] as ArrayLike<number> | undefined) : undefined;
+            if (path) rules.push(...rulesOf(path, device, STROKES.has(pathOp)));
             const [x1, y1] = apply(device, minMax[0], minMax[1]);
             const [x2, y2] = apply(device, minMax[2], minMax[3]);
             const box = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
@@ -249,7 +262,7 @@ export async function extractPages(
       }
 
       colorPieces(pieces, drawn, drawnColors);
-      pages.push({ width: viewport.width, height: viewport.height, pieces, pictures, marks });
+      pages.push({ width: viewport.width, height: viewport.height, pieces, pictures, marks, rules });
       page.cleanup();
     }
   } finally {
@@ -257,6 +270,75 @@ export async function extractPages(
   }
 
   return { pages, failedPictures };
+}
+
+/** pdf.js path commands (`DrawOPS`). */
+const MOVE_TO = 0;
+const LINE_TO = 1;
+const CURVE_TO = 2;
+const QUADRATIC_CURVE_TO = 3;
+const CLOSE_PATH = 4;
+
+/**
+ * The straight horizontal and vertical lines a path draws, in page pixels.
+ * Stroked paths give each of their straight edges; filled ones give the
+ * shapes thin enough to be lines, which is how Word draws table borders.
+ */
+function rulesOf(path: ArrayLike<number>, device: Matrix, stroked: boolean): PageRule[] {
+  const rules: PageRule[] = [];
+  let points: [number, number][] = [];
+  let curved = false;
+  const finish = (closed: boolean) => {
+    if (points.length >= 2 && !curved) {
+      if (stroked) {
+        const edges = closed ? [...points, points[0]] : points;
+        for (let index = 1; index < edges.length; index += 1) {
+          const [x1, y1] = edges[index - 1];
+          const [x2, y2] = edges[index];
+          if ((Math.abs(y1 - y2) < 1 || Math.abs(x1 - x2) < 1) && Math.hypot(x2 - x1, y2 - y1) >= 3) {
+            rules.push({ x1: Math.min(x1, x2), y1: Math.min(y1, y2), x2: Math.max(x1, x2), y2: Math.max(y1, y2) });
+          }
+        }
+      } else {
+        const xs = points.map((point) => point[0]);
+        const ys = points.map((point) => point[1]);
+        const left = Math.min(...xs);
+        const right = Math.max(...xs);
+        const top = Math.min(...ys);
+        const bottom = Math.max(...ys);
+        if (bottom - top <= 2.5 && right - left >= 3) rules.push({ x1: left, y1: (top + bottom) / 2, x2: right, y2: (top + bottom) / 2 });
+        else if (right - left <= 2.5 && bottom - top >= 3) rules.push({ x1: (left + right) / 2, y1: top, x2: (left + right) / 2, y2: bottom });
+      }
+    }
+    points = [];
+    curved = false;
+  };
+  for (let index = 0; index < path.length; ) {
+    switch (path[index++]) {
+      case MOVE_TO:
+        finish(false);
+        points.push(apply(device, path[index++], path[index++]));
+        break;
+      case LINE_TO:
+        points.push(apply(device, path[index++], path[index++]));
+        break;
+      case CURVE_TO:
+        curved = true;
+        index += 6;
+        break;
+      case QUADRATIC_CURVE_TO:
+        curved = true;
+        index += 4;
+        break;
+      case CLOSE_PATH:
+        finish(true);
+        break;
+      default:
+        return rules;
+    }
+  }
+  finish(false);
+  return rules;
 }
 
 /** Text with spaces removed and ligatures split, so drawn glyphs and text pieces compare. */

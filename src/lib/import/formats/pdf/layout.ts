@@ -13,7 +13,7 @@ import {
   type Marks,
 } from "../../nodes";
 import type { PlateNode } from "../../types";
-import type { PageData, PagePicture, TextPiece } from "./extract";
+import type { PageData, PagePicture, PageRule, TextPiece } from "./extract";
 
 /**
  * Turns the text pieces of a PDF's pages back into a document. A PDF only
@@ -70,6 +70,7 @@ interface Line {
   short?: boolean;
   /** Where a bullet drawn as a shape sits in front of the line. */
   bulletX?: number;
+  pieces: TextPiece[];
 }
 
 type ListMarker = { type: ListType; start?: number; checked?: boolean; length: number };
@@ -141,7 +142,11 @@ function buildLines(page: PageData, pageIndex: number): Line[] {
   return lines;
 }
 
-function toLine(pieces: TextPiece[], page: number): Line {
+/**
+ * `cellGap` is the gap, in text sizes, that splits a line into segments;
+ * tables set closely can need a smaller one than prose can bear.
+ */
+function toLine(pieces: TextPiece[], page: number, cellGap = 1.5): Line {
   const visible = pieces.filter((piece) => piece.text.trim());
   const size = weightedMode(visible.map((piece) => ({ value: piece.size, weight: piece.text.length }))) || pieces[0].size;
   const sizes = [...new Set(visible.map((piece) => Math.round(piece.size * 2) / 2))];
@@ -160,7 +165,7 @@ function toLine(pieces: TextPiece[], page: number): Line {
     }
     let value = piece.text;
     const gap = previousRight === null ? 0 : piece.x - previousRight;
-    if (!segment || gap > Math.max(piece.size, size) * 1.5) {
+    if (!segment || gap > Math.max(piece.size, size) * cellGap) {
       segment = { x: piece.x, right: piece.x + piece.width, runs: [], text: "" };
       segments.push(segment);
       value = value.replace(/^\s+/, "");
@@ -218,7 +223,127 @@ function toLine(pieces: TextPiece[], page: number): Line {
     mono: words.length > 0 && words.every((piece) => piece.mono),
     sizes,
     segments: segments.filter((part) => part.text),
+    pieces,
   };
+}
+
+// ── Tables with borders ──────────────────────────────────────────────────────
+
+interface RuledTable {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  node: PlateNode;
+}
+
+/** Values within `tolerance` of each other as one, sorted. */
+function cluster(values: number[], tolerance: number) {
+  const out: number[] = [];
+  for (const value of [...values].sort((a, b) => a - b)) {
+    if (!out.length || value - out[out.length - 1] > tolerance) out.push(value);
+  }
+  return out;
+}
+
+/**
+ * Tables drawn with borders, found from the lines on the page: horizontal
+ * and vertical lines that cross make a grid, and the text inside each box
+ * is a cell. A border missing inside the grid means a merged cell. A lone
+ * box (a framed note) isn't a table.
+ */
+function findRuledTables(page: PageData, pageIndex: number): RuledTable[] {
+  const horizontal = page.rules.filter((rule) => rule.y2 - rule.y1 < 1.5);
+  const vertical = page.rules.filter((rule) => rule.x2 - rule.x1 < 1.5);
+  if (!horizontal.length || !vertical.length) return [];
+
+  // Group lines that cross into grids.
+  const all: PageRule[] = [...horizontal, ...vertical];
+  const parent = all.map((_, index) => index);
+  const root = (index: number): number => (parent[index] === index ? index : (parent[index] = root(parent[index])));
+  horizontal.forEach((h, hi) => {
+    vertical.forEach((v, vi) => {
+      if (v.x1 >= h.x1 - 2 && v.x1 <= h.x2 + 2 && h.y1 >= v.y1 - 2 && h.y1 <= v.y2 + 2) parent[root(hi)] = root(horizontal.length + vi);
+    });
+  });
+  const groups = new Map<number, PageRule[]>();
+  all.forEach((rule, index) => groups.set(root(index), [...(groups.get(root(index)) ?? []), rule]));
+
+  const tables: RuledTable[] = [];
+  for (const rules of groups.values()) {
+    const hs = rules.filter((rule) => rule.y2 - rule.y1 < 1.5);
+    const vs = rules.filter((rule) => rule.x2 - rule.x1 < 1.5);
+    const xs = cluster(vs.map((rule) => rule.x1), 2.5);
+    const ys = cluster(hs.map((rule) => rule.y1), 2.5);
+    if (xs.length < 2 || ys.length < 2 || (xs.length - 1) * (ys.length - 1) < 2) continue;
+    if (xs[xs.length - 1] - xs[0] < 40) continue;
+
+    const rows = ys.length - 1;
+    const columns = xs.length - 1;
+    const hasVertical = (x: number, top: number, bottom: number) =>
+      vs.some((rule) => Math.abs(rule.x1 - x) <= 2.5 && rule.y1 <= top + 2 && rule.y2 >= bottom - 2);
+    const hasHorizontal = (y: number, left: number, right: number) =>
+      hs.some((rule) => Math.abs(rule.y1 - y) <= 2.5 && rule.x1 <= left + 2 && rule.x2 >= right - 2);
+
+    // Which piece of text sits in which box.
+    const boxes: TextPiece[][][] = Array.from({ length: rows }, () => Array.from({ length: columns }, () => []));
+    const indexIn = (edges: number[], value: number) => edges.findIndex((edge, index) => index < edges.length - 1 && value >= edge && value < edges[index + 1]);
+    for (const piece of page.pieces) {
+      const row = indexIn(ys, piece.y - piece.size / 3);
+      const column = indexIn(xs, piece.x + Math.min(piece.width, piece.size) / 2);
+      if (row >= 0 && column >= 0) boxes[row][column].push(piece);
+    }
+
+    // Merged cells: boxes joined where the border between them is missing.
+    const covered = boxes.map((row) => row.map(() => false));
+    const cells: { row: number; column: number; colSpan: number; rowSpan: number; pieces: TextPiece[] }[] = [];
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        if (covered[row][column]) continue;
+        let colSpan = 1;
+        while (column + colSpan < columns && !hasVertical(xs[column + colSpan], ys[row], ys[row + 1])) colSpan += 1;
+        let rowSpan = 1;
+        while (row + rowSpan < rows && !hasHorizontal(ys[row + rowSpan], xs[column], xs[column + colSpan])) rowSpan += 1;
+        const pieces: TextPiece[] = [];
+        for (let r = row; r < row + rowSpan; r += 1) {
+          for (let c = column; c < column + colSpan; c += 1) {
+            covered[r][c] = true;
+            pieces.push(...boxes[r][c]);
+          }
+        }
+        cells.push({ row, column, colSpan, rowSpan, pieces });
+      }
+    }
+    if (cells.length < 2) continue;
+
+    const cellLines = (pieces: TextPiece[]) => buildLines({ ...page, pieces }, pageIndex);
+    const firstRow = cells.filter((cell) => cell.row === 0);
+    const header = rows > 1 && firstRow.every((cell) => cellLines(cell.pieces).every((line) => line.bold));
+    const tableRows = Array.from({ length: rows }, (_, row) =>
+      cells
+        .filter((cell) => cell.row === row)
+        .map((cell) => ({
+          header: header && row === 0,
+          colSpan: cell.colSpan,
+          rowSpan: cell.rowSpan,
+          children: cellParagraphs(cellLines(cell.pieces), { headingText: header && row === 0 }),
+        })),
+    ).filter((row) => row.length);
+
+    tables.push({ top: ys[0], bottom: ys[ys.length - 1], left: xs[0], right: xs[xs.length - 1], node: table(tableRows) });
+  }
+  return tables;
+}
+
+/** A cell's lines as paragraphs, split where the gap between lines grows. */
+function cellParagraphs(lines: Line[], options: { headingText?: boolean }): PlateNode[] {
+  const groups: Line[][] = [];
+  lines.forEach((line, index) => {
+    const previous = lines[index - 1];
+    if (!previous || line.y - previous.y > Math.max(line.size, previous.size) * 1.6) groups.push([line]);
+    else groups[groups.length - 1].push(line);
+  });
+  return groups.map((group) => paragraph(inlines(group, options)));
 }
 
 // ── Headers and footers ──────────────────────────────────────────────────────
@@ -296,6 +421,45 @@ function findTables(lines: Line[], pageWidth: number): { start: number; end: num
   return ranges;
 }
 
+/**
+ * Tables without borders whose columns sit closer than `findTables` needs:
+ * three or more lines in a row that split at smaller gaps, all at the same
+ * places. Prose never lines its word gaps up like that. The lines take the
+ * finer split for their cells.
+ */
+function findCloseTables(lines: Line[], pageWidth: number) {
+  const ranges: { start: number; end: number; columns: number[] }[] = [];
+  const split = lines.map((line) => toLine(line.pieces, line.page, 0.5).segments);
+  let index = 0;
+  while (index < lines.length) {
+    let end = index - 1;
+    while (
+      end + 1 < lines.length &&
+      split[end + 1].length >= 2 &&
+      !lines[end + 1].mono &&
+      (end < index || (lines[end + 1].y > lines[end].y && lines[end + 1].y - lines[end].y <= lines[end].size * 3.5))
+    ) {
+      end += 1;
+    }
+    if (end - index + 1 >= 3) {
+      const group = split.slice(index, end + 1);
+      const columns = cluster(group.flatMap((segments) => segments.map((segment) => segment.x)), 3);
+      const shared = columns.filter((column) => group.filter((segments) => segments.some((segment) => Math.abs(segment.x - column) <= 3)).length >= group.length * 0.6);
+      const aligned = group.every((segments) => segments.every((segment) => shared.some((column) => Math.abs(segment.x - column) <= 3)));
+      const widths = group.flat().map((segment) => segment.right - segment.x);
+      const narrow = widths.reduce((sum, width) => sum + width, 0) / widths.length < pageWidth * 0.3;
+      if (aligned && shared.length >= 2 && narrow) {
+        for (let line = index; line <= end; line += 1) lines[line].segments = split[line];
+        ranges.push({ start: index, end, columns: shared });
+        index = end + 1;
+        continue;
+      }
+    }
+    index = Math.max(index + 1, end + 1);
+  }
+  return ranges;
+}
+
 function listMarker(textValue: string): ListMarker | null {
   const checkbox = CHECKBOX.exec(textValue);
   if (checkbox) return { type: "todo", checked: /[☑☒✓✔]/.test(checkbox[1]), length: checkbox[1].length };
@@ -355,12 +519,15 @@ function keepPickedColors(pages: PageData[]) {
 
 export function layoutPages(pages: PageData[]): LayoutResult {
   keepPickedColors(pages);
+  const ruled = pages.map((page, index) => findRuledTables(page, index));
+  const inRuledTable = (piece: TextPiece, tables: RuledTable[]) =>
+    tables.some((box) => piece.x >= box.left - 2 && piece.x <= box.right + 2 && piece.y - piece.size / 3 >= box.top - 2 && piece.y - piece.size / 3 <= box.bottom + 2);
   const allLines = removeFurniture(
     pages,
-    pages.map((page, index) => buildLines(page, index)),
+    pages.map((page, index) => buildLines({ ...page, pieces: page.pieces.filter((piece) => !inRuledTable(piece, ruled[index])) }, index)),
   );
   const flat = allLines.flat();
-  if (!flat.length) {
+  if (!flat.length && !ruled.some((tables) => tables.length)) {
     return { nodes: pages.flatMap((page) => page.pictures.map(pictureNode)), hasText: false };
   }
 
@@ -407,7 +574,11 @@ export function layoutPages(pages: PageData[]): LayoutResult {
       );
       if (mark) line.bulletX = mark.x;
     }
-    const tableRanges = findTables(pageLines, page.width);
+    // Close-set tables first: they only take lines that line up exactly.
+    const tableRanges = findCloseTables(pageLines, page.width);
+    tableRanges.push(
+      ...findTables(pageLines, page.width).filter((range) => !tableRanges.some((close) => range.start <= close.end && close.start <= range.end)),
+    );
 
     // List nesting: the distinct indents list markers start at on this page.
     const markerX = (line: Line) => line.bulletX ?? line.x;
@@ -422,9 +593,11 @@ export function layoutPages(pages: PageData[]): LayoutResult {
       if (line.mono) return { kind: "code" };
       if (line.bulletX !== undefined) return { kind: "list", marker: { type: "disc", length: 0 } };
       const marker = listMarker(line.text);
-      if (marker && line.text.length > marker.length) return { kind: "list", marker };
       // Headings start with a capital, a number or a symbol, not mid-sentence.
-      if (levelOf(line.size) !== null && line.size >= bodySize * 1.15 && !/^\p{Ll}/u.test(line.text)) return { kind: "heading" };
+      const headingSized = levelOf(line.size) !== null && line.size >= bodySize * 1.15 && !/^\p{Ll}/u.test(line.text);
+      // "1. Sales" in a heading's size is a numbered heading, not a list.
+      if (headingSized && (!marker || (marker.type !== "disc" && marker.type !== "todo" && line.text.length <= 120))) return { kind: "heading" };
+      if (marker && line.text.length > marker.length) return { kind: "list", marker };
       return { kind: "paragraph" };
     };
 
@@ -478,22 +651,26 @@ export function layoutPages(pages: PageData[]): LayoutResult {
       blocks.push(current);
     }
 
-    // Pictures go before the first block that starts below them.
-    const pictures = [...page.pictures].sort((a, b) => a.y - b.y);
-    const output: (Block | PagePicture)[] = [];
-    let pictureIndex = 0;
+    // Pictures and tables with borders go before the first block that
+    // starts below them.
+    const placed = [
+      ...page.pictures.map((picture) => ({ y: picture.y + picture.height / 2, node: pictureNode(picture) })),
+      ...ruled[pageIndex].map((box) => ({ y: box.top, node: box.node })),
+    ].sort((a, b) => a.y - b.y);
+    const output: (Block | { node: PlateNode })[] = [];
+    let placedIndex = 0;
     for (const block of blocks) {
-      while (pictureIndex < pictures.length && pictures[pictureIndex].y + pictures[pictureIndex].height / 2 < block.lines[0].y) {
-        output.push(pictures[pictureIndex]);
-        pictureIndex += 1;
+      while (placedIndex < placed.length && placed[placedIndex].y < block.lines[0].y) {
+        output.push(placed[placedIndex]);
+        placedIndex += 1;
       }
       output.push(block);
     }
-    output.push(...pictures.slice(pictureIndex));
+    output.push(...placed.slice(placedIndex));
 
     for (const item of output) {
       if (!("kind" in item)) {
-        nodes.push(pictureNode(item));
+        nodes.push(item.node);
         previousBlock = null;
         continue;
       }
@@ -579,7 +756,7 @@ function blockNode(block: Block, options: BlockOptions): PlateNode | null {
         for (const segment of line.segments) {
           const cell = row.cells[cellOf(segment.x)];
           if (cell.length) cell.push(text(wraps ? "\n" : " "));
-          cell.push(...inlines([{ ...line, runs: segment.runs, segments: [segment] }]));
+          cell.push(...inlines([{ ...line, runs: segment.runs, segments: [segment] }], { headingText: row.header }));
         }
       });
       return table(rows.map((row) => row.cells.map((content) => ({ header: row.header, children: [paragraph(content)] }))));

@@ -12,6 +12,7 @@ import remarkMath from "remark-math";
 
 import { DRAWING_LINK_ATTRIBUTE } from "@/lib/drawing-files";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
+import { textHandler } from "@/lib/markdown-escapes";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
 import { shardLinkRules } from "@/lib/markdown-shard-links";
 import { tableRules } from "@/lib/markdown-tables";
@@ -58,7 +59,12 @@ export const MarkdownKit = [
       plainMarks: [KEYS.suggestion, KEYS.comment],
       // Match common markdown style (and most hand-written notes): `-` for
       // bullets and `---` for rules, instead of remark's `*` defaults.
-      remarkStringifyOptions: { bullet: "-", rule: "-" },
+      // Text is escaped only where Markdown needs it (`markdown-escapes.ts`).
+      remarkStringifyOptions: {
+        bullet: "-",
+        rule: "-",
+        handlers: { text: textHandler },
+      },
       rules: {
         img: imageRule,
         ...toggleRules,

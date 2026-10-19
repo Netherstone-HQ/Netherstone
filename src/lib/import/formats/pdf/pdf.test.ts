@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { memoryImport } from "@/test/import";
 
@@ -40,6 +40,11 @@ function pdfFile(lines: [("F1" | "F2"), number, number, number, string][], links
   out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new TextEncoder().encode(out);
 }
+
+// jsdom has no workers, so pdf.js parses on this thread.
+beforeAll(async () => {
+  (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+});
 
 describe("PDF import", () => {
   it("rebuilds headings, paragraphs, lists and links from the layout", async () => {

@@ -29,6 +29,17 @@ export interface BrokenLink {
   name: string;
 }
 
+/** A shard holding at least one chart. */
+export interface ChartShard {
+  path: string;
+  name: string;
+  charts: number;
+}
+
+export function getChartShards() {
+  return invoke<ChartShard[]>("get_chart_shards");
+}
+
 export function getWritingLog(vaultPath: string) {
   return invoke<WritingLog>("get_writing_log", { vaultPath });
 }

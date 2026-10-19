@@ -202,6 +202,8 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
             .map_err(|e| format!("Failed to delete old links: {}", e))?;
         conn.execute("DELETE FROM tags WHERE file_id = ?1", params![id])
             .map_err(|e| format!("Failed to delete old tags: {}", e))?;
+        conn.execute("DELETE FROM charts WHERE file_id = ?1", params![id])
+            .map_err(|e| format!("Failed to delete old charts: {}", e))?;
 
         id
     } else {
@@ -242,6 +244,14 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
     let unique_tags: HashSet<String> = parsed.tags.into_iter().collect();
     insert_tags(conn, file_id, &content, unique_tags.into_iter().collect())
         .map_err(|e| format!("Failed to insert tag: {}", e))?;
+
+    for title in &parsed.charts {
+        conn.execute(
+            "INSERT INTO charts (file_id, title) VALUES (?1, ?2)",
+            params![file_id, title],
+        )
+        .map_err(|e| format!("Failed to insert chart: {}", e))?;
+    }
 
     super::attachments::sync_references_for_saved_markdown(conn, path_str, &content)?;
 

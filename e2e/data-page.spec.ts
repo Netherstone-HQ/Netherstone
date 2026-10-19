@@ -39,6 +39,7 @@ async function mockData(
             };
           }
           if (command === "get_broken_links") return data.brokenLinks;
+          if (command === "get_chart_shards") return [];
           return invoke(command, args);
         };
         bridge = value;

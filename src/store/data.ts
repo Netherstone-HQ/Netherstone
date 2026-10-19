@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import {
   getBrokenLinks,
+  getChartShards,
   getWritingLog,
   type BrokenLink,
+  type ChartShard,
   type WritingLog,
 } from "@/lib/data";
 
@@ -18,6 +20,8 @@ interface DataState {
   vaultPath: string | null;
   log: WritingLog | null;
   brokenLinks: BrokenLink[];
+  /** The shards with charts, for the sidebar. */
+  chartShards: ChartShard[];
   status: "idle" | "loading" | "ready" | "error";
   /** Bumped when the index changes, so an open Data page loads again. */
   version: number;
@@ -38,21 +42,31 @@ export const useDataStore = create<DataState>()((set, get) => ({
   vaultPath: null,
   log: null,
   brokenLinks: [],
+  chartShards: [],
   status: "idle",
   version: 0,
   section: "writing",
   load: async (vaultPath) => {
     const request = ++latestLoad;
     if (get().vaultPath !== vaultPath) {
-      set({ vaultPath, log: null, brokenLinks: [], status: "loading" });
+      set({
+        vaultPath,
+        log: null,
+        brokenLinks: [],
+        chartShards: [],
+        status: "loading",
+      });
     }
 
     try {
-      const [log, brokenLinks] = await Promise.all([
+      const [log, brokenLinks, chartShards] = await Promise.all([
         getWritingLog(vaultPath),
         getBrokenLinks(),
+        getChartShards(),
       ]);
-      if (request === latestLoad) set({ log, brokenLinks, status: "ready" });
+      if (request === latestLoad) {
+        set({ log, brokenLinks, chartShards, status: "ready" });
+      }
     } catch (error) {
       console.error("[Netherstone] Failed to load the Data page:", error);
       if (request === latestLoad) set({ status: "error" });

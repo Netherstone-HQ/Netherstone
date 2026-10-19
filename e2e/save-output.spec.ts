@@ -75,3 +75,15 @@ End
   expect(saved).toBe(note.replace("End\n", "End!\n"));
   await expect(editor(page).locator("table")).toHaveCount(1);
 });
+
+test("paragraphs and code inside list items stay in their items", async ({ page }) => {
+  const note =
+    "# Note\n\n- First item\n\n  More about the first item.\n- Second item\n\n  ```js\n  x()\n  ```\n\nEnd\n";
+  await mockVault(page, { files: { "Note.md": note }, open: "Note.md" });
+
+  await caretAfter(page, "End");
+  await page.keyboard.type("!");
+
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toBe(note.replace("End\n", "End!\n"));
+});

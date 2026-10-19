@@ -3,7 +3,15 @@
 import * as React from "react";
 
 import { buildToggleIndex, TogglePlugin } from "@platejs/toggle/react";
-import type { TElement } from "platejs";
+import {
+  ElementApi,
+  KEYS,
+  NodeApi,
+  PathApi,
+  type Path,
+  type SlateEditor,
+  type TElement,
+} from "platejs";
 import { useEditorSelector, usePluginOption } from "platejs/react";
 
 import { IndentKit } from "@/components/editor/kits/indent-kit";
@@ -73,6 +81,17 @@ function HiddenInToggle({
   return <div style={hiddenStyle}>{children}</div>;
 }
 
+/** The ids of the toggles at `path` and inside it. */
+function toggleIdsAt(editor: SlateEditor, path: Path): string[] {
+  const node = NodeApi.get<TElement>(editor, path);
+  if (!ElementApi.isElement(node)) return [];
+  const elements: TElement[] = [node];
+  for (const [element] of NodeApi.elements(node)) elements.push(element);
+  return elements
+    .filter((element) => element.type === KEYS.toggle && typeof element.id === "string")
+    .map((element) => element.id as string);
+}
+
 export const ToggleKit = [
   ...IndentKit,
   TogglePlugin.configure({
@@ -80,5 +99,33 @@ export const ToggleKit = [
       aboveEditable: HiddenBlocksProvider,
       aboveNodes: () => HiddenInToggle,
     },
-  }).withComponent(ToggleElement),
+  })
+    .overrideEditor(({ api, editor, tf: { apply } }) => ({
+      transforms: {
+        /**
+         * A toggle made while editing (from a menu, by turning a block into
+         * one, by Enter at the end of one, or by pasting) starts open, so
+         * what is typed next shows. Toggles loaded from a file never pass
+         * through here and stay closed.
+         */
+        apply(operation) {
+          apply(operation);
+
+          let path: Path | undefined;
+          if (operation.type === "insert_node") path = operation.path;
+          else if (operation.type === "split_node") path = PathApi.next(operation.path);
+          else if (
+            operation.type === "set_node" &&
+            operation.newProperties.type === KEYS.toggle
+          ) {
+            path = operation.path;
+          }
+          if (!path) return;
+
+          const ids = toggleIdsAt(editor, path);
+          if (ids.length > 0) api.toggle.toggleIds(ids, true);
+        },
+      },
+    }))
+    .withComponent(ToggleElement),
 ];

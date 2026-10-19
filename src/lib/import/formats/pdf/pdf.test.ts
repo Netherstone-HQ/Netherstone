@@ -97,7 +97,7 @@ describe("PDF layout", () => {
     mono: false,
     ...options,
   });
-  const page = (pieces: TextPiece[]): PageData => ({ width: 612, height: 792, pieces, pictures: [], marks: [] });
+  const page = (pieces: TextPiece[]): PageData => ({ width: 612, height: 792, pieces, pictures: [], marks: [], rules: [] });
 
   it("finds tables from columns that line up", () => {
     const rows = [
@@ -113,6 +113,59 @@ describe("PDF layout", () => {
 
     expect(tableNode?.children).toHaveLength(3);
     expect(tableNode?.children[0].children).toHaveLength(3);
+  });
+
+  const cellsOf = (node: unknown) =>
+    (node as { children: { children: { colSpan?: number; children: unknown[] }[] }[] }).children.map((row) =>
+      row.children.map((cell) => [JSON.stringify(cell.children).match(/"text":"([^"]*)"/g)?.map((t) => t.slice(8, -1)).join("") ?? "", cell.colSpan ?? 1]),
+    );
+
+  it("reads tables with borders from their lines, merged cells included", () => {
+    const rule = (x1: number, y1: number, x2: number, y2: number) => ({ x1, y1, x2, y2 });
+    // Three columns at 72, 172, 272 to 372; rows at 90, 110, 130. The first
+    // row has no border between its first two boxes.
+    const rules = [
+      ...[90, 110, 130].map((y) => rule(72, y, 372, y)),
+      rule(72, 90, 72, 130),
+      rule(172, 110, 172, 130),
+      rule(272, 90, 272, 130),
+      rule(372, 90, 372, 130),
+    ];
+    const pieces = [
+      piece("Team", 76, 104, { bold: true }),
+      piece("Budget", 276, 104, { bold: true }),
+      piece("Design", 76, 124),
+      piece("Brand", 176, 124),
+      piece("40", 276, 124),
+    ];
+    const { nodes } = layoutPages([{ ...page([piece("Our budget.", 72, 70), ...pieces]), rules }]);
+    const tableNode = nodes.find((node) => node.type === "table");
+
+    expect(cellsOf(tableNode)).toEqual([
+      [["Team", 2], ["Budget", 1]],
+      [["Design", 1], ["Brand", 1], ["40", 1]],
+    ]);
+    expect((tableNode as { children: { children: { type: string }[] }[] }).children[0].children[0].type).toBe("th");
+  });
+
+  it("finds tables without borders whose columns sit close together", () => {
+    const rows = [
+      ["Ada Lovelace", "Platform", "March"],
+      ["Grace Hopper", "Compilers", "May"],
+      ["Alan Turing", "Research", "June"],
+    ];
+    const pieces = rows.flatMap((row, index) => row.map((text, column) => piece(text, 72 + column * 75, 100 + index * 18)));
+    const { nodes } = layoutPages([page([piece("The new people.", 72, 70), ...pieces])]);
+
+    expect(cellsOf(nodes.find((node) => node.type === "table"))).toEqual(rows.map((row) => row.map((cell) => [cell, 1])));
+  });
+
+  it("keeps numbered headings as headings", () => {
+    const { nodes } = layoutPages([
+      page([piece("1. Sales", 72, 70, { size: 15, bold: true }), piece("Sales grew in every region this year.", 72, 100)]),
+    ]);
+
+    expect(nodes[0].type).toBe("h1");
   });
 
   it("drops page numbers repeated on every page", () => {

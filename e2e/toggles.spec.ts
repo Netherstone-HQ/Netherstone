@@ -10,10 +10,7 @@ test("a toggle typed through the / menu is saved with its content", async ({ pag
   await expect(page.getByRole("option", { name: "Toggle" })).toBeVisible();
   await page.keyboard.press("Enter");
   await page.keyboard.type("My toggle title");
-  // A new toggle starts closed; Enter then adds a sibling toggle. Open it
-  // first, as a writer would, so Enter starts a line inside.
-  await editor(page).locator(".slate-toggle button").first().click();
-  await caretAfter(page, "My toggle title");
+  // A new toggle starts open, so Enter starts a line inside it.
   await page.keyboard.press("Enter");
   await page.keyboard.type("Inside the toggle");
 

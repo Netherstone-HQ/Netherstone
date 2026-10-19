@@ -16,9 +16,38 @@ export type AttachmentSyncStatusLike = {
 /** Mirrors the attachment policy's soft limit in `db/attachments.rs`. */
 export const ATTACHMENT_SYNC_LIMIT_BYTES = 20 * 1024 * 1024;
 
-function getAttachmentSyncStatus(
+/** Mirrors `SYNCABLE_EXTENSIONS` in `db/attachments.rs`. */
+const SYNCABLE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "pdf", "txt", "md", "csv",
+  "json", "xml", "yaml", "yml", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+  "mp3", "wav", "ogg", "m4a", "flac", "aac", "opus", "wma", "mp4", "mov",
+  "mkv", "avi", "webm", "m4v", "wmv", "flv",
+]);
+
+/** Mirrors `BLOCKED_EXTENSIONS` in `db/attachments.rs`. */
+const BLOCKED_EXTENSIONS = new Set([
+  "exe", "dll", "bat", "cmd", "ps1", "sh", "app", "msi", "com", "scr",
+]);
+
+/** Mirrors `sync_status_for_attachment` in `db/attachments.rs`. */
+function syncStatusFor(extension: string, sizeBytes: number) {
+  if (BLOCKED_EXTENSIONS.has(extension)) return "blocked";
+  if (sizeBytes > ATTACHMENT_SYNC_LIMIT_BYTES) return "local_only";
+  if (SYNCABLE_EXTENSIONS.has(extension)) return "syncable";
+  return extension ? "local_only" : "pending_review";
+}
+
+/**
+ * Whether a file syncs under today's rules. Shards save the status from when
+ * the file was added, which goes stale when the rules change (audio and video
+ * didn't sync at first), so it's only used when the type or size is unknown.
+ */
+export function getAttachmentSyncStatus(
   value: AttachmentSyncStatusLike,
 ): AttachmentSyncStatus | null {
+  const extension = getExtension(value).toLowerCase();
+  const size = getSizeBytes(value);
+  if (extension && size !== null) return syncStatusFor(extension, size);
   return value.netherstoneSyncStatus ?? value.syncStatus ?? null;
 }
 

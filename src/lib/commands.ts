@@ -319,6 +319,15 @@ export async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Lets a shard show a picture, sound or video file from anywhere on this
+ * device, as a pasted or linked file. False when the file isn't there.
+ */
+export async function showLinkedFile(filePath: string): Promise<boolean> {
+  assertTauri();
+  return invoke<boolean>("show_linked_file", { filePath });
+}
+
+/**
  * Opens a native .md file picker.
  * Returns the picked shard path and its parent directory as the vault path,
  * or null if the user cancelled.

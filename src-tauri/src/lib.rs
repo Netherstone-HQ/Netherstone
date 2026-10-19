@@ -168,10 +168,8 @@ fn open_media_files_dialog(
 
     // A picked file can stay where it is (relinking a moved file), so the
     // shard shows it from there.
-    use tauri::Manager;
-    let scope = app.asset_protocol_scope();
     for path in &selected_files {
-        let _ = scope.allow_file(path);
+        asset_scope::show_linked_file(&app, path);
     }
 
     Ok(selected_files
@@ -342,6 +340,11 @@ fn file_exists(file_path: String) -> Result<bool, String> {
     Ok(std::path::Path::new(&file_path).exists())
 }
 
+#[tauri::command(async)]
+fn show_linked_file(app: tauri::AppHandle, file_path: String) -> bool {
+    asset_scope::show_linked_file(&app, Path::new(&file_path))
+}
+
 // ── Sync ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command(async)]
@@ -473,20 +476,16 @@ fn stop_vault_watcher(app: tauri::AppHandle) {
 }
 
 #[tauri::command(async)]
-fn read_markdown_file(app: tauri::AppHandle, file_path: String) -> Result<String, String> {
-    let markdown = read_markdown_from_disk(&file_path)?;
-    asset_scope::allow_linked_files(&app, Path::new(&file_path), &markdown);
-    Ok(markdown)
+fn read_markdown_file(file_path: String) -> Result<String, String> {
+    read_markdown_from_disk(&file_path)
 }
 
 #[tauri::command(async)]
 fn open_markdown_file(
-    app: tauri::AppHandle,
     file_path: String,
     cache_version: Option<i64>,
 ) -> Result<OpenMarkdownFileResult, String> {
     let markdown = read_markdown_from_disk(&file_path)?;
-    asset_scope::allow_linked_files(&app, Path::new(&file_path), &markdown);
     let content_hash = hash_markdown_content(&markdown);
     let expected_cache_version = resolve_ast_cache_version(cache_version);
     let conn = db::open_connection()?;
@@ -1394,6 +1393,7 @@ pub fn run() {
             persist_attachment_file,
             persist_attachment_bytes,
             file_exists,
+            show_linked_file,
             scan_vault,
             github_get_account,
             github_token_storage,

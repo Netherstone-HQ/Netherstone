@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { editor, expect, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, mockVault, paste, test } from "./vault";
 
 /**
  * Everything a shard, a drawing, an export or an import loads, under the
@@ -59,6 +59,14 @@ function pdf() {
   return Buffer.from(out, "latin1");
 }
 
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+};
+
 /** Every URL the page asks for, whether or not it is answered. */
 function recordRequests(page: Page) {
   const urls: string[] = [];
@@ -109,7 +117,7 @@ test("pictures, sound, video, embeds and math in a shard load", async ({ page })
 
   // Pictures and videos from the web are asked for (the test answers none).
   await expect.poll(() => requests.includes("https://example.com/web.png")).toBe(true);
-  await expect.poll(() => requests.some((url) => url.includes("ytimg.com"))).toBe(true);
+  await expect.poll(() => requests.some((url) => hostOf(url).endsWith(".ytimg.com"))).toBe(true);
   await editor(page).locator(".lty-playbtn").click();
   await expect(editor(page).locator("iframe[src*='youtube']")).toHaveCount(1);
 
@@ -261,4 +269,93 @@ test("a PDF imports into a shard", async ({ page }) => {
     () => window.__saves.find((save) => save.filePath.endsWith("Inbox/Field notes.md"))!.content,
   );
   expect(saved).toContain("The river was high after the rain.");
+});
+
+/** Runs the shard as the app does, so files are shown through the asset protocol. */
+async function asInApp(page: Page) {
+  await page.addInitScript(() => {
+    (window as unknown as { isTauri: boolean }).isTauri = true;
+  });
+}
+
+/** Drops `data` onto the editor, as a drag from the browser panel does. */
+async function drop(page: Page, data: { file?: { name: string; base64: string; type: string }; html?: string; url?: string }) {
+  await editor(page).evaluate((element, data) => {
+    const transfer = new DataTransfer();
+    if (data.file) {
+      const bytes = Uint8Array.from(atob(data.file.base64), (c) => c.charCodeAt(0));
+      transfer.items.add(new File([bytes], data.file.name, { type: data.file.type }));
+    }
+    if (data.html) transfer.setData("text/html", data.html);
+    if (data.url) transfer.setData("text/uri-list", data.url);
+    const box = element.querySelector("h1")!.getBoundingClientRect();
+    const at = { clientX: box.left + 5, clientY: box.bottom + 2, bubbles: true, cancelable: true, dataTransfer: transfer };
+    element.dispatchEvent(new DragEvent("dragenter", at));
+    element.dispatchEvent(new DragEvent("dragover", at));
+    element.dispatchEvent(new DragEvent("drop", at));
+  }, data);
+}
+
+const OUTSIDE = "/home/me/Pictures/cat.png";
+
+test("a picture outside the vault shows when a shard links to it", async ({ page }) => {
+  await asInApp(page);
+  await mockVault(page, {
+    files: { "Cats.md": `# Cats\n\n![Cat](${OUTSIDE})\n` },
+    assets: { [OUTSIDE]: PNG },
+    open: "Cats.md",
+  });
+
+  await expect(editor(page).locator("img[src*='cat.png']")).toHaveJSProperty("naturalWidth", 1);
+});
+
+test("a picture outside the vault shows as soon as it is pasted", async ({ page }) => {
+  await asInApp(page);
+  await mockVault(page, {
+    files: { "Cats.md": "# Cats\n\nBelow.\n" },
+    assets: { [OUTSIDE]: PNG },
+    open: "Cats.md",
+  });
+
+  await caretAfter(page, "Below.");
+  await page.keyboard.press("Enter");
+  await paste(page, { text: `![Pasted cat](${OUTSIDE})` });
+  await expect(editor(page).locator("img[src*='cat.png']")).toHaveJSProperty("naturalWidth", 1);
+});
+
+test("a picture file pasted or dropped from the browser panel is added and shown", async ({ page }) => {
+  await asInApp(page);
+  await mockVault(page, { files: { "Cats.md": "# Cats\n\nBelow.\n" }, open: "Cats.md" });
+
+  await drop(page, {
+    file: { name: "dropped.png", base64: PNG.toString("base64"), type: "image/png" },
+    html: '<img src="https://example.com/dropped.png">',
+    url: "https://example.com/dropped.png",
+  });
+  await expect(editor(page).locator("img[src*='dropped.png']")).toHaveJSProperty("naturalWidth", 1);
+  expect(await page.evaluate(() => "_attachments/dropped.png" in window.__binaries)).toBe(true);
+
+  await caretAfter(page, "Below.");
+  await page.evaluate(async (base64) => {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) })]);
+  }, PNG.toString("base64"));
+  await page.keyboard.press("Control+V");
+  await expect(editor(page).locator("img[src*='asset.localhost']")).toHaveCount(2);
+  for (const image of await editor(page).locator("img[src*='asset.localhost']").all()) {
+    await expect(image).toHaveJSProperty("naturalWidth", 1);
+  }
+});
+
+test("a web picture dropped from the browser panel as a link shows", async ({ page }) => {
+  const requests = recordRequests(page);
+  await asInApp(page);
+  await mockVault(page, { files: { "Cats.md": "# Cats\n\nBelow.\n" }, open: "Cats.md" });
+
+  await drop(page, {
+    html: '<img src="https://example.com/linked.png" alt="Linked cat">',
+    url: "https://example.com/linked.png",
+  });
+  await expect(editor(page).locator("img[src='https://example.com/linked.png']")).toHaveCount(1);
+  await expect.poll(() => requests.includes("https://example.com/linked.png")).toBe(true);
 });

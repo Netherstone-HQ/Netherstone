@@ -21,9 +21,15 @@ function appCsp(html: string) {
     readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
   );
   const csp: Record<string, string> = { ...config.app.security.csp };
-  const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
-    ([, script]) => `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
-  );
+  const hashes: string[] = [];
+  const lower = html.toLowerCase();
+  for (let at = lower.indexOf("<script"); at !== -1; at = lower.indexOf("<script", at)) {
+    const start = lower.indexOf(">", at) + 1;
+    const end = lower.indexOf("</script", start);
+    const script = html.slice(start, end);
+    if (script) hashes.push(`'sha256-${createHash("sha256").update(script).digest("base64")}'`);
+    at = end;
+  }
   csp["script-src"] = [csp["script-src"], ...hashes].join(" ");
   return Object.entries(csp)
     .map(([directive, sources]) => `${directive} ${sources}`)
@@ -87,6 +93,10 @@ declare global {
     __saves: Save[];
     /** The first bytes of each file an export wrote. */
     __exports: string[];
+    /** Binary files by vault-relative (or, outside the vault, absolute) path, in base64. */
+    __binaries: Record<string, string>;
+    /** What the asset protocol may serve, as the desktop app's scope does. */
+    __assetScope: { folders: string[]; files: string[] };
     __vaultFiles: VaultFiles;
   }
 }
@@ -114,6 +124,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
 
       window.__saves = [];
       window.__exports = [];
+      window.__binaries = binaries;
+      window.__assetScope = { folders: [], files: [] };
+      const allowFolder = (folder: string) => {
+        if (!window.__assetScope.folders.includes(folder)) window.__assetScope.folders.push(folder);
+      };
       window.__vaultFiles = files;
 
       localStorage.setItem(
@@ -170,7 +185,22 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
 
       type Args = Record<string, string>;
       const handlers: Record<string, (args: Args) => unknown> = {
-        scan_vault: () => tree,
+        scan_vault: ({ vaultPath }) => {
+          allowFolder(vaultPath);
+          return tree;
+        },
+        start_vault_watcher: ({ vaultPath }) => {
+          allowFolder(vaultPath);
+          return null;
+        },
+        // As the desktop app: pictures, sound and video are let through.
+        show_linked_file: ({ filePath }) => {
+          const exists = relative(filePath) in binaries;
+          if (exists && /\.(png|jpe?g|gif|webp|svg|wav|mp3|mp4|webm)$/i.test(filePath)) {
+            window.__assetScope.files.push(filePath);
+          }
+          return exists;
+        },
         index_vault: () => "ok",
         open_markdown_file: ({ filePath }) => ({
           file_path: filePath,
@@ -191,7 +221,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         },
         read_drawing_file: ({ filePath }) => files[relative(filePath)] ?? "",
         // Attachments are kept with the test's other binary files.
-        persist_attachment_bytes: ({ fileName, bytes }) => {
+        persist_attachment_bytes: ({ fileName, bytes, vaultPath: vault }) => {
+          allowFolder(vault);
           const assetPath = `_attachments/${fileName}`;
           binaries[assetPath] = btoa(
             String.fromCharCode(...(bytes as unknown as number[])),
@@ -291,14 +322,27 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
   await page.route(/^(?!http:\/\/(localhost|127\.0\.0\.1))/, (route: Route) =>
     route.abort(),
   );
-  // The asset protocol, which shows the vault's files in shards.
-  await page.route("http://asset.localhost/**", (route: Route) => {
+  // The asset protocol, which shows the vault's files in shards. Like the
+  // desktop app, it refuses files outside what it was allowed to serve.
+  await page.route("http://asset.localhost/**", async (route: Route) => {
     const path = decodeURIComponent(new URL(route.request().url()).pathname.slice(1));
-    const bytes = assets[path.replace(`${VAULT_PATH}/`, "")];
-    if (!bytes) return route.fulfill({ status: 404 });
+    const found = await page.evaluate(
+      ({ path, vaultPath }) => {
+        const { folders, files } = window.__assetScope;
+        const allowed =
+          files.includes(path) || folders.some((folder) => path.startsWith(`${folder}/`));
+        return { allowed, data: window.__binaries[path.replace(`${vaultPath}/`, "")] ?? null };
+      },
+      { path, vaultPath: VAULT_PATH },
+    );
+    if (!found.allowed) return route.fulfill({ status: 403 });
+    if (!found.data) return route.fulfill({ status: 404 });
     const extension = path.split(".").pop() ?? "";
     const types: Record<string, string> = { png: "image/png", wav: "audio/wav", mp4: "video/mp4", pdf: "application/pdf" };
-    return route.fulfill({ body: bytes, contentType: types[extension] ?? "application/octet-stream" });
+    return route.fulfill({
+      body: Buffer.from(found.data, "base64"),
+      contentType: types[extension] ?? "application/octet-stream",
+    });
   });
 
   await page.goto("/");

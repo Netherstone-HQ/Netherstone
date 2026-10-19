@@ -1,6 +1,6 @@
 import { convertFileSrc, isTauri } from "@tauri-apps/api/core";
 
-import { fileExists } from "@/lib/commands";
+import { fileExists, showLinkedFile } from "@/lib/commands";
 
 export type AssetSourceKind = "remote" | "vault" | "local";
 export type MediaSourceKind = AssetSourceKind | "blob" | "data" | "unknown";
@@ -20,6 +20,8 @@ export interface ResolvedMediaSource {
   renderUrl: string;
   openTarget: string;
   isMissing: boolean;
+  /** A file outside the vault the app hasn't been allowed to show yet. */
+  isPending: boolean;
   isMachineLocal: boolean;
   isPortable: boolean;
   isVaultManaged: boolean;
@@ -315,6 +317,22 @@ function canUseTauriConvertFileSrc(): boolean {
   }
 }
 
+/**
+ * Files outside the vault the app has asked to show. The app serves only the
+ * vault until it is asked for another file, so a file's address is handed
+ * out once it has been asked for, never before.
+ */
+const shownLocalFiles = new Set<string>();
+
+function isPendingLocalFile(kind: MediaSourceKind, path: string | null) {
+  return (
+    kind === "local" &&
+    path !== null &&
+    canUseTauriConvertFileSrc() &&
+    !shownLocalFiles.has(path)
+  );
+}
+
 export function resolveMediaRenderUrl(
   source: string | null | undefined,
   options: Pick<
@@ -343,6 +361,9 @@ export function resolveMediaRenderUrl(
 
   if (!canUseTauriConvertFileSrc()) {
     return filePath;
+  }
+  if (isPendingLocalFile(kind, filePath)) {
+    return "";
   }
 
   try {
@@ -394,6 +415,9 @@ export function resolveMediaSourceSync(
     renderUrl: resolveMediaRenderUrl(normalized, options),
     openTarget: resolveMediaOpenTarget(normalized, options),
     isMissing: false,
+    isPending:
+      !normalizeMediaSourceValue(options.explicitRenderUrl) &&
+      isPendingLocalFile(kind, path),
     isMachineLocal: isMachineLocalMediaSource(kind),
     isPortable: isPortableMediaSource(kind),
     isVaultManaged: kind === "vault",
@@ -405,6 +429,21 @@ export async function resolveMediaSource(
   options: ResolveMediaSourceOptions = {},
 ): Promise<ResolvedMediaSource> {
   const base = resolveMediaSourceSync(source, options);
+
+  if (base.isPending && base.path) {
+    try {
+      const exists = await showLinkedFile(base.path);
+      if (exists) shownLocalFiles.add(base.path);
+
+      return {
+        ...resolveMediaSourceSync(source, options),
+        status: exists ? "available" : "missing",
+        isMissing: !exists,
+      };
+    } catch {
+      return base;
+    }
+  }
 
   if (!options.checkExistence || !base.path) {
     return base;

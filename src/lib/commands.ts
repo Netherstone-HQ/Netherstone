@@ -159,6 +159,50 @@ export async function importShard(
   return invoke<string>("import_shard", { sourcePath, vaultPath });
 }
 
+/** A file found for importing: its path, and its path under what was picked. */
+export interface ImportSourceFile {
+  path: string;
+  relativePath: string;
+  size: number;
+}
+
+/** Asks for files, or one folder, to import. Empty when cancelled. */
+export async function pickImportPaths(folder: boolean): Promise<string[]> {
+  assertTauri();
+  return invoke<string[]>("open_import_dialog", { folder });
+}
+
+/** Every file in the picked files and folders, hidden ones left out. */
+export async function listImportSources(
+  paths: string[],
+): Promise<ImportSourceFile[]> {
+  assertTauri();
+  return invoke<ImportSourceFile[]>("list_import_sources", { paths });
+}
+
+export async function readImportFile(path: string): Promise<Uint8Array> {
+  assertTauri();
+  return new Uint8Array(await invoke<ArrayBuffer>("read_import_file", { path }));
+}
+
+/** Free shard paths in `targetDir`, one per `Folder/Name`, never existing files. */
+export async function reserveImportPaths(
+  targetDir: string,
+  relativePaths: string[],
+): Promise<string[]> {
+  assertTauri();
+  return invoke<string[]>("reserve_import_paths", { targetDir, relativePaths });
+}
+
+export async function saveImportedShard(
+  vaultPath: string,
+  filePath: string,
+  content: string,
+): Promise<void> {
+  assertTauri();
+  await invoke("save_imported_shard", { vaultPath, filePath, content });
+}
+
 /**
  * Persists a local file into the vault-managed `_attachments` store.
  * Returns durable attachment metadata for markdown insertion and UI status.

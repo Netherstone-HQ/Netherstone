@@ -7,6 +7,7 @@ import {
   FolderOpenIcon,
   FolderPlusIcon,
   ImagePlusIcon,
+  ImportIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
@@ -51,6 +52,7 @@ import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openExportDialog } from "@/lib/export";
+import { openImportDialog } from "@/lib/import";
 import {
   applyOpenEditorSessionPathChange,
   captureOpenEditorSessionPathChangeSnapshot,
@@ -496,6 +498,11 @@ export function useVaultItem(
             label: "New folder",
             icon: FolderPlusIcon,
             onSelect: handleNewFolder,
+          },
+          {
+            label: "Import here…",
+            icon: ImportIcon,
+            onSelect: () => openImportDialog(node.path),
           },
           { ...shared[0], separated: true },
           ...shared.slice(1),

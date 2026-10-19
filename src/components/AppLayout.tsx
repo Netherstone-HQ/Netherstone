@@ -8,6 +8,7 @@ import { LeftSidebar } from "./sidebar/LeftSidebar";
 import { TagsView } from "./tags/TagsView";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
+import { ImportDialogHost } from "./import/ImportDialogHost";
 import { NewShardDialog } from "./vault/NewShardDialog";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { BrowserPanel } from "./browser/BrowserPanel";
@@ -165,6 +166,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             onOpenChange={setIsNewShardDialogOpen}
           />
           <ExportDialogHost />
+          <ImportDialogHost />
         </div>
       </div>
     </SidebarProvider>

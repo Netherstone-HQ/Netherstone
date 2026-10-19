@@ -2,6 +2,7 @@ mod browser;
 mod db;
 mod export;
 mod github;
+mod import;
 mod markdown_text;
 mod shard_links;
 mod splash;
@@ -181,6 +182,51 @@ fn import_shard(source_path: String, vault_path: String) -> Result<String, Strin
     }
 
     vault::import_shard_to_vault(source, vault)
+}
+
+/// Opens the native picker for files, or one folder, to import.
+#[tauri::command(async)]
+fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
+    let dialog = app.dialog().file().set_title("Import");
+    let picked = if folder {
+        dialog.blocking_pick_folder().into_iter().collect::<Vec<_>>()
+    } else {
+        dialog.blocking_pick_files().unwrap_or_default()
+    };
+
+    picked
+        .into_iter()
+        .filter_map(|path| path.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// Lists the files in the picked files and folders.
+#[tauri::command(async)]
+fn list_import_sources(paths: Vec<String>) -> Vec<import::ImportSourceFile> {
+    let paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
+    import::list_sources(&paths)
+}
+
+/// Reads a file being imported, as raw bytes.
+#[tauri::command(async)]
+fn read_import_file(path: String) -> Result<tauri::ipc::Response, String> {
+    std::fs::read(&path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("Could not read {}: {}", path, e))
+}
+
+/// Finds a free shard path in `target_dir` for each imported file.
+#[tauri::command(async)]
+fn reserve_import_paths(target_dir: String, relative_paths: Vec<String>) -> Result<Vec<String>, String> {
+    import::reserve_shard_paths(Path::new(&target_dir), &relative_paths)
+}
+
+/// Writes an imported shard to a path `reserve_import_paths` gave out.
+#[tauri::command(async)]
+fn save_imported_shard(vault_path: String, file_path: String, content: String) -> Result<(), String> {
+    import::prepare_new_shard(Path::new(&vault_path), Path::new(&file_path))?;
+    write_markdown_file_and_sync_references(&file_path, &content)
 }
 
 #[tauri::command(async)]
@@ -1259,6 +1305,11 @@ pub fn run() {
             open_shard_dialog,
             open_media_files_dialog,
             import_shard,
+            open_import_dialog,
+            list_import_sources,
+            read_import_file,
+            reserve_import_paths,
+            save_imported_shard,
             persist_attachment_file,
             persist_attachment_bytes,
             file_exists,

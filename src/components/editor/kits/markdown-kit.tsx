@@ -13,6 +13,7 @@ import remarkMath from "remark-math";
 import { DRAWING_LINK_ATTRIBUTE } from "@/lib/drawing-files";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
+import { listGroupRules } from "@/lib/markdown-list-blocks";
 import { shardLinkRules } from "@/lib/markdown-shard-links";
 import { tableRules } from "@/lib/markdown-tables";
 import { toggleRules } from "@/lib/markdown-toggles";
@@ -63,6 +64,7 @@ export const MarkdownKit = [
         img: imageRule,
         ...toggleRules,
         ...emptyLineRules,
+        ...listGroupRules,
         ...rawBlockRules,
         ...shardLinkRules,
         ...tableRules,

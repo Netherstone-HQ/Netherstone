@@ -27,6 +27,7 @@ import {
   prepareTableForMarkdown,
   tableMetaBlock,
 } from "@/lib/markdown-tables";
+import { groupListContent } from "@/lib/markdown-list-blocks";
 import { groupToggles } from "@/lib/markdown-toggles";
 
 // Plate parses markdown as MDX, which is stricter than the plain markdown in a
@@ -584,9 +585,10 @@ export function serializeMarkdownValue(
   const frontMatter = isFrontMatterNode(first) ? first.value : null;
   const body = frontMatter === null ? value : rest;
 
-  // Toggles first, so a block's indent is its own and not its toggle's.
+  // Toggles first, so a block's indent is its own and not its toggle's;
+  // then blocks inside list items, so they aren't wrapped as indented.
   const serialized = editor.getApi(MarkdownPlugin).markdown.serialize({
-    value: wrapFormattedBlocks(groupToggles(body)),
+    value: wrapFormattedBlocks(groupListContent(groupToggles(body))),
   });
 
   return joinFrontMatter(frontMatter, finalizeSerializedMarkdown(serialized));

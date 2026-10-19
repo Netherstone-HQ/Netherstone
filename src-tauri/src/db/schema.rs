@@ -12,6 +12,9 @@ use rusqlite::Connection;
 /// - `ast_cache`: Legacy path-keyed AST cache rows retained for migration/backfill
 /// - `ast_cache_index`: Path-to-content index for the content-addressed AST cache
 /// - `ast_cache_blobs`: Content-addressed AST payload store keyed by hash + version
+/// - `writing_log`: Words each shard started and ended a day with, from saves
+///   in the editor on this device. Never synced.
+/// - `writing_log_start`: The day this device started counting for each vault
 /// - `fts_search`: FTS5 virtual table for full-text search
 pub const SCHEMA: &str = r#"
 -- ── Files ──────────────────────────────────────────────────────────────────
@@ -142,6 +145,24 @@ CREATE TABLE IF NOT EXISTS ast_cache_blobs (
 
 CREATE INDEX IF NOT EXISTS idx_ast_cache_blobs_updated_at
     ON ast_cache_blobs(updated_at);
+
+-- ── Writing Log ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS writing_log (
+    -- The local date, as YYYY-MM-DD.
+    day TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    start_words INTEGER NOT NULL,
+    end_words INTEGER NOT NULL,
+    PRIMARY KEY (day, file_path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_writing_log_file_path ON writing_log(file_path);
+
+CREATE TABLE IF NOT EXISTS writing_log_start (
+    vault_path TEXT PRIMARY KEY,
+    started_on TEXT NOT NULL
+);
 
 -- ── Full-Text Search ────────────────────────────────────────────────────────
 

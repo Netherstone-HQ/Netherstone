@@ -1,5 +1,10 @@
 import { Fragment } from "react";
-import { FileTextIcon, SettingsIcon, TagIcon } from "lucide-react";
+import {
+  ChartColumnIcon,
+  FileTextIcon,
+  SettingsIcon,
+  TagIcon,
+} from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
 import { Hint } from "@/components/ui/tooltip";
 import { selectRailMode, useUIStore, type RailMode } from "@/store/ui";
@@ -9,6 +14,7 @@ const MODES: { mode: RailMode; label: string; icon: React.ElementType }[] = [
   { mode: "editor", label: "Editor", icon: FileTextIcon },
   { mode: "tags", label: "Tags", icon: TagIcon },
   { mode: "canvas", label: "Canvas", icon: DrawingIcon },
+  { mode: "data", label: "Data", icon: ChartColumnIcon },
 ];
 
 function RailButton({

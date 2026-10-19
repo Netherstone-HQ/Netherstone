@@ -6,6 +6,7 @@ import { useUIStore } from "@/store";
 import { RightSidebar } from "./sidebar/RightSidebar";
 import { LeftSidebar } from "./sidebar/LeftSidebar";
 import { TagsView } from "./tags/TagsView";
+import { DataView } from "./data/DataView";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
 import { ImportDialogHost } from "./import/ImportDialogHost";
@@ -61,6 +62,18 @@ const ModeAwareTags = React.memo(function ModeAwareTags() {
   return (
     <main className="min-h-0 flex-1">
       <TagsView />
+    </main>
+  );
+});
+
+// Mounted only while Data is open, so it loads fresh figures on each visit.
+const ModeAwareData = React.memo(function ModeAwareData() {
+  const appMode = useUIStore((s) => s.appMode);
+  if (appMode !== "data") return null;
+
+  return (
+    <main className="min-h-0 flex-1">
+      <DataView />
     </main>
   );
 });
@@ -150,6 +163,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="relative isolate flex h-full min-w-0 flex-1 flex-col">
               <ModeAwareCanvas />
               <ModeAwareTags />
+              <ModeAwareData />
               <ModeAwareNotes children={children} />
             </div>
 

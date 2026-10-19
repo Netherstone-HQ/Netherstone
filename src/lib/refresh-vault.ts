@@ -2,12 +2,17 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
+import { useDataStore } from "@/store/data";
 import { useTagsStore } from "@/store/tags";
 
-/** Brings the vault's search index up to date; Tags reloads on its next visit. */
+/**
+ * Brings the vault's search index up to date; Tags reloads on its next visit,
+ * and an open Data page at once.
+ */
 export async function indexVault(vaultPath: string) {
   const result = await invoke<string>("index_vault", { vaultPath });
   useTagsStore.getState().invalidate();
+  useDataStore.getState().invalidate();
   return result;
 }
 

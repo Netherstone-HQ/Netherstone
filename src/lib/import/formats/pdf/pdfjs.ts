@@ -38,10 +38,9 @@ export class BundledDataFactory {
 export function loadPdfJs(): Promise<PdfJs> {
   loading ??= (async () => {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    if (typeof Worker === "undefined") {
-      // No workers (tests): pdf.js runs its parser on this thread instead.
-      (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
-    } else {
+    // Without workers (tests), pdf.js runs its parser on this thread from
+    // the `pdfjsWorker` global the tests set; the app always has workers.
+    if (typeof Worker !== "undefined") {
       const { default: workerUrl } = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
       pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
     }

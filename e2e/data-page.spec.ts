@@ -3,7 +3,8 @@ import { VAULT_PATH, mockVault } from "./vault";
 
 const FILES = {
   "Note.md": "# Note\n\nStart\n",
-  "Spaced repetition.md": "# Spaced repetition\n\nSee [Leitner box](Leitner%20box.md).\n",
+  // The link sits below the fold, so opening it has to scroll.
+  "Spaced repetition.md": `# Spaced repetition\n\n${"Filler.\n\n".repeat(80)}See [Leitner box](Leitner%20box.md).\n`,
 };
 
 function today(offset = 0) {
@@ -93,6 +94,10 @@ test("the Data page shows the days written and the broken links", async ({
     "aria-pressed",
     "true",
   );
+  // The shard opens scrolled to the broken link, with it selected.
+  const link = page.locator('[data-slate-value="Leitner box"]');
+  await expect(link).toBeInViewport();
+  await expect(link).toHaveClass(/ring-2/);
 });
 
 test("a vault with no writing yet starts its calendar today", async ({

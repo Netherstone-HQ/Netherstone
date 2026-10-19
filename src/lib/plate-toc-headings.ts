@@ -1,6 +1,13 @@
 import type { Heading } from "@platejs/toc";
 import { BaseTocPlugin, isHeading } from "@platejs/toc";
-import { KEYS, NodeApi, type SlateEditor, type TElement } from "platejs";
+import {
+  KEYS,
+  NodeApi,
+  type Location,
+  type Path,
+  type SlateEditor,
+  type TElement,
+} from "platejs";
 
 const headingDepth: Record<string, number> = {
   h1: 1,
@@ -152,7 +159,25 @@ export function scrollPlateToHeading(
   heading: Heading,
   behavior: ScrollBehavior = "smooth",
 ) {
-  const node = NodeApi.get(editor, heading.path);
+  scrollPlateToNode(
+    editor,
+    heading.path,
+    () => editor.api.start(heading.path),
+    behavior,
+  );
+}
+
+/**
+ * Scrolls the node at `path` to the top of the editor, then focuses the
+ * editor with `getSelection()` selected.
+ */
+export function scrollPlateToNode(
+  editor: SlateEditor,
+  path: Path,
+  getSelection: () => Location | undefined,
+  behavior: ScrollBehavior = "smooth",
+) {
+  const node = NodeApi.get(editor, path);
   if (!node) return;
 
   const el = editor.api.toDOMNode(node);
@@ -167,24 +192,24 @@ export function scrollPlateToHeading(
 
   // Focusing an unfocused editor restores its previous caret, and Slate then
   // scrolls that caret into view, cancelling this scroll (so the first click
-  // only focused the editor). Put the caret on the heading once the scroll
-  // has settled; it's in view by then, so Slate has nothing left to scroll.
+  // only focused the editor). Put the caret on the node once the scroll has
+  // settled; it's in view by then, so Slate has nothing left to scroll.
   let didFocus = false;
   const requestId = ++latestScrollRequestId;
-  const focusHeading = () => {
+  const focusNode = () => {
     // A newer click superseded this one; moving the caret here would scroll
-    // back to this heading.
+    // back to this node.
     if (didFocus || requestId !== latestScrollRequestId) return;
     didFocus = true;
 
-    const start = editor.api.start(heading.path);
-    if (start) editor.tf.select(start);
+    const selection = getSelection();
+    if (selection) editor.tf.select(selection);
     editor.tf.focus();
   };
 
   if (scrollRoot && scrollRoot.scrollHeight > scrollRoot.clientHeight) {
     const stickyInset = getStickyTopInset(scrollRoot);
-    // Place the heading just below the sticky toolbar + gap, or use plugin
+    // Place the node just below the sticky toolbar + gap, or use plugin
     // `topOffset` when there is no sticky toolbar in this scroller.
     const gapPx = 12;
     const topOffset =
@@ -198,15 +223,15 @@ export function scrollPlateToHeading(
     );
 
     if (Math.abs(nextTop - scrollRoot.scrollTop) < 1) {
-      focusHeading();
+      focusNode();
       return;
     }
 
-    scrollRoot.addEventListener("scrollend", focusHeading, { once: true });
-    window.setTimeout(focusHeading, SCROLL_SETTLE_TIMEOUT_MS);
+    scrollRoot.addEventListener("scrollend", focusNode, { once: true });
+    window.setTimeout(focusNode, SCROLL_SETTLE_TIMEOUT_MS);
     scrollRoot.scrollTo({ top: nextTop, behavior });
   } else {
     el.scrollIntoView({ behavior, block: "start" });
-    window.setTimeout(focusHeading, SCROLL_SETTLE_TIMEOUT_MS);
+    window.setTimeout(focusNode, SCROLL_SETTLE_TIMEOUT_MS);
   }
 }

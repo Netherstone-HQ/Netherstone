@@ -4,9 +4,11 @@ import { toast } from "sonner";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
 import { getPlateHeadingList } from "@/lib/plate-toc-headings";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
-import { useEditorStore, useSettingsStore } from "@/store";
+import { isSamePath } from "@/lib/drawing-files";
+import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
+import { revealLinkByText } from "./lib/link-reveal";
 import { insertManagedMediaFiles } from "./lib/media-insert";
 import {
   formatEditorLifecycleDurationMs,
@@ -82,6 +84,7 @@ export const MountedEditor = memo(function MountedEditor({
   const setIsDirty = useEditorStore((s) => s.setIsDirty);
   const bumpEditTick = useEditorStore((s) => s.bumpEditTick);
   const spellcheck = useSettingsStore((s) => s.spellcheck);
+  const isShown = useUIStore((s) => s.appMode === "notes");
 
   const insertFilesFromEvent = (
     files: FileList | File[] | null | undefined,
@@ -202,6 +205,27 @@ export const MountedEditor = memo(function MountedEditor({
     setPlateEditor,
     setTocHeadings,
   ]);
+
+  // A link asked for when this shard was opened (a broken link on the Data
+  // page): scroll to it once the shard is on screen.
+  useEffect(() => {
+    if (!isShown) return;
+
+    const { pendingLinkReveal, setPendingLinkReveal, plateEditor } =
+      useEditorStore.getState();
+    // A previous session still on screen while the next one prepares isn't
+    // the store's editor any more; the new one shows the link.
+    if (
+      plateEditor !== editor ||
+      !pendingLinkReveal ||
+      !isSamePath(pendingLinkReveal.path, currentFilePath)
+    ) {
+      return;
+    }
+
+    setPendingLinkReveal(null);
+    revealLinkByText(editor, pendingLinkReveal.text);
+  }, [currentFilePath, editor, isShown]);
 
   useEffect(() => {
     const root = editor.api.toDOMNode(editor);

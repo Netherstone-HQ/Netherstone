@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ATTACHMENT_SYNC_LIMIT_BYTES } from "@/lib/attachment-sync-status";
+import { useHistoryStore } from "@/store/history";
 
 export type VaultSyncRecord = {
   vaultId: string;
@@ -85,7 +86,11 @@ export function turnOnBackup(vaultPath: string) {
 }
 
 export function syncNow(vaultPath: string) {
-  return invoke<SyncReport>("sync_now", { vaultPath });
+  return invoke<SyncReport>("sync_now", { vaultPath }).then((report) => {
+    // Saved a version, or brought in other devices' versions.
+    useHistoryStore.getState().versionsChanged();
+    return report;
+  });
 }
 
 export function listBackups() {
@@ -122,9 +127,19 @@ export function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
+type VaultSnapshotResult = { commit: unknown | null };
+
+/** Tells an open history panel when a version was saved. */
+function noteVersion(result: VaultSnapshotResult) {
+  if (result.commit) useHistoryStore.getState().versionsChanged();
+  return result;
+}
+
 /** Saves a version of the vault in its local history, if anything changed. */
 export function saveVaultVersion(vaultPath: string) {
-  return invoke("sync_snapshot_vault", { vaultPath });
+  return invoke<VaultSnapshotResult>("sync_snapshot_vault", { vaultPath }).then(
+    noteVersion,
+  );
 }
 
 /**
@@ -136,7 +151,11 @@ export function saveOutsideChangeVersion(
   filePath: string,
   previous: string,
 ) {
-  return invoke("sync_snapshot_outside_change", { vaultPath, filePath, previous });
+  return invoke<VaultSnapshotResult>("sync_snapshot_outside_change", {
+    vaultPath,
+    filePath,
+    previous,
+  }).then(noteVersion);
 }
 
 export function turnOffBackup(vaultPath: string) {

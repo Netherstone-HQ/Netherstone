@@ -113,13 +113,24 @@ export type MockVaultOptions = {
   /** The shard open when the app starts, relative to the vault. */
   open: string;
   theme?: "light" | "dark";
+  /** Earlier versions of files, newest first, by vault-relative path. */
+  versions?: Record<string, MockVersion[]>;
+};
+
+export type MockVersion = {
+  /** Unix seconds. */
+  time: number;
+  content: string;
+  kind?: "created" | "edited" | "outsideChange" | "restored" | "synced";
+  added?: number;
+  removed?: number;
 };
 
 export async function mockVault(page: Page, options: MockVaultOptions) {
-  const { files, assets = {}, folders = [], open, theme = "dark" } = options;
+  const { files, assets = {}, folders = [], open, theme = "dark", versions = {} } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, versions }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -290,6 +301,33 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         search_files: () => [],
         find_shards_containing: () => [],
         sync_get_vault_record: () => null,
+        // Versions are named by file and position: "Note.md#0" is the newest.
+        history_list_versions: ({ filePath }) =>
+          (versions[relative(filePath)] ?? []).map((version, index) => ({
+            id: `${relative(filePath)}#${index}`,
+            blob: `${relative(filePath)}#${index}`,
+            time: version.time,
+            kind: version.kind ?? "edited",
+            restoredFrom: null,
+            added: version.added ?? 0,
+            removed: version.removed ?? 0,
+            changed: 0,
+            counted: true,
+          })),
+        history_read_version: ({ blob }) => {
+          const [path, index] = blob.split("#");
+          return versions[path][Number(index)].content;
+        },
+        history_restore: ({ filePath, blob, versionTime }) => {
+          const [path, index] = blob.split("#");
+          const name = relative(filePath);
+          const before = files[name];
+          versions[name].unshift({ time: Math.floor(Date.now() / 1000), content: before });
+          const content = versions[path][Number(index) + 1].content;
+          files[name] = content;
+          window.__saves.push({ filePath, content });
+          return { content, undo: { blob: `${name}#0`, time: Number(versionTime) } };
+        },
         github_get_account: () => null,
       };
 
@@ -337,6 +375,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       folders,
       theme,
       open,
+      versions,
     },
   );
 

@@ -427,6 +427,53 @@ fn sync_snapshot_outside_change(
     )
 }
 
+// ── History ──────────────────────────────────────────────────────────────────
+
+#[tauri::command(async)]
+fn history_list_versions(
+    vault_path: String,
+    file_path: String,
+) -> Result<Vec<sync::history::FileVersion>, String> {
+    sync::history::list_versions(&sync::sync_root()?, Path::new(&vault_path), Path::new(&file_path))
+}
+
+#[tauri::command(async)]
+fn history_read_version(vault_path: String, blob: String) -> Result<String, String> {
+    sync::history::read_version(&sync::sync_root()?, Path::new(&vault_path), &blob)
+}
+
+/// Puts an earlier version of a shard or drawing back. `expected_content` is
+/// the shard's text as the app last read or wrote it: if the file changed
+/// outside the app since, nothing is restored.
+#[tauri::command(async)]
+fn history_restore(
+    vault_path: String,
+    file_path: String,
+    blob: String,
+    version_time: i64,
+    expected_content: Option<String>,
+) -> Result<sync::history::RestoreResult, String> {
+    let path = Path::new(&file_path);
+    let is_drawing = vault::is_drawing_path(path);
+    if !is_drawing && !vault::is_markdown_path(path) {
+        return Err(format!("Not a shard or drawing: {}", file_path));
+    }
+    sync::history::restore(
+        &sync::sync_root()?,
+        Path::new(&vault_path),
+        path,
+        &blob,
+        version_time,
+        |content| {
+            if is_drawing {
+                write_drawing_file(path, content)
+            } else {
+                write_markdown_file_if_unchanged(&file_path, content, expected_content.as_deref())
+            }
+        },
+    )
+}
+
 // ── GitHub account ───────────────────────────────────────────────────────────
 
 #[tauri::command(async)]
@@ -790,7 +837,10 @@ fn read_drawing_file(file_path: String) -> Result<String, String> {
 
 #[tauri::command(async)]
 fn save_drawing_file(file_path: String, content: String) -> Result<(), String> {
-    let path = Path::new(&file_path);
+    write_drawing_file(Path::new(&file_path), &content)
+}
+
+fn write_drawing_file(path: &Path, content: &str) -> Result<(), String> {
     ensure_drawing_path(path)?;
 
     let _write_guard = locks::vault_writes()?;
@@ -799,7 +849,7 @@ fn save_drawing_file(file_path: String, content: String) -> Result<(), String> {
     std::fs::write(&tmp_path, content)
         .map_err(|e| format!("Failed to write temporary drawing file: {}", e))?;
     std::fs::rename(&tmp_path, path)
-        .map_err(|e| format!("Failed to save drawing {}: {}", file_path, e))
+        .map_err(|e| format!("Failed to save drawing {}: {}", path.display(), e))
 }
 
 /// Returns the shards in `vault_path` whose text contains any of `needles`.
@@ -1446,6 +1496,9 @@ pub fn run() {
             sync_plan_vault,
             sync_snapshot_vault,
             sync_snapshot_outside_change,
+            history_list_versions,
+            history_read_version,
+            history_restore,
             sync_turn_on_backup,
             sync_now,
             sync_list_backups,

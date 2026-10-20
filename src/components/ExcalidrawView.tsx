@@ -8,11 +8,15 @@ import {
   type LibraryReturnPayload,
 } from "@/components/browser/browserCommands";
 import { CanvasHeader } from "@/components/canvas/CanvasHeader";
+import { DrawingVersionView } from "@/components/history/DrawingVersionView";
+import { HistoryPanel } from "@/components/history/HistoryPanel";
 import type { SaveState } from "@/components/SaveStatus";
 import { useTheme } from "@/components/theme/theme-provider";
 import { resolveThemeMode } from "@/components/theme/themes";
 import { isPathWithin } from "@/lib/drawing-files";
+import { cn } from "@/lib/utils";
 import { useUIStore, useVaultStore } from "@/store";
+import { useHistoryStore, useShownVersion } from "@/store/history";
 
 const ExcalidrawCanvas = lazy(() =>
   import("./ExcalidrawCanvas").then((mod) => ({
@@ -55,6 +59,9 @@ export function ExcalidrawView() {
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const isHistoryOpen = useHistoryStore((s) => s.openIn === "canvas");
+  const closeHistory = useHistoryStore((s) => s.closeHistory);
+  const shownVersion = useShownVersion("canvas");
 
   useEffect(() => {
     if (theme !== "system") {
@@ -84,6 +91,11 @@ export function ExcalidrawView() {
       openDrawing(null);
     }
   }, [activeDrawingPath, drawingPath, openDrawing]);
+
+  // A scratch canvas has no history.
+  useEffect(() => {
+    if (isHistoryOpen && !drawingPath) closeHistory();
+  }, [isHistoryOpen, drawingPath, closeHistory]);
 
   useEffect(() => {
     if (!window.name) {
@@ -161,27 +173,45 @@ export function ExcalidrawView() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
-          <Suspense
-            fallback={
-              <div className="flex h-full w-full items-center justify-center text-ui text-muted-foreground">
-                Loading canvas…
-              </div>
-            }
+        <div className="relative min-w-0 flex-1">
+          {/* The drawing stays laid out under an earlier version, as it was. */}
+          <div
+            className={cn("h-full", shownVersion && "invisible")}
+            inert={shownVersion !== null}
           >
-            <ExcalidrawCanvas
-              key={drawingSessionKey}
-              drawingPath={drawingPath}
-              theme={excalidrawTheme}
-              libraryReturnUrl={
-                window.location.origin + window.location.pathname
+            <Suspense
+              fallback={
+                <div className="flex h-full w-full items-center justify-center text-ui text-muted-foreground">
+                  Loading canvas…
+                </div>
               }
-              excalidrawAPI={excalidrawAPI}
-              onExcalidrawAPI={setExcalidrawAPI}
-              onSaveStateChange={setSaveState}
+            >
+              <ExcalidrawCanvas
+                key={drawingSessionKey}
+                drawingPath={drawingPath}
+                theme={excalidrawTheme}
+                libraryReturnUrl={
+                  window.location.origin + window.location.pathname
+                }
+                excalidrawAPI={excalidrawAPI}
+                onExcalidrawAPI={setExcalidrawAPI}
+                onSaveStateChange={setSaveState}
+              />
+            </Suspense>
+          </div>
+          {shownVersion && drawingPath ? (
+            <DrawingVersionView
+              version={shownVersion}
+              filePath={drawingPath}
+              liveCanvas={excalidrawAPI}
+              theme={excalidrawTheme}
             />
-          </Suspense>
+          ) : null}
         </div>
+
+        {isHistoryOpen && drawingPath ? (
+          <HistoryPanel place="canvas" filePath={drawingPath} />
+        ) : null}
 
         {isBrowserPanelOpen && (
           <div className="min-w-88 max-w-[60%] basis-[32%] border-l">

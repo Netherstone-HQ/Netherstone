@@ -8,6 +8,7 @@ import {
   LeftSidebarToggle,
   RightSidebarToggle,
 } from "./PanelToggles";
+import { HistoryToggle } from "./history/HistoryToggle";
 import { FileBreadcrumb } from "./vault/FileBreadcrumb";
 
 const closeShard = () => void closeEditorFile();
@@ -27,6 +28,7 @@ export function AppHeader() {
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <WordCount />
         <AutosaveIndicator />
+        {currentFilePath ? <HistoryToggle place="notes" /> : null}
         <BrowserPanelToggle />
         <Separator
           orientation="vertical"

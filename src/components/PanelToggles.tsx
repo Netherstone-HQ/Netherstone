@@ -3,6 +3,7 @@ import { GlobeIcon, PanelLeftIcon, PanelRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useUIStore } from "@/store";
+import { useHistoryStore } from "@/store/history";
 
 function PanelToggle({
   label,
@@ -47,9 +48,18 @@ export function LeftSidebarToggle() {
   );
 }
 
+/** History takes the right sidebar's place; showing the sidebar closes it. */
 export function RightSidebarToggle() {
-  const isOpen = useUIStore((s) => s.isRightSidebarOpen);
-  const toggle = useUIStore((s) => s.toggleRightSidebar);
+  const isHistoryOpen = useHistoryStore((s) => s.openIn === "notes");
+  const isOpen = useUIStore((s) => s.isRightSidebarOpen) && !isHistoryOpen;
+  const toggleSidebar = useUIStore((s) => s.toggleRightSidebar);
+  const setSidebarOpen = useUIStore((s) => s.setRightSidebarOpen);
+  const closeHistory = useHistoryStore((s) => s.closeHistory);
+  const toggle = () => {
+    if (!isHistoryOpen) return toggleSidebar();
+    closeHistory();
+    setSidebarOpen(true);
+  };
 
   return (
     <PanelToggle

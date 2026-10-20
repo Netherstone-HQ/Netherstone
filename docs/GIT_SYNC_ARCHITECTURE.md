@@ -63,6 +63,14 @@ open shard changes outside the app, the text the app last saved and the new
 text are both saved first (`snapshot_outside_change`), so neither is lost
 whatever the user keeps. Unchanged vaults make no version.
 
+The history panel (`src/components/history/`) lists one file's versions from
+this history (`src-tauri/src/sync/history.rs`): the commits where its content
+changed, following renames, newest first. What a version is, beyond an edit,
+comes from a line in its commit message: `Changed outside the app: <path>` or
+`Restored <path> from <time>`. Restoring saves a version of the vault first,
+writes the old content, then saves that as a version, so a restore can always
+be undone.
+
 ## Locks
 
 `src-tauri/src/locks.rs` holds two locks shared by every Netherstone process

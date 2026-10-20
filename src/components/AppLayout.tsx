@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useCallback, useState } from "react";
 import { useAppShortcuts } from "@/hooks/useAppShortcuts";
-import { useUIStore } from "@/store";
+import { cn } from "@/lib/utils";
+import { useEditorStore, useUIStore } from "@/store";
+import { useShownVersion } from "@/store/history";
 
 import { RightSidebar } from "./sidebar/RightSidebar";
 import { LeftSidebar } from "./sidebar/LeftSidebar";
@@ -23,6 +25,7 @@ import { AppHeader } from "./AppHeader";
 import { Editor } from "./editor/Editor";
 import { ModeSwitcher } from "./sidebar/ModeSwitcher";
 import { ExcalidrawView } from "./ExcalidrawView";
+import { ShardVersionView } from "./history/ShardVersionView";
 import { WindowTitleBar } from "./WindowTitleBar";
 
 interface AppLayoutProps {
@@ -32,6 +35,34 @@ interface AppLayoutProps {
 const MainEditorContent = React.memo(function MainEditorContent() {
   return <Editor />;
 });
+
+/**
+ * The editor, or an earlier version of its shard over it. The editor stays
+ * laid out underneath, keeping its scroll position, undo history and
+ * unsaved edits for when the version closes.
+ */
+function EditorOrVersion({ children }: { children?: React.ReactNode }) {
+  const version = useShownVersion("notes");
+  const filePath = useEditorStore((s) => s.currentFilePath);
+  const shown = children == null && version !== null && filePath !== null;
+
+  return (
+    <div className="relative flex min-w-0 flex-1 flex-col">
+      <main
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-auto",
+          shown && "invisible",
+        )}
+        inert={shown}
+      >
+        {children ?? <MainEditorContent />}
+      </main>
+      {shown ? (
+        <ShardVersionView version={version} filePath={filePath} />
+      ) : null}
+    </div>
+  );
+}
 
 const MemoizedLeftSidebar = React.memo(LeftSidebar);
 
@@ -103,9 +134,7 @@ const ModeAwareNotes = React.memo(function ModeAwareNotes({
         >
           <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
             <div className="relative flex min-h-0 flex-1">
-              <main className="flex min-w-0 flex-1 flex-col overflow-auto">
-                {children ?? <MainEditorContent />}
-              </main>
+              <EditorOrVersion children={children} />
 
               <RightSidebar />
             </div>

@@ -37,7 +37,9 @@ function errorText(error: unknown) {
  * now. A toast offers Undo, which brings back the version saved just before.
  */
 export async function restoreFileVersion(version: Version) {
-  const place = useHistoryStore.getState().openIn ?? "notes";
+  const { openIn, deletedPath } = useHistoryStore.getState();
+  if (deletedPath) return restoreDeletedShard(deletedPath, version);
+  const place = openIn ?? "notes";
   const filePath = openFilePath(place);
   if (!filePath) return;
   const restored = await restore(version, place, filePath);
@@ -90,6 +92,29 @@ async function restore(
     });
     return null;
   }
+}
+
+/** Brings a deleted shard back at its old path and opens it. */
+async function restoreDeletedShard(filePath: string, version: Version) {
+  const vaultPath = useVaultStore.getState().currentVaultPath;
+  if (!vaultPath) return;
+  try {
+    // Not suppressed: the watcher adds it to the tree and the index.
+    await restoreVersion(vaultPath, filePath, version);
+  } catch (error) {
+    console.error("[Netherstone] Couldn't restore a deleted shard:", error);
+    toast.error("Couldn't restore this version", {
+      description: errorText(error),
+    });
+    return;
+  }
+  useHistoryStore.getState().closeHistory();
+  try {
+    await openEditorFile(filePath);
+  } catch (error) {
+    console.error("[Netherstone] Couldn't open a restored shard:", error);
+  }
+  toast.success(`Restored ${formatVersionMoment(version.time)}`);
 }
 
 async function restoreShard(

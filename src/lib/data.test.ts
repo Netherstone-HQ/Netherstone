@@ -10,7 +10,7 @@ import {
 } from "./data";
 
 function entry(day: string, name: string, words: number): WritingEntry {
-  return { day, name, path: `/v/${name}`, words, exists: true };
+  return { day, name, path: `/v/${name}`, words, exists: true, has_history: false };
 }
 
 describe("writing totals", () => {

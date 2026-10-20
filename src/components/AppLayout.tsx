@@ -1,9 +1,9 @@
 import * as React from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppShortcuts } from "@/hooks/useAppShortcuts";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useUIStore } from "@/store";
-import { useShownVersion } from "@/store/history";
+import { useHistoryStore, useShownVersion } from "@/store/history";
 
 import { RightSidebar } from "./sidebar/RightSidebar";
 import { LeftSidebar } from "./sidebar/LeftSidebar";
@@ -37,14 +37,28 @@ const MainEditorContent = React.memo(function MainEditorContent() {
 });
 
 /**
- * The editor, or an earlier version of its shard over it. The editor stays
- * laid out underneath, keeping its scroll position, undo history and
- * unsaved edits for when the version closes.
+ * The editor, or an earlier version of its shard over it, or of a deleted
+ * shard. The editor stays laid out underneath, keeping its scroll position,
+ * undo history and unsaved edits for when the version closes.
  */
 function EditorOrVersion({ children }: { children?: React.ReactNode }) {
   const version = useShownVersion("notes");
-  const filePath = useEditorStore((s) => s.currentFilePath);
-  const shown = children == null && version !== null && filePath !== null;
+  const openPath = useEditorStore((s) => s.currentFilePath);
+  const deletedPath = useHistoryStore((s) => s.deletedPath);
+  const closeHistory = useHistoryStore((s) => s.closeHistory);
+  const filePath = deletedPath ?? openPath;
+  const shown =
+    children == null &&
+    filePath !== null &&
+    (version !== null || deletedPath !== null);
+
+  // Opening a shard leaves the deleted one's history.
+  const openPathRef = useRef(openPath);
+  useEffect(() => {
+    if (openPathRef.current === openPath) return;
+    openPathRef.current = openPath;
+    if (useHistoryStore.getState().deletedPath !== null) closeHistory();
+  }, [openPath, closeHistory]);
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col">
@@ -57,8 +71,14 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
       >
         {children ?? <MainEditorContent />}
       </main>
-      {shown ? (
-        <ShardVersionView version={version} filePath={filePath} />
+      {shown && version !== null ? (
+        <ShardVersionView
+          version={version}
+          filePath={filePath}
+          isDeleted={deletedPath !== null}
+        />
+      ) : shown ? (
+        <div className="absolute inset-0 bg-background" />
       ) : null}
     </div>
   );
@@ -97,7 +117,7 @@ const ModeAwareTags = React.memo(function ModeAwareTags() {
   );
 });
 
-// Mounted only while Data is open, so it loads fresh figures on each visit.
+// Mounted only while Overview is open, so it loads fresh figures on each visit.
 const ModeAwareData = React.memo(function ModeAwareData() {
   const appMode = useUIStore((s) => s.appMode);
   if (appMode !== "data") return null;

@@ -43,6 +43,12 @@ export async function openFileHistory(filePath: string) {
     .openHistory(isDrawingPath(filePath) ? "canvas" : "notes");
 }
 
+/** Shows a deleted shard's history in the Editor, its last version on screen. */
+export function openDeletedShardHistory(filePath: string) {
+  useUIStore.getState().openMode("editor");
+  useHistoryStore.getState().openDeletedHistory(filePath);
+}
+
 /**
  * Creates an untitled drawing in `folder` (the vault's root by default) and
  * opens it, saying so if that fails.

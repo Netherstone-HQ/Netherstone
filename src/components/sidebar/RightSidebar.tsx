@@ -29,8 +29,10 @@ function ShardSections({ isOpen }: { isOpen: boolean }) {
 /** The open shard's outline, links and details, or its history in their place. */
 export function RightSidebar() {
   const isSidebarOpen = useUIStore((s) => s.isRightSidebarOpen);
-  const filePath = useEditorStore((s) => s.currentFilePath);
-  const hasShard = filePath !== null;
+  const openPath = useEditorStore((s) => s.currentFilePath);
+  const deletedPath = useHistoryStore((s) => s.deletedPath);
+  const hasShard = openPath !== null;
+  const filePath = deletedPath ?? openPath;
   const isHistoryOpen = useHistoryStore((s) => s.openIn === "notes");
   const closeHistory = useHistoryStore((s) => s.closeHistory);
   const showsHistory = isHistoryOpen && filePath !== null;
@@ -38,8 +40,8 @@ export function RightSidebar() {
 
   // Closing the shard closes its history.
   useEffect(() => {
-    if (isHistoryOpen && !hasShard) closeHistory();
-  }, [isHistoryOpen, hasShard, closeHistory]);
+    if (isHistoryOpen && !hasShard && deletedPath === null) closeHistory();
+  }, [isHistoryOpen, hasShard, deletedPath, closeHistory]);
 
   return (
     <div

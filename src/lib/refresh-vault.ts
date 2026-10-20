@@ -7,7 +7,7 @@ import { useTagsStore } from "@/store/tags";
 
 /**
  * Brings the vault's search index up to date; Tags reloads on its next visit,
- * and an open Data page at once.
+ * and an open Overview page at once.
  */
 export async function indexVault(vaultPath: string) {
   const result = await invoke<string>("index_vault", { vaultPath });

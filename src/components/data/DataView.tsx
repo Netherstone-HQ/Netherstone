@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CircleCheckIcon } from "lucide-react";
 
 import { LeftSidebarToggle } from "@/components/PanelToggles";
@@ -19,10 +19,18 @@ import {
   getFolderInVault,
   getVaultFileDisplayName,
 } from "@/lib/drawing-files";
+import { getAssetLabel } from "@/components/settings/attachment-format";
+import type { MissingAttachment } from "@/lib/commands";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
+import { openDeletedShardHistory } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
-import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import {
+  useAttachmentReportStore,
+  useEditorStore,
+  useUIStore,
+  useVaultStore,
+} from "@/store";
 import { DATA_SECTIONS, useDataStore, type DataSection } from "@/store/data";
 import { CalendarKey, WritingCalendar } from "./WritingCalendar";
 
@@ -39,12 +47,12 @@ async function openShard(path: string): Promise<boolean> {
     useUIStore.getState().openMode("editor");
     return true;
   } catch (error) {
-    console.error("[Netherstone] Failed to open shard from Data:", error);
+    console.error("[Netherstone] Failed to open shard from Overview:", error);
     return false;
   }
 }
 
-/** Scrolls the Data page to `section`, for the sidebar's list. */
+/** Scrolls the Overview page to `section`, for the sidebar's list. */
 export function showDataSection(section: DataSection) {
   useDataStore.getState().setSection(section);
   document
@@ -138,14 +146,17 @@ function DayShard({
     </>
   );
 
+  // A deleted shard opens its history, to bring it back.
+  const open = entry.exists
+    ? () => void openShard(entry.path)
+    : entry.has_history
+      ? () => openDeletedShardHistory(entry.path)
+      : null;
+
   return (
     <li>
-      {entry.exists ? (
-        <button
-          type="button"
-          className={LINK_ROW_CLASS}
-          onClick={() => void openShard(entry.path)}
-        >
+      {open ? (
+        <button type="button" className={LINK_ROW_CLASS} onClick={open}>
           {content}
         </button>
       ) : (
@@ -216,11 +227,8 @@ function Writing({ vaultPath }: { vaultPath: string }) {
             pickedDay={shownDay}
             onPick={setPickedDay}
           />
-          <div className="flex items-center gap-1 text-muted-foreground text-ui-sm">
-            <span>Each square is a day you wrote in this vault.</span>
-            <span className="ml-auto">
-              <CalendarKey />
-            </span>
+          <div className="flex justify-end text-muted-foreground text-ui-sm">
+            <CalendarKey />
           </div>
         </div>
       ) : (
@@ -228,13 +236,9 @@ function Writing({ vaultPath }: { vaultPath: string }) {
           <div className="opacity-35">
             <WritingCalendar weeks={weeks} pickedDay={todayKey} isInert />
           </div>
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-20 text-center">
+          <div className="absolute inset-0 flex items-center justify-center px-20 text-center">
             <span className="font-semibold text-ui">
               Your calendar starts today
-            </span>
-            <span className="text-muted-foreground text-ui-sm">
-              Each day you write in this vault fills in a square. Netherstone
-              keeps the count on this device, starting now.
             </span>
           </div>
         </div>
@@ -258,8 +262,41 @@ async function openBrokenLink(link: BrokenLink) {
   if (!(await openShard(link.path))) setPendingLinkReveal(null);
 }
 
-function BrokenLinks({ links }: { links: BrokenLink[] }) {
-  if (links.length === 0) {
+/** Opens a shard that embeds a missing file, scrolled to the embed. */
+async function openMissingFile(shardPath: string, assetPath: string) {
+  const { setPendingLinkReveal } = useEditorStore.getState();
+  setPendingLinkReveal({ path: shardPath, assetPath });
+  if (!(await openShard(shardPath))) setPendingLinkReveal(null);
+}
+
+/** One row per shard embedding each missing file. */
+export function missingFileRows(missing: MissingAttachment[]) {
+  return missing.flatMap((file) =>
+    file.shardPaths.map((shardPath) => ({
+      assetPath: file.assetPath,
+      name: file.originalName ?? getAssetLabel(file.assetPath),
+      shardPath,
+    })),
+  );
+}
+
+function OpenLabel() {
+  return (
+    <span className="ml-auto shrink-0 text-chart-4 text-ui-sm dark:text-chart-2">
+      Open
+    </span>
+  );
+}
+
+function BrokenLinks({
+  links,
+  missing,
+}: {
+  links: BrokenLink[];
+  missing: MissingAttachment[];
+}) {
+  const missingRows = missingFileRows(missing);
+  if (links.length === 0 && missingRows.length === 0) {
     return (
       <div className="flex items-center gap-2.5 rounded-lg border bg-card p-4 text-ui">
         <CircleCheckIcon className="size-5 shrink-0 text-chart-3" />
@@ -269,34 +306,60 @@ function BrokenLinks({ links }: { links: BrokenLink[] }) {
   }
 
   return (
-    <>
-      <ul className="flex flex-col rounded-lg border bg-card p-1.5">
-        {links.map((link, i) => (
-          <li key={`${link.path}-${i}`}>
-            <button
-              type="button"
-              className={LINK_ROW_CLASS}
-              onClick={() => void openBrokenLink(link)}
-            >
-              <span className="min-w-0 truncate">@{link.text}</span>
-              <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-                in {getVaultFileDisplayName(link.name)}
-              </span>
-              <span className="ml-auto shrink-0 text-chart-4 text-ui-sm dark:text-chart-2">
-                Open
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="mx-3 text-muted-foreground text-ui-sm">
-        These @ links point to shards that don't exist. Open one to fix it.
-      </p>
-    </>
+    <ul className="flex flex-col rounded-lg border bg-card p-1.5">
+      {links.map((link, i) => (
+        <li key={`${link.path}-${i}`}>
+          <button
+            type="button"
+            className={LINK_ROW_CLASS}
+            onClick={() => void openBrokenLink(link)}
+          >
+            <span className="min-w-0 truncate">@{link.text}</span>
+            <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
+              in {getVaultFileDisplayName(link.name)}
+            </span>
+            <OpenLabel />
+          </button>
+        </li>
+      ))}
+      {missingRows.map((row) => (
+        <li key={`${row.assetPath}-${row.shardPath}`}>
+          <button
+            type="button"
+            className={LINK_ROW_CLASS}
+            title={row.assetPath}
+            onClick={() => void openMissingFile(row.shardPath, row.assetPath)}
+          >
+            <span className="min-w-0 truncate">{row.name}</span>
+            <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
+              in{" "}
+              {getVaultFileDisplayName(
+                row.shardPath.split(/[\\/]/).pop() ?? row.shardPath,
+              )}
+            </span>
+            <OpenLabel />
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-/** Data mode's page: your writing in this vault, then its broken links. */
+/** The missing files in the vault's attachment report, checked on each visit. */
+function useMissingFiles(vaultPath: string | null, version: number) {
+  const check = useAttachmentReportStore((s) => s.check);
+  const missing = useAttachmentReportStore((s) =>
+    s.vaultPath === vaultPath ? (s.report?.missing ?? null) : null,
+  );
+
+  useEffect(() => {
+    if (vaultPath) void check(vaultPath);
+  }, [vaultPath, version, check]);
+
+  return missing ?? [];
+}
+
+/** The Overview page: your writing in this vault, then its broken links. */
 export function DataView() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const log = useDataStore((s) => s.log);
@@ -306,6 +369,16 @@ export function DataView() {
   const load = useDataStore((s) => s.load);
   const setSection = useDataStore((s) => s.setSection);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const missing = useMissingFiles(vaultPath, version);
+  const pendingSection = useDataStore((s) => s.pendingSection);
+  const hasContent = !!log && !!vaultPath && status !== "error";
+
+  // Asked for from elsewhere, such as the missing files toast.
+  useLayoutEffect(() => {
+    if (!hasContent || !pendingSection) return;
+    useDataStore.getState().scrollToOnOpen(null);
+    showDataSection(pendingSection);
+  }, [hasContent, pendingSection]);
 
   // Loads on each visit, since saves change the figures, and again if the
   // index changes while the page is open.
@@ -335,15 +408,10 @@ export function DataView() {
   if (status === "error") {
     content = (
       <p className="mt-24 text-center text-muted-foreground text-ui">
-        Data couldn't be loaded.
+        Overview couldn't be loaded.
       </p>
     );
   } else if (log && vaultPath) {
-    const startedOn = parseDay(log.started_on).toLocaleDateString(undefined, {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
     content = (
       <>
         <h1 className="font-semibold text-2xl tracking-tight">
@@ -351,9 +419,6 @@ export function DataView() {
         </h1>
         <p className="mt-1 mb-7 text-muted-foreground text-ui-sm">
           {plural(log.shard_count, "shard", "shards")}
-          {log.entries.length > 0
-            ? ` · counted on this device since ${startedOn}`
-            : null}
         </p>
 
         <section
@@ -383,7 +448,7 @@ export function DataView() {
           >
             Broken links
           </h2>
-          <BrokenLinks links={brokenLinks} />
+          <BrokenLinks links={brokenLinks} missing={missing} />
         </section>
       </>
     );
@@ -397,7 +462,7 @@ export function DataView() {
           orientation="vertical"
           className="mx-1 h-4 data-vertical:self-center"
         />
-        <span className="px-1.5 font-medium text-ui">Data</span>
+        <span className="px-1.5 font-medium text-ui">Overview</span>
       </header>
       <div
         ref={scrollRef}

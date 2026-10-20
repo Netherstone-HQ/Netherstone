@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** A shard's writing on one day, as this device logged it. */
+/** A shard's writing on one day, from the vault's history or this device's log. */
 export interface WritingEntry {
   /** The local date, as `YYYY-MM-DD`. */
   day: string;
@@ -10,12 +10,14 @@ export interface WritingEntry {
   words: number;
   /** False once the shard is deleted; its words still count. */
   exists: boolean;
+  /** For a deleted shard: whether the local history still has it. */
+  has_history: boolean;
 }
 
 export interface WritingLog {
   shard_count: number;
   word_count: number;
-  /** The day this device started counting for the vault, as `YYYY-MM-DD`. */
+  /** The first day with writing counted, as `YYYY-MM-DD`. */
   started_on: string;
   /** Oldest first, over the last year or so. */
   entries: WritingEntry[];

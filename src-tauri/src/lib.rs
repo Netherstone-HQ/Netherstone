@@ -285,14 +285,6 @@ fn reconcile_attachments(vault_path: String) -> Result<db::attachments::Attachme
     db::attachments::reconcile_vault_attachments(&conn, vault, &shard_paths)
 }
 
-/// Renames an attachment inside the attachment folder and moves its
-/// database records. The caller rewrites links in shards.
-#[tauri::command(async)]
-fn rename_attachment(vault_path: String, from: String, to: String) -> Result<(), String> {
-    let conn = db::open_connection()?;
-    db::attachments::rename_attachment(&conn, Path::new(&vault_path), &from, &to)
-}
-
 /// Moves the requested unused attachments to the OS trash, after
 /// re-checking that each is still unused and past the grace period.
 #[tauri::command(async)]
@@ -442,9 +434,9 @@ fn history_read_version(vault_path: String, blob: String) -> Result<String, Stri
     sync::history::read_version(&sync::sync_root()?, Path::new(&vault_path), &blob)
 }
 
-/// Puts an earlier version of a shard or drawing back. `expected_content` is
-/// the shard's text as the app last read or wrote it: if the file changed
-/// outside the app since, nothing is restored.
+/// Puts an earlier version of a shard or drawing back, deleted ones too.
+/// `expected_content` is the shard's text as the app last read or wrote it:
+/// if the file changed outside the app since, nothing is restored.
 #[tauri::command(async)]
 fn history_restore(
     vault_path: String,
@@ -465,6 +457,11 @@ fn history_restore(
         &blob,
         version_time,
         |content| {
+            // A deleted file comes back where it was, folders and all.
+            if let Some(folder) = path.parent().filter(|folder| !folder.exists()) {
+                std::fs::create_dir_all(folder)
+                    .map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
+            }
             if is_drawing {
                 write_drawing_file(path, content)
             } else {
@@ -1263,10 +1260,27 @@ fn get_tagged_files() -> Result<Vec<db::queries::TaggedFile>, String> {
 
 #[tauri::command(async)]
 fn get_writing_log(vault_path: String) -> Result<db::data::WritingLog, String> {
+    let today = db::data::local_today();
+    // Without its history, the page still shows what this device counted.
+    let history = sync::sync_root()
+        .and_then(|sync_root| {
+            sync::writing::writing_history(
+                &sync_root,
+                Path::new(&vault_path),
+                &db::data::first_log_day(&today),
+            )
+        })
+        .unwrap_or_else(|error| {
+            eprintln!(
+                "[Netherstone] Couldn't read writing from history: {}",
+                error
+            );
+            None
+        });
     let db = db::Database::new()?;
 
     db.with_connection(|conn| {
-        db::data::get_writing_log(conn, &vault_path, &db::data::local_today())
+        db::data::get_writing_log(conn, &vault_path, &today, history.as_ref())
     })
 }
 
@@ -1519,7 +1533,6 @@ pub fn run() {
             reconcile_attachments,
             describe_missing_attachment,
             clean_up_attachments,
-            rename_attachment,
             find_shards_containing,
             upsert_ast_cache,
             delete_ast_cache,

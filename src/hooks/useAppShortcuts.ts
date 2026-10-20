@@ -27,7 +27,7 @@ const ZOOM_KEYS: Record<string, 1 | -1 | 0> = {
 
 /**
  * App-wide shortcuts: Ctrl+1/2/3/4 (⌘ on a Mac) switch between Editor,
- * Tags, Canvas and Data, Ctrl+N starts a new shard, and Ctrl+= / Ctrl+− /
+ * Tags, Canvas and Overview, Ctrl+N starts a new shard, and Ctrl+= / Ctrl+− /
  * Ctrl+0 zoom the interface. Listed in Settings › Shortcuts.
  */
 export function useAppShortcuts({ onNewShard }: { onNewShard: () => void }) {

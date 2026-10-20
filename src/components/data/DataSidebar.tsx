@@ -8,16 +8,16 @@ import {
 import { getFolderInVault, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { cn } from "@/lib/utils";
-import { useUIStore, useVaultStore } from "@/store";
+import { useAttachmentReportStore, useUIStore, useVaultStore } from "@/store";
 import { DATA_SECTIONS, useDataStore } from "@/store/data";
-import { showDataSection } from "./DataView";
+import { missingFileRows, showDataSection } from "./DataView";
 
 async function openChartShard(path: string) {
   try {
     await openEditorFile(path);
     useUIStore.getState().openMode("editor");
   } catch (error) {
-    console.error("[Netherstone] Failed to open shard from Data:", error);
+    console.error("[Netherstone] Failed to open shard from Overview:", error);
   }
 }
 
@@ -58,12 +58,19 @@ function ChartShards() {
 }
 
 /**
- * The sidebar in Data mode: the page's sections, to jump between, and the
- * shards with charts.
+ * The sidebar on the Overview page: the page's sections, to jump between,
+ * and the shards with charts.
  */
 export function DataSidebar() {
   const section = useDataStore((s) => s.section);
-  const brokenLinkCount = useDataStore((s) => s.brokenLinks.length);
+  const vaultPath = useVaultStore((s) => s.currentVaultPath);
+  const linkCount = useDataStore((s) => s.brokenLinks.length);
+  const missingCount = useAttachmentReportStore((s) =>
+    s.vaultPath === vaultPath && s.report
+      ? missingFileRows(s.report.missing).length
+      : 0,
+  );
+  const brokenLinkCount = linkCount + missingCount;
 
   return (
     <>

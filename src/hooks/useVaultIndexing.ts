@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
-import { ATTACHMENTS_SECTION_ID } from "@/components/settings/AttachmentsSection";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { isMarkdownPath } from "@/lib/drawing-files";
 import {
@@ -17,6 +16,7 @@ import {
 import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
 import { indexVault } from "@/lib/refresh-vault";
+import { useDataStore } from "@/store/data";
 import {
   useAttachmentReportStore,
   useEditorStore,
@@ -71,13 +71,8 @@ async function checkAttachments(vaultPath: string) {
       action: {
         label: "Review",
         onClick: () => {
-          useUIStore.getState().openSettings("files");
-          // Wait for the settings view to mount.
-          window.setTimeout(() => {
-            document
-              .getElementById(ATTACHMENTS_SECTION_ID)
-              ?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }, 50);
+          useDataStore.getState().scrollToOnOpen("broken-links");
+          useUIStore.getState().openMode("data");
         },
       },
     },

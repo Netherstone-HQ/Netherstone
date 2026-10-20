@@ -89,7 +89,7 @@ fn git_error(context: &str, e: git2::Error) -> String {
 
 /// The vault's repository, or `None` when it has no history yet. Never
 /// creates one: reading history shouldn't write anything.
-fn open_existing(sync_root: &Path, vault_path: &Path) -> Result<Option<Repository>, String> {
+pub(super) fn open_existing(sync_root: &Path, vault_path: &Path) -> Result<Option<Repository>, String> {
     let Some(record) = state::find_record(sync_root, vault_path)? else {
         return Ok(None);
     };
@@ -171,6 +171,20 @@ pub fn list_versions(
 
     let mut path = super::vault_relative(vault_path, file_path)?;
     let mut commit = head;
+    // A deleted file: its versions end with the last one that had it.
+    while blob_at(
+        &commit
+            .tree()
+            .map_err(|e| git_error("Failed to read history", e))?,
+        &path,
+    )
+    .is_none()
+    {
+        match commit.parent(0) {
+            Ok(parent) => commit = parent,
+            Err(_) => return Ok(Vec::new()),
+        }
+    }
     let mut changes = Vec::new();
     loop {
         let tree = commit
@@ -579,6 +593,33 @@ mod tests {
         let versions = list_versions(&sync_root, &vault, &file).unwrap();
         assert_eq!(versions[0].kind, VersionKind::Restored);
         assert_eq!(versions[0].restored_from, Some(first.time));
+    }
+
+    #[test]
+    fn a_deleted_file_keeps_its_versions_and_can_be_restored() {
+        let (vault, sync_root) = setup("history-deleted");
+        fs::create_dir_all(vault.join("Folder")).unwrap();
+        save(&sync_root, &vault, "Folder/Note.md", "First");
+        save(&sync_root, &vault, "Folder/Note.md", "Second");
+        fs::remove_dir_all(vault.join("Folder")).unwrap();
+        crate::sync::snapshot_vault(&sync_root, &vault).unwrap();
+
+        let file = vault.join("Folder/Note.md");
+        let versions = list_versions(&sync_root, &vault, &file).unwrap();
+        // Its last version too: nothing on disk is "Now".
+        assert_eq!(
+            kinds(&versions),
+            [VersionKind::Edited, VersionKind::Created]
+        );
+
+        let latest = &versions[0];
+        let write = |text: &str| {
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(&file, text).map_err(|e| e.to_string())
+        };
+        let result = restore(&sync_root, &vault, &file, &latest.blob, latest.time, write).unwrap();
+        assert!(result.undo.is_none());
+        assert_eq!(fs::read_to_string(&file).unwrap(), "Second");
     }
 
     #[test]

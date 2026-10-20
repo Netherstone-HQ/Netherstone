@@ -44,7 +44,11 @@ async function currentValue(filePath: string) {
   return resolveSessionValue(filePath, state.markdownContent, null);
 }
 
-function useLoadedVersion(version: FileVersion, filePath: string) {
+function useLoadedVersion(
+  version: FileVersion,
+  filePath: string,
+  isDeleted: boolean,
+) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const [loaded, setLoaded] = useState<
     Loaded | { id: string; error: string } | null
@@ -57,13 +61,14 @@ function useLoadedVersion(version: FileVersion, filePath: string) {
       const markdown = await readVersion(vaultPath, version.blob);
       const [value, current] = await Promise.all([
         resolveSessionValue(filePath, markdown, null),
-        currentValue(filePath),
+        // A deleted shard has nothing now to compare with.
+        isDeleted ? null : currentValue(filePath),
       ]);
       if (cancelled) return;
       setLoaded({
         id: version.id,
         markdown,
-        value: diffShardValues(value, current, isInline),
+        value: current ? diffShardValues(value, current, isInline) : value,
       });
     })().catch((error) => {
       console.error("[Netherstone] Couldn't show a version:", error);
@@ -72,7 +77,7 @@ function useLoadedVersion(version: FileVersion, filePath: string) {
     return () => {
       cancelled = true;
     };
-  }, [vaultPath, filePath, version.id, version.blob]);
+  }, [vaultPath, filePath, isDeleted, version.id, version.blob]);
 
   return loaded?.id === version.id ? loaded : null;
 }
@@ -115,18 +120,20 @@ function VersionDocument({ value }: { value: any[] }) {
 }
 
 /**
- * An earlier version of the open shard in the editor's place, under the
- * version bar. The editor stays as it was underneath, for when "Now" is
- * picked or history closes.
+ * An earlier version of the open shard, or of a deleted one, in the editor's
+ * place, under the version bar. The editor stays as it was underneath, for
+ * when "Now" is picked or history closes.
  */
 export function ShardVersionView({
   version,
   filePath,
+  isDeleted = false,
 }: {
   version: FileVersion;
   filePath: string;
+  isDeleted?: boolean;
 }) {
-  const loaded = useLoadedVersion(version, filePath);
+  const loaded = useLoadedVersion(version, filePath, isDeleted);
   const markdown = loaded && "markdown" in loaded ? loaded.markdown : null;
 
   const moreActions: RowAction[] = markdown
@@ -150,7 +157,11 @@ export function ShardVersionView({
 
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
-      <VersionBar version={version} moreActions={moreActions} />
+      <VersionBar
+        version={version}
+        moreActions={moreActions}
+        canShowChanges={!isDeleted}
+      />
       {loaded === null ? null : "error" in loaded ? (
         <p className="px-6 py-10 text-center text-ui text-muted-foreground">
           This version couldn't be opened.

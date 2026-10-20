@@ -8,12 +8,12 @@ import { useVaultStore } from "@/store/vault";
 
 /** First sync after a vault opens, once the app has settled. */
 const STARTUP_DELAY_MS = 3_000;
-/** Sync this long after the last edit. */
-const AFTER_EDITS_DELAY_MS = 60_000;
+/** Sync this long after the last edit. Versions are saved sooner, locally. */
+const AFTER_EDITS_DELAY_MS = 5 * 60_000;
 
 /**
  * Keeps the open vault in sync while sync and automatic sync are on: shortly
- * after it opens, a minute after edits stop, on the interval chosen in
+ * after it opens, five minutes after edits stop, on the interval chosen in
  * Settings (to pick up other devices' changes), and when the connection
  * comes back.
  */

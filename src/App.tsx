@@ -11,6 +11,7 @@ import { useVaultWatcher } from "./hooks/useVaultWatcher";
 import { useAutosave } from "./hooks/useAutosave";
 import { useVaultIndexing } from "./hooks/useVaultIndexing";
 import { useBackgroundSync } from "./hooks/useBackgroundSync";
+import { useLocalHistory } from "./hooks/useLocalHistory";
 import { useSearchModal } from "./hooks/useSearchModal";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { SearchModal } from "./components/SearchModal";
@@ -27,6 +28,7 @@ function App() {
   useVaultWatcher();
   useAutosave();
   useVaultIndexing();
+  useLocalHistory();
   useBackgroundSync();
   const { isOpen, setIsOpen } = useSearchModal();
   const { screen, finish, close } = useWelcomeTour();

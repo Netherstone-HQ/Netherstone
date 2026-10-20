@@ -1,7 +1,7 @@
 //! Choosing a version for a file that changed both here and on GitHub.
 
+use super::repo;
 use super::state::{self, SyncConflict, VaultSyncRecord};
-use super::{GIT_LOCK, repo};
 use git2::{Oid, Repository};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -121,7 +121,7 @@ pub fn resolve_conflict(
     path: &str,
     choice: ConflictChoice,
 ) -> Result<VaultSyncRecord, String> {
-    let _guard = GIT_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = crate::locks::history(sync_root)?;
     let mut record = state::load_or_create_record(sync_root, vault_path)?;
     let conflict = find_conflict(&record, path)?.clone();
     let target = vault_path.join(&conflict.path);

@@ -4,6 +4,7 @@ mod db;
 mod export;
 mod github;
 mod import;
+mod locks;
 mod markdown_text;
 mod shard_links;
 mod splash;
@@ -410,6 +411,22 @@ fn sync_snapshot_vault(vault_path: String) -> Result<sync::VaultSnapshotResult, 
     sync::snapshot_vault(&sync::sync_root()?, Path::new(&vault_path))
 }
 
+/// Saves a version of the vault that keeps `previous`, the text the app last
+/// saved to `file_path`, as well as the outside change now on disk.
+#[tauri::command(async)]
+fn sync_snapshot_outside_change(
+    vault_path: String,
+    file_path: String,
+    previous: String,
+) -> Result<sync::VaultSnapshotResult, String> {
+    sync::snapshot_outside_change(
+        &sync::sync_root()?,
+        Path::new(&vault_path),
+        Path::new(&file_path),
+        &previous,
+    )
+}
+
 // ── GitHub account ───────────────────────────────────────────────────────────
 
 #[tauri::command(async)]
@@ -633,14 +650,24 @@ fn rename_ast_cache(old_path: String, new_path: String) -> Result<bool, String> 
     }
 }
 
-/// Serializes markdown writes. Commands run concurrently on the async runtime,
-/// and overlapping saves of one file would race on the shared `.md.tmp` path.
-static MARKDOWN_WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+/// Writes a shard. Saves are serialized across threads and processes:
+/// overlapping saves of one file would race on the shared `.md.tmp` path.
 fn write_markdown_file_and_sync_references(file_path: &str, content: &str) -> Result<(), String> {
-    let _write_guard = MARKDOWN_WRITE_LOCK
-        .lock()
-        .map_err(|e| format!("Failed to lock markdown writes: {}", e))?;
+    write_markdown_file_if_unchanged(file_path, content, None)
+}
+
+/// Like `write_markdown_file_and_sync_references`, but refuses when
+/// `expected` is given and the file now holds something else. The check and
+/// the write happen under one lock, so no other save lands in between.
+fn write_markdown_file_if_unchanged(
+    file_path: &str,
+    content: &str,
+    expected: Option<&str>,
+) -> Result<(), String> {
+    let _write_guard = locks::vault_writes()?;
+    if expected.is_some_and(|expected| changed_on_disk(file_path, expected)) {
+        return Err(CHANGED_ON_DISK.to_string());
+    }
     let path = std::path::Path::new(file_path);
     let tmp_path = path.with_extension("md.tmp");
 
@@ -690,6 +717,7 @@ fn save_markdown_file(
     expected_content: Option<String>,
 ) -> Result<(), String> {
     if let Some(expected) = expected_content.as_deref() {
+        // Checked again under the write lock; this skips logging a refused save.
         if changed_on_disk(&file_path, expected) {
             return Err(CHANGED_ON_DISK.to_string());
         }
@@ -697,7 +725,7 @@ fn save_markdown_file(
     if record_writing == Some(true) {
         record_writing_before_save(&file_path, &content);
     }
-    write_markdown_file_and_sync_references(&file_path, &content)
+    write_markdown_file_if_unchanged(&file_path, &content, expected_content.as_deref())
 }
 
 /// True when the file exists and doesn't hold `expected`.
@@ -743,9 +771,6 @@ fn append_markdown_to_file(file_path: String, markdown: String) -> Result<(), St
     write_markdown_file_and_sync_references(&file_path, &content)
 }
 
-/// Serializes drawing writes for the same reason as `MARKDOWN_WRITE_LOCK`.
-static DRAWING_WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 fn ensure_drawing_path(path: &Path) -> Result<(), String> {
     if vault::is_drawing_path(path) {
         Ok(())
@@ -768,9 +793,7 @@ fn save_drawing_file(file_path: String, content: String) -> Result<(), String> {
     let path = Path::new(&file_path);
     ensure_drawing_path(path)?;
 
-    let _write_guard = DRAWING_WRITE_LOCK
-        .lock()
-        .map_err(|e| format!("Failed to lock drawing writes: {}", e))?;
+    let _write_guard = locks::vault_writes()?;
     let tmp_path = path.with_extension("excalidraw.tmp");
 
     std::fs::write(&tmp_path, content)
@@ -1422,6 +1445,7 @@ pub fn run() {
             sync_get_vault_record,
             sync_plan_vault,
             sync_snapshot_vault,
+            sync_snapshot_outside_change,
             sync_turn_on_backup,
             sync_now,
             sync_list_backups,

@@ -16,12 +16,7 @@ pub mod state;
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-/// Serializes snapshot and upload work so two backups never touch the same
-/// repository at once.
-static GIT_LOCK: Mutex<()> = Mutex::new(());
 
 /// Returns the directory holding per-vault sync data
 /// (`<AppData>/com.netherstone.app/sync`).
@@ -46,11 +41,51 @@ pub struct VaultSnapshotResult {
     pub plan: planner::SyncPlanSummary,
 }
 
-/// Plans and commits the current state of `vault_path` to its local sync
-/// repository, creating the repository on first use.
+/// Saves a version of `vault_path`: plans and commits its current state to
+/// its local repository, creating the repository on first use. Every vault
+/// has this history, with or without sync.
 pub fn snapshot_vault(sync_root: &Path, vault_path: &Path) -> Result<VaultSnapshotResult, String> {
-    let mut record = state::load_or_create_record(sync_root, vault_path)?;
+    let _guard = crate::locks::history(sync_root)?;
+    snapshot_locked(sync_root, vault_path)
+}
+
+/// Saves `previous` as the last version of the vault file `file_path`, then a
+/// version of the whole vault. Called when a file changed outside the app, so
+/// the text the app last saved and the outside change are both kept, whatever
+/// is saved next.
+pub fn snapshot_outside_change(
+    sync_root: &Path,
+    vault_path: &Path,
+    file_path: &Path,
+    previous: &str,
+) -> Result<VaultSnapshotResult, String> {
+    let _guard = crate::locks::history(sync_root)?;
+    let relative = file_path
+        .strip_prefix(vault_path)
+        .ok()
+        .and_then(Path::to_str)
+        .map(|path| path.replace('\\', "/"))
+        .ok_or_else(|| format!("Not in the vault: {}", file_path.display()))?;
     let plan = planner::plan_vault(vault_path)?;
+    if plan.includes(&relative) {
+        let record = state::load_or_create_record(sync_root, vault_path)?;
+        let repository =
+            repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault_path)?;
+        repo::commit_file_version(&repository, &relative, previous.as_bytes())?;
+    }
+    commit_snapshot(sync_root, vault_path, plan)
+}
+
+fn snapshot_locked(sync_root: &Path, vault_path: &Path) -> Result<VaultSnapshotResult, String> {
+    commit_snapshot(sync_root, vault_path, planner::plan_vault(vault_path)?)
+}
+
+fn commit_snapshot(
+    sync_root: &Path,
+    vault_path: &Path,
+    plan: planner::SyncPlan,
+) -> Result<VaultSnapshotResult, String> {
+    let mut record = state::load_or_create_record(sync_root, vault_path)?;
     let git_dir = state::git_dir(sync_root, &record.vault_id);
 
     let repository = repo::open_or_init(&git_dir, vault_path)?;
@@ -99,12 +134,12 @@ fn sync_cycle(
     remote_url: &str,
     token: &str,
 ) -> Result<SyncReport, String> {
-    let _guard = GIT_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = crate::locks::history(sync_root)?;
     let mut changed = Vec::new();
     let mut conflicts = Vec::new();
 
     for attempt in 1..=SYNC_ATTEMPTS {
-        let snapshot = snapshot_vault(sync_root, vault_path)?;
+        let snapshot = snapshot_locked(sync_root, vault_path)?;
         let git_dir = state::git_dir(sync_root, &snapshot.vault_id);
         let repository = repo::open_or_init(&git_dir, vault_path)?;
         remote::set_remote(&repository, remote_url)?;
@@ -303,5 +338,34 @@ mod tests {
         let record = state::load_or_create_record(&sync_root, &vault).unwrap();
         assert_eq!(record.last_commit.as_deref(), Some(commit.id.as_str()));
         assert!(!record.sync_enabled);
+    }
+
+    #[test]
+    fn an_outside_change_keeps_both_versions() {
+        let dir = state::tests::temp_dir("outside-change");
+        let vault = dir.join("vault");
+        let sync_root = dir.join("sync");
+        fs::create_dir_all(&vault).unwrap();
+        fs::write(vault.join("Note.md"), "first").unwrap();
+        snapshot_vault(&sync_root, &vault).unwrap();
+
+        // Saved by the app, then changed outside before the next version.
+        fs::write(vault.join("Note.md"), "outside").unwrap();
+        let result =
+            snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
+        assert!(result.commit.is_some());
+
+        let repository =
+            repo::open_or_init(&state::git_dir(&sync_root, &result.vault_id), &vault).unwrap();
+        let mut walk = repository.revwalk().unwrap();
+        walk.push_head().unwrap();
+        let versions: Vec<Vec<u8>> = walk
+            .map(|id| {
+                let tree = repository.find_commit(id.unwrap()).unwrap().tree().unwrap();
+                let entry = tree.get_path(Path::new("Note.md")).unwrap();
+                repository.find_blob(entry.id()).unwrap().content().to_vec()
+            })
+            .collect();
+        assert_eq!(versions, [&b"outside"[..], b"mine", b"first"]);
     }
 }

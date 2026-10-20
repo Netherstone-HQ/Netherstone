@@ -2,7 +2,10 @@
 
 use super::planner::SyncPlan;
 use super::state::DEFAULT_BRANCH;
-use git2::{IndexAddOption, Repository, RepositoryInitOptions, Signature};
+use git2::{
+    Commit, Index, IndexAddOption, IndexEntry, IndexTime, Repository, RepositoryInitOptions,
+    Signature, Tree,
+};
 use serde::Serialize;
 use std::path::Path;
 
@@ -100,22 +103,8 @@ pub fn commit_plan(
         .find_tree(tree_id)
         .map_err(|e| git_error("Failed to read sync tree", e))?;
 
-    let parent = match repository.head() {
-        Ok(head) => Some(
-            head.peel_to_commit()
-                .map_err(|e| git_error("Failed to read last backup", e))?,
-        ),
-        Err(e) if e.code() == git2::ErrorCode::UnbornBranch => None,
-        Err(e) => return Err(git_error("Failed to read last backup", e)),
-    };
-    let parent_tree = match &parent {
-        Some(commit) => Some(
-            commit
-                .tree()
-                .map_err(|e| git_error("Failed to read last backup", e))?,
-        ),
-        None => None,
-    };
+    let parent = head_commit(repository)?;
+    let parent_tree = tree_of(parent.as_ref())?;
 
     if parent_tree.as_ref().map(|t| t.id()) == Some(tree_id) {
         return Ok(None);
@@ -137,28 +126,114 @@ pub fn commit_plan(
         return Ok(None);
     }
 
+    commit_tree(
+        repository,
+        &tree,
+        parent.as_ref(),
+        (added, modified, removed),
+    )
+    .map(Some)
+}
+
+/// Commits `bytes` as the vault file `path` on top of the last version, with
+/// every other file as it was there. Returns `None` when the last version
+/// already holds those bytes.
+pub fn commit_file_version(
+    repository: &Repository,
+    path: &str,
+    bytes: &[u8],
+) -> Result<Option<SnapshotCommit>, String> {
+    let parent = head_commit(repository)?;
+    let parent_tree = tree_of(parent.as_ref())?;
+
+    // A separate index, so the repository's own (and its cached file stats)
+    // still describes the vault.
+    let mut index = Index::new().map_err(|e| git_error("Failed to create index", e))?;
+    if let Some(tree) = &parent_tree {
+        index
+            .read_tree(tree)
+            .map_err(|e| git_error("Failed to read last backup", e))?;
+    }
+    let existed = index.get_path(Path::new(path), 0).is_some();
+    let blob = repository
+        .blob(bytes)
+        .map_err(|e| git_error("Failed to save file version", e))?;
+    index
+        .add(&IndexEntry {
+            ctime: IndexTime::new(0, 0),
+            mtime: IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode: 0o100644,
+            uid: 0,
+            gid: 0,
+            file_size: bytes.len() as u32,
+            id: blob,
+            flags: 0,
+            flags_extended: 0,
+            path: path.as_bytes().to_vec(),
+        })
+        .map_err(|e| git_error("Failed to save file version", e))?;
+    let tree_id = index
+        .write_tree_to(repository)
+        .map_err(|e| git_error("Failed to write sync tree", e))?;
+    if parent_tree.as_ref().map(|t| t.id()) == Some(tree_id) {
+        return Ok(None);
+    }
+    let tree = repository
+        .find_tree(tree_id)
+        .map_err(|e| git_error("Failed to read sync tree", e))?;
+
+    let counts = if existed { (0, 1, 0) } else { (1, 0, 0) };
+    commit_tree(repository, &tree, parent.as_ref(), counts).map(Some)
+}
+
+fn head_commit(repository: &Repository) -> Result<Option<Commit<'_>>, String> {
+    match repository.head() {
+        Ok(head) => head
+            .peel_to_commit()
+            .map(Some)
+            .map_err(|e| git_error("Failed to read last backup", e)),
+        Err(e) if e.code() == git2::ErrorCode::UnbornBranch => Ok(None),
+        Err(e) => Err(git_error("Failed to read last backup", e)),
+    }
+}
+
+fn tree_of<'r>(commit: Option<&Commit<'r>>) -> Result<Option<Tree<'r>>, String> {
+    commit
+        .map(|commit| commit.tree())
+        .transpose()
+        .map_err(|e| git_error("Failed to read last backup", e))
+}
+
+fn commit_tree(
+    repository: &Repository,
+    tree: &Tree,
+    parent: Option<&Commit>,
+    (added, modified, removed): (usize, usize, usize),
+) -> Result<SnapshotCommit, String> {
     let signature = Signature::now(COMMITTER_NAME, COMMITTER_EMAIL)
         .map_err(|e| git_error("Failed to create backup signature", e))?;
     let message = commit_message(added, modified, removed);
-    let parents: Vec<_> = parent.iter().collect();
+    let parents: Vec<_> = parent.into_iter().collect();
     let id = repository
         .commit(
             Some("HEAD"),
             &signature,
             &signature,
             &message,
-            &tree,
+            tree,
             &parents,
         )
         .map_err(|e| git_error("Failed to save backup", e))?;
 
-    Ok(Some(SnapshotCommit {
+    Ok(SnapshotCommit {
         id: id.to_string(),
         time: signature.when().seconds(),
         added,
         modified,
         removed,
-    }))
+    })
 }
 
 fn commit_message(added: usize, modified: usize, removed: usize) -> String {
@@ -279,6 +354,37 @@ mod tests {
         let repository = open_or_init(&git_dir, &vault).unwrap();
         assert!(snapshot(&repository, &vault).is_none());
         assert!(repository.head().is_err());
+    }
+
+    #[test]
+    fn a_file_version_is_committed_without_touching_the_vault() {
+        let dir = temp_dir("repo-file-version");
+        let (vault, git_dir) = (dir.join("vault"), dir.join("git"));
+        fs::create_dir_all(vault.join("Folder")).unwrap();
+        fs::write(vault.join("A.md"), "a").unwrap();
+        fs::write(vault.join("Folder/B.md"), "outside").unwrap();
+
+        let repository = open_or_init(&git_dir, &vault).unwrap();
+        snapshot(&repository, &vault).unwrap();
+        let version = commit_file_version(&repository, "Folder/B.md", b"mine").unwrap();
+        assert_eq!(version.unwrap().modified, 1);
+        let blob = |path: &str| {
+            let tree = repository.head().unwrap().peel_to_tree().unwrap();
+            let entry = tree.get_path(Path::new(path)).unwrap();
+            repository.find_blob(entry.id()).unwrap().content().to_vec()
+        };
+        assert_eq!(blob("Folder/B.md"), b"mine");
+        assert_eq!(blob("A.md"), b"a");
+        assert!(
+            commit_file_version(&repository, "Folder/B.md", b"mine")
+                .unwrap()
+                .is_none()
+        );
+
+        // The next version is what's on disk.
+        assert_eq!(snapshot(&repository, &vault).unwrap().modified, 1);
+        assert_eq!(blob("Folder/B.md"), b"outside");
+        assert_eq!(fs::read(vault.join("Folder/B.md")).unwrap(), b"outside");
     }
 
     #[test]

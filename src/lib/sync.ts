@@ -122,6 +122,23 @@ export function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
+/** Saves a version of the vault in its local history, if anything changed. */
+export function saveVaultVersion(vaultPath: string) {
+  return invoke("sync_snapshot_vault", { vaultPath });
+}
+
+/**
+ * Saves `previous`, the text the app last saved to `filePath`, and then the
+ * outside change now on disk, as versions of the vault.
+ */
+export function saveOutsideChangeVersion(
+  vaultPath: string,
+  filePath: string,
+  previous: string,
+) {
+  return invoke("sync_snapshot_outside_change", { vaultPath, filePath, previous });
+}
+
 export function turnOffBackup(vaultPath: string) {
   return invoke<VaultSyncRecord>("sync_turn_off_backup", { vaultPath });
 }

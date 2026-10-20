@@ -51,8 +51,24 @@ between, the cycle retries. Edits made while a sync runs are never
 overwritten.
 
 Triggers (`src/hooks/useBackgroundSync.ts`): a few seconds after a vault
-opens, a minute after edits stop, every five minutes, on "Sync now", and when
-the connection comes back. Network failures show "Working offline".
+opens, five minutes after edits stop, every five minutes, on "Sync now", and
+when the connection comes back. Network failures show "Working offline".
+
+## Local history
+
+Every vault has this history, with or without sync: the same repository,
+committed by the same planner. A version is saved a minute after changes stop
+and a minute after the vault opens (`src/hooks/useLocalHistory.ts`). When the
+open shard changes outside the app, the text the app last saved and the new
+text are both saved first (`snapshot_outside_change`), so neither is lost
+whatever the user keeps. Unchanged vaults make no version.
+
+## Locks
+
+`src-tauri/src/locks.rs` holds two locks shared by every Netherstone process
+on the device: one around shard and drawing saves, one around Git work. Each
+is an OS file lock in the app data folder, so a second process (like the MCP
+server) waits instead of writing at the same time.
 
 ## Conflicts
 

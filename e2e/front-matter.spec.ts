@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { caretAfter, editor, lastSave, mockVault } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, test } from "./vault";
 
 test("front matter is shown read-only and written back unchanged", async ({ page }) => {
   const note = "---\ntitle: Props\ntags: [a, b]\n---\n\n# Note\n\nBody\n";

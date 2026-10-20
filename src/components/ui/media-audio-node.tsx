@@ -137,7 +137,11 @@ export const AudioElement = withHOC(
       };
     }, [currentVaultPath, props.element.netherstoneRenderUrl, source]);
 
-    const renderUrl = resolvedSource.renderUrl || unsafeUrl || "";
+    // Until the app may show a file outside the vault, nothing is drawn, so
+    // it never shows as broken.
+    const renderUrl = resolvedSource.isPending
+      ? ""
+      : resolvedSource.renderUrl || unsafeUrl || "";
     const attachmentPath = getResolvedAttachmentPath(
       resolvedSource,
       props.element,
@@ -201,6 +205,10 @@ export const AudioElement = withHOC(
           {props.children}
         </PlateElement>
       );
+    }
+
+    if (resolvedSource.isPending) {
+      return <PlateElement {...props}>{props.children}</PlateElement>;
     }
 
     if (!renderUrl) {

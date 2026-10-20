@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { VAULT_PATH, mockVault } from "./vault";
+import type { Page } from "@playwright/test";
+import { expect, mockVault, test, VAULT_PATH } from "./vault";
 
 const FILES = {
   "Note.md": "# Note\n\nStart\n",

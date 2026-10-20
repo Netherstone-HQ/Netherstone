@@ -24,10 +24,24 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'wasm-unsafe-eval' 'sha256-UBe/P1k6jQKMGqi/8Nhi5IvRzF3HlPzOPe0io8R06Fs='",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' asset: http://asset.localhost data: blob: https: http:",
+        "media-src": "'self' asset: http://asset.localhost data: blob: https: http:",
+        "font-src": "'self' data: https://esm.sh",
+        "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost data: blob: https://esm.sh https://libraries.excalidraw.com https://raw.githubusercontent.com",
+        "worker-src": "'self' blob:",
+        "frame-src": "'self' blob: https:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'"
+      },
+      "dangerousDisableAssetCspModification": ["style-src"],
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": []
       }
     }
   },

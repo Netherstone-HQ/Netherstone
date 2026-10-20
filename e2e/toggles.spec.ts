@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { caretAfter, editor, lastSave, mockVault } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, test } from "./vault";
 
 test("a toggle typed through the / menu is saved with its content", async ({ page }) => {
   await mockVault(page, { files: { "Note.md": "# Note\n\nStart\n" }, open: "Note.md" });

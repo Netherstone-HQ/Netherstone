@@ -23,6 +23,14 @@ export interface OpenEditorFilePayload {
   cacheHit?: boolean;
 }
 
+export interface OutsideChange {
+  path: string;
+  /** The unsaved text in the editor. */
+  mine: string;
+  /** The text on disk. */
+  outside: string;
+}
+
 interface EditorState {
   // ── Open File ──────────────────────────────────────────────────────────────
   currentFilePath: string | null;
@@ -86,6 +94,13 @@ interface EditorState {
   isSaving: boolean;
   setIsSaving: (saving: boolean) => void;
 
+  /**
+   * The open shard changed outside the app in the part being edited. Nothing
+   * is saved until the user chooses which version to keep.
+   */
+  outsideChange: OutsideChange | null;
+  setOutsideChange: (change: OutsideChange | null) => void;
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   /** Call when a file is successfully saved — clears dirty/saving flags and can commit the saved markdown snapshot. */
@@ -143,6 +158,9 @@ export const useEditorStore = create<EditorState>((set) => ({
   isSaving: false,
   setIsSaving: (saving) => set({ isSaving: saving }),
 
+  outsideChange: null,
+  setOutsideChange: (outsideChange) => set({ outsideChange }),
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   markSaved: (markdownContent) =>
     set((state) => ({
@@ -180,6 +198,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         cacheHit,
         isDirty: false,
         isSaving: false,
+        outsideChange: null,
         // The previous note can stay on screen while this one prepares; it
         // must stop being the store's editor right away so saves, renames and
         // sidebars never pair its content with the new path.
@@ -233,6 +252,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         cacheHit: false,
         isDirty: false,
         isSaving: false,
+        outsideChange: null,
         plateEditor: null,
         tocHeadings: [],
       };

@@ -15,7 +15,9 @@ import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
+import { readMarkdownFile } from "@/lib/commands";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { Editor } from "./Editor";
@@ -35,6 +37,11 @@ vi.mock("@/lib/editor-ast-cache", () => ({
     cacheHit: false,
     plateValue: null,
   })),
+}));
+
+vi.mock("@/lib/commands", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/commands")>()),
+  readMarkdownFile: vi.fn(),
 }));
 
 const NOTE_PATH = "C:/vault/notes/note.md";
@@ -185,6 +192,29 @@ describe("Editor", () => {
     ).toBeTruthy();
     expect(screen.getByText("second item")).toBeTruthy();
     expect(screen.getByText("Last paragraph.")).toBeTruthy();
+  });
+
+  it("shows a change made outside the app in place, without marking it dirty", async () => {
+    const editor = await openNote(NOTE);
+    const heading = editor.children[0];
+    const changed = NOTE.replace("Last paragraph.", "Changed elsewhere.");
+    vi.mocked(readMarkdownFile).mockResolvedValue(changed);
+
+    await act(() => reloadOpenShardIfChanged());
+
+    expect(screen.getByText("Changed elsewhere.")).toBeTruthy();
+    expect(useEditorStore.getState().plateEditor).toBe(editor);
+    expect(editor.children[0]).toBe(heading);
+    expect(useEditorStore.getState().isDirty).toBe(false);
+    expect(useEditorStore.getState().markdownContent).toBe(changed);
+    expect(await save(editor)).toBe(changed);
+
+    // Typing afterwards is an edit as usual.
+    await act(async () => {
+      selectEndOf(editor, blockIndexOf(editor, "Changed elsewhere."));
+      editor.tf.insertText("!");
+    });
+    expect(useEditorStore.getState().isDirty).toBe(true);
   });
 
   it("does not mark a note dirty just for opening it", async () => {

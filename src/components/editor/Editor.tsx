@@ -8,32 +8,20 @@ import {
   useState,
   useTransition,
 } from "react";
-import { createSlateEditor, normalizeStaticValue } from "platejs";
 import { useShallow } from "zustand/shallow";
 import { stripLinkDecorators } from "@/components/sidebar/right-sidebar/link-utils";
 import { Button } from "@/components/ui/button";
-import {
-  deserializeEditorMarkdown,
-  stripDeviceMediaProps,
-} from "@/lib/editor-markdown";
-import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
 import {
   isWebPageUrl,
   openWebLink,
   wantsSystemBrowser,
 } from "@/lib/open-web-link";
-import { resolveShardLinkKeys } from "@/lib/shard-link-keys";
-import { useEditorStore, useVaultStore } from "@/store";
+import { useEditorStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
-import { EditorKit } from "./editor-kit";
-import {
-  formatEditorLifecycleDurationMs,
-  getEditorLifecycleNowMs,
-  getPlateValueNodeCount,
-  logEditorLifecycle,
-} from "./lib/editor-lifecycle";
+import { logEditorLifecycle } from "./lib/editor-lifecycle";
+import { resolveSessionValue } from "./lib/session-value";
 
 /** Delay before showing the loading bar, so fast opens don't flash it. */
 const LOADING_BAR_DELAY_MS = 150;
@@ -95,59 +83,6 @@ function resolveInternalLinkPath(
   }
 
   return resolvedParts.join("/");
-}
-
-/**
- * Resolves the initial Plate value for a newly opened file: the cached AST
- * when available, otherwise markdown deserialized in the worker (falling back
- * to the main thread if the worker fails).
- */
-async function resolveSessionValue(
-  filePath: string,
-  content: string,
-  cachedValue: any[] | null,
-): Promise<any[]> {
-  // Values cached before device-specific media props stopped being saved
-  // may still carry them.
-  if (cachedValue) return withCurrentShardLinks(filePath, stripDeviceMediaProps(cachedValue));
-
-  const startMs = getEditorLifecycleNowMs();
-  const deserializeInMainThread = () =>
-    normalizeStaticValue(
-      deserializeEditorMarkdown(createSlateEditor({ plugins: EditorKit }), content, {
-        filePath,
-      }),
-    ) as any[];
-
-  try {
-    const value = await deserializeMarkdownInWorker(content, {
-      filePath,
-      fallback: deserializeInMainThread,
-    });
-
-    logEditorLifecycle("deserialize:complete", {
-      filePath,
-      nodeCount: getPlateValueNodeCount(value),
-      duration: formatEditorLifecycleDurationMs(startMs),
-    });
-
-    return withCurrentShardLinks(
-      filePath,
-      Array.isArray(value) ? (value as any[]) : [],
-    );
-  } catch (error) {
-    console.error("Failed to deserialize markdown in worker:", {
-      filePath,
-      error,
-    });
-    return withCurrentShardLinks(filePath, deserializeInMainThread());
-  }
-}
-
-/** Points the @ links of a loaded shard at where their shards are now. */
-function withCurrentShardLinks(filePath: string, value: any[]): any[] {
-  const { fileTree, currentVaultPath } = useVaultStore.getState();
-  return resolveShardLinkKeys(value, fileTree, filePath, currentVaultPath ?? "");
 }
 
 /**

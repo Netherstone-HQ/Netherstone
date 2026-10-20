@@ -4,7 +4,9 @@ import { fileExists, readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
+import { saveOutsideChangeVersion } from "@/lib/sync";
 import { useEditorStore } from "@/store/editor";
+import { useVaultStore } from "@/store/vault";
 
 /**
  * The open shard's blocks as they were when its text last matched the file
@@ -80,6 +82,7 @@ async function reloadOpenShard() {
     reloadOnceMounted();
     return;
   }
+  keepBothInHistory(filePath, before.markdownContent);
 
   const value = (await resolveSessionValue(
     filePath,
@@ -174,6 +177,19 @@ function serializeEditor(editor: SlateEditor, filePath: string) {
     requestKey: `outside-change:${filePath}`,
     fallback: () => getSaveMarkdownContent(editor, fallback, { filePath }),
   });
+}
+
+/**
+ * Saves the text the app last saved and the outside change as versions, so
+ * whichever is kept, the other can be restored. Not awaited: it can wait on
+ * a sync, and the shard shouldn't.
+ */
+function keepBothInHistory(filePath: string, previous: string) {
+  const vaultPath = useVaultStore.getState().currentVaultPath;
+  if (!vaultPath) return;
+  saveOutsideChangeVersion(vaultPath, filePath, previous).catch((error) =>
+    console.error("[Netherstone] Couldn't save versions of the outside change:", error),
+  );
 }
 
 function reloadOnceMounted() {

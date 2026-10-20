@@ -115,6 +115,8 @@ export type MockVaultOptions = {
   theme?: "light" | "dark";
   /** Earlier versions of files, newest first, by vault-relative path. */
   versions?: Record<string, MockVersion[]>;
+  /** When files as they are now were saved as a version, in Unix seconds. */
+  savedAt?: Record<string, number>;
 };
 
 export type MockVersion = {
@@ -127,10 +129,18 @@ export type MockVersion = {
 };
 
 export async function mockVault(page: Page, options: MockVaultOptions) {
-  const { files, assets = {}, folders = [], open, theme = "dark", versions = {} } = options;
+  const {
+    files,
+    assets = {},
+    folders = [],
+    open,
+    theme = "dark",
+    versions = {},
+    savedAt = {},
+  } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, versions }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, versions, savedAt }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -302,8 +312,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         find_shards_containing: () => [],
         sync_get_vault_record: () => null,
         // Versions are named by file and position: "Note.md#0" is the newest.
-        history_list_versions: ({ filePath }) =>
-          (versions[relative(filePath)] ?? []).map((version, index) => ({
+        history_list_versions: ({ filePath }) => ({
+          savedAt: savedAt[relative(filePath)] ?? null,
+          versions: (versions[relative(filePath)] ?? []).map((version, index) => ({
             id: `${relative(filePath)}#${index}`,
             blob: `${relative(filePath)}#${index}`,
             time: version.time,
@@ -314,6 +325,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             changed: 0,
             counted: true,
           })),
+        }),
         history_read_version: ({ blob }) => {
           const [path, index] = blob.split("#");
           return versions[path][Number(index)].content;
@@ -376,6 +388,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       theme,
       open,
       versions,
+      savedAt,
     },
   );
 

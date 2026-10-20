@@ -425,7 +425,7 @@ fn sync_snapshot_outside_change(
 fn history_list_versions(
     vault_path: String,
     file_path: String,
-) -> Result<Vec<sync::history::FileVersion>, String> {
+) -> Result<sync::history::FileHistory, String> {
     sync::history::list_versions(&sync::sync_root()?, Path::new(&vault_path), Path::new(&file_path))
 }
 

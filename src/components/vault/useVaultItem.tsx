@@ -65,6 +65,7 @@ import {
 } from "@/lib/open-vault-file";
 import { refreshVault } from "@/lib/refresh-vault";
 import { remapShardLinkKeys } from "@/lib/shard-link-keys";
+import { saveVaultVersion } from "@/lib/sync";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
 import {
   useEditorStore,
@@ -340,6 +341,13 @@ export function useVaultItem(
 
     await refreshVault(currentVaultPath);
     await relinkMovedDrawings(node, newPath, currentVaultPath);
+
+    // Saved now, so the history follows the new name at once.
+    if (currentVaultPath) {
+      saveVaultVersion(currentVaultPath).catch((error) =>
+        console.error(`[Netherstone] Couldn't save a version after ${reason}:`, error),
+      );
+    }
   };
 
   const handleRename = async () => {

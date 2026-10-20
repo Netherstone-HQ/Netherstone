@@ -46,3 +46,29 @@ test("a shard with 400 tables opens and takes edits", async ({ page }) => {
   expect(saved).toContain("xxxxx");
   expect(saved.match(/^\| -+ \| -+ \| -+ \|$/gm)).toHaveLength(SECTIONS);
 });
+
+test("blocks far down a long shard show their drag handle", async ({ page }) => {
+  test.slow();
+  await mockVault(page, {
+    files: { "Small.md": "# Small\n\nHi\n", "Big.md": manyTables() },
+    open: "Small.md",
+  });
+  await expect(editor(page)).toContainText("Hi");
+  await openShard(page, "Big");
+
+  // Past the first chunks of 100 blocks, which clipped the gutter.
+  const block = editor(page).getByText("Paragraph 300 with");
+  await block.scrollIntoViewIfNeeded();
+  await block.hover();
+
+  const handle = page.locator("[data-plate-prevent-deselect]").first();
+  await expect(handle).toBeVisible();
+  const box = (await handle.boundingBox())!;
+  // Something actually painted there, not clipped away: the handle is what
+  // the page reports at its own centre.
+  const hit = await page.evaluate(
+    ({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-plate-prevent-deselect]"),
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  );
+  expect(hit).toBe(true);
+});

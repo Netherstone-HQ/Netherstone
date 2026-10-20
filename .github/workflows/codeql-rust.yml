@@ -1,23 +1,20 @@
 name: CodeQL (Rust)
 
-# Scanning the Rust backend takes several minutes, so pull requests only run
-# it when they change Rust code or its dependencies. Every push to main and
-# the weekly run scan it all.
+# Scanning the Rust backend takes several minutes, so it has its own workflow
+# and isn't a required check. It runs on every pull request: one that skips it
+# shows "1 configuration not found", since main has a Rust scan to compare to.
 
 on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - "src-tauri/**/*.rs"
-      - "src-tauri/Cargo.toml"
-      - "src-tauri/Cargo.lock"
-      - ".github/workflows/codeql-rust.yml"
   schedule:
     - cron: "17 4 * * 1"
 
+# A new push to a pull request replaces its scan. Every push to main keeps its
+# own, so merging twice in a row doesn't cancel the first.
 concurrency:
-  group: codeql-rust-${{ github.ref }}
+  group: codeql-rust-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 permissions:

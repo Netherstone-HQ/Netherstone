@@ -10,8 +10,10 @@ on:
   schedule:
     - cron: "17 4 * * 1"
 
+# A new push to a pull request replaces its scan. Every push to main keeps its
+# own, so merging twice in a row doesn't cancel the first.
 concurrency:
-  group: codeql-${{ github.ref }}
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 permissions:

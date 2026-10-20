@@ -20,7 +20,7 @@ How Netherstone stores the images, files, audio and video that shards link to.
 - Shards link with vault-relative paths, for example
   `![](<_attachments/Screenshot 2026-10-03.png>)`.
 - Older vaults may hold files under their hash (`_attachments/0c/0cbd….png`).
-  They keep working, and **Tidy up** in Settings renames them.
+  They keep working.
 - `.excalidraw` drawings are ordinary vault files. A drawing placed in a shard
   is exported as a PNG attachment and refreshed when the drawing changes.
 
@@ -32,9 +32,10 @@ How Netherstone stores the images, files, audio and video that shards link to.
 1. **Insert:** dropping, pasting or picking a file writes it to
    `_attachments/` and records it.
 2. **Save:** saving a shard refreshes its references.
-3. **Check:** when a vault opens, and from Settings, `reconcile_attachments`
-   reports missing files, unused files, files linked from outside
-   `_attachments/`, and pending tidy renames.
+3. **Check:** when a vault opens, on the Overview page, and from Settings,
+   `reconcile_attachments` reports missing files (listed under Broken links
+   on the Overview page), unused files and files linked from outside
+   `_attachments/`.
 4. **Clean up:** files unused for 7 days can be moved to the Trash from
    Settings. Each file is re-checked before removal.
 

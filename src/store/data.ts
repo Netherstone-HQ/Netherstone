@@ -8,7 +8,7 @@ import {
   type WritingLog,
 } from "@/lib/data";
 
-/** The Data page's sections, top to bottom, as the sidebar lists them. */
+/** The Overview page's sections, top to bottom, as the sidebar lists them. */
 export const DATA_SECTIONS = [
   { id: "writing", label: "Writing" },
   { id: "broken-links", label: "Broken links" },
@@ -23,10 +23,12 @@ interface DataState {
   /** The shards with charts, for the sidebar. */
   chartShards: ChartShard[];
   status: "idle" | "loading" | "ready" | "error";
-  /** Bumped when the index changes, so an open Data page loads again. */
+  /** Bumped when the index changes, so an open Overview page loads again. */
   version: number;
   /** The section in view, which the sidebar marks. */
   section: DataSection;
+  /** A section to scroll to once the page has loaded. */
+  pendingSection: DataSection | null;
   /**
    * Loads the vault's writing and broken links, keeping the last figures on
    * screen meanwhile. Runs on every visit: saves don't mark it stale.
@@ -34,6 +36,7 @@ interface DataState {
   load: (vaultPath: string) => Promise<void>;
   invalidate: () => void;
   setSection: (section: DataSection) => void;
+  scrollToOnOpen: (section: DataSection | null) => void;
 }
 
 let latestLoad = 0;
@@ -46,6 +49,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
   status: "idle",
   version: 0,
   section: "writing",
+  pendingSection: null,
   load: async (vaultPath) => {
     const request = ++latestLoad;
     if (get().vaultPath !== vaultPath) {
@@ -68,10 +72,11 @@ export const useDataStore = create<DataState>()((set, get) => ({
         set({ log, brokenLinks, chartShards, status: "ready" });
       }
     } catch (error) {
-      console.error("[Netherstone] Failed to load the Data page:", error);
+      console.error("[Netherstone] Failed to load the Overview page:", error);
       if (request === latestLoad) set({ status: "error" });
     }
   },
   invalidate: () => set((state) => ({ version: state.version + 1 })),
   setSection: (section) => set({ section }),
+  scrollToOnOpen: (pendingSection) => set({ pendingSection }),
 }));

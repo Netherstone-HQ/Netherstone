@@ -76,17 +76,6 @@ export function replaceAttachmentPath(
   return next === markdown ? null : next;
 }
 
-/** Points the links to an attachment in `shardPaths` at its new path. */
-export function relinkAttachment(
-  shardPaths: string[],
-  oldPath: string,
-  newPath: string,
-) {
-  return rewriteShards(shardPaths, (markdown) =>
-    replaceAttachmentPath(markdown, oldPath, newPath),
-  );
-}
-
 /**
  * Points a link to a file outside the attachment folder at its imported
  * copy, and marks media tags that used it as vault attachments.

@@ -1,15 +1,28 @@
-//! What the Data page shows: the words written each day, kept on this device
-//! only, the @ links that point to shards that don't exist, and the shards
-//! with charts.
+//! What the Overview page shows: the words written each day, the @ links
+//! that point to shards that don't exist, and the shards with charts.
+//!
+//! Words come from the vault's local history, which every device and outside
+//! edits add to. Days before the history began keep this device's own count,
+//! from what was typed in the editor.
 
 use super::parser::{LinkType, parse_markdown};
+use crate::sync::writing::WritingHistory;
 use rusqlite::{Connection, params};
 use serde::Serialize;
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
-/// Days of writing the Data page is sent, enough for a whole year's calendar.
+/// Days of writing the Overview page is sent, enough for a whole year's calendar.
 const LOG_DAYS: i64 = 400;
+
+/// The first day the Overview page is sent writing for.
+pub fn first_log_day(today: &str) -> String {
+    chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
+        .ok()
+        .and_then(|date| date.checked_sub_days(chrono::Days::new(LOG_DAYS as u64 - 1)))
+        .map(|date| date.format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| today.to_string())
+}
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct WritingEntry {
@@ -21,13 +34,15 @@ pub struct WritingEntry {
     pub words: i64,
     /// False once the shard is deleted; its words still count.
     pub exists: bool,
+    /// For a deleted shard: whether the local history still has it.
+    pub has_history: bool,
 }
 
 #[derive(Debug, Serialize)]
 pub struct WritingLog {
     pub shard_count: i64,
     pub word_count: i64,
-    /// The day this device started counting for the vault, as `YYYY-MM-DD`.
+    /// The first day with writing counted, as `YYYY-MM-DD`.
     pub started_on: String,
     /// Oldest first.
     pub entries: Vec<WritingEntry>,
@@ -129,15 +144,18 @@ fn file_name(path: &str) -> String {
         .to_string()
 }
 
-/// The vault's totals and its last year of writing, for the Data page. The
-/// index holds only the open vault's shards; the log is filtered by path.
+/// The vault's totals and its last year of writing, for the Overview page:
+/// from `history` where it has the day, from this device's log before. The
+/// day the history began has both, so each shard keeps the larger count.
+/// The index holds only the open vault's shards; the log is filtered by path.
 pub fn get_writing_log(
     conn: &Connection,
     vault_path: &str,
     today: &str,
+    history: Option<&WritingHistory>,
 ) -> rusqlite::Result<WritingLog> {
     start_writing_log(conn, vault_path, today)?;
-    let started_on: String = conn.query_row(
+    let logged_since: String = conn.query_row(
         "SELECT started_on FROM writing_log_start WHERE vault_path = ?1",
         params![vault_path],
         |row| row.get(0),
@@ -158,33 +176,67 @@ pub fn get_writing_log(
     }
 
     let vault = Path::new(vault_path);
+    let began_on = history.map(|history| history.began_on.as_str());
+    // By day and path key: the path as written, and the words.
+    let mut words: HashMap<(String, String), (String, i64)> = HashMap::new();
     let mut stmt = conn.prepare(
         "SELECT day, file_path, MAX(end_words - start_words, 0) FROM writing_log
-         WHERE day > date(?1, ?2)
-         ORDER BY day, file_path",
+         WHERE day >= ?1 AND day <= COALESCE(?2, day)",
     )?;
-    let rows = stmt.query_map(params![today, format!("-{LOG_DAYS} days")], |row| {
+    let rows = stmt.query_map(params![first_log_day(today), began_on], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
             row.get::<_, i64>(2)?,
         ))
     })?;
-    let mut entries = Vec::new();
     for row in rows {
-        let (day, path, words) = row?;
-        if !Path::new(&path).starts_with(vault) {
-            continue;
+        let (day, path, count) = row?;
+        if Path::new(&path).starts_with(vault) {
+            words.insert((day, path_key(&path)), (path, count));
         }
-        entries.push(WritingEntry {
-            exists: existing.contains(&path_key(&path)),
-            name: file_name(&path),
-            day,
-            path,
-            words,
-        });
+    }
+    if let Some(history) = history {
+        for written in &history.days {
+            let path = vault
+                .join(written.path.split('/').collect::<PathBuf>())
+                .to_string_lossy()
+                .into_owned();
+            let entry = words
+                .entry((written.day.clone(), path_key(&path)))
+                .or_insert((path, 0));
+            entry.1 = entry.1.max(written.words);
+        }
     }
 
+    let vault_key = path_key(vault_path);
+    let in_history = |key: &str| {
+        history.is_some_and(|history| {
+            key.strip_prefix(&vault_key)
+                .map(|relative| relative.trim_start_matches('/'))
+                .is_some_and(|relative| history.seen_paths.contains(relative))
+        })
+    };
+    let mut entries: Vec<WritingEntry> = words
+        .into_iter()
+        .map(|((day, key), (path, words))| {
+            let exists = existing.contains(&key);
+            WritingEntry {
+                has_history: !exists && in_history(&key),
+                exists,
+                name: file_name(&path),
+                day,
+                path,
+                words,
+            }
+        })
+        .collect();
+    entries.sort_by(|a, b| (&a.day, &a.path).cmp(&(&b.day, &b.path)));
+
+    let started_on = match began_on {
+        Some(began_on) if began_on < logged_since.as_str() => began_on.to_string(),
+        _ => logged_since,
+    };
     Ok(WritingLog {
         shard_count,
         word_count,
@@ -319,7 +371,7 @@ mod tests {
         // Long ago: left out.
         record_writing(&conn, "2024-01-01", "/v/old.md", "x", || None).unwrap();
 
-        let log = get_writing_log(&conn, "/v", "2026-10-19").unwrap();
+        let log = get_writing_log(&conn, "/v", "2026-10-19", None).unwrap();
         assert_eq!(log.started_on, "2026-10-19");
         let days: Vec<_> = log
             .entries
@@ -331,6 +383,51 @@ mod tests {
             [
                 ("2026-10-18", "a.md", 4, false),
                 ("2026-10-19", "a.md", 0, false)
+            ]
+        );
+    }
+
+    #[test]
+    fn counts_from_history_once_it_began() {
+        use crate::sync::writing::{WritingHistory, WrittenDay};
+        let conn = memory_db();
+        record_writing(&conn, "2026-10-17", "/v/a.md", "a b c d", || None).unwrap();
+        record_writing(&conn, "2026-10-18", "/v/a.md", "a b c d e", || {
+            Some("a b c d".into())
+        })
+        .unwrap();
+        // Counted by history, which has every device.
+        record_writing(&conn, "2026-10-19", "/v/b.md", "x", || None).unwrap();
+
+        let written = |day: &str, path: &str, words| WrittenDay {
+            day: day.into(),
+            path: path.into(),
+            words,
+        };
+        let history = WritingHistory {
+            began_on: "2026-10-18".into(),
+            days: vec![
+                written("2026-10-18", "a.md", 3),
+                written("2026-10-19", "b.md", 5),
+                written("2026-10-19", "Folder/c.md", 2),
+            ],
+            seen_paths: ["a.md", "b.md", "folder/c.md"].map(String::from).into(),
+        };
+        let log = get_writing_log(&conn, "/v", "2026-10-19", Some(&history)).unwrap();
+        assert_eq!(log.started_on, "2026-10-18");
+        let days: Vec<_> = log
+            .entries
+            .iter()
+            .map(|e| (e.day.as_str(), e.name.as_str(), e.words, e.has_history))
+            .collect();
+        assert_eq!(
+            days,
+            [
+                ("2026-10-17", "a.md", 4, true),
+                // The day history began: the larger of the two counts.
+                ("2026-10-18", "a.md", 3, true),
+                ("2026-10-19", "c.md", 2, true),
+                ("2026-10-19", "b.md", 5, true),
             ]
         );
     }

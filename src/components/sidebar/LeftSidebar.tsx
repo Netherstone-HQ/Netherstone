@@ -133,7 +133,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
 
   function newFolder() {
     if (!currentVaultPath) return;
-    // Tags and Data list other things in place of the file tree the folder
+    // Tags and Overview list other things in place of the file tree the folder
     // is named in.
     if (isTagsMode || isDataMode) useUIStore.getState().openMode("editor");
     setNewFolderParent(currentVaultPath);

@@ -165,7 +165,7 @@ export function useAutosave() {
         await invoke("save_markdown_file", {
           filePath,
           content,
-          // What you type counts toward the Data page's writing.
+          // What you type counts toward the Overview page's writing.
           recordWriting: true,
           expectedContent,
         });

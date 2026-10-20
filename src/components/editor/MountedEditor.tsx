@@ -9,7 +9,7 @@ import { rememberSavedValue, takeOutsideChange } from "@/lib/outside-changes";
 import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
-import { revealLinkByText } from "./lib/link-reveal";
+import { revealAttachment, revealLinkByText } from "./lib/link-reveal";
 import { insertManagedMediaFiles } from "./lib/media-insert";
 import {
   formatEditorLifecycleDurationMs,
@@ -208,8 +208,8 @@ export const MountedEditor = memo(function MountedEditor({
     setTocHeadings,
   ]);
 
-  // A link asked for when this shard was opened (a broken link on the Data
-  // page): scroll to it once the shard is on screen.
+  // A link or missing file asked for when this shard was opened (from Broken
+  // links on the Overview page): scroll to it once the shard is on screen.
   useEffect(() => {
     if (!isShown) return;
 
@@ -226,7 +226,11 @@ export const MountedEditor = memo(function MountedEditor({
     }
 
     setPendingLinkReveal(null);
-    revealLinkByText(editor, pendingLinkReveal.text);
+    if ("assetPath" in pendingLinkReveal) {
+      revealAttachment(editor, pendingLinkReveal.assetPath);
+    } else {
+      revealLinkByText(editor, pendingLinkReveal.text);
+    }
   }, [currentFilePath, editor, isShown]);
 
   useEffect(() => {

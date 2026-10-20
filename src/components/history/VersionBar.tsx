@@ -15,9 +15,12 @@ import { useHistoryStore } from "@/store/history";
 export function VersionBar({
   version,
   moreActions,
+  canShowChanges = true,
 }: {
   version: FileVersion;
   moreActions: RowAction[];
+  /** False when there's nothing now to compare with, as for a deleted shard. */
+  canShowChanges?: boolean;
 }) {
   const showChanges = useHistoryStore((s) => s.showChanges);
   const setShowChanges = useHistoryStore((s) => s.setShowChanges);
@@ -38,14 +41,16 @@ export function VersionBar({
         {formatVersionTitle(version.time)}
       </span>
       <div className="ml-auto flex shrink-0 items-center gap-3">
-        <label className="flex cursor-pointer items-center gap-2 text-ui-sm text-muted-foreground">
-          <Switch
-            checked={showChanges}
-            onCheckedChange={setShowChanges}
-            className="data-[state=checked]:bg-brand"
-          />
-          Show changes
-        </label>
+        {canShowChanges ? (
+          <label className="flex cursor-pointer items-center gap-2 text-ui-sm text-muted-foreground">
+            <Switch
+              checked={showChanges}
+              onCheckedChange={setShowChanges}
+              className="data-[state=checked]:bg-brand"
+            />
+            Show changes
+          </label>
+        ) : null}
         <Button
           type="button"
           size="sm"

@@ -536,16 +536,6 @@ fn portable_file_stem(stem: &str) -> String {
 /// The first free `_attachments/<name>` for `original_name`, adding `-1`,
 /// `-2`, ... when the name is taken.
 fn readable_asset_path(vault_path: &Path, original_name: &str, extension: &str) -> String {
-    readable_asset_path_avoiding(vault_path, original_name, extension, &HashSet::new())
-}
-
-/// Like `readable_asset_path`, also skipping names in `taken`.
-fn readable_asset_path_avoiding(
-    vault_path: &Path,
-    original_name: &str,
-    extension: &str,
-    taken: &HashSet<String>,
-) -> String {
     let raw_stem = Path::new(original_name)
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -566,8 +556,7 @@ fn readable_asset_path_avoiding(
             }
         })
         .find(|asset_path| {
-            !taken.contains(asset_path)
-                && path_from_asset_path(vault_path, asset_path).is_ok_and(|path| !path.exists())
+            path_from_asset_path(vault_path, asset_path).is_ok_and(|path| !path.exists())
         })
         .expect("an unused attachment name")
 }
@@ -922,9 +911,6 @@ pub struct AttachmentReport {
     pub removed_shard_count: usize,
     /// Files that shards link to outside the attachment folder.
     pub external_files: Vec<ExternalFile>,
-    /// Moves that put every attachment in the flat folder under a readable
-    /// name where one is known.
-    pub tidy_renames: Vec<PlannedRename>,
 }
 
 /// One place a shard links to an external file, as written in the shard.
@@ -944,14 +930,6 @@ pub struct ExternalFile {
     pub size_bytes: u64,
     pub inside_vault: bool,
     pub uses: Vec<ExternalFileUse>,
-}
-
-/// An attachment and the flat, readable path it can move to.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct PlannedRename {
-    pub from: String,
-    pub to: String,
 }
 
 fn is_hash_stem(stem: &str) -> bool {
@@ -1094,73 +1072,6 @@ fn find_external_files(vault_path: &Path, shards: &[(String, String)]) -> Vec<Ex
     files
 }
 
-/// Moves that tidy the attachment folder into one flat, readable folder.
-/// Files stored under their content hash get the name of the file they were
-/// imported from, and files in subfolders (the old two-letter hash folders)
-/// move up to `_attachments/`. A hash-named file whose original name is
-/// unknown keeps its name but still moves up.
-fn plan_tidy_renames(
-    conn: &Connection,
-    vault_path: &Path,
-    disk_files: &[(String, u64)],
-) -> Result<Vec<PlannedRename>, String> {
-    let root_prefix = format!("{}/", ATTACHMENTS_DIR_NAME);
-    let mut taken = HashSet::new();
-    let mut renames = Vec::new();
-
-    for (asset_path, _) in disk_files {
-        if asset_path.ends_with(".tmp") {
-            continue;
-        }
-        let path = Path::new(asset_path);
-        let Some(file_name) = path.file_name().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default();
-        let in_subfolder = asset_path
-            .strip_prefix(&root_prefix)
-            .is_some_and(|rest| rest.contains('/'));
-
-        let original_name = if is_hash_stem(stem) {
-            let original_name: Option<String> = conn
-                .query_row(
-                    "SELECT original_name FROM attachments WHERE asset_path = ?1",
-                    params![asset_path],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(|e| format!("Failed to query attachment metadata: {}", e))?;
-            original_name.filter(|name| {
-                let original_stem = Path::new(name)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or_default();
-                !original_stem.is_empty() && !is_hash_stem(original_stem)
-            })
-        } else {
-            None
-        };
-
-        if original_name.is_none() && !in_subfolder {
-            continue;
-        }
-
-        let name = original_name.as_deref().unwrap_or(file_name);
-        let extension = extension_for_path(path);
-        let to = readable_asset_path_avoiding(vault_path, name, &extension, &taken);
-        taken.insert(to.clone());
-        renames.push(PlannedRename {
-            from: asset_path.clone(),
-            to,
-        });
-    }
-
-    Ok(renames)
-}
-
 /// Files the operating system leaves in folders it has shown, which are not
 /// attachments.
 fn is_system_file(name: &str) -> bool {
@@ -1171,7 +1082,7 @@ fn is_system_file(name: &str) -> bool {
 }
 
 /// Removes folders under `_attachments` that hold no attachments, such as
-/// the old two-letter hash folders once tidied. Folders holding only system
+/// emptied old two-letter hash folders. Folders holding only system
 /// files count as empty. The `_attachments` folder itself stays.
 fn prune_empty_attachment_folders(vault_path: &Path) {
     fn prune(dir: &Path) -> bool {
@@ -1459,7 +1370,6 @@ pub fn reconcile_vault_attachments(
         shard_contents.push((shard_path.clone(), content));
     }
     report.external_files = find_external_files(vault_path, &shard_contents);
-    report.tidy_renames = plan_tidy_renames(&tx, vault_path, &disk_files)?;
 
     let on_disk: HashSet<&str> = disk_files.iter().map(|(path, _)| path.as_str()).collect();
     report.file_count = disk_files.len();
@@ -1509,65 +1419,6 @@ pub fn reconcile_vault_attachments(
         .map_err(|e| format!("Failed to save attachment reconciliation: {}", e))?;
 
     Ok(report)
-}
-
-/// Renames an attachment file and moves its database row and references to
-/// the new path. Links in shards are rewritten by the caller.
-pub fn rename_attachment(
-    conn: &Connection,
-    vault_path: &Path,
-    from: &str,
-    to: &str,
-) -> Result<(), String> {
-    let source = path_from_asset_path(vault_path, from)?;
-    let destination = path_from_asset_path(vault_path, to)?;
-    let attachments_dir = vault_path.join(ATTACHMENTS_DIR_NAME);
-    if !source.starts_with(&attachments_dir) || !destination.starts_with(&attachments_dir) {
-        return Err("Attachments can only be renamed inside the attachment folder.".into());
-    }
-    if !source.is_file() {
-        return Err(format!("Attachment not found: {}", from));
-    }
-    if destination.exists() {
-        return Err(format!("An attachment named {} already exists.", to));
-    }
-
-    let _write_guard = ATTACHMENT_WRITE_LOCK
-        .lock()
-        .map_err(|e| format!("Failed to lock attachment writes: {}", e))?;
-    if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-    }
-    std::fs::rename(&source, &destination)
-        .map_err(|e| format!("Failed to rename {}: {}", from, e))?;
-
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| format!("Failed to start attachment rename: {}", e))?;
-    tx.execute(
-        "INSERT OR IGNORE INTO attachments (asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count, last_referenced_at, gc_candidate_at)
-         SELECT ?2, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count, last_referenced_at, gc_candidate_at
-         FROM attachments WHERE asset_path = ?1",
-        params![from, to],
-    )
-    .map_err(|e| format!("Failed to move attachment metadata: {}", e))?;
-    tx.execute(
-        "UPDATE OR IGNORE attachment_references SET asset_path = ?2 WHERE asset_path = ?1",
-        params![from, to],
-    )
-    .map_err(|e| format!("Failed to move attachment references: {}", e))?;
-    tx.execute(
-        "DELETE FROM attachments WHERE asset_path = ?1",
-        params![from],
-    )
-    .map_err(|e| format!("Failed to remove old attachment metadata: {}", e))?;
-    tx.commit()
-        .map_err(|e| format!("Failed to save attachment rename: {}", e))?;
-
-    prune_empty_attachment_folders(vault_path);
-
-    Ok(())
 }
 
 /// How long a file must stay unused before cleanup removes it, so a link
@@ -1961,12 +1812,13 @@ mod tests {
     }
 
     #[test]
-    fn report_lists_external_files_and_tidy_renames() {
+    fn report_lists_external_files() {
         let vault = temp_vault("external");
         let conn = Connection::open_in_memory().unwrap();
         super::super::init_schema(&conn).unwrap();
 
-        // A file elsewhere in the vault, one outside it, and one hash-named.
+        // A file elsewhere in the vault, one outside it, and an old
+        // hash-named one, which still counts as an attachment.
         std::fs::create_dir_all(vault.join("images")).unwrap();
         std::fs::write(vault.join("images/a b.png"), b"a").unwrap();
         let outside =
@@ -1990,14 +1842,6 @@ mod tests {
             },
         )
         .unwrap();
-        std::fs::write(vault.join("_attachments/Diagram.png"), b"taken").unwrap();
-        // A readable file left in a hash folder, and a hash-named file whose
-        // original name is unknown.
-        std::fs::create_dir_all(vault.join("_attachments/0c")).unwrap();
-        std::fs::write(vault.join("_attachments/0c/My diagram.png"), b"mine").unwrap();
-        let unknown = format!("_attachments/0d/{}.pdf", blake3::hash(b"unknown").to_hex());
-        std::fs::create_dir_all(vault.join("_attachments/0d")).unwrap();
-        std::fs::write(vault.join(&unknown), b"unknown").unwrap();
 
         let note = path_string(vault.join("sub").join("note.md"));
         let outside_link = outside.to_string_lossy().into_owned();
@@ -2041,37 +1885,7 @@ mod tests {
             .unwrap();
         assert_eq!(device.uses[0].link, outside_link);
         assert_eq!(report.external_files.len(), 2);
-
-        let mut renames = report.tidy_renames.clone();
-        renames.sort_by(|a, b| a.from.cmp(&b.from));
-        let mut expected = vec![
-            PlannedRename {
-                from: legacy.clone(),
-                to: "_attachments/Diagram-1.png".into(),
-            },
-            PlannedRename {
-                from: "_attachments/0c/My diagram.png".into(),
-                to: "_attachments/My diagram.png".into(),
-            },
-            PlannedRename {
-                from: unknown.clone(),
-                to: unknown.replacen("0d/", "", 1),
-            },
-        ];
-        expected.sort_by(|a, b| a.from.cmp(&b.from));
-        assert_eq!(renames, expected);
-
-        rename_attachment(&conn, &vault, &legacy, "_attachments/Diagram-1.png").unwrap();
-        assert!(vault.join("_attachments/Diagram-1.png").is_file());
-        assert!(!vault.join(&legacy).parent().unwrap().exists());
-        let moved: String = conn
-            .query_row(
-                "SELECT original_name FROM attachments WHERE asset_path = ?1",
-                params!["_attachments/Diagram-1.png"],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(moved, "Diagram.png");
+        assert!(report.missing.is_empty());
 
         std::fs::remove_file(&outside).unwrap();
         std::fs::remove_dir_all(&vault).unwrap();

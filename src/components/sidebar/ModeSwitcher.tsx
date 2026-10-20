@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import {
-  ChartColumnIcon,
   FileTextIcon,
+  LayoutDashboardIcon,
   SettingsIcon,
   TagIcon,
 } from "lucide-react";
@@ -10,11 +10,11 @@ import { Hint } from "@/components/ui/tooltip";
 import { selectRailMode, useUIStore, type RailMode } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
+/** The modes you work in, at the top of the rail. */
 const MODES: { mode: RailMode; label: string; icon: React.ElementType }[] = [
   { mode: "editor", label: "Editor", icon: FileTextIcon },
   { mode: "tags", label: "Tags", icon: TagIcon },
   { mode: "canvas", label: "Canvas", icon: DrawingIcon },
-  { mode: "data", label: "Data", icon: ChartColumnIcon },
 ];
 
 function RailButton({
@@ -75,13 +75,22 @@ export function ModeSwitcher() {
         </Fragment>
       ))}
 
+      {/* The vault at a glance sits apart, above Settings. */}
+      <RailButton
+        label="Overview"
+        isActive={railMode === "data"}
+        onClick={() => openMode("data")}
+        className="mt-auto"
+      >
+        <LayoutDashboardIcon />
+      </RailButton>
+
       <RailButton
         label="Settings"
         isActive={activeNavItem === "settings"}
         onClick={() =>
           setActiveNavItem(activeNavItem === "settings" ? null : "settings")
         }
-        className="mt-auto"
       >
         <SettingsIcon />
       </RailButton>

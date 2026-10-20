@@ -1,22 +1,12 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  AlertTriangleIcon,
-  CheckCircle2Icon,
-  FileQuestionIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-} from "lucide-react";
+import { FileQuestionIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
-import { openEditorFile } from "@/lib/open-editor-file";
-import { relinkAttachment } from "@/lib/shard-rewrite";
 import {
   CLEANUP_GRACE_DAYS,
   cleanUpAttachments,
-  type MissingAttachment,
   type UnusedAttachment,
 } from "@/lib/commands";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
@@ -30,71 +20,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useAttachmentReportStore, useUIStore, useVaultStore } from "@/store";
+import { useAttachmentReportStore, useVaultStore } from "@/store";
 import {
   formatBytes,
   getAssetLabel,
-  getFileName,
   plural,
 } from "@/components/settings/attachment-format";
-import {
-  ExternalFilesRow,
-  TidyRow,
-} from "@/components/settings/AttachmentMigrationRows";
+import { ExternalFilesRow } from "@/components/settings/AttachmentMigrationRows";
 
 export const ATTACHMENTS_SECTION_ID = "settings-attachments";
-
-function openShard(filePath: string) {
-  const ui = useUIStore.getState();
-  ui.setActiveNavItem(null);
-  ui.setAppMode("notes");
-  void openEditorFile(filePath);
-}
-
-/** Points a missing file's links at the same file found under a new name. */
-function RelinkButton({
-  file,
-  vaultPath,
-}: {
-  file: MissingAttachment & { foundAssetPath: string };
-  vaultPath: string;
-}) {
-  const check = useAttachmentReportStore((s) => s.check);
-  const [isRelinking, setIsRelinking] = useState(false);
-
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="xs"
-      disabled={isRelinking}
-      title={`Point links to ${file.foundAssetPath}`}
-      onClick={async () => {
-        setIsRelinking(true);
-        try {
-          await relinkAttachment(
-            file.shardPaths,
-            file.assetPath,
-            file.foundAssetPath,
-          );
-          toast.success("Relinked attachment", {
-            description: getFileName(file.foundAssetPath),
-          });
-          await check(vaultPath);
-        } catch (error) {
-          console.error("[Netherstone] Relink failed:", error);
-          toast.error("Couldn't relink attachment", {
-            description: error instanceof Error ? error.message : String(error),
-          });
-        } finally {
-          setIsRelinking(false);
-        }
-      }}
-    >
-      Use {getFileName(file.foundAssetPath)}
-    </Button>
-  );
-}
 
 const GRACE_SECONDS = CLEANUP_GRACE_DAYS * 24 * 60 * 60;
 
@@ -251,8 +185,9 @@ function UnusedFilesRow({
 }
 
 /**
- * Health of the open vault's attachments: files that shards link to but are
- * gone, and files no shard uses.
+ * The open vault's attachments: files no shard uses, and files linked from
+ * outside the attachment folder. Missing files are under Broken links on the
+ * Overview page.
  */
 export function AttachmentsSection() {
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -310,61 +245,6 @@ export function AttachmentsSection() {
 
       {currentReport ? (
         <>
-          {currentReport.missing.length === 0 ? (
-            <div className="flex items-center gap-3 px-4 py-3 text-ui">
-              <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
-              Every linked file is in the vault
-            </div>
-          ) : (
-            <div className="space-y-2 px-4 py-3">
-              <div className="flex items-center gap-3 text-ui">
-                <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
-                <span className="font-medium">
-                  {plural(currentReport.missing.length, "missing file")}
-                </span>
-              </div>
-              <ul className="space-y-1 pl-7 text-ui">
-                {currentReport.missing.map((file) => (
-                  <li
-                    key={file.assetPath}
-                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
-                  >
-                    <span
-                      className="max-w-64 truncate text-muted-foreground"
-                      title={file.assetPath}
-                    >
-                      {file.originalName ?? getAssetLabel(file.assetPath)}
-                    </span>
-                    <span className="text-muted-foreground text-ui-sm">in</span>
-                    {file.shardPaths.map((shardPath, index) => (
-                      <button
-                        key={shardPath}
-                        type="button"
-                        title={shardPath}
-                        onClick={() => openShard(shardPath)}
-                        className="max-w-48 truncate text-left text-foreground underline-offset-2 hover:underline"
-                      >
-                        {getVaultFileDisplayName(getFileName(shardPath))}
-                        {index < file.shardPaths.length - 1 ? "," : ""}
-                      </button>
-                    ))}
-                    {file.foundAssetPath ? (
-                      <span className="ml-auto">
-                        <RelinkButton
-                          file={{
-                            ...file,
-                            foundAssetPath: file.foundAssetPath,
-                          }}
-                          vaultPath={currentVaultPath}
-                        />
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           <UnusedFilesRow
             unused={currentReport.unused}
             vaultPath={currentVaultPath}
@@ -372,12 +252,6 @@ export function AttachmentsSection() {
           {currentReport.externalFiles.length > 0 ? (
             <ExternalFilesRow
               files={currentReport.externalFiles}
-              vaultPath={currentVaultPath}
-            />
-          ) : null}
-          {currentReport.tidyRenames.length > 0 ? (
-            <TidyRow
-              renames={currentReport.tidyRenames}
               vaultPath={currentVaultPath}
             />
           ) : null}

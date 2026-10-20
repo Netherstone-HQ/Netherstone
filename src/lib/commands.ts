@@ -64,8 +64,6 @@ export interface AttachmentReport {
   removedShardCount: number;
   /** Files shards link to outside the attachment folder. */
   externalFiles: ExternalFile[];
-  /** Moves that put attachments in the flat folder under readable names. */
-  tidyRenames: PlannedRename[];
 }
 
 export interface ExternalFile {
@@ -74,11 +72,6 @@ export interface ExternalFile {
   insideVault: boolean;
   /** Each shard that links to the file, with the link as written. */
   uses: { shardPath: string; link: string }[];
-}
-
-export interface PlannedRename {
-  from: string;
-  to: string;
 }
 
 // ── Environment guard ─────────────────────────────────────────────────────────
@@ -240,19 +233,6 @@ export async function reconcileAttachments(
 ): Promise<AttachmentReport> {
   assertTauri();
   return invoke<AttachmentReport>("reconcile_attachments", { vaultPath });
-}
-
-/**
- * Renames an attachment inside the attachment folder and moves its database
- * records. Links in shards must be rewritten separately.
- */
-export async function renameAttachment(
-  vaultPath: string,
-  from: string,
-  to: string,
-): Promise<void> {
-  assertTauri();
-  return invoke("rename_attachment", { vaultPath, from, to });
 }
 
 /**

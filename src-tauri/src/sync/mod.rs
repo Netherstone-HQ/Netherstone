@@ -9,6 +9,7 @@
 
 pub mod conflicts;
 pub mod history;
+pub mod writing;
 pub mod merge;
 pub mod planner;
 pub mod remote;

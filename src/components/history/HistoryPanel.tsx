@@ -107,6 +107,10 @@ export function HistoryPanel({
   filePath: string;
 }) {
   const versions = useVersions(filePath);
+  // A deleted shard has no "Now": its last version shows first.
+  const isDeleted = useHistoryStore(
+    (s) => place === "notes" && s.deletedPath === filePath,
+  );
   const picked = useHistoryStore((s) => s.picked);
   const pickVersion = useHistoryStore((s) => s.pickVersion);
   const closeHistory = useHistoryStore((s) => s.closeHistory);
@@ -125,8 +129,10 @@ export function HistoryPanel({
   useEffect(() => {
     if (picked && versions && !versions.some((v) => v.id === picked.id)) {
       pickVersion(null);
+    } else if (!picked && isDeleted && versions?.[0]) {
+      pickVersion(versions[0]);
     }
-  }, [picked, versions, pickVersion]);
+  }, [picked, versions, isDeleted, pickVersion]);
 
   const moveFocus = (event: React.KeyboardEvent) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -144,7 +150,7 @@ export function HistoryPanel({
   };
 
   const days = versions ? groupByDay(versions) : [];
-  const hasToday = days[0]?.label === "Today";
+  const hasToday = !isDeleted && days[0]?.label === "Today";
 
   return (
     <aside
@@ -180,13 +186,17 @@ export function HistoryPanel({
           onKeyDown={moveFocus}
           className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2"
         >
-          <DayLabel>Today</DayLabel>
-          <VersionRow
-            time="Now"
-            isCurrent
-            isPicked={picked === null}
-            onPick={() => pickVersion(null)}
-          />
+          {isDeleted ? null : (
+            <>
+              <DayLabel>Today</DayLabel>
+              <VersionRow
+                time="Now"
+                isCurrent
+                isPicked={picked === null}
+                onPick={() => pickVersion(null)}
+              />
+            </>
+          )}
           {days.map((day, index) => (
             <div key={day.label} className="contents">
               {index === 0 && hasToday ? null : (

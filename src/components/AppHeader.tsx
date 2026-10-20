@@ -1,6 +1,8 @@
 import { Separator } from "@/components/ui/separator";
 import { closeEditorFile } from "@/lib/open-editor-file";
+import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store";
+import { useHistoryStore } from "@/store/history";
 import { AutosaveIndicator } from "./editor/AutosaveIndicator";
 import { WordCount } from "./editor/WordCount";
 import {
@@ -13,9 +15,19 @@ import { FileBreadcrumb } from "./vault/FileBreadcrumb";
 
 const closeShard = () => void closeEditorFile();
 
+/** A deleted shard's name, while its history is open. */
+function DeletedShardName({ path }: { path: string }) {
+  return (
+    <span className="min-w-0 truncate px-1.5 font-medium text-ui">
+      {getVaultFileDisplayName(path.split(/[\\/]/).pop() ?? path)}
+    </span>
+  );
+}
+
 /** The Editor's top bar: where the open shard is, and its save state. */
 export function AppHeader() {
   const currentFilePath = useEditorStore((s) => s.currentFilePath);
+  const deletedPath = useHistoryStore((s) => s.deletedPath);
 
   return (
     <header className="flex h-header shrink-0 items-center gap-1.5 border-b px-2.5">
@@ -24,11 +36,21 @@ export function AppHeader() {
         orientation="vertical"
         className="mx-1 h-4 data-vertical:self-center"
       />
-      <FileBreadcrumb path={currentFilePath} onClose={closeShard} />
+      {deletedPath ? (
+        <DeletedShardName path={deletedPath} />
+      ) : (
+        <FileBreadcrumb path={currentFilePath} onClose={closeShard} />
+      )}
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        <WordCount />
-        <AutosaveIndicator />
-        {currentFilePath ? <HistoryToggle place="notes" /> : null}
+        {deletedPath ? null : (
+          <>
+            <WordCount />
+            <AutosaveIndicator />
+          </>
+        )}
+        {currentFilePath || deletedPath ? (
+          <HistoryToggle place="notes" />
+        ) : null}
         <BrowserPanelToggle />
         <Separator
           orientation="vertical"

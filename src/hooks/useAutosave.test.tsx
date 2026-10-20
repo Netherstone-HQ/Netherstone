@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SerializationKit } from "@/components/editor/serialization-kit";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { rememberSavedValue } from "@/lib/outside-changes";
 import { useEditorStore } from "@/store";
 import { loadMarkdown } from "@/test/markdown";
 import { useAutosave } from "./useAutosave";
@@ -28,6 +29,11 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("@/lib/editor-ast-cache", () => ({
   upsertAstCache: vi.fn(async () => {}),
   openMarkdownFile: vi.fn(),
+}));
+
+vi.mock("@/components/editor/lib/session-value", () => ({
+  resolveSessionValue: async (_path: string, markdown: string) =>
+    loadMarkdown(markdown),
 }));
 
 const AUTOSAVE_DELAY_MS = 1800;
@@ -93,6 +99,7 @@ afterEach(() => {
   cleanup();
   act(() => store().closeFile());
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
@@ -186,6 +193,34 @@ describe("autosave", () => {
     expect(store().isDirty).toBe(false);
   });
 
+  it("never writes over a change made outside the app", async () => {
+    vi.stubGlobal("__TAURI_INTERNALS__", {});
+    const editor = openNote(NOTE_A, "Hello\n\nBye\n");
+    rememberSavedValue(editor, editor.children);
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      const { expectedContent } = (args ?? {}) as { expectedContent?: string };
+      if (command === "read_markdown_file") return "Hello\n\nBye, outside\n";
+      if (command === "save_markdown_file" && expectedContent === "Hello\n\nBye\n") {
+        throw "The shard changed on disk";
+      }
+      return null;
+    });
+
+    act(() => {
+      editor.tf.insertText(" world", { at: editor.api.end([0])! });
+      store().setIsDirty(true);
+      store().bumpEditTick();
+    });
+    await wait(AUTOSAVE_DELAY_MS);
+
+    expect(savedFiles().at(-1)).toEqual({
+      filePath: NOTE_A,
+      content: "Hello world\n\nBye, outside\n",
+    });
+    expect(store().isDirty).toBe(false);
+    expect(store().markdownContent).toBe("Hello world\n\nBye, outside\n");
+  });
+
   it("saves edits made while a write is in flight", async () => {
     const editor = openNote(NOTE_A, "Hello\n");
     let finishWrite = () => {};
@@ -250,6 +285,28 @@ describe("autosave", () => {
       markdown: "Hello one\n",
       plateValue: savedValue,
     });
+  });
+
+  it("saves nothing while waiting for a choice of version", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+    type(editor, " world");
+    act(() =>
+      store().setOutsideChange({
+        path: NOTE_A,
+        mine: "Hello world\n",
+        outside: "Hello there\n",
+      }),
+    );
+
+    await wait(AUTOSAVE_DELAY_MS * 2);
+    expect(savedFiles()).toEqual([]);
+
+    // Closing would lose the edits; the window stays open for the choice.
+    const preventDefault = vi.fn();
+    await act(() => closeRequestHandler!({ preventDefault }));
+    expect(preventDefault).toHaveBeenCalled();
+    expect(closeWindow).not.toHaveBeenCalled();
+    expect(savedFiles()).toEqual([]);
   });
 
   it("saves pending edits before the window closes", async () => {

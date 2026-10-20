@@ -6,9 +6,10 @@ import {
   startVaultWatcher,
   stopVaultWatcher,
 } from "@/lib/commands";
-import { isPathWithin } from "@/lib/drawing-files";
+import { isPathWithin, isSamePath } from "@/lib/drawing-files";
 import { deleteAstCache } from "@/lib/editor-ast-cache";
 import { invalidateAstWarmPaths } from "@/lib/editor-ast-warm-state";
+import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
 import { useEditorStore, useVaultStore } from "@/store";
 
@@ -22,7 +23,8 @@ type VaultChangedPayload = {
  * is rescanned and the file tree is updated.
  *
  * If the open shard was deleted or moved outside the app, it is closed, so
- * the next edit doesn't write it back to its old path.
+ * the next edit doesn't write it back to its old path. If it was changed,
+ * the editor shows the new text, so the next save doesn't write over it.
  *
  * Cleans up the watcher and the event listener when the vault changes or
  * the component unmounts.
@@ -90,6 +92,16 @@ export function useVaultWatcher() {
         }
       }
 
+      // Checked even for the app's own saves: those leave the text as it was
+      // saved, but a change right after one would otherwise be missed.
+      // No paths means the OS dropped events, so anything may have changed.
+      if (
+        changedPaths.length === 0 ||
+        changedPaths.some((filePath) => isOpenShard(filePath))
+      ) {
+        void reloadOpenShardIfChanged();
+      }
+
       try {
         const tree = await scanVault(path);
         if (!cancelled) setFileTree(tree);
@@ -112,6 +124,11 @@ export function useVaultWatcher() {
       stopVaultWatcher().catch(console.error);
     };
   }, [currentVaultPath, setFileTree]);
+}
+
+function isOpenShard(filePath: string) {
+  const openPath = useEditorStore.getState().currentFilePath;
+  return !!openPath && isSamePath(openPath, filePath);
 }
 
 async function closeOpenFileIfRemoved(changedPaths: string[]) {

@@ -5,6 +5,7 @@ import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
 import { getPlateHeadingList } from "@/lib/plate-toc-headings";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { isSamePath } from "@/lib/drawing-files";
+import { rememberSavedValue, takeOutsideChange } from "@/lib/outside-changes";
 import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
@@ -169,6 +170,7 @@ export const MountedEditor = memo(function MountedEditor({
   }, [cacheHit, currentFilePath, nodeCount]);
 
   useEffect(() => {
+    rememberSavedValue(editor, editor.children);
     setPlateEditor(editor);
 
     const tocStartMs = getEditorLifecycleNowMs();
@@ -268,6 +270,9 @@ export const MountedEditor = memo(function MountedEditor({
           (op: any) => op.type !== "set_selection",
         );
 
+        // Text that changed outside the app is already on disk.
+        const isOutsideChange = takeOutsideChange(editor);
+
         if (suppressInitialChangeRef.current) {
           if (hasDocumentChange) {
             logEditorLifecycle("mount:initial-change-suppressed", {
@@ -281,7 +286,7 @@ export const MountedEditor = memo(function MountedEditor({
 
         if (!hasDocumentChange) return;
 
-        if (!useEditorStore.getState().isDirty) {
+        if (!isOutsideChange && !useEditorStore.getState().isDirty) {
           setIsDirty(true);
         }
 

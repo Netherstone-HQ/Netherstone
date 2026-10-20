@@ -14,6 +14,7 @@ import { useBackgroundSync } from "./hooks/useBackgroundSync";
 import { useSearchModal } from "./hooks/useSearchModal";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { SearchModal } from "./components/SearchModal";
+import { OutsideChangeDialog } from "@/components/editor/OutsideChangeDialog";
 import { Toaster } from "@/components/ui/sonner";
 import { CompanionHost } from "@/components/brand/CompanionHost";
 import { preloadEditorMarkdownWorker } from "@/lib/editor-markdown-worker";
@@ -53,6 +54,7 @@ function App() {
             open={isOpen && screen !== "onboarding"}
             onOpenChange={setIsOpen}
           />
+          <OutsideChangeDialog />
           <CompanionHost />
           <Toaster />
         </TooltipProvider>

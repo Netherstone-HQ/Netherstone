@@ -100,6 +100,7 @@ declare global {
     /** What the asset protocol may serve, as the desktop app's scope does. */
     __assetScope: { folders: string[]; files: string[] };
     __vaultFiles: VaultFiles;
+    __emit: (event: string, payload: unknown) => void;
   }
 }
 
@@ -213,7 +214,12 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           plate_value: null,
         }),
         read_markdown_file: ({ filePath }) => files[relative(filePath)] ?? "",
-        save_markdown_file: ({ filePath, content }) => {
+        save_markdown_file: ({ filePath, content, expectedContent }) => {
+          // As the desktop app: a save never writes over an outside change.
+          const current = files[relative(filePath)];
+          if (expectedContent !== undefined && current !== undefined && current !== expectedContent) {
+            throw "The shard changed on disk";
+          }
           files[relative(filePath)] = content;
           window.__saves.push({ filePath, content });
           return null;
@@ -288,12 +294,21 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       };
 
       let callbackId = 0;
+      const callbacks: Record<number, (event: unknown) => void> = {};
+      const listeners: Record<string, number[]> = {};
+      // Sends an event from the "backend" to the app's listeners.
+      window.__emit = (event, payload) => {
+        for (const id of listeners[event] ?? []) callbacks[id]?.({ event, id, payload });
+      };
       (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
         metadata: {
           currentWindow: { label: "main" },
           currentWebview: { windowLabel: "main", label: "main" },
         },
-        transformCallback: () => ++callbackId,
+        transformCallback: (callback: (event: unknown) => void) => {
+          callbacks[++callbackId] = callback;
+          return callbackId;
+        },
         unregisterCallback: () => {},
         // As on Windows; the route below serves these from `assets`.
         convertFileSrc: (path: string) =>
@@ -301,7 +316,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         invoke: async (command: string, args: Args = {}) => {
           window.__commands.push({ command, args });
           if (handlers[command]) return handlers[command](args);
-          if (command.startsWith("plugin:event|listen")) return ++callbackId;
+          if (command.startsWith("plugin:event|listen")) {
+            const { event, handler } = args as unknown as { event: string; handler: number };
+            (listeners[event] ??= []).push(handler);
+            return ++callbackId;
+          }
           if (command === "plugin:app|version") return "0.0.0-e2e";
           return null;
         },
@@ -388,6 +407,20 @@ export async function caretAfter(page: Page, text: string) {
 /** The cells of a table's first row (the row handle column is not a cell). */
 export const cellsOf = (row: Locator) =>
   row.locator("> [data-slate-node='element']");
+
+/**
+ * Changes a file the way another app would, and reports it as the vault
+ * watcher does.
+ */
+export async function changeOutside(page: Page, name: string, content: string) {
+  await page.evaluate(
+    ({ filePath, name, content }) => {
+      window.__vaultFiles[name] = content;
+      window.__emit("vault:changed", { paths: [filePath] });
+    },
+    { filePath: `${VAULT_PATH}/${name}`, name, content },
+  );
+}
 
 /** Waits for autosave and returns the content it wrote for the shard. */
 export async function lastSave(page: Page, name: string): Promise<string> {

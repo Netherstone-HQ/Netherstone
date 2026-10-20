@@ -122,7 +122,7 @@ export function ConflictDialog({ vaultPath }: { vaultPath: string }) {
   );
 }
 
-function VersionPreview({
+export function VersionPreview({
   label,
   text,
   bytes,

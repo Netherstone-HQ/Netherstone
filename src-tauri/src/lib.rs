@@ -674,18 +674,35 @@ fn write_markdown_file_and_sync_references(file_path: &str, content: &str) -> Re
     Ok(())
 }
 
+/// What a save returns when the shard changed outside the app.
+const CHANGED_ON_DISK: &str = "The shard changed on disk";
+
 /// Saves a shard. `record_writing` is set by saves of what you type in the
 /// editor, which the Data page counts as writing on this device.
+/// `expected_content` is the text the app last read or wrote; if the file now
+/// holds something else, it changed outside the app and the save is refused
+/// rather than write over it.
 #[tauri::command(async)]
 fn save_markdown_file(
     file_path: String,
     content: String,
     record_writing: Option<bool>,
+    expected_content: Option<String>,
 ) -> Result<(), String> {
+    if let Some(expected) = expected_content.as_deref() {
+        if changed_on_disk(&file_path, expected) {
+            return Err(CHANGED_ON_DISK.to_string());
+        }
+    }
     if record_writing == Some(true) {
         record_writing_before_save(&file_path, &content);
     }
     write_markdown_file_and_sync_references(&file_path, &content)
+}
+
+/// True when the file exists and doesn't hold `expected`.
+fn changed_on_disk(file_path: &str, expected: &str) -> bool {
+    std::fs::read(file_path).is_ok_and(|bytes| bytes != expected.as_bytes())
 }
 
 /// Logs the words written today, before the save replaces the words the shard
@@ -1454,6 +1471,37 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_refuses_to_write_over_an_outside_change() {
+        let dir = std::env::temp_dir().join(format!("netherstone-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shard = dir.join("Note.md");
+        let path = shard.to_string_lossy().into_owned();
+        std::fs::write(&shard, "opened").unwrap();
+
+        save_markdown_file(path.clone(), "typed".into(), None, Some("opened".into())).unwrap();
+        assert_eq!(std::fs::read_to_string(&shard).unwrap(), "typed");
+
+        std::fs::write(&shard, "outside").unwrap();
+        assert_eq!(
+            save_markdown_file(
+                path.clone(),
+                "typed more".into(),
+                None,
+                Some("typed".into())
+            ),
+            Err(CHANGED_ON_DISK.to_string())
+        );
+        assert_eq!(std::fs::read_to_string(&shard).unwrap(), "outside");
+
+        // Other saves, and a shard that was deleted, are written as before.
+        save_markdown_file(path.clone(), "renamed".into(), None, None).unwrap();
+        std::fs::remove_file(&shard).unwrap();
+        save_markdown_file(path, "again".into(), None, Some("renamed".into())).unwrap();
+        assert_eq!(std::fs::read_to_string(&shard).unwrap(), "again");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn find_shards_containing_matches_any_needle_in_markdown_only() {

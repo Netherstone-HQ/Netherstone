@@ -9,6 +9,11 @@ import {
   finishDrawingSession,
   hasPendingDrawingSave,
 } from "@/lib/drawing-files";
+import {
+  isChangedOnDiskError,
+  reloadOpenShardIfChanged,
+  rememberSavedValue,
+} from "@/lib/outside-changes";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 
 const AUTOSAVE_DELAY_MS = 1800;
@@ -114,7 +119,7 @@ export function useAutosave() {
       });
     };
 
-    const performSave = async () => {
+    const performSave = async (retryIfChanged = true) => {
       const filePath = latestFilePathRef.current;
       const dirty = latestDirtyRef.current;
 
@@ -122,8 +127,16 @@ export function useAutosave() {
         return;
       }
 
+      // Waits for the user to choose a version (OutsideChangeDialog).
+      if (useEditorStore.getState().outsideChange?.path === filePath) {
+        return;
+      }
+
       // Slate values are immutable, so this is the exact value being saved.
-      const savedValue = latestEditorRef.current?.children;
+      const editor = latestEditorRef.current;
+      const savedValue = editor?.children;
+      // The text the file held when it was opened or last saved.
+      const expectedContent = useEditorStore.getState().markdownContent;
       const savedEditTick = useEditorStore.getState().editTick;
       const content = await serializeCurrentMarkdown();
 
@@ -144,6 +157,7 @@ export function useAutosave() {
 
       inFlightRef.current = true;
       setSaving(true);
+      let changedOnDisk = false;
 
       try {
         suppressVaultChangePath(filePath, { reason: "autosave" });
@@ -153,6 +167,7 @@ export function useAutosave() {
           content,
           // What you type counts toward the Data page's writing.
           recordWriting: true,
+          expectedContent,
         });
 
         if (savedValue) {
@@ -181,12 +196,21 @@ export function useAutosave() {
           }
         }
 
+        if (editor && savedValue) rememberSavedValue(editor, savedValue);
         commitSavedState(filePath, content, savedEditTick);
       } catch (error) {
-        console.error("Autosave failed:", error);
+        changedOnDisk = retryIfChanged && isChangedOnDiskError(error);
+        if (!changedOnDisk) console.error("Autosave failed:", error);
       } finally {
         inFlightRef.current = false;
         setSaving(false);
+      }
+
+      // Bring in what changed outside the app, then save the edits with it.
+      if (changedOnDisk) {
+        await reloadOpenShardIfChanged();
+        await performSave(false);
+        return;
       }
 
       if (saveRequestedDuringFlightRef.current) {
@@ -231,7 +255,12 @@ export function useAutosave() {
       (state, previousState) => {
         syncRefsFromState(state);
 
-        if (state.currentFilePath !== previousState.currentFilePath) {
+        // Either is a new text on disk: another shard, or this one changed
+        // outside the app or was saved elsewhere in the app.
+        if (
+          state.currentFilePath !== previousState.currentFilePath ||
+          state.markdownContent !== previousState.markdownContent
+        ) {
           lastSavedFilePathRef.current = state.currentFilePath;
           lastSavedContentRef.current = state.markdownContent;
         }
@@ -252,6 +281,12 @@ export function useAutosave() {
     const closeListenerPromise = appWindow.onCloseRequested(async (event) => {
       if (bypassCloseRequestRef.current) {
         bypassCloseRequestRef.current = false;
+        return;
+      }
+
+      // Closing now would drop the edits; the choice is on screen.
+      if (useEditorStore.getState().outsideChange) {
+        event.preventDefault();
         return;
       }
 

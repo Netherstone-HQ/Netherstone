@@ -80,8 +80,15 @@ interface SettingsState extends Preferences {
   companionUnlocked: boolean;
   unlockCompanion: () => void;
 
+  // ── Updates ─────────────────────────────────────────────────────────────────
+  /** The version the app last launched as, to tell when it was updated. */
+  lastSeenVersion: string | null;
+
   // ── Utilities ───────────────────────────────────────────────────────────────
-  /** Restores every preference. Leaves onboarding and the companion alone. */
+  /**
+   * Restores every preference. Leaves onboarding, the companion and the last
+   * seen version alone.
+   */
   resetSettings: () => void;
 }
 
@@ -211,6 +218,9 @@ export const useSettingsStore = create<SettingsState>()(
       unlockCompanion: () =>
         set({ companionUnlocked: true, showCompanion: true }),
 
+      // ── Updates ─────────────────────────────────────────────────────────────
+      lastSeenVersion: null,
+
       // ── Utilities ───────────────────────────────────────────────────────────
       resetSettings: () => set({ ...DEFAULT_PREFERENCES }),
     }),
@@ -220,11 +230,14 @@ export const useSettingsStore = create<SettingsState>()(
       version: 2,
       partialize: (state) => {
         const saved: Partial<Preferences> &
-          Pick<SettingsState, "onboardingCompletedAt" | "companionUnlocked"> =
-          {
-            onboardingCompletedAt: state.onboardingCompletedAt,
-            companionUnlocked: state.companionUnlocked,
-          };
+          Pick<
+            SettingsState,
+            "onboardingCompletedAt" | "companionUnlocked" | "lastSeenVersion"
+          > = {
+          onboardingCompletedAt: state.onboardingCompletedAt,
+          companionUnlocked: state.companionUnlocked,
+          lastSeenVersion: state.lastSeenVersion,
+        };
         for (const key of PREFERENCE_KEYS) {
           (saved as Record<string, unknown>)[key] = state[key];
         }

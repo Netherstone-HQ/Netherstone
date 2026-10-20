@@ -14,6 +14,7 @@ import { useBackgroundSync } from "./hooks/useBackgroundSync";
 import { useLocalHistory } from "./hooks/useLocalHistory";
 import { useSearchModal } from "./hooks/useSearchModal";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
+import { useWhatsNew } from "./hooks/useWhatsNew";
 import { SearchModal } from "./components/SearchModal";
 import { OutsideChangeDialog } from "@/components/editor/OutsideChangeDialog";
 import { Toaster } from "@/components/ui/sonner";
@@ -33,6 +34,7 @@ function App() {
   const { isOpen, setIsOpen } = useSearchModal();
   const { screen, finish, close } = useWelcomeTour();
   useUpdateCheck(screen !== "onboarding");
+  useWhatsNew();
 
   // Start the markdown worker early so the first opened note doesn't wait for it.
   useEffect(() => {

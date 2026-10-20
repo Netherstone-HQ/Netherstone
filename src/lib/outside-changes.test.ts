@@ -44,8 +44,8 @@ function createEditor(markdown: string) {
 
 /** Opens `markdown` the way MountedEditor registers its editor. */
 function openNote(markdown: string) {
-  const editor = createEditor(markdown);
   store().openFile({ path: NOTE, content: markdown });
+  const editor = createEditor(markdown);
   store().setPlateEditor(editor);
   return editor;
 }
@@ -281,6 +281,111 @@ describe("reloadOpenShardIfChanged", () => {
       await reloadOpenShardIfChanged();
       expect(store().outsideChange).toBeNull();
     });
+  });
+
+  describe("after the app saved what you wrote", () => {
+    /** Opens "One / Two" and saves "Two!" as autosave would. */
+    function openAndSave() {
+      const editor = openNote("One\n\nTwo\n");
+      edit(editor, 1, "!");
+      rememberSavedValue(editor, editor.children);
+      store().markSaved("One\n\nTwo!\n");
+      return editor;
+    }
+
+    it("asks when an outside save drops it", async () => {
+      const editor = openAndSave();
+      // An app that still had the old text saves it with its own change.
+      vi.mocked(readMarkdownFile).mockResolvedValue("One, outside\n\nTwo\n");
+
+      await reloadOpenShardIfChanged();
+
+      expect(store().outsideChange).toEqual({
+        path: NOTE,
+        mine: "One\n\nTwo!\n",
+        outside: "One, outside\n\nTwo\n",
+      });
+      expect(texts(editor)).toEqual(["One", "Two!"]);
+    });
+
+    it("asks when an outside save brings back what you deleted", async () => {
+      const editor = openNote("One\n\nTwo\n");
+      editor.tf.removeNodes({ at: [1] });
+      rememberSavedValue(editor, editor.children);
+      store().markSaved("One\n");
+      vi.mocked(readMarkdownFile).mockResolvedValue("One\n\nTwo\n");
+
+      await reloadOpenShardIfChanged();
+
+      expect(store().outsideChange?.outside).toBe("One\n\nTwo\n");
+      expect(texts(editor)).toEqual(["One"]);
+    });
+
+    it("shows an outside change that kept it", async () => {
+      const editor = openAndSave();
+      vi.mocked(readMarkdownFile).mockResolvedValue("One, outside\n\nTwo!\n");
+
+      await reloadOpenShardIfChanged();
+
+      expect(store().outsideChange).toBeNull();
+      expect(texts(editor)).toEqual(["One, outside", "Two!"]);
+    });
+
+    it("saves your version again when you keep it", async () => {
+      openAndSave();
+      vi.mocked(readMarkdownFile).mockResolvedValue("One\n\nTwo\n");
+      await reloadOpenShardIfChanged();
+      await keepVersion("mine");
+
+      expect(store().outsideChange).toBeNull();
+      expect(store().isDirty).toBe(true);
+      expect(store().markdownContent).toBe("One\n\nTwo\n");
+    });
+
+    it("stops counting it once an outside change is shown", async () => {
+      const editor = openAndSave();
+      vi.mocked(readMarkdownFile).mockResolvedValue("One, outside\n\nTwo!\n");
+      await reloadOpenShardIfChanged();
+      vi.mocked(readMarkdownFile).mockResolvedValue("One, outside\n\nTwo, again\n");
+      await reloadOpenShardIfChanged();
+
+      expect(store().outsideChange).toBeNull();
+      expect(texts(editor)).toEqual(["One, outside", "Two, again"]);
+    });
+  });
+
+  it("doesn't ask when both sides made the same change", async () => {
+    const editor = openNote("One\n\nTwo\n");
+    edit(editor, 1, "!");
+    vi.mocked(readMarkdownFile).mockResolvedValue("One\n\nTwo!\n");
+
+    await reloadOpenShardIfChanged();
+
+    expect(store().outsideChange).toBeNull();
+    expect(store().isDirty).toBe(false);
+    expect(store().markdownContent).toBe("One\n\nTwo!\n");
+    expect(texts(editor)).toEqual(["One", "Two!"]);
+  });
+
+  it("lets go of the cursor when its text changed outside", async () => {
+    const editor = openNote("One\n\nTwo\n");
+    editor.tf.select(editor.api.end([1])!);
+    vi.mocked(readMarkdownFile).mockResolvedValue("One\n");
+
+    await reloadOpenShardIfChanged();
+
+    expect(texts(editor)).toEqual(["One"]);
+    expect(editor.selection).toBeNull();
+  });
+
+  it("keeps the cursor when other text changed outside", async () => {
+    const editor = openNote("One\n\nTwo\n");
+    editor.tf.select(editor.api.end([0])!);
+    vi.mocked(readMarkdownFile).mockResolvedValue("One\n\nTwo, outside\n");
+
+    await reloadOpenShardIfChanged();
+
+    expect(editor.selection).not.toBeNull();
   });
 
   it("waits for a shard still being prepared to show it", async () => {

@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import {
   caretAfter,
   changeOutside,
@@ -62,6 +63,23 @@ test("typing and an outside change to the same paragraph asks which to keep", as
   expect(await lastSave(page, "Note.md")).toBe("# Note\n\nFirst. Typed.\n");
 });
 
+/** The element the open shard scrolls in. */
+function editorScroller(page: Page) {
+  return editor(page).evaluateHandle((element) => {
+    let node: Element | null = element;
+    while (
+      node &&
+      !(
+        node.scrollHeight > node.clientHeight &&
+        /auto|scroll/.test(getComputedStyle(node).overflowY)
+      )
+    ) {
+      node = node.parentElement;
+    }
+    return node ?? document.scrollingElement!;
+  });
+}
+
 const PARAGRAPHS = 3000;
 
 function longShard(last: string) {
@@ -85,11 +103,7 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
   await editor(page).getByText("Paragraph 0 with").waitFor({ timeout: 60_000 });
   const openMs = Date.now() - openStarted;
 
-  const scroller = await editor(page).evaluateHandle((element) => {
-    let node: Element | null = element;
-    while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
-    return node ?? document.scrollingElement!;
-  });
+  const scroller = await editorScroller(page);
   await scroller.evaluate((element: Element) => {
     element.scrollTop = 5000;
   });
@@ -104,4 +118,48 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
   expect(await scroller.evaluate((element: Element) => element.scrollTop)).toBe(scrollTop);
   expect(reloadMs).toBeLessThan(openMs);
   expect(await savesFor(page, "Long.md")).toEqual([]);
+});
+
+test("an outside save that drops saved typing asks which to keep", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Note.md": "# Note\n\nFirst.\n\nSecond.\n" },
+    open: "Note.md",
+  });
+  await caretAfter(page, "First.");
+  await page.keyboard.type(" Typed.");
+  await expect
+    .poll(() => lastSave(page, "Note.md"))
+    .toBe("# Note\n\nFirst. Typed.\n\nSecond.\n");
+
+  // An app that still had the old text saves it with its own change.
+  await changeOutside(page, "Note.md", "# Note\n\nFirst.\n\nSecond, from elsewhere.\n");
+
+  await expect(page.getByText("Choose which version to keep")).toBeVisible();
+  await expect(page.locator(".history-added", { hasText: "Typed" })).toBeVisible();
+  await expect(editor(page)).toContainText("First. Typed.");
+  await page.screenshot({ path: "test-results/outside-change-dialog.png" });
+
+  await page.getByRole("button", { name: "Keep your version" }).click();
+  await expect
+    .poll(() => lastSave(page, "Note.md"))
+    .toBe("# Note\n\nFirst. Typed.\n\nSecond.\n");
+});
+
+test("deleting the text under the cursor outside keeps the scroll", async ({ page }) => {
+  const body = Array.from({ length: 200 }, (_, i) => `Paragraph ${i}.`).join("\n\n");
+  await mockVault(page, {
+    files: { "Long.md": `# Long\n\n${body}\n\nThe end.\n` },
+    open: "Long.md",
+  });
+  await caretAfter(page, "The end.");
+
+  const scroller = await editorScroller(page);
+  await scroller.evaluate((element: Element) => {
+    element.scrollTop = 0;
+  });
+
+  await changeOutside(page, "Long.md", `# Long\n\n${body}\n`);
+  await expect(editor(page).getByText("The end.")).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(await scroller.evaluate((element: Element) => element.scrollTop)).toBe(0);
 });

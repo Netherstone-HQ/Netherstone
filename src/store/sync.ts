@@ -1,10 +1,13 @@
+import { toast } from "sonner";
 import { create } from "zustand";
 
+import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { errorMessage } from "@/lib/github-account";
 import {
   type BackupSummary,
   type ConflictChoice,
   connectBackup,
+  fileName,
   getVaultSyncRecord,
   isOfflineError,
   listBackups,
@@ -62,7 +65,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
       const result = await work();
       const report = "record" in result ? result : { record: result, changed: [] };
       if (!isCurrent(vaultPath)) return;
+      const known = new Set(get().record?.conflicts.map((c) => c.path));
       set({ record: report.record, isWorking: false, offline: false });
+      announceConflicts(report.record.conflicts.filter((c) => !known.has(c.path)));
       await showSyncedChanges(vaultPath, report.changed);
       if (!report.record.syncEnabled) await get().loadPlan(vaultPath);
     } catch (e) {
@@ -74,6 +79,23 @@ export const useSyncStore = create<SyncState>((set, get) => {
         set({ isWorking: false, error: message });
       }
     }
+  }
+
+  /** Says when a sync found files changed on two devices. */
+  function announceConflicts(conflicts: SyncConflict[]) {
+    if (conflicts.length === 0) return;
+    toast.warning(
+      conflicts.length === 1
+        ? `${getVaultFileDisplayName(fileName(conflicts[0].path))} changed on two devices`
+        : `${conflicts.length} files changed on two devices`,
+      {
+        duration: 10_000,
+        action: {
+          label: "Review",
+          onClick: () => get().showConflict(conflicts[0]),
+        },
+      },
+    );
   }
 
   /** Saves pending edits first, so the sync includes them. */

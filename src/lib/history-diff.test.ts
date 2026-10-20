@@ -5,6 +5,7 @@ import {
   REMOVED_MARK,
   diffShardValues,
   hasChanges,
+  sideOf,
 } from "./history-diff";
 
 const p = (...children: object[]) => ({
@@ -104,5 +105,50 @@ describe("diffShardValues", () => {
     const children = merged[0].children;
     expect(children[0]).toEqual(t("plain", { [REMOVED_MARK]: true }));
     expect(children[children.length - 1]).toEqual(t(""));
+  });
+});
+
+describe("sideOf", () => {
+  const merged = () =>
+    diffShardValues(
+      [p(t("Use 350 g water")), p(t("Only in the version"))],
+      [p(t("Use 375 g water")), p(t("Only now"))],
+      isInline,
+    );
+  const strip = (nodes: any[]) =>
+    nodes.map(({ id: _id, ...node }) => node);
+
+  it("shows the version with its own words marked", () => {
+    const [first, second] = strip(sideOf(merged(), "version"));
+    expect(first.children).toEqual([
+      t("Use "),
+      t("350", { [ADDED_MARK]: true }),
+      t(" g water"),
+    ]);
+    expect(JSON.stringify(second)).not.toContain("Only now");
+  });
+
+  it("shows the shard as it is now with its own words marked", () => {
+    const side = strip(sideOf(merged(), "current"));
+    expect(side[0].children).toEqual([
+      t("Use "),
+      t("375", { [ADDED_MARK]: true }),
+      t(" g water"),
+    ]);
+    expect(JSON.stringify(side)).not.toContain(REMOVED_MARK);
+    expect(JSON.stringify(side)).not.toContain("Only in the version");
+  });
+
+  it("drops a link only the other side has", () => {
+    const link = { type: "a", url: "x", children: [t("link")] };
+    const both = diffShardValues(
+      [p(t("A "), link, t(" b"))],
+      [p(t("A b"))],
+      isInline,
+    );
+    const current = sideOf(both, "current");
+    expect(JSON.stringify(current)).not.toContain('"url"');
+    const version = sideOf(both, "version");
+    expect(JSON.stringify(version)).toContain('"url"');
   });
 });

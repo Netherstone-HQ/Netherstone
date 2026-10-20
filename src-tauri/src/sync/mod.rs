@@ -8,6 +8,7 @@
 //! See `docs/GIT_SYNC_ARCHITECTURE.md` for the overall design.
 
 pub mod conflicts;
+pub mod history;
 pub mod merge;
 pub mod planner;
 pub mod remote;
@@ -60,36 +61,47 @@ pub fn snapshot_outside_change(
     previous: &str,
 ) -> Result<VaultSnapshotResult, String> {
     let _guard = crate::locks::history(sync_root)?;
-    let relative = file_path
-        .strip_prefix(vault_path)
-        .ok()
-        .and_then(Path::to_str)
-        .map(|path| path.replace('\\', "/"))
-        .ok_or_else(|| format!("Not in the vault: {}", file_path.display()))?;
+    let relative = vault_relative(vault_path, file_path)?;
     let plan = planner::plan_vault(vault_path)?;
-    if plan.includes(&relative) {
+    let note = plan.includes(&relative).then(|| history::Note::OutsideChange {
+        path: relative.clone(),
+    });
+    if note.is_some() {
         let record = state::load_or_create_record(sync_root, vault_path)?;
         let repository =
             repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault_path)?;
         repo::commit_file_version(&repository, &relative, previous.as_bytes())?;
     }
-    commit_snapshot(sync_root, vault_path, plan)
+    commit_snapshot(sync_root, vault_path, plan, note)
+}
+
+/// `file_path` relative to the vault, with `/` separators, as the history
+/// stores it.
+pub fn vault_relative(vault_path: &Path, file_path: &Path) -> Result<String, String> {
+    file_path
+        .strip_prefix(vault_path)
+        .ok()
+        .and_then(Path::to_str)
+        .map(|path| path.replace('\\', "/"))
+        .ok_or_else(|| format!("Not in the vault: {}", file_path.display()))
 }
 
 fn snapshot_locked(sync_root: &Path, vault_path: &Path) -> Result<VaultSnapshotResult, String> {
-    commit_snapshot(sync_root, vault_path, planner::plan_vault(vault_path)?)
+    commit_snapshot(sync_root, vault_path, planner::plan_vault(vault_path)?, None)
 }
 
 fn commit_snapshot(
     sync_root: &Path,
     vault_path: &Path,
     plan: planner::SyncPlan,
+    note: Option<history::Note>,
 ) -> Result<VaultSnapshotResult, String> {
     let mut record = state::load_or_create_record(sync_root, vault_path)?;
     let git_dir = state::git_dir(sync_root, &record.vault_id);
 
     let repository = repo::open_or_init(&git_dir, vault_path)?;
-    let commit = repo::commit_plan(&repository, &plan)?;
+    let note = note.map(|note| note.to_string());
+    let commit = repo::commit_plan_noted(&repository, &plan, note.as_deref())?;
 
     if let Some(commit) = &commit {
         record.last_commit = Some(commit.id.clone());

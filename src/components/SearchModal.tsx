@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   CornerDownLeftIcon,
   FileIcon,
+  HistoryIcon,
   LoaderCircleIcon,
   SearchIcon,
   SearchXIcon,
@@ -23,8 +24,10 @@ import {
   isDrawingPath,
   isPathWithin,
 } from "@/lib/drawing-files";
-import { openVaultFile } from "@/lib/open-vault-file";
+import { openFileHistory, openVaultFile } from "@/lib/open-vault-file";
+import { fileName } from "@/lib/sync";
 import { cn } from "@/lib/utils";
+import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 import { HighlightedText, type TextPart } from "./HighlightedText";
@@ -42,6 +45,20 @@ interface Row {
   path: string;
   name: TextPart[];
   snippet?: TextPart[];
+  /** Shows the file's history instead of opening it. */
+  isHistory?: boolean;
+}
+
+/** Words that find "Show history" for the open file. */
+const HISTORY_WORDS = ["show", "history", "versions", "restore"];
+
+/** True when every word typed starts a word of "Show history" and friends. */
+function asksForHistory(query: string) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return (
+    query.trim().length >= 3 &&
+    words.every((word) => HISTORY_WORDS.some((known) => known.startsWith(word)))
+  );
 }
 
 /** What the dialog says when a search fails, by the reason the backend gives. */
@@ -152,6 +169,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
   const recentFiles = useUIStore((s) => s.recentFiles);
+  const isCanvas = useUIStore((s) => s.appMode === "canvas");
+  const drawingPath = useUIStore((s) => s.activeDrawingPath);
+  const shardPath = useEditorStore((s) => s.currentFilePath);
+  const openFilePath = isCanvas ? drawingPath : shardPath;
   // Answers can arrive out of order; only the latest search's counts.
   const searchIdRef = useRef(0);
 
@@ -205,12 +226,24 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
   const hasQuery = query.trim().length > 0;
   const terms = searchTerms(query);
+  const historyRows: Row[] =
+    hasQuery && openFilePath && asksForHistory(query)
+      ? [
+          {
+            path: openFilePath,
+            name: [{ text: "Show history", highlight: false }],
+            isHistory: true,
+          },
+        ]
+      : [];
   const rows: Row[] = hasQuery
-    ? results.map((result) => ({
+    ? historyRows.concat(
+        results.map((result) => ({
         path: result.path,
         name: highlightWords(getVaultFileDisplayName(result.name), terms),
-        snippet: result.snippet,
-      }))
+          snippet: result.snippet,
+        })),
+      )
     : recentFiles
         .filter(
           (file) =>
@@ -227,7 +260,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
   const handleSelect = async (row: Row) => {
     try {
-      await openVaultFile(row.path);
+      await (row.isHistory ? openFileHistory : openVaultFile)(row.path);
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to open file:", error);
@@ -285,13 +318,20 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         ) : null}
         {rows.map((row, index) => {
           const selected = index === selectedIndex;
-          const folder = currentVaultPath
-            ? getFolderInVault(row.path, currentVaultPath)
-            : "";
-          const Icon = isDrawingPath(row.path) ? DrawingIcon : FileIcon;
+          // For "Show history", the file it's for.
+          const folder = row.isHistory
+            ? getVaultFileDisplayName(fileName(row.path))
+            : currentVaultPath
+              ? getFolderInVault(row.path, currentVaultPath)
+              : "";
+          const Icon = row.isHistory
+            ? HistoryIcon
+            : isDrawingPath(row.path)
+              ? DrawingIcon
+              : FileIcon;
           return (
             <button
-              key={row.path}
+              key={row.isHistory ? `history:${row.path}` : row.path}
               type="button"
               onClick={() => void handleSelect(row)}
               onMouseEnter={() => setSelectedIndex(index)}

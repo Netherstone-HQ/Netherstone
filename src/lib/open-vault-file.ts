@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { finishDrawingSession, isDrawingPath } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { createDrawingFile, scanVault } from "@/lib/commands";
+import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 
@@ -32,6 +33,14 @@ export async function openVaultFile(filePath: string) {
 
   await openEditorFile(filePath);
   useUIStore.getState().openMode("editor");
+}
+
+/** Opens a shard or drawing with its history beside it. */
+export async function openFileHistory(filePath: string) {
+  await openVaultFile(filePath);
+  useHistoryStore
+    .getState()
+    .openHistory(isDrawingPath(filePath) ? "canvas" : "notes");
 }
 
 /**

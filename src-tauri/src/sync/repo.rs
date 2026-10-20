@@ -63,6 +63,16 @@ pub fn commit_plan(
     repository: &Repository,
     plan: &SyncPlan,
 ) -> Result<Option<SnapshotCommit>, String> {
+    commit_plan_noted(repository, plan, None)
+}
+
+/// Like [`commit_plan`], with `note` as the commit message's body: what the
+/// history panel says about the version (see `history::Note`).
+pub fn commit_plan_noted(
+    repository: &Repository,
+    plan: &SyncPlan,
+    note: Option<&str>,
+) -> Result<Option<SnapshotCommit>, String> {
     let mut index = repository
         .index()
         .map_err(|e| git_error("Failed to read sync index", e))?;
@@ -131,6 +141,7 @@ pub fn commit_plan(
         &tree,
         parent.as_ref(),
         (added, modified, removed),
+        note,
     )
     .map(Some)
 }
@@ -185,10 +196,10 @@ pub fn commit_file_version(
         .map_err(|e| git_error("Failed to read sync tree", e))?;
 
     let counts = if existed { (0, 1, 0) } else { (1, 0, 0) };
-    commit_tree(repository, &tree, parent.as_ref(), counts).map(Some)
+    commit_tree(repository, &tree, parent.as_ref(), counts, None).map(Some)
 }
 
-fn head_commit(repository: &Repository) -> Result<Option<Commit<'_>>, String> {
+pub fn head_commit(repository: &Repository) -> Result<Option<Commit<'_>>, String> {
     match repository.head() {
         Ok(head) => head
             .peel_to_commit()
@@ -211,10 +222,15 @@ fn commit_tree(
     tree: &Tree,
     parent: Option<&Commit>,
     (added, modified, removed): (usize, usize, usize),
+    note: Option<&str>,
 ) -> Result<SnapshotCommit, String> {
     let signature = Signature::now(COMMITTER_NAME, COMMITTER_EMAIL)
         .map_err(|e| git_error("Failed to create backup signature", e))?;
-    let message = commit_message(added, modified, removed);
+    let mut message = commit_message(added, modified, removed);
+    if let Some(note) = note {
+        message.push_str("\n\n");
+        message.push_str(note);
+    }
     let parents: Vec<_> = parent.into_iter().collect();
     let id = repository
         .commit(

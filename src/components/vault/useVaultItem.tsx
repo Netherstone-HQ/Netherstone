@@ -6,6 +6,7 @@ import {
   FilePlusIcon,
   FolderOpenIcon,
   FolderPlusIcon,
+  HistoryIcon,
   ImagePlusIcon,
   ImportIcon,
   PencilIcon,
@@ -57,7 +58,11 @@ import {
   applyOpenEditorSessionPathChange,
   captureOpenEditorSessionPathChangeSnapshot,
 } from "@/lib/open-editor-session-path-change";
-import { createDrawing, openVaultFile } from "@/lib/open-vault-file";
+import {
+  createDrawing,
+  openFileHistory,
+  openVaultFile,
+} from "@/lib/open-vault-file";
 import { refreshVault } from "@/lib/refresh-vault";
 import { remapShardLinkKeys } from "@/lib/shard-link-keys";
 import { suppressVaultChangePaths } from "@/lib/vault-change-suppression";
@@ -516,6 +521,14 @@ export function useVaultItem(
             onSelect: () =>
               togglePinnedFile({ path: node.path, name: node.name }),
             separated: leadingActions.length > 0,
+          },
+          {
+            label: "Show history",
+            icon: HistoryIcon,
+            onSelect: () =>
+              void openFileHistory(node.path).catch((error) =>
+                console.error("[Netherstone] Couldn't show history:", error),
+              ),
           },
           { ...shared[0], separated: true },
           ...shared.slice(1),

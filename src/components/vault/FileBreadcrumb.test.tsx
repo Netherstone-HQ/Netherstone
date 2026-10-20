@@ -77,6 +77,7 @@ describe("FileBreadcrumb", () => {
 
     expect(items).toEqual([
       "Pin",
+      "Show history",
       "Rename",
       "Move",
       "Open location",

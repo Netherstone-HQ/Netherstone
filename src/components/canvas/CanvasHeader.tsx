@@ -6,6 +6,7 @@ import {
   AddToShardDialog,
   hasSomethingToAdd,
 } from "@/components/canvas/AddToShardDialog";
+import { HistoryToggle } from "@/components/history/HistoryToggle";
 import { DrawingIcon } from "@/components/icons";
 import {
   BrowserPanelToggle,
@@ -110,6 +111,7 @@ export function CanvasHeader({
           </Button>
         ) : null}
         {drawingPath ? <SaveStatus state={saveState} /> : null}
+        {drawingPath ? <HistoryToggle place="canvas" /> : null}
         <BrowserPanelToggle isCanvas />
       </div>
       {drawingPath && excalidrawAPI ? (

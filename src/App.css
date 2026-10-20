@@ -158,6 +158,9 @@
     --sidebar-ring: #4fa38e;
     --brand: #2b6a5b;
     --highlight: oklch(0.852 0.199 91.936);
+    --history-added: rgb(79 163 142 / 20%);
+    --history-added-line: #2b6a5b;
+    --history-removed: rgb(200 60 40 / 10%);
     --scrollbar-thumb: #cfcbc3;
     --scrollbar-thumb-hover: #a8a49c;
 }
@@ -196,6 +199,9 @@
     --sidebar-ring: #4fa38e;
     --brand: #8fd1be;
     --highlight: oklch(0.852 0.199 91.936);
+    --history-added: rgb(79 163 142 / 24%);
+    --history-added-line: #8fd1be;
+    --history-removed: rgb(235 110 90 / 14%);
     --scrollbar-thumb: #3a3c3f;
     --scrollbar-thumb-hover: #5a5856;
 }
@@ -421,6 +427,60 @@
     [data-slate-chunk] {
         contain-intrinsic-size: auto 5000px;
     }
+}
+
+/* An earlier version with what restoring it would change: added text comes
+   back, removed text goes away. "Show changes" off shows the version as it
+   was saved. */
+.history-added {
+    border-radius: 2px;
+    background: var(--history-added);
+    text-decoration: underline;
+    text-decoration-color: var(--history-added-line);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 4px;
+}
+
+/* Text replaced in place: a little room between what goes and what comes back. */
+.history-changes-on
+    [data-slate-node="text"]:has(.history-removed)
+    + [data-slate-node="text"]:has(.history-added) {
+    margin-left: 0.25em;
+}
+
+.history-removed {
+    border-radius: 2px;
+    background: var(--history-removed);
+    color: var(--muted-foreground);
+    text-decoration: line-through;
+}
+
+[data-history-block][data-void] {
+    border-radius: var(--radius);
+    outline-offset: 2px;
+}
+
+[data-history-block="added"][data-void] {
+    outline: 2px solid var(--history-added-line);
+}
+
+[data-history-block="removed"][data-void] {
+    opacity: 0.6;
+    outline: 2px dashed var(--muted-foreground);
+}
+
+.history-changes-off .history-added {
+    background: none;
+    text-decoration: none;
+}
+
+.history-changes-off [data-history-block="added"][data-void] {
+    outline: none;
+}
+
+.history-changes-off .history-removed,
+.history-changes-off [data-history-block="removed"] {
+    display: none;
 }
 
 @keyframes editor-loading {

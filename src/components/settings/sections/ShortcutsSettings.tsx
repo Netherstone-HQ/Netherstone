@@ -15,6 +15,8 @@ const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
       { keys: "mod+2", action: "Tags" },
       { keys: "mod+3", action: "Canvas" },
       { keys: "mod+4", action: "Overview" },
+      { keys: "ctrl+tab", action: "Next recent shard" },
+      { keys: "ctrl+shift+tab", action: "Previous recent shard" },
       { keys: "mod+=", action: "Zoom in" },
       { keys: "mod+minus", action: "Zoom out" },
       { keys: "mod+0", action: "Reset zoom" },

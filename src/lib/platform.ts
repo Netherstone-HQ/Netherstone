@@ -20,21 +20,25 @@ export function hasModKey(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
 const KEY_NAMES: Record<string, string> = IS_MAC
   ? {
       mod: "⌘",
+      ctrl: "⌃",
       alt: "⌥",
       shift: "⇧",
       enter: "↩",
       period: ".",
       comma: ",",
       minus: "−",
+      tab: "Tab",
     }
   : {
       mod: "Ctrl",
+      ctrl: "Ctrl",
       alt: "Alt",
       shift: "Shift",
       enter: "Enter",
       period: ".",
       comma: ",",
       minus: "−",
+      tab: "Tab",
     };
 
 /**

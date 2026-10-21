@@ -494,6 +494,31 @@
     display: none;
 }
 
+/* Two versions side by side (VersionPair): what only this one has is
+   highlighted, and a mark shows where the other one has something it doesn't. */
+.version-pair .history-added {
+    background: color-mix(in srgb, var(--history-added-line) 30%, transparent);
+    text-decoration: none;
+}
+
+.history-gap {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    margin: 0 1px;
+    border-radius: 1px;
+    background: var(--destructive);
+    vertical-align: text-bottom;
+}
+
+.history-gap-block {
+    width: 2rem;
+    height: 2px;
+    margin: 0.5rem 0;
+    border-radius: 1px;
+    background: var(--destructive);
+}
+
 /* The editor's loading bar (Editor.tsx) appears after a short delay, so fast
    opens don't flash it. Both animations run off the main thread, so the bar
    shows and moves while a long shard is being drawn. */

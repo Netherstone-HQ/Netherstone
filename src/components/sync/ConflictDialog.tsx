@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LoaderCircleIcon } from "lucide-react";
 import { Plate, usePlateEditor } from "platejs/react";
 
@@ -143,7 +143,8 @@ type ShardSides = { key: string; mine: any[]; theirs: any[] };
 
 /**
  * Two versions of a file side by side. A shard shows as it reads, with the
- * words only one version has marked; other text shows as it is.
+ * words only one version has highlighted and a mark where the other one has
+ * something it doesn't; other text shows as it is.
  */
 export function VersionPair({
   filePath,
@@ -190,7 +191,7 @@ export function VersionPair({
   const waiting = loading || (isShard && !shown && mine.text != null && theirs.text != null);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="version-pair grid gap-3 sm:grid-cols-2">
       <VersionPane version={mine} value={shown?.mine} loading={waiting} />
       <VersionPane version={theirs} value={shown?.theirs} loading={waiting} />
     </div>
@@ -207,13 +208,22 @@ function VersionPane({
   loading: boolean;
 }) {
   const { label, text, bytes } = version;
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  // Opens on the first change, so it's in view without scrolling for it.
+  useLayoutEffect(() => {
+    paneRef.current
+      ?.querySelector(".history-added, .history-gap, .history-gap-block")
+      ?.scrollIntoView({ block: "center" });
+  }, [value]);
+
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border">
       <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-1.5 text-ui-sm">
         <span className="font-medium">{label}</span>
         {bytes != null ? <span className="text-muted-foreground">{formatBytes(bytes)}</span> : null}
       </div>
-      <div className="h-56 overflow-auto">
+      <div ref={paneRef} className="h-56 overflow-auto">
         {loading ? null : value ? (
           <ShardPreview value={value} label={label} />
         ) : text != null ? (

@@ -40,7 +40,12 @@ export function CalloutElement({
       {...props}
     >
       <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5 rounded-md">
-        <div contentEditable={false} className="shrink-0 pt-0.5">
+        {/* One text line tall (plus the paragraph's padding), so the emoji
+            sits on the first line at every text size. */}
+        <div
+          contentEditable={false}
+          className="box-content flex h-[1lh] shrink-0 items-center py-1"
+        >
           <EmojiPopover
             {...emojiToolbarDropdownProps}
             control={
@@ -57,7 +62,7 @@ export function CalloutElement({
             <EmojiPicker {...emojiPickerState} {...calloutProps} />
           </EmojiPopover>
         </div>
-        <div className="min-w-0 pt-px leading-6">{children}</div>
+        <div className="min-w-0">{children}</div>
       </div>
     </PlateElement>
   );

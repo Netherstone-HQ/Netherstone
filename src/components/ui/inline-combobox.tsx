@@ -28,10 +28,7 @@ import { useComposedRef, useEditorRef } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
 
-type FilterFn = (
-  item: { value: string; keywords?: string[]; label?: string },
-  search: string
-) => boolean;
+type FilterFn = (item: { value: string }, search: string) => boolean;
 
 type InlineComboboxContextValue = {
   filter: FilterFn | false;
@@ -47,15 +44,8 @@ const InlineComboboxContext = React.createContext<InlineComboboxContextValue>(
   null as unknown as InlineComboboxContextValue
 );
 
-// Group names ("Basic blocks") aren't searched: "block" would match every
-// item in them and bury Blockquote.
-const defaultFilter: FilterFn = ({ keywords = [], label, value }, search) => {
-  const uniqueTerms = new Set([value, ...keywords, label].filter(Boolean));
-
-  return Array.from(uniqueTerms).some((keyword) =>
-    filterWords(keyword!, search)
-  );
-};
+const defaultFilter: FilterFn = ({ value }, search) =>
+  filterWords(value, search);
 
 type InlineComboboxProps = {
   children: React.ReactNode;
@@ -328,14 +318,10 @@ const comboboxItemVariants = cva(
 const InlineComboboxItem = ({
   className,
   focusEditor = true,
-  keywords,
-  label,
   onClick,
   ...props
 }: {
   focusEditor?: boolean;
-  keywords?: string[];
-  label?: string;
 } & ComboboxItemProps &
   Required<Pick<ComboboxItemProps, 'value'>>) => {
   const { value } = props;
@@ -349,8 +335,8 @@ const InlineComboboxItem = ({
 
   const visible = React.useMemo(
     () =>
-      !filter || filter({ keywords, label, value }, search as string),
-    [filter, keywords, label, value, search]
+      !filter || filter({ value }, search as string),
+    [filter, value, search]
   );
 
   if (!visible) return null;

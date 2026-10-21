@@ -18,7 +18,8 @@ import {
   Table,
   TableOfContentsIcon,
 } from "lucide-react";
-import type * as React from "react";
+import * as React from "react";
+import { filterWords } from "@platejs/combobox";
 import { KEYS, type TComboboxInputElement } from "platejs";
 import type { PlateEditor, PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
@@ -35,15 +36,17 @@ import {
   InlineComboboxItem,
 } from "./inline-combobox";
 
+type Item = {
+  icon: React.ReactNode;
+  value: string;
+  onSelect: (editor: PlateEditor, value: string) => void;
+  keywords?: string[];
+  label?: string;
+};
+
 type Group = {
   group: string;
-  items: {
-    icon: React.ReactNode;
-    value: string;
-    onSelect: (editor: PlateEditor, value: string) => void;
-    keywords?: string[];
-    label?: string;
-  }[];
+  items: Item[];
 };
 
 const groups: Group[] = [
@@ -163,37 +166,75 @@ const groups: Group[] = [
   },
 ];
 
+const allItems = groups.flatMap(({ items }) => items);
+
+// Lower is better: the name starts with the search, then a word in the name
+// does, then any other search word matches. -1 means no match.
+function matchRank({ keywords = [], label, value }: Item, search: string) {
+  const name = (label ?? value).toLowerCase();
+
+  if (name.startsWith(search)) return 0;
+  if (name.split(/\s+/).some((word) => word.startsWith(search))) return 1;
+  if (
+    [value, ...keywords, label].some(
+      (term) => term && filterWords(term, search),
+    )
+  ) {
+    return 2;
+  }
+
+  return -1;
+}
+
+// While typing, one list with the best match first (and picked by Enter).
+function rankItems(search: string) {
+  return allItems
+    .map((item) => ({ item, rank: matchRank(item, search) }))
+    .filter(({ rank }) => rank >= 0)
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ item }) => item);
+}
+
 export function SlashInputElement(
   props: PlateElementProps<TComboboxInputElement>,
 ) {
   const { editor, element } = props;
+  const [value, setValue] = React.useState("");
+  const search = value.trim().toLowerCase();
+
+  const renderItem = ({ icon, label, value, onSelect }: Item) => (
+    <InlineComboboxItem
+      key={value}
+      onClick={() => onSelect(editor, value)}
+      value={value}
+    >
+      <div className="mr-2 text-muted-foreground">{icon}</div>
+      {label ?? value}
+    </InlineComboboxItem>
+  );
 
   return (
     <PlateElement {...props} as="span">
-      <InlineCombobox element={element} trigger="/">
+      <InlineCombobox
+        element={element}
+        filter={false}
+        setValue={setValue}
+        trigger="/"
+        value={value}
+      >
         <InlineComboboxInput />
 
         <InlineComboboxContent>
           <InlineComboboxEmpty>No results</InlineComboboxEmpty>
 
-          {groups.map(({ group, items }) => (
-            <InlineComboboxGroup key={group}>
-              <InlineComboboxGroupLabel>{group}</InlineComboboxGroupLabel>
-
-              {items.map(({ icon, keywords, label, value, onSelect }) => (
-                <InlineComboboxItem
-                  key={value}
-                  keywords={keywords}
-                  label={label}
-                  onClick={() => onSelect(editor, value)}
-                  value={value}
-                >
-                  <div className="mr-2 text-muted-foreground">{icon}</div>
-                  {label ?? value}
-                </InlineComboboxItem>
+          {search
+            ? rankItems(search).map(renderItem)
+            : groups.map(({ group, items }) => (
+                <InlineComboboxGroup key={group}>
+                  <InlineComboboxGroupLabel>{group}</InlineComboboxGroupLabel>
+                  {items.map(renderItem)}
+                </InlineComboboxGroup>
               ))}
-            </InlineComboboxGroup>
-          ))}
         </InlineComboboxContent>
       </InlineCombobox>
 

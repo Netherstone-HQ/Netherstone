@@ -128,6 +128,7 @@ type TableResizeDragState = {
 type TableResizeContextValue = {
   /** No column widths saved yet: the table sizes by its content. */
   autoLayout: boolean;
+  columnCount: number;
   /** Editable, and no block selection being dragged: rows get grips. */
   hasControls: boolean;
   /**
@@ -174,12 +175,44 @@ function useTableResizeContext() {
   return context;
 }
 
+/**
+ * Saved widths, shrunk in proportion when they add up to more than the text
+ * column (saved in a wider window, say), so a table never scrolls sideways.
+ */
+function fitColSizes(colSizes: number[], fitWidth: number) {
+  const total = colSizes.reduce((sum, colSize) => sum + colSize, 0);
+
+  if (fitWidth <= 0 || total <= fitWidth) return colSizes;
+
+  return colSizes.map((colSize) => Math.floor((colSize * fitWidth) / total));
+}
+
+/** The element's width, kept current as the window or panels resize. */
+function useElementWidth(ref: React.RefObject<HTMLElement | null>) {
+  const [width, setWidth] = React.useState(0);
+
+  React.useLayoutEffect(() => {
+    const element = ref.current;
+
+    if (!element) return;
+
+    setWidth(element.clientWidth);
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return width;
+}
+
 function useTableResizeController({
   autoLayout,
   deferColumnResize,
   dragIndicatorRef,
   hoverIndicatorRef,
   controlColumnWidth,
+  fitWidth,
   tablePath,
   tableRef,
   wrapperRef,
@@ -189,6 +222,8 @@ function useTableResizeController({
   dragIndicatorRef: React.RefObject<HTMLDivElement | null>;
   hoverIndicatorRef: React.RefObject<HTMLDivElement | null>;
   controlColumnWidth: number;
+  /** The text column's width, which the cells must fit in. */
+  fitWidth: number;
   tablePath: number[];
   tableRef: React.RefObject<HTMLTableElement | null>;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
@@ -198,11 +233,17 @@ function useTableResizeController({
   const colSizes = useTableColSizes({
     disableOverrides: true,
   });
+  // The widths as shown, so a drag starts from what is on screen.
   const effectiveColSizes = React.useMemo(
-    () => colSizes.map((colSize) => colSize || TABLE_DEFAULT_COLUMN_WIDTH),
-    [colSizes],
+    () =>
+      fitColSizes(
+        colSizes.map((colSize) => colSize || TABLE_DEFAULT_COLUMN_WIDTH),
+        fitWidth,
+      ),
+    [colSizes, fitWidth],
   );
   const effectiveColSizesRef = React.useRef(effectiveColSizes);
+  const fitWidthRef = React.useRef(fitWidth);
   const activeHandleKeyRef = React.useRef<string | null>(null);
   const activeRowElementRef = React.useRef<HTMLTableRowElement | null>(null);
   const cleanupListenersRef = React.useRef<(() => void) | null>(null);
@@ -216,6 +257,10 @@ function useTableResizeController({
   React.useEffect(() => {
     effectiveColSizesRef.current = effectiveColSizes;
   }, [effectiveColSizes]);
+
+  React.useEffect(() => {
+    fitWidthRef.current = fitWidth;
+  }, [fitWidth]);
 
   const hideDeferredResizeIndicator = React.useCallback(() => {
     const indicator = dragIndicatorRef.current;
@@ -396,9 +441,17 @@ function useTableResizeController({
       const nextInitial = effectiveColSizesRef.current[dragState.colIndex + 1];
       const complement = (width: number) =>
         currentInitial + nextInitial - width;
+      // The last column grows only up to the edge of the text column.
+      const otherColumnsWidth =
+        effectiveColSizesRef.current.reduce((sum, colSize) => sum + colSize, 0) -
+        currentInitial;
+      const lastColumnMax =
+        fitWidthRef.current > 0
+          ? Math.max(minColumnWidth, fitWidthRef.current - otherColumnsWidth)
+          : undefined;
       const currentWidth = roundCellSizeToStep(
         resizeLengthClampStatic(currentInitial + delta, {
-          max: nextInitial ? complement(minColumnWidth) : undefined,
+          max: nextInitial ? complement(minColumnWidth) : lastColumnMax,
           min: minColumnWidth,
         }),
         undefined,
@@ -508,6 +561,19 @@ function useTableResizeController({
     ) => {
       if (autoLayout && direction !== "bottom") {
         freezeMeasuredColSizes();
+      } else if (
+        direction !== "bottom" &&
+        effectiveColSizesRef.current.some(
+          (colSize, index) =>
+            colSize !== (colSizes[index] || TABLE_DEFAULT_COLUMN_WIDTH),
+        )
+      ) {
+        // Widths shrunk to fit are kept as shown, so the drag moves only
+        // the edge being dragged.
+        editor.tf.setNodes<TTableElement>(
+          { colSizes: effectiveColSizesRef.current },
+          { at: tablePath },
+        );
       }
       setResizing(true);
 
@@ -586,7 +652,9 @@ function useTableResizeController({
     },
     [
       autoLayout,
+      colSizes,
       deferColumnResize,
+      editor,
       freezeMeasuredColSizes,
       getColumnBoundaryOffset,
       hideResizeIndicator,
@@ -594,6 +662,7 @@ function useTableResizeController({
       showResizeIndicator,
       stopResize,
       tableRef,
+      tablePath,
       applyResize,
       freezeRowHeights,
     ],
@@ -629,11 +698,12 @@ export const TableElement = withHOC(
     // their content, up to the text column. Widths exist once an edge was
     // dragged (or the file's table comment holds them).
     const autoLayout = !props.element.colSizes?.some((size) => size > 0);
+    const columnCount = getTableColumnCount(props.element);
     // Widths written by hand as percentages (`widths 30% 30%`) are shares of
     // the text column until an edge is dragged, which switches to pixels.
     const colPercents = props.element.colPercents as number[] | undefined;
     const percentWidths =
-      autoLayout && colPercents?.length === getTableColumnCount(props.element)
+      autoLayout && colPercents?.length === columnCount
         ? colPercents
         : null;
     const percentTotal =
@@ -649,12 +719,18 @@ export const TableElement = withHOC(
     });
     const tableRef = React.useRef<HTMLTableElement>(null);
     const wrapperRef = React.useRef<HTMLDivElement>(null);
+    // The wrapper is the text column plus the row grips in the gutter.
+    const fitWidth = Math.max(
+      0,
+      useElementWidth(wrapperRef) - controlColumnWidth,
+    );
     useTableSelectionDom(tableRef);
     const resizeController = useTableResizeController({
       autoLayout,
       controlColumnWidth,
       deferColumnResize,
       dragIndicatorRef,
+      fitWidth,
       hoverIndicatorRef,
       tablePath,
       tableRef,
@@ -664,8 +740,11 @@ export const TableElement = withHOC(
       () =>
         autoLayout
           ? []
-          : colSizes.map((colSize) => colSize || TABLE_DEFAULT_COLUMN_WIDTH),
-      [autoLayout, colSizes],
+          : fitColSizes(
+              colSizes.map((colSize) => colSize || TABLE_DEFAULT_COLUMN_WIDTH),
+              fitWidth,
+            ),
+      [autoLayout, colSizes, fitWidth],
     );
     const tableVariableStyle = React.useMemo(() => {
       if (resolvedColSizes.length === 0) {
@@ -706,8 +785,20 @@ export const TableElement = withHOC(
       hasControls && (hovered || selected || resizeController.resizing);
     const tableContext = React.useMemo<TableResizeContextValue>(() => {
       const { resizing: _resizing, ...handlers } = resizeController;
-      return { ...handlers, hasControls, isSelectingTable, showResizeHandles };
-    }, [resizeController, hasControls, isSelectingTable, showResizeHandles]);
+      return {
+        ...handlers,
+        columnCount,
+        hasControls,
+        isSelectingTable,
+        showResizeHandles,
+      };
+    }, [
+      resizeController,
+      columnCount,
+      hasControls,
+      isSelectingTable,
+      showResizeHandles,
+    ]);
 
     const content = (
       <PlateElement
@@ -1405,7 +1496,8 @@ export function TableCellElement({
   const element = props.element;
   // What the table and row already know is read from them, not looked up
   // again in every cell.
-  const { autoLayout, showResizeHandles } = useTableResizeContext();
+  const { autoLayout, columnCount, showResizeHandles } =
+    useTableResizeContext();
   const { isSelectingRow } = React.useContext(TableRowContext);
 
   const { borders, colIndex, colSpan, rowIndex, rowSpan, width } =
@@ -1444,7 +1536,8 @@ export function TableCellElement({
       }}
     >
       <div
-        className="relative z-20 box-border h-full px-3 py-2"
+        // Long links (URLs) wrap instead of widening the table.
+        className="relative z-20 box-border h-full px-3 py-2 [&_a]:[overflow-wrap:anywhere]"
         style={
           rowSpan === 1
             ? { minHeight: "var(--tableRowMinHeight, 0px)" }
@@ -1455,7 +1548,11 @@ export function TableCellElement({
       </div>
 
       {showResizeHandles && (
-        <TableCellResizeControls colIndex={colIndex} rowIndex={rowIndex} />
+        <TableCellResizeControls
+          colIndex={colIndex}
+          isLastColumn={colIndex === columnCount - 1}
+          rowIndex={rowIndex}
+        />
       )}
 
       {isSelectingRow && (
@@ -1473,9 +1570,12 @@ export function TableCellHeaderElement(
 
 const TableCellResizeControls = React.memo(function TableCellResizeControls({
   colIndex,
+  isLastColumn,
   rowIndex,
 }: {
   colIndex: number;
+  /** The last column's edge stays inside the table, so it never scrolls. */
+  isLastColumn: boolean;
   rowIndex: number;
 }) {
   const {
@@ -1493,7 +1593,10 @@ const TableCellResizeControls = React.memo(function TableCellResizeControls({
       suppressContentEditableWarning={true}
     >
       <div
-        className="-top-2 -right-1 pointer-events-auto absolute z-40 h-[calc(100%_+_8px)] w-2 cursor-col-resize touch-none"
+        className={cn(
+          "-top-2 pointer-events-auto absolute z-40 h-[calc(100%_+_8px)] w-2 cursor-col-resize touch-none",
+          isLastColumn ? "right-0" : "-right-1",
+        )}
         onPointerEnter={(event) => {
           setResizePreview(event, {
             colIndex,

@@ -151,6 +151,71 @@ test("dragging a column edge keeps the measured widths and saves them", async ({
   expect(saved).toMatch(/<!-- netherstone: widths \d+ \d+ \d+ -->\n\n\| Name/);
 });
 
+test("a table that fills the text column does not scroll while in use", async ({
+  page,
+}) => {
+  await mockVault(page, {
+    files: {
+      "Tables.md": `# Tables
+
+| Name | Notes |
+| - | - |
+| Two words | A whole paragraph of text that is much longer than the cell next to it, so this column should take most of the room and wrap inside the text column. |
+
+After.
+`,
+    },
+    open: "Tables.md",
+  });
+
+  await caretAfter(page, "Two words");
+  await expect(editor(page).locator(".cursor-col-resize").first()).toBeVisible();
+  expect(await scrollsSideways(page)).toBe(false);
+});
+
+test("saved widths wider than the text column shrink to fit it", async ({ page }) => {
+  await mockVault(page, {
+    files: {
+      "Tables.md":
+        "# Tables\n\n<!-- netherstone: widths 300 600 300 -->\n\n| a | b | c |\n| - | - | - |\n| 1 | 2 | 3 |\n\nAfter.\n",
+    },
+    open: "Tables.md",
+  });
+
+  const [measure] = await measureTables(page);
+  const total = measure.columns.reduce((sum, width) => sum + width, 0);
+  expect(total).toBeLessThanOrEqual(measure.editorWidth);
+  expect(total).toBeGreaterThan(measure.editorWidth - 8);
+  // The columns keep their proportions.
+  expect(Math.abs(measure.columns[1] - measure.columns[0] * 2)).toBeLessThan(4);
+  expect(await scrollsSideways(page)).toBe(false);
+});
+
+test("dragging the last column's edge stops at the text column", async ({ page }) => {
+  await mockVault(page, {
+    files: {
+      "Tables.md":
+        "# Tables\n\n<!-- netherstone: widths 200 200 -->\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nAfter.\n",
+    },
+    open: "Tables.md",
+  });
+
+  const lastCell = cellsOf(editor(page).locator("table tr").first()).last();
+  await lastCell.hover();
+  const handle = lastCell.locator(".cursor-col-resize").first();
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 900, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+
+  const [measure] = await measureTables(page);
+  const total = measure.columns.reduce((sum, width) => sum + width, 0);
+  expect(total).toBeLessThanOrEqual(measure.editorWidth);
+  expect(total).toBeGreaterThan(measure.editorWidth - 16);
+  expect(await scrollsSideways(page)).toBe(false);
+});
+
 test("a very wide table scrolls sideways instead of squeezing its columns", async ({
   page,
 }) => {

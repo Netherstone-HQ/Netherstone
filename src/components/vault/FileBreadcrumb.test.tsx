@@ -81,7 +81,7 @@ describe("FileBreadcrumb", () => {
       "Rename",
       "Move",
       "Open location",
-      "Export…",
+      "Export",
       "Close",
       "Move to trash",
     ]);

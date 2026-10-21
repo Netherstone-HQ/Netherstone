@@ -75,6 +75,16 @@ test("/block finds Blockquote, not every block in the menu", async ({ page }) =>
   await expect(options.filter({ hasText: "Heading 1" })).toHaveCount(0);
 });
 
+test("/blo lists Blockquote before Code block", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await caretAfter(page, "Start");
+  await page.keyboard.press("Enter");
+
+  await page.keyboard.type("/blo", { delay: 40 });
+  const options = page.getByRole("option");
+  await expect(options).toHaveText(["Blockquote", "Code block"]);
+});
+
 test("a code block from the / menu in a list stays in the list item", async ({ page }) => {
   await mockVault(page, {
     files: { "List.md": "# List\n\n- First item\n- Second item\n" },

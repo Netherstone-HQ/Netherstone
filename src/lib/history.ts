@@ -1,11 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { getVaultFileDisplayName } from "@/lib/drawing-files";
+
 export type VersionKind =
   | "created"
   | "edited"
   | "outsideChange"
   | "restored"
-  | "synced";
+  | "synced"
+  | "renamed";
 
 /** An earlier version of a shard or drawing, from the vault's local history. */
 export type FileVersion = {
@@ -18,6 +21,10 @@ export type FileVersion = {
   kind: VersionKind;
   /** For a restored version, when the version it brought back was saved. */
   restoredFrom: number | null;
+  /** Its path in this version, relative to the vault. */
+  path: string;
+  /** The path it had before, when this version renamed or moved it. */
+  renamedFrom: string | null;
   /** Words (shards) or shapes (drawings) compared with the version before. */
   added: number;
   removed: number;
@@ -37,10 +44,10 @@ export type RestoreResult = {
 /** A file's history, for the history panel. */
 export type FileHistory = {
   /**
-   * When the file as it is now was saved as a version (Unix seconds), or
-   * null when it changed since or was never saved.
+   * The version the file as it is now was saved as, or null when it changed
+   * since or was never saved.
    */
-  savedAt: number | null;
+  current: FileVersion | null;
   /** Its earlier versions, newest first. The file as it is now isn't one. */
   versions: FileVersion[];
 };
@@ -160,12 +167,37 @@ function describeCounts(
     .join(", ");
 }
 
+function splitPath(path: string) {
+  const parts = path.split("/");
+  const name = getVaultFileDisplayName(parts.pop() ?? path);
+  return { folders: parts, name };
+}
+
+/** "Renamed from Draft", "Moved from Projects", "Moved into Projects". */
+function describeRename(from: string, to: string) {
+  const before = splitPath(from);
+  const after = splitPath(to);
+  if (before.name !== after.name) return `Renamed from ${before.name}`;
+  const folder = before.folders.at(-1);
+  return folder
+    ? `Moved from ${folder}`
+    : `Moved into ${after.folders.at(-1) ?? ""}`;
+}
+
 /** The line under a version's time in the history panel. */
 export function describeVersion(
   version: FileVersion,
   isDrawing: boolean,
   now = new Date(),
 ) {
+  const change = describeChange(version, isDrawing, now);
+  if (version.renamedFrom === null) return change;
+  const rename = describeRename(version.renamedFrom, version.path);
+  if (version.kind === "renamed") return rename;
+  return `${rename}, ${change.charAt(0).toLowerCase()}${change.slice(1)}`;
+}
+
+function describeChange(version: FileVersion, isDrawing: boolean, now: Date) {
   switch (version.kind) {
     case "created":
       return "Created";
@@ -178,6 +210,7 @@ export function describeVersion(
         ? "Restored"
         : `Restored from ${formatVersionMoment(version.restoredFrom, now)}`;
     case "edited":
+    case "renamed":
       break;
   }
   if (!version.counted) return "Edited";

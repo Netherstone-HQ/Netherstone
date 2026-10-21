@@ -110,20 +110,32 @@ export type MockVaultOptions = {
   assets?: Record<string, Buffer>;
   /** Empty folders shown in the sidebar. */
   folders?: string[];
-  /** The shard open when the app starts, relative to the vault. */
-  open: string;
+  /** The shard open when the app starts, relative to the vault. None when left out. */
+  open?: string;
+  /** Starts with no vault open. */
+  noVault?: boolean;
+  /** Vaults opened before, besides this one. */
+  otherVaults?: string[];
   theme?: "light" | "dark";
   /** Earlier versions of files, newest first, by vault-relative path. */
   versions?: Record<string, MockVersion[]>;
-  /** When files as they are now were saved as a version, in Unix seconds. */
-  savedAt?: Record<string, number>;
+  /** The versions files as they are now were saved as. */
+  current?: Record<string, Omit<MockVersion, "content">>;
 };
 
 export type MockVersion = {
   /** Unix seconds. */
   time: number;
   content: string;
-  kind?: "created" | "edited" | "outsideChange" | "restored" | "synced";
+  kind?:
+    | "created"
+    | "edited"
+    | "outsideChange"
+    | "restored"
+    | "synced"
+    | "renamed";
+  /** The vault-relative path it had before, for a rename or move. */
+  renamedFrom?: string;
   added?: number;
   removed?: number;
 };
@@ -134,13 +146,15 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     assets = {},
     folders = [],
     open,
+    noVault = false,
+    otherVaults = [],
     theme = "dark",
     versions = {},
-    savedAt = {},
+    current = {},
   } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, versions, savedAt }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, noVault, otherVaults, versions, current }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -159,7 +173,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       localStorage.setItem(
         "netherstone-vault",
         JSON.stringify({
-          state: { currentVaultPath: vaultPath, recentVaults: [vaultPath] },
+          state: {
+            currentVaultPath: noVault ? null : vaultPath,
+            recentVaults: noVault ? otherVaults : [vaultPath, ...otherVaults],
+          },
           version: 0,
         }),
       );
@@ -182,12 +199,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             isSidebarOpenOutsideCanvas: true,
             isRightSidebarOpen: false,
             activeNavItem: "notes",
-            recentFiles: [
-              {
-                path: `${vaultPath}/${open}`,
-                name: open.replace(/\.md$/, ""),
-              },
-            ],
+            recentFiles: open
+              ? [{ path: `${vaultPath}/${open}`, name: open.replace(/\.md$/, "") }]
+              : [],
             pinnedFiles: [],
           },
           version: 0,
@@ -312,20 +326,31 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         find_shards_containing: () => [],
         sync_get_vault_record: () => null,
         // Versions are named by file and position: "Note.md#0" is the newest.
-        history_list_versions: ({ filePath }) => ({
-          savedAt: savedAt[relative(filePath)] ?? null,
-          versions: (versions[relative(filePath)] ?? []).map((version, index) => ({
-            id: `${relative(filePath)}#${index}`,
-            blob: `${relative(filePath)}#${index}`,
+        history_list_versions: ({ filePath }) => {
+          const path = relative(filePath);
+          const listed = (
+            version: Omit<MockVersion, "content">,
+            id: string,
+          ) => ({
+            id,
+            blob: id,
             time: version.time,
             kind: version.kind ?? "edited",
             restoredFrom: null,
+            path,
+            renamedFrom: version.renamedFrom ?? null,
             added: version.added ?? 0,
             removed: version.removed ?? 0,
             changed: 0,
             counted: true,
-          })),
-        }),
+          });
+          return {
+            current: current[path] ? listed(current[path], `${path}#now`) : null,
+            versions: (versions[path] ?? []).map((version, index) =>
+              listed(version, `${path}#${index}`),
+            ),
+          };
+        },
         history_read_version: ({ blob }) => {
           const [path, index] = blob.split("#");
           return versions[path][Number(index)].content;
@@ -387,8 +412,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       folders,
       theme,
       open,
+      noVault,
+      otherVaults,
       versions,
-      savedAt,
+      current,
     },
   );
 
@@ -421,7 +448,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
   });
 
   await page.goto("/");
-  await page.locator("[data-slate-editor]").first().waitFor();
+  if (open) await page.locator("[data-slate-editor]").first().waitFor();
 }
 
 export const editor = (page: Page) => page.locator("[data-slate-editor]").first();

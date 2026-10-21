@@ -204,7 +204,7 @@ export function HistoryPanel({
   return (
     <aside
       aria-label="History"
-      className="flex h-full w-80 flex-col border-l bg-sidebar text-ui text-sidebar-foreground"
+      className="flex h-full w-72 flex-col border-l bg-sidebar text-ui text-sidebar-foreground"
     >
       <div className="flex h-toolbar shrink-0 items-center border-b border-sidebar-border pr-2.5 pl-4">
         <span className="font-medium">History</span>

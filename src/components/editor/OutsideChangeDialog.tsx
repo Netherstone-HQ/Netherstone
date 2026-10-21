@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { LoaderCircleIcon } from "lucide-react";
 
-import { VersionPreview } from "@/components/sync/ConflictDialog";
+import { VersionPair } from "@/components/sync/ConflictDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,20 +63,18 @@ export function OutsideChangeDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <VersionPreview
-            label="Your version"
-            text={change?.mine}
-            bytes={change ? bytes(change.mine) : null}
+        {change ? (
+          <VersionPair
+            filePath={change.path}
+            mine={{ label: "Your version", text: change.mine, bytes: bytes(change.mine) }}
+            theirs={{
+              label: "Outside version",
+              text: change.outside,
+              bytes: bytes(change.outside),
+            }}
             loading={false}
           />
-          <VersionPreview
-            label="Outside version"
-            text={change?.outside}
-            bytes={change ? bytes(change.outside) : null}
-            loading={false}
-          />
-        </div>
+        ) : null}
 
         <DialogFooter className="sm:justify-between">
           <Button

@@ -1,4 +1,10 @@
-import type { Descendant, SlateEditor } from "platejs";
+import {
+  ElementApi,
+  NodeApi,
+  TextApi,
+  type Descendant,
+  type SlateEditor,
+} from "platejs";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
 import { fileExists, readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
@@ -14,6 +20,12 @@ import { useVaultStore } from "@/store/vault";
  */
 const savedValues = new WeakMap<SlateEditor, Descendant[]>();
 
+/**
+ * The open shard's text as it was last read from disk (opened, or changed
+ * outside the app). What the app saved since is what the user wrote.
+ */
+const readTexts = new WeakMap<SlateEditor, string>();
+
 /** Editors whose next change is an outside change, not an edit. */
 const outsideChangeEditors = new WeakSet<SlateEditor>();
 
@@ -26,8 +38,15 @@ export function isChangedOnDiskError(error: unknown): boolean {
   return String(error).includes(CHANGED_ON_DISK);
 }
 
+/**
+ * Notes `value` as the open shard's saved blocks. The first call, as the
+ * shard opens, also notes the text it was read with.
+ */
 export function rememberSavedValue(editor: SlateEditor, value: Descendant[]) {
   savedValues.set(editor, value);
+  if (!readTexts.has(editor)) {
+    readTexts.set(editor, useEditorStore.getState().markdownContent);
+  }
 }
 
 /**
@@ -42,8 +61,10 @@ export function takeOutsideChange(editor: SlateEditor): boolean {
  * Shows what's on disk in the open shard when its file changed outside the
  * app, so the next save doesn't write over it. Only the blocks that changed
  * are replaced, keeping the scroll position and cursor. Unsaved edits to
- * other blocks are kept; if the same blocks changed on both sides, the user
- * is asked which version to keep (see `keepVersion`).
+ * other blocks are kept. If the same blocks changed on both sides, or the
+ * outside save drops what the user wrote since the shard was read (an app
+ * that still had the old text saved it), the user is asked which version to
+ * keep (see `keepVersion`).
  */
 export function reloadOpenShardIfChanged(): Promise<void> {
   queue = queue.then(reloadOpenShard).catch((error) => {
@@ -101,36 +122,66 @@ async function reloadOpenShard() {
     return;
   }
 
+  const mine = state.isDirty
+    ? await serializeEditor(editor, filePath)
+    : state.markdownContent;
+  if (useEditorStore.getState().plateEditor !== editor) return;
+
+  // Both sides made the same change, as a move does to the links to it.
+  if (mine === markdown) {
+    state.setMarkdownContent(markdown);
+    state.setIsDirty(false);
+    state.setOutsideChange(null);
+    rememberSavedValue(editor, editor.children);
+    readTexts.set(editor, markdown);
+    return;
+  }
+
+  // Saved edits only: unsaved ones are merged below.
+  const read = readTexts.get(editor);
+  const saved = state.markdownContent;
+  if (read !== undefined && read !== saved) {
+    const [readValue, savedValue] = (await Promise.all([
+      resolveSessionValue(filePath, read, null),
+      resolveSessionValue(filePath, saved, null),
+    ])) as Descendant[][];
+    if (useEditorStore.getState().plateEditor !== editor) return;
+    if (dropsWrittenText(readValue, savedValue, value)) {
+      state.setOutsideChange({ path: filePath, mine, outside: markdown });
+      return;
+    }
+  }
+
   if (!state.isDirty) {
     showOutsideValue(editor, value);
     state.setMarkdownContent(markdown);
     rememberSavedValue(editor, editor.children);
+    readTexts.set(editor, markdown);
     void upsertAstCache({ filePath, markdown, plateValue: value }).catch(
       (error) => console.error("[Netherstone] AST cache refresh failed:", error),
     );
     return;
   }
 
-  const saved = savedValues.get(editor);
-  const savedFromDisk = saved
-    ? ((await resolveSessionValue(
-        filePath,
-        state.markdownContent,
-        null,
-      )) as Descendant[])
+  const savedBlocks = savedValues.get(editor);
+  const savedFromDisk = savedBlocks
+    ? ((await resolveSessionValue(filePath, saved, null)) as Descendant[])
     : null;
 
   if (useEditorStore.getState().plateEditor !== editor) return;
 
-  if (saved && savedFromDisk && mergeOutsideValue(editor, saved, savedFromDisk, value)) {
+  if (
+    savedBlocks &&
+    savedFromDisk &&
+    mergeOutsideValue(editor, savedBlocks, savedFromDisk, value)
+  ) {
     // The merged text is saved like an edit.
     state.setMarkdownContent(markdown);
+    readTexts.set(editor, markdown);
     state.bumpEditTick();
     return;
   }
 
-  const mine = await serializeEditor(editor, filePath);
-  if (useEditorStore.getState().plateEditor !== editor) return;
   state.setOutsideChange({ path: filePath, mine, outside: markdown });
 }
 
@@ -154,6 +205,7 @@ export async function keepVersion(choice: KeptVersion) {
     if (useEditorStore.getState().plateEditor !== editor) return;
     showOutsideValue(editor, value);
     rememberSavedValue(editor, editor.children);
+    readTexts.set(editor, change.outside);
     state.setMarkdownContent(change.outside);
     state.setIsDirty(false);
     state.setOutsideChange(null);
@@ -164,8 +216,10 @@ export async function keepVersion(choice: KeptVersion) {
     await saveMarkdownFile(await freeCopyPath(change.path), change.outside);
   }
 
-  // The edits are saved over the outside version.
+  // Your version is saved over the outside one, even if it was saved before.
+  readTexts.set(editor, change.outside);
   state.setMarkdownContent(change.outside);
+  state.setIsDirty(true);
   state.setOutsideChange(null);
   state.bumpEditTick();
 }
@@ -267,6 +321,40 @@ export function isSameNode(a: unknown, b: unknown): boolean {
   );
 }
 
+/**
+ * True when `outside` loses what the app saved since the shard was read
+ * (`read` → `saved`): a block written here isn't in it, or a block deleted
+ * here is back. Empty lines don't count.
+ */
+export function dropsWrittenText(
+  read: Descendant[],
+  saved: Descendant[],
+  outside: Descendant[],
+): boolean {
+  const range = findChangedBlocks(read, saved);
+  if (!range) return false;
+
+  const has = (blocks: Descendant[], node: Descendant) =>
+    blocks.some((block) => isSameNode(block, node));
+  const counts = (node: Descendant) => !isEmptyLine(node);
+
+  const written = saved.slice(range.start, range.nextEnd).filter(counts);
+  const deleted = read.slice(range.start, range.end).filter(counts);
+  return (
+    written.some((node) => !has(outside, node)) ||
+    deleted.some((node) => has(outside, node) && !has(saved, node))
+  );
+}
+
+function isEmptyLine(node: Descendant) {
+  return (
+    ElementApi.isElement(node) &&
+    node.type === "p" &&
+    NodeApi.string(node).trim() === "" &&
+    node.children.every((child) => TextApi.isText(child))
+  );
+}
+
 /** Replaces the blocks of `editor` that differ from `value`. */
 export function showOutsideValue(editor: SlateEditor, value: Descendant[]) {
   const range = findChangedBlocks(editor.children, value);
@@ -331,6 +419,17 @@ function replaceBlocks(
   blocks: Descendant[],
 ) {
   outsideChangeEditors.add(editor);
+  // The cursor's text is going; letting the cursor go keeps the editor from
+  // scrolling to wherever it would land.
+  const { selection } = editor;
+  if (
+    selection &&
+    [selection.anchor, selection.focus].some(
+      (point) => point.path[0] >= start && point.path[0] < end,
+    )
+  ) {
+    editor.tf.deselect();
+  }
   editor.tf.withoutSaving(() => {
     editor.tf.withoutNormalizing(() => {
       for (let index = end - 1; index >= start; index -= 1) {

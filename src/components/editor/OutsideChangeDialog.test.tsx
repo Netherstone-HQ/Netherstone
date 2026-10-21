@@ -20,7 +20,7 @@ describe("OutsideChangeDialog", () => {
     expect(screen.queryByText("Choose which version to keep")).toBeNull();
   });
 
-  it("previews both versions and keeps the one chosen", async () => {
+  it("compares both versions and keeps the one chosen", async () => {
     act(() =>
       useEditorStore.getState().setOutsideChange({
         path: "C:/vault/Plan.md",
@@ -31,8 +31,9 @@ describe("OutsideChangeDialog", () => {
     render(<OutsideChangeDialog />);
 
     expect(screen.getByText("Choose which version to keep")).toBeTruthy();
-    expect(screen.getByText(/mine/)).toBeTruthy();
-    expect(screen.getByText(/theirs/)).toBeTruthy();
+    // Each side marks the words only it has.
+    expect((await screen.findByText("mine")).closest(".history-added")).toBeTruthy();
+    expect(screen.getByText("theirs").closest(".history-added")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keep both" }).getAttribute("title")).toContain(
       "Plan (Changed outside).md",
     );

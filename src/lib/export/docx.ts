@@ -3,7 +3,7 @@
  * working after export: heading styles (navigation pane, Word's own table of
  * contents), numbered lists, checkboxes you can tick, editable equations and
  * repeating table headers. Fonts are named, not embedded, with stand-ins
- * for computers that don't have them (see `addFontFallbacks`).
+ * for computers that don't have them (see `finishPackage`).
  */
 
 import {
@@ -166,6 +166,25 @@ function importXml(xml: string): ImportedXmlComponent {
   return element as ImportedXmlComponent;
 }
 
+/** Word names the equation font on every math run. */
+const MATH_RUN_FONT = '<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr>';
+
+/**
+ * Writes equations the way Word itself does, which Word on the web needs to
+ * show them instead of "[Equation]": `0`/`1` for on and off, no empty runs,
+ * and Cambria Math named on every run.
+ */
+function wordShapedOmml(omml: string) {
+  return omml
+    .replace(/<m:sty m:val="undefined"\/>/g, "")
+    .replace(/<m:rPr><\/m:rPr>/g, "")
+    .replace(/ m:val="off"/g, ' m:val="0"')
+    .replace(/ m:val="on"/g, ' m:val="1"')
+    .replace(/<m:r>(?:<m:rPr>(?:(?!<\/m:rPr>)[\s\S])*<\/m:rPr>)?<m:t[^>]*><\/m:t><\/m:r>/g, "")
+    .replace(/<m:r>(<m:rPr>(?:(?!<\/m:rPr>)[\s\S])*<\/m:rPr>)?<m:t/g, (_, rPr = "") => `<m:r>${rPr}${MATH_RUN_FONT}<m:t`)
+    .replace(/<m:ctrlPr\/>/g, `<m:ctrlPr>${MATH_RUN_FONT}</m:ctrlPr>`);
+}
+
 /** LaTeX to an Office Math (OMML) `m:oMath` element, or null. */
 export function latexToOmml(tex: string): string | null {
   try {
@@ -179,7 +198,7 @@ export function latexToOmml(tex: string): string | null {
         .replace(/<mpadded[^>]*>/g, "<mrow>")
         .replace(/<\/mpadded>/g, "</mrow>"),
     );
-    return mml2omml(cleaned).replace(/<m:sty m:val="undefined"\/>/g, "");
+    return wordShapedOmml(mml2omml(cleaned));
   } catch {
     return null;
   }
@@ -856,28 +875,40 @@ function documentStyles(fonts: WordFonts, type: PrintType, lang: string) {
   };
 }
 
+/** Word's own equation settings, which it writes in every file. */
+const MATH_SETTINGS =
+  '<m:mathPr><m:mathFont m:val="Cambria Math"/><m:brkBin m:val="before"/><m:brkBinSub m:val="--"/><m:smallFrac m:val="0"/><m:dispDef/><m:lMargin m:val="0"/><m:rMargin m:val="0"/><m:defJc m:val="centerGroup"/><m:wrapIndent m:val="1440"/><m:intLim m:val="subSup"/><m:naryLim m:val="undOvr"/></m:mathPr>';
+
 /**
  * Word substitutes fonts that aren't installed. The font table tells it what
  * kind each one is and a close stand-in, so Newsreader falls back to a serif
- * and Geist to a sans, not to Word's default.
+ * and Geist to a sans, not to Word's default. Cambria Math, Word's equation
+ * font, is named and set in the settings as Word's own files do.
  */
-async function addFontFallbacks(docx: Uint8Array): Promise<Uint8Array> {
+async function finishPackage(docx: Uint8Array): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(docx);
   const table = await zip.file("word/fontTable.xml")?.async("string");
-  if (!table) return docx;
+  const settings = await zip.file("word/settings.xml")?.async("string");
+  if (!table || !settings) return docx;
 
-  const entries = Object.values(WORD_FONTS)
-    .filter((font) => !table.includes(`w:name="${font.name}"`))
-    .map(
-      (font) =>
-        `<w:font w:name="${font.name}"><w:altName w:val="${font.fallback}"/><w:charset w:val="00"/><w:family w:val="${font.kind}"/><w:pitch w:val="${font.kind === "modern" ? "fixed" : "variable"}"/></w:font>`,
-    )
-    .join("");
+  const entries = [
+    ...Object.values(WORD_FONTS)
+      .filter((font) => !table.includes(`w:name="${font.name}"`))
+      .map(
+        (font) =>
+          `<w:font w:name="${font.name}"><w:altName w:val="${font.fallback}"/><w:charset w:val="00"/><w:family w:val="${font.kind}"/><w:pitch w:val="${font.kind === "modern" ? "fixed" : "variable"}"/></w:font>`,
+      ),
+    table.includes('w:name="Cambria Math"')
+      ? ""
+      : '<w:font w:name="Cambria Math"><w:panose1 w:val="02040503050406030204"/><w:charset w:val="00"/><w:family w:val="roman"/><w:pitch w:val="variable"/></w:font>',
+  ].join("");
   // The table may be empty and written as a self-closing `<w:fonts .../>`.
   const updated = table.includes("</w:fonts>")
     ? table.replace("</w:fonts>", `${entries}</w:fonts>`)
     : table.replace(/<w:fonts\b([^>]*?)\s*\/>/, `<w:fonts$1>${entries}</w:fonts>`);
   zip.file("word/fontTable.xml", updated);
+  // The math settings follow the compatibility settings.
+  if (!settings.includes("<m:mathPr>")) zip.file("word/settings.xml", settings.replace("</w:compat>", `</w:compat>${MATH_SETTINGS}`));
 
   return zip.generateAsync({
     type: "uint8array",
@@ -955,5 +986,5 @@ export async function renderDocx(doc: ExportDocument, options: DocxRenderOptions
     ],
   });
 
-  return addFontFallbacks(new Uint8Array(await Packer.toArrayBuffer(document)));
+  return finishPackage(new Uint8Array(await Packer.toArrayBuffer(document)));
 }

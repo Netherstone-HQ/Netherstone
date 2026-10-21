@@ -3,11 +3,14 @@
 //! The app converts each file itself (see `src/lib/import`). This side lists
 //! the files a person picked, reads them, and finds free names for the shards
 //! they become, so an import never overwrites anything already in the vault.
+//! It also takes an import back when the person asks right after.
 
+use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
+use crate::db::attachments::ATTACHMENTS_DIR_NAME;
 use crate::vault;
 
 /// A file found among the picked files and folders.
@@ -163,6 +166,63 @@ pub fn prepare_new_shard(vault_root: &Path, path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Removes the folders an undone import leaves empty, from each shard's
+/// folder up to `target_dir`, which stays.
+pub fn remove_empty_folders(target_dir: &Path, shard_paths: &[PathBuf]) {
+    for shard in shard_paths {
+        let mut dir = shard.parent();
+        while let Some(current) = dir {
+            if current == target_dir || !current.starts_with(target_dir) || std::fs::remove_dir(current).is_err() {
+                break;
+            }
+            dir = current.parent();
+        }
+    }
+}
+
+/// Of the attachments an import linked (`asset_paths`), moves to the trash
+/// with `remove` the ones it brought in (added at or after `since`, unix
+/// seconds) that no shard links to any more. Files that were already in the
+/// vault stay. Returns the ones removed.
+pub fn remove_new_attachments(
+    conn: &Connection,
+    vault_root: &Path,
+    asset_paths: &[String],
+    since: i64,
+    remove: impl Fn(&Path) -> Result<(), String>,
+) -> Result<Vec<String>, String> {
+    let mut removed = Vec::new();
+    for asset_path in asset_paths {
+        let relative = Path::new(asset_path);
+        let inside = relative.starts_with(ATTACHMENTS_DIR_NAME)
+            && relative.components().all(|c| matches!(c, Component::Normal(_)));
+        if !inside {
+            continue;
+        }
+        let unused_and_new: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM attachments WHERE asset_path = ?1 AND created_at >= ?2 AND ref_count = 0)",
+                params![asset_path, since],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to check attachment {}: {}", asset_path, e))?;
+        if !unused_and_new {
+            continue;
+        }
+        let path = vault_root.join(relative);
+        if path.exists() {
+            remove(&path)?;
+        }
+        conn.execute(
+            "DELETE FROM attachments WHERE asset_path = ?1 AND ref_count = 0",
+            params![asset_path],
+        )
+        .map_err(|e| format!("Failed to forget attachment {}: {}", asset_path, e))?;
+        removed.push(asset_path.clone());
+    }
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +283,46 @@ mod tests {
         assert!(prepare_new_shard(&vault, &vault.join("../Escape.md")).is_err());
         assert!(prepare_new_shard(&vault, &vault.join("Deep/New.md")).is_ok());
         assert!(vault.join("Deep").is_dir());
+    }
+
+    #[test]
+    fn undo_removes_only_the_folders_and_attachments_the_import_added() {
+        let vault = temp_dir("undo");
+        std::fs::create_dir_all(vault.join("Notes/Trip")).unwrap();
+        std::fs::create_dir_all(vault.join("Kept")).unwrap();
+        std::fs::write(vault.join("Kept/Other.md"), "x").unwrap();
+        remove_empty_folders(&vault, &[vault.join("Notes/Trip/Day.md"), vault.join("Kept/New.md")]);
+        assert!(!vault.join("Notes").exists());
+        assert!(vault.join("Kept/Other.md").exists());
+        assert!(vault.is_dir());
+
+        std::fs::create_dir_all(vault.join("_attachments")).unwrap();
+        for name in ["old.png", "new.png", "used.png"] {
+            std::fs::write(vault.join("_attachments").join(name), name).unwrap();
+        }
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::init_schema(&conn).unwrap();
+        for (name, created_at, ref_count) in [("old.png", 100, 0), ("new.png", 200, 0), ("used.png", 200, 1)] {
+            conn.execute(
+                "INSERT INTO attachments (asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count)
+                 VALUES (?1, ?1, ?1, 'png', 'image/png', 1, ?2, ?2, 'syncable', ?3)",
+                params![format!("_attachments/{}", name), created_at, ref_count],
+            )
+            .unwrap();
+        }
+
+        let assets: Vec<String> = ["old.png", "new.png", "used.png", "../escape.png"]
+            .iter()
+            .map(|name| format!("_attachments/{}", name))
+            .collect();
+        let removed = remove_new_attachments(&conn, &vault, &assets, 150, |path| {
+            std::fs::remove_file(path).map_err(|e| e.to_string())
+        })
+        .unwrap();
+
+        assert_eq!(removed, vec!["_attachments/new.png".to_string()]);
+        assert!(!vault.join("_attachments/new.png").exists());
+        assert!(vault.join("_attachments/old.png").exists());
+        assert!(vault.join("_attachments/used.png").exists());
     }
 }

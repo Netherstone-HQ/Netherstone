@@ -178,6 +178,22 @@ export async function readImportFile(path: string): Promise<Uint8Array> {
   return new Uint8Array(await invoke<ArrayBuffer>("read_import_file", { path }));
 }
 
+/**
+ * Takes an import back: its shards go to the trash like deleted ones, then
+ * the attachments it brought in that nothing else links to. `since` is when
+ * the import started, in unix seconds.
+ */
+export async function undoImport(
+  vaultPath: string,
+  targetDir: string,
+  shardPaths: string[],
+  assetPaths: string[],
+  since: number,
+): Promise<void> {
+  assertTauri();
+  await invoke("undo_import", { vaultPath, targetDir, shardPaths, assetPaths, since });
+}
+
 /** Free shard paths in `targetDir`, one per `Folder/Name`, never existing files. */
 export async function reserveImportPaths(
   targetDir: string,

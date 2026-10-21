@@ -9,9 +9,11 @@ import { decodeText } from "./decode-text";
  *
  * - `[[Note]]`, `[[Note|label]]` and `[[Note#Heading]]` become @ links to the
  *   imported shard, or plain text when that note wasn't imported.
- * - `![[picture.png]]` and `![](picture.png)` copy the picture into the
- *   vault's attachments; `![[Note]]` becomes a link to that note.
- * - Links to other imported files point at their new shards.
+ * - `![[picture.png]]`, `![](picture.png)` and the `src` of `<img>`,
+ *   `<audio>`, `<video>` and `<file>` copy the file into the vault's
+ *   attachments; `![[Note]]` becomes a link to that note.
+ * - Links to other imported files point at their new shards; links to notes
+ *   that weren't imported become plain text.
  * - Obsidian callouts (`> [!tip] Title`) become callouts, `==text==` is
  *   highlighted, `%%comments%%` and `^block-ids` are dropped.
  *
@@ -28,6 +30,8 @@ export const markdownImporter: Importer = {
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "tif", "tiff"]);
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+/** The `src` of a media tag Netherstone or another app wrote, `<img src="…"`. */
+const MEDIA_SRC = /(<(?:img|audio|video|source|file)\b[^>]*?\ssrc=)("[^"]*"|'[^']*')/gi;
 
 const CALLOUT_ICONS: Record<string, string> = {
   note: "📝",
@@ -110,7 +114,6 @@ export async function convertMarkdown(source: string, context: ImportContext): P
   let fence: string | null = null;
   let inFrontMatter = lines[0] === "---";
   let missingLinks = 0;
-  let missingFiles = 0;
 
   const embed = async (target: string, size: string | undefined, wholeLine: boolean) => {
     const ext = extension(target);
@@ -121,10 +124,7 @@ export async function convertMarkdown(source: string, context: ImportContext): P
       return baseName(target);
     }
     const link = await context.attachRelated(target);
-    if (!link) {
-      missingFiles += 1;
-      return `![[${target}]]`;
-    }
+    if (!link) return `![[${target}]]`;
     const src = encodeShardLinkPath(link);
     if (IMAGE_EXTENSIONS.has(ext)) {
       const width = size && /^\d+/.exec(size)?.[0];
@@ -139,7 +139,40 @@ export async function convertMarkdown(source: string, context: ImportContext): P
   const rewrite = async (part: string, wholeLine: string) => {
     let value = part;
 
-    // ![[file|size]]
+    // <img src="_attachments/x.png" />, <audio src="…" />, …
+    value = await replaceAsync(value, MEDIA_SRC, async (match) => {
+      const [whole, before, quoted] = match;
+      const target = quoted.slice(1, -1).replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+      if (!target || URL_SCHEME.test(target) || target.startsWith("/") || target.startsWith("#")) return whole;
+      const link = await context.attachRelated(target.split(/[?#]/)[0]);
+      return link ? `${before}"${escapeAttribute(link)}"` : whole;
+    });
+
+    // ![alt](relative/picture.png) and [label](relative/file)
+    value = await replaceAsync(
+      value,
+      /(!?)\[((?:\\.|[^\]\\])*)\]\(\s*(<[^>]*>|[^)\s]+)((?:\s+"[^"]*")?)\s*\)/g,
+      async (match) => {
+        const [whole, bang, label, rawTarget, title] = match;
+        const target = rawTarget.replace(/^<|>$/g, "");
+        if (!target || URL_SCHEME.test(target) || target.startsWith("#") || target.startsWith("/")) return whole;
+        const pathOnly = target.split("#")[0];
+        if (!bang) {
+          const linkTarget = context.linkTo(pathOnly);
+          if (linkTarget) return `[${label}](${linkTarget}${title})`;
+          if (!extension(pathOnly) || extension(pathOnly) === "md") {
+            missingLinks += 1;
+            return label;
+          }
+        }
+        const link = await context.attachRelated(pathOnly);
+        if (!link) return whole;
+        return `${bang}[${label}](${encodeShardLinkPath(link)}${title})`;
+      },
+    );
+
+    // ![[file|size]], then [[note]] below. They come last so the links and
+    // tags they write aren't read again.
     value = await replaceAsync(value, /!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g, (match) =>
       embed(match[1].trim(), match[2]?.trim(), wholeLine.trim() === match[0]),
     );
@@ -156,29 +189,6 @@ export async function convertMarkdown(source: string, context: ImportContext): P
       }
       return `[${escapeLabel(label)}](${linkTarget})`;
     });
-
-    // ![alt](relative/picture.png) and [label](relative/file)
-    value = await replaceAsync(
-      value,
-      /(!?)\[((?:\\.|[^\]\\])*)\]\(\s*(<[^>]*>|[^)\s]+)((?:\s+"[^"]*")?)\s*\)/g,
-      async (match) => {
-        const [whole, bang, label, rawTarget, title] = match;
-        const target = rawTarget.replace(/^<|>$/g, "");
-        if (!target || URL_SCHEME.test(target) || target.startsWith("#") || target.startsWith("/")) return whole;
-        const pathOnly = target.split("#")[0];
-        if (!bang) {
-          const linkTarget = context.linkTo(pathOnly);
-          if (linkTarget) return `[${label}](${linkTarget}${title})`;
-          if (!extension(pathOnly) || extension(pathOnly) === "md") return whole;
-        }
-        const link = await context.attachRelated(pathOnly);
-        if (!link) {
-          missingFiles += 1;
-          return whole;
-        }
-        return `${bang}[${label}](${encodeShardLinkPath(link)}${title})`;
-      },
-    );
 
     value = value
       .replace(/==(?=\S)([^=]+?)(?<=\S)==/g, "<mark>$1</mark>")
@@ -259,13 +269,6 @@ export async function convertMarkdown(source: string, context: ImportContext): P
       missingLinks === 1
         ? "1 link points to a note that wasn't imported; it's plain text now."
         : `${missingLinks} links point to notes that weren't imported; they're plain text now.`,
-    );
-  }
-  if (missingFiles > 0) {
-    context.warn(
-      missingFiles === 1
-        ? "1 picture or file it uses wasn't found next to it."
-        : `${missingFiles} pictures or files it uses weren't found next to it.`,
     );
   }
 

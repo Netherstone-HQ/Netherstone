@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { FilesIcon, FolderIcon, LoaderCircleIcon, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { listImportSources, pickImportPaths } from "@/lib/commands";
+import { listImportSources, pickImportPaths, undoImport } from "@/lib/commands";
 import { useImportDialogStore } from "@/lib/import";
 import { appImportIO } from "@/lib/import/app-io";
 import { carriesFiles, readDrop } from "@/lib/import/dropped";
 import { runImport, type ImportIO, type ImportProgress, type ImportReport, type ImportSource } from "@/lib/import/engine";
+import { IMPORTERS } from "@/lib/import/registry";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
@@ -17,7 +19,8 @@ import { useVaultStore } from "@/store";
 type Step =
   | { kind: "pick" }
   | { kind: "importing"; progress: ImportProgress | null }
-  | { kind: "done"; report: ImportReport };
+  /** `since`: when the import started, in unix seconds, for Undo. */
+  | { kind: "done"; report: ImportReport; vaultPath: string; since: number; isUndoing?: boolean };
 
 /** The import window: pick or drop files or a folder, watch them convert, see what came in. */
 export function ImportDialog() {
@@ -35,6 +38,7 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
   const [step, setStep] = useState<Step>({ kind: "pick" });
   const [isPicking, setIsPicking] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [bringAttachments, setBringAttachments] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const isImporting = step.kind === "importing";
 
@@ -64,9 +68,11 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
     const vaultPath = useVaultStore.getState().currentVaultPath;
     if (step.kind !== "pick" || isPicking || !vaultPath) return;
     const dropped = readDrop(event.dataTransfer);
+    // Dropped files have no path on disk to look for what they use.
     await start(vaultPath, async () => (await dropped).sources, {
       ...appImportIO(vaultPath),
       readFile: async (path) => (await dropped).read(path),
+      exists: undefined,
     });
   };
 
@@ -82,12 +88,14 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
     const controller = new AbortController();
     abortRef.current = controller;
     setStep({ kind: "importing", progress: null });
+    const since = Math.floor(Date.now() / 1000);
 
     let report: ImportReport;
     try {
       report = await runImport({
         sources: await listSources(),
         targetDir,
+        bringAttachments,
         io,
         signal: controller.signal,
         onProgress: (progress) => setStep({ kind: "importing", progress }),
@@ -96,6 +104,7 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
       console.error("[Netherstone] Import failed:", error);
       report = {
         created: [],
+        attachments: [],
         skipped: [],
         failed: [{ source: "", error: error instanceof Error ? error.message : String(error) }],
         cancelled: false,
@@ -108,7 +117,29 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
         console.error("[Netherstone] Couldn't refresh the vault after importing:", error),
       );
     }
-    setStep({ kind: "done", report });
+    setStep({ kind: "done", report, vaultPath, since });
+  };
+
+  const undo = async () => {
+    if (step.kind !== "done") return;
+    const { report, vaultPath, since } = step;
+    setStep({ ...step, isUndoing: true });
+    try {
+      await undoImport(
+        vaultPath,
+        targetDir,
+        report.created.map((shard) => shard.path),
+        report.attachments,
+        since,
+      );
+    } catch (error) {
+      console.error("[Netherstone] Couldn't undo the import:", error);
+      alert(error instanceof Error ? error.message : String(error));
+    }
+    await refreshVault(vaultPath).catch((error) =>
+      console.error("[Netherstone] Couldn't refresh the vault after undoing an import:", error),
+    );
+    onClose();
   };
 
   const openShard = async (path: string) => {
@@ -146,10 +177,17 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
               </div>
             ) : null}
           </div>
-          <p className="text-muted-foreground text-ui-sm leading-5">
-            Word, PDF, web pages, Markdown, text and CSV files each become a shard. A folder keeps its folders, and
-            pictures go in your attachments. You can also drop files or folders here.
-          </p>
+          <ul className="flex flex-wrap gap-1">
+            {IMPORTERS.map((importer) => (
+              <li key={importer.label} className="rounded border border-border px-1.5 text-muted-foreground text-ui-sm">
+                {importer.label}
+              </li>
+            ))}
+          </ul>
+          <label className="flex w-fit items-center gap-2 text-ui-sm">
+            <Checkbox checked={bringAttachments} onCheckedChange={(checked) => setBringAttachments(checked === true)} />
+            Bring attachments
+          </label>
         </>
       ) : null}
 
@@ -164,12 +202,14 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
           </Button>
         ) : step.kind === "done" ? (
           <>
-            {step.report.created.length === 1 ? (
-              <Button variant="ghost" onClick={() => void openShard(step.report.created[0].path)}>
-                Open
+            {step.report.created.length ? (
+              <Button variant="ghost" disabled={step.isUndoing} onClick={() => void undo()}>
+                Undo import
               </Button>
             ) : null}
-            <Button onClick={onClose}>Done</Button>
+            <Button disabled={step.isUndoing} onClick={onClose}>
+              Done
+            </Button>
           </>
         ) : (
           <Button variant="ghost" onClick={onClose}>
@@ -231,7 +271,6 @@ function Importing({ progress }: { progress: ImportProgress | null }) {
 
 function Summary({ report, onOpen }: { report: ImportReport; onOpen: (path: string) => void }) {
   const { created, skipped, failed, cancelled } = report;
-  const withWarnings = created.filter((shard) => shard.warnings.length);
 
   let headline: string;
   if (created.length === 0 && failed.length === 0) {
@@ -242,45 +281,22 @@ function Summary({ report, onOpen }: { report: ImportReport; onOpen: (path: stri
   }
 
   return (
-    <div className="max-h-80 space-y-3 overflow-y-auto text-ui">
+    <div className="space-y-3 text-ui">
       <p>{headline}</p>
 
-      {created.length > 1 && created.length <= 8 ? (
-        <ul className="space-y-0.5">
+      {created.length || failed.length ? (
+        <ul className="-mx-2 max-h-72 overflow-y-auto">
           {created.map((shard) => (
-            <li key={shard.path}>
-              <button
-                type="button"
-                className="truncate text-left underline-offset-2 hover:underline"
-                onClick={() => onOpen(shard.path)}
-              >
-                {fileName(shard.path).replace(/\.md$/i, "")}
-              </button>
-            </li>
+            <Row key={shard.path} name={fileName(shard.path).replace(/\.md$/i, "")} notes={shard.warnings}>
+              <Button variant="ghost" size="xs" onClick={() => onOpen(shard.path)}>
+                Open
+              </Button>
+            </Row>
+          ))}
+          {failed.map((item, index) => (
+            <Row key={`${item.source}:${index}`} name={item.source ? fileName(item.source) : "Import"} notes={[item.error]} />
           ))}
         </ul>
-      ) : null}
-
-      {failed.length ? (
-        <Section title={failed.length === 1 ? "1 file couldn't be imported" : `${failed.length} files couldn't be imported`}>
-          {failed.map((item, index) => (
-            <li key={`${item.source}:${index}`}>
-              {item.source ? <span className="text-foreground">{fileName(item.source)}: </span> : null}
-              {item.error}
-            </li>
-          ))}
-        </Section>
-      ) : null}
-
-      {withWarnings.length ? (
-        <Section title="Worth a look">
-          {withWarnings.map((shard) => (
-            <li key={shard.path}>
-              <span className="text-foreground">{fileName(shard.source)}: </span>
-              {shard.warnings.join(" ")}
-            </li>
-          ))}
-        </Section>
       ) : null}
 
       {skipped.length ? (
@@ -294,12 +310,18 @@ function Summary({ report, onOpen }: { report: ImportReport; onOpen: (path: stri
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** One shard or file in the summary, with what's worth knowing about it. */
+function Row({ name, notes, children }: { name: string; notes: string[]; children?: React.ReactNode }) {
   return (
-    <div className="space-y-1">
-      <p className="font-medium">{title}</p>
-      <ul className="space-y-1 text-muted-foreground text-ui-sm leading-5">{children}</ul>
-    </div>
+    <li className="flex items-start gap-2 rounded-md px-2 py-1.5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate" title={name}>
+          {name}
+        </p>
+        {notes.length ? <p className="text-muted-foreground text-ui-sm leading-5">{notes.join(" ")}</p> : null}
+      </div>
+      {children}
+    </li>
   );
 }
 

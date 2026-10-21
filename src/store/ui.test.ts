@@ -132,3 +132,51 @@ describe("revealing a folder in the tree", () => {
     expect(useUIStore.getState().treeReveal).toBeNull();
   });
 });
+
+describe("open folders", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("keeps a folder open when it is renamed, with the folders inside it", async () => {
+    const { useUIStore } = await loadStore();
+    const { setFolderOpen } = useUIStore.getState();
+    setFolderOpen("C:/Notes/Work", true);
+    setFolderOpen("C:/Notes/Work/2026", true);
+
+    useUIStore
+      .getState()
+      .remapRememberedPaths("C:/Notes/Work", "C:/Notes/Projects");
+
+    expect(useUIStore.getState().openFolders).toEqual([
+      "C:/Notes/Projects",
+      "C:/Notes/Projects/2026",
+    ]);
+  });
+
+  it("forgets folders sent to the trash", async () => {
+    const { useUIStore } = await loadStore();
+    useUIStore.setState({ openFolders: ["C:/Notes/Work", "C:/Notes/Ideas"] });
+
+    useUIStore.getState().forgetRememberedPaths("C:/Notes/Work");
+
+    expect(useUIStore.getState().openFolders).toEqual(["C:/Notes/Ideas"]);
+  });
+
+  it("collapses every folder in one vault only", async () => {
+    const { useUIStore } = await loadStore();
+    useUIStore.setState({
+      openFolders: ["C:/Notes/Work", "C:/Notes/Work/2026", "D:/Other/Work"],
+    });
+
+    useUIStore.getState().collapseAllFolders("C:/Notes");
+
+    expect(useUIStore.getState().openFolders).toEqual(["D:/Other/Work"]);
+  });
+
+  it("remembers open folders across restarts", async () => {
+    const first = await loadStore();
+    first.useUIStore.getState().setFolderOpen("C:/Notes/Work", true);
+
+    const { useUIStore } = await loadStore();
+    expect(useUIStore.getState().openFolders).toEqual(["C:/Notes/Work"]);
+  });
+});

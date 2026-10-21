@@ -226,6 +226,36 @@ fn read_import_file(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| format!("Could not read {}: {}", path, e))
 }
 
+/// Takes an import back: moves the shards it made to the trash, like
+/// deleting them, then the attachments it brought in that nothing else
+/// links to. `since` is when the import started, in unix seconds.
+#[tauri::command(async)]
+fn undo_import(
+    vault_path: String,
+    target_dir: String,
+    shard_paths: Vec<String>,
+    asset_paths: Vec<String>,
+    since: i64,
+) -> Result<(), String> {
+    let vault = Path::new(&vault_path);
+    let shards: Vec<std::path::PathBuf> = shard_paths.iter().map(std::path::PathBuf::from).collect();
+    for shard in &shards {
+        let inside = shard.starts_with(vault) && !shard.components().any(|c| matches!(c, std::path::Component::ParentDir));
+        if inside && vault::is_markdown_path(shard) && shard.exists() {
+            delete_vault_path(shard.to_string_lossy().into_owned())?;
+        }
+    }
+    if Path::new(&target_dir).starts_with(vault) {
+        import::remove_empty_folders(Path::new(&target_dir), &shards);
+    }
+
+    let conn = db::open_connection()?;
+    import::remove_new_attachments(&conn, vault, &asset_paths, since, |path| {
+        trash::delete(path).map_err(|e| format!("Failed to move {} to the OS trash: {}", path.display(), e))
+    })?;
+    Ok(())
+}
+
 /// Finds a free shard path in `target_dir` for each imported file.
 #[tauri::command(async)]
 fn reserve_import_paths(target_dir: String, relative_paths: Vec<String>) -> Result<Vec<String>, String> {
@@ -348,6 +378,11 @@ fn sync_get_vault_record(
 }
 
 #[tauri::command(async)]
+fn find_nested_vault(folder: String) -> Result<Option<sync::state::NestedVault>, String> {
+    Ok(sync::state::find_nested_vault(&sync::sync_root()?, Path::new(&folder)))
+}
+
+#[tauri::command(async)]
 fn sync_plan_vault(vault_path: String) -> Result<sync::planner::SyncPlanSummary, String> {
     Ok(sync::planner::plan_vault(Path::new(&vault_path))?.summary())
 }
@@ -425,7 +460,7 @@ fn sync_snapshot_outside_change(
 fn history_list_versions(
     vault_path: String,
     file_path: String,
-) -> Result<Vec<sync::history::FileVersion>, String> {
+) -> Result<sync::history::FileHistory, String> {
     sync::history::list_versions(&sync::sync_root()?, Path::new(&vault_path), Path::new(&file_path))
 }
 
@@ -1492,6 +1527,7 @@ pub fn run() {
             open_import_dialog,
             list_import_sources,
             read_import_file,
+            undo_import,
             reserve_import_paths,
             save_imported_shard,
             persist_attachment_file,
@@ -1507,6 +1543,7 @@ pub fn run() {
             github_get_installation,
             github_sign_out,
             sync_get_vault_record,
+            find_nested_vault,
             sync_plan_vault,
             sync_snapshot_vault,
             sync_snapshot_outside_change,

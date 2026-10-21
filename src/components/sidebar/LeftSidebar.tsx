@@ -52,6 +52,7 @@ import {
   importShard,
   type ShardDialogResult,
 } from "@/lib/commands";
+import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, openVault } from "@/lib/open-vault";
 import { createDrawing } from "@/lib/open-vault-file";
 import { REVEAL_LABEL } from "@/lib/platform";
@@ -126,7 +127,8 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
   }
 
   async function handleOpenVault() {
-    const path = await openVaultDialog();
+    const picked = await openVaultDialog();
+    const path = picked && (await chooseVaultFolder(picked, "open"));
     if (!path) return;
     await switchVault(path);
   }

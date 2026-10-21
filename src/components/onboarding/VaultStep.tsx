@@ -18,7 +18,8 @@ import {
   openVaultDialog,
 } from "@/lib/commands";
 import { errorMessage } from "@/lib/github-account";
-import { folderName, openVault } from "@/lib/open-vault";
+import { chooseVaultFolder } from "@/lib/nested-vault";
+import { folderName, joinPath, openVault } from "@/lib/open-vault";
 import type { BackupSummary } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useVaultStore } from "@/store";
@@ -64,7 +65,8 @@ export function VaultStep({
   }, []);
 
   async function openExisting() {
-    const path = await openVaultDialog();
+    const picked = await openVaultDialog();
+    const path = picked && (await chooseVaultFolder(picked, "open"));
     if (!path) return;
     await openVault(path);
     onChoose({ path, kind: "opened" });
@@ -174,6 +176,17 @@ export function CreateVaultForm({
     setBusy(true);
     setError(null);
     try {
+      const target = joinPath(location, name.trim());
+      const chosen = await chooseVaultFolder(target, "create");
+      if (chosen !== target) {
+        if (chosen) {
+          await openVault(chosen);
+          onCreated({ path: chosen, kind: "opened" });
+        } else {
+          setBusy(false);
+        }
+        return;
+      }
       const path = await createVault(location, name);
       const startHerePath = await addStartHere(path);
       await openVault(path);
@@ -262,6 +275,19 @@ function RestoreVault({
     setError(null);
     let path = restorePath;
     try {
+      if (!path) {
+        const target = joinPath(location, backup.name);
+        const picked = await chooseVaultFolder(target, "create");
+        if (picked !== target) {
+          if (picked) {
+            await openVault(picked);
+            onRestored({ path: picked, kind: "opened" });
+          } else {
+            setBusy(false);
+          }
+          return;
+        }
+      }
       path ??= await createVault(location, backup.name);
       setRestorePath(path);
       await openVault(path);

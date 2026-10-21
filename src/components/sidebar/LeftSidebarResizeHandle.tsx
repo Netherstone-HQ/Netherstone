@@ -39,7 +39,7 @@ export function LeftSidebarResizeHandle({
   const latestSidebarWidthRef = useRef(sidebarWidth);
   const cleanupDragRef = useRef<(() => void) | null>(null);
 
-  const { isMobile, state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
 
   useEffect(() => {
     const nextWidth = clampSidebarWidth(sidebarWidth, minWidth, maxWidth);
@@ -83,8 +83,7 @@ export function LeftSidebarResizeHandle({
     if (
       event.defaultPrevented ||
       event.button !== 0 ||
-      state !== "expanded" ||
-      isMobile
+      state !== "expanded"
     ) {
       return;
     }

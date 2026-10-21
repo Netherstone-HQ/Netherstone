@@ -27,6 +27,8 @@ async function mockData(
     startedOn: string;
     brokenLinks: unknown[];
     missing?: unknown[];
+    unused?: unknown[];
+    charts?: unknown[];
   },
 ) {
   await page.addInitScript((data) => {
@@ -47,13 +49,13 @@ async function mockData(
             };
           }
           if (command === "get_broken_links") return data.brokenLinks;
-          if (command === "get_chart_shards") return [];
+          if (command === "get_chart_shards") return data.charts ?? [];
           if (command === "reconcile_attachments") {
             return {
               fileCount: 0,
               totalBytes: 0,
               missing: data.missing ?? [],
-              unused: [],
+              unused: data.unused ?? [],
               registeredCount: 0,
               removedShardCount: 0,
               externalFiles: [],
@@ -126,7 +128,117 @@ test("a vault with no writing yet starts its calendar today", async ({
 
   await page.keyboard.press("Control+4");
   await expect(page.getByText("Your calendar starts today")).toBeVisible();
-  await expect(page.getByText("No broken links.")).toBeVisible();
+  await expect(page.getByText("Nothing needs attention.")).toBeVisible();
+  // No charts, no Charts section.
+  await expect(page.getByRole("heading", { name: "Charts" })).toHaveCount(0);
+});
+
+test("a busy day lists six shards until you show all of them", async ({
+  page,
+}) => {
+  await mockData(page, {
+    startedOn: today(-40),
+    entries: [
+      ...Array.from({ length: 8 }, (_, i) =>
+        entry(today(), `Shard ${i + 1}.md`, 100 - i),
+      ),
+      entry(today(), "Gone.md", 500, false),
+    ],
+    brokenLinks: [],
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  await expect(page.getByText("+100 words")).toBeVisible();
+  await expect(page.getByText("+95 words")).toBeVisible();
+  await expect(page.getByText("+94 words")).toHaveCount(0);
+  // Deleted shards come after the others, in their own group.
+  const deleted = page.getByRole("list", { name: "Deleted" });
+  await expect(deleted).toHaveCount(0);
+  await page.getByRole("button", { name: "Show all 9" }).click();
+  await expect(page.getByText("+93 words")).toBeVisible();
+  await expect(deleted.getByText("+500 words")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show all 9" })).toHaveCount(0);
+});
+
+test("the calendar shows the last year across the card's width", async ({
+  page,
+}) => {
+  await mockData(page, {
+    startedOn: today(-400),
+    entries: [entry(today(), "Note.md", 10)],
+    brokenLinks: [],
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  const calendar = page.getByRole("group", { name: "Days written" });
+  await expect(calendar).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Show the/ })).toHaveCount(0);
+  // 53 weeks, never scrolled sideways.
+  const days = await calendar.getByRole("button").count();
+  expect(days).toBeGreaterThan(52 * 7);
+  const overflow = await calendar.evaluate(
+    (el) => el.scrollWidth - el.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("charts are listed on the page and open their shard", async ({ page }) => {
+  await mockData(page, {
+    startedOn: today(),
+    entries: [],
+    brokenLinks: [],
+    charts: [{ path: `${VAULT_PATH}/Trip.md`, name: "Trip.md", charts: 2 }],
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  const sidebar = page.getByRole("region", { name: "On this page" });
+  await expect(sidebar.getByRole("button", { name: "Charts" })).toBeVisible();
+  await page.getByRole("button", { name: /^Trip.*2 charts/ }).click();
+  await expect(page.getByRole("button", { name: "Editor" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
+test("picking a section in the sidebar marks it, even when the page can't scroll", async ({
+  page,
+}) => {
+  await mockData(page, { startedOn: today(), entries: [], brokenLinks: [] });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  const sidebar = page.getByRole("region", { name: "On this page" });
+  const writing = sidebar.getByRole("button", { name: "Writing" });
+  const health = sidebar.getByRole("button", { name: "Health" });
+  await health.click();
+  await expect(health).toHaveAttribute("aria-current", "true");
+  await writing.click();
+  await expect(writing).toHaveAttribute("aria-current", "true");
+  await page.waitForTimeout(500);
+  await expect(writing).toHaveAttribute("aria-current", "true");
+});
+
+test("unused files are cleaned up from Health", async ({ page }) => {
+  const longAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+  await mockData(page, {
+    startedOn: today(),
+    entries: [],
+    brokenLinks: [],
+    unused: [
+      { assetPath: "_attachments/old.png", sizeBytes: 2048, unusedSince: longAgo },
+    ],
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  await expect(page.getByText("1 unused file")).toBeVisible();
+  await page.getByRole("button", { name: "Clean up" }).click();
+  await expect(
+    page.getByRole("alertdialog", { name: "Move 1 unused file to trash?" }),
+  ).toBeVisible();
 });
 
 test("a missing file opens its shard at the embed", async ({ page }) => {

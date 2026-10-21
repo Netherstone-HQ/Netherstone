@@ -9,7 +9,6 @@ import {
   flip,
   offset,
 } from '@platejs/floating';
-import { getLinkAttributes } from '@platejs/link';
 import {
   type LinkFloatingToolbarState,
   FloatingLinkUrlInput,
@@ -19,7 +18,7 @@ import {
   useFloatingLinkInsertState,
 } from '@platejs/link/react';
 import { cva } from 'class-variance-authority';
-import { ExternalLink, Link, Text, Unlink } from 'lucide-react';
+import { ExternalLink, Link, PanelRight, Text, Unlink } from 'lucide-react';
 import { KEYS } from 'platejs';
 import {
   useEditorRef,
@@ -27,8 +26,13 @@ import {
   useFormInputProps,
 } from 'platejs/react';
 
+import { openLinkTarget } from '@/components/editor/lib/link-target';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Hint } from '@/components/ui/tooltip';
+import { isWebPageUrl } from '@/lib/open-web-link';
+import { useEditorStore } from '@/store';
+import type { LinkOpener } from '@/store/settings';
 
 const popoverVariants = cva(
   'z-50 w-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-hidden'
@@ -130,9 +134,7 @@ export function LinkFloatingToolbar({
         Edit link
       </button>
 
-      <Separator orientation="vertical" />
-
-      <LinkOpenButton />
+      <LinkOpenButtons />
 
       <Separator orientation="vertical" />
 
@@ -162,39 +164,58 @@ export function LinkFloatingToolbar({
   );
 }
 
-function LinkOpenButton() {
+function LinkOpenButtons() {
   const editor = useEditorRef();
   const selection = useEditorSelection();
+  const currentFilePath = useEditorStore((s) => s.currentFilePath);
 
-  const attributes = React.useMemo(
-    () => {
-      const entry = editor.api.node<TLinkElement>({
-        match: { type: editor.getType(KEYS.link) },
-      });
-      if (!entry) {
-        return {};
-      }
-      const [element] = entry;
-      return getLinkAttributes(editor, element);
-    },
+  const url = React.useMemo(
+    () =>
+      editor.api
+        .node<TLinkElement>({ match: { type: editor.getType(KEYS.link) } })?.[0]
+        .url.trim(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [editor, selection]
   );
 
+  if (!url || !currentFilePath) return null;
+
+  const button = (
+    label: string,
+    icon: React.ReactNode,
+    openIn?: LinkOpener
+  ) => (
+    <Hint label={label} side="bottom">
+      <button
+        className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+        type="button"
+        aria-label={label}
+        onClick={() => openLinkTarget(url, currentFilePath, openIn)}
+      >
+        {icon}
+      </button>
+    </Hint>
+  );
+
   return (
-    <a
-      {...attributes}
-      className={buttonVariants({
-        size: 'sm',
-        variant: 'ghost',
-      })}
-      onMouseOver={(e) => {
-        e.stopPropagation();
-      }}
-      aria-label="Open link"
-      target="_blank"
-    >
-      <ExternalLink width={18} />
-    </a>
+    <>
+      <Separator orientation="vertical" />
+      {isWebPageUrl(url) ? (
+        <>
+          {button(
+            'Open in browser panel',
+            <PanelRight width={18} />,
+            'browser-panel'
+          )}
+          {button(
+            'Open in your browser',
+            <ExternalLink width={18} />,
+            'your-browser'
+          )}
+        </>
+      ) : (
+        button('Open', <ExternalLink width={18} />)
+      )}
+    </>
   );
 }

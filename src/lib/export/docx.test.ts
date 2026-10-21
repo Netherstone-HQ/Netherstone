@@ -82,8 +82,24 @@ describe("Word export", () => {
 
   it("keeps everything after a sum or integral in its body, up to the next relation", () => {
     const sum = latexToOmml(String.raw`\sum_{i=1}^{n} i = \frac{n(n+1)}{2}`)!;
-    expect(sum).toContain('<m:e><m:r><m:t xml:space="preserve">i</m:t></m:r></m:e></m:nary><m:r><m:t xml:space="preserve">=</m:t>');
+    const font = '<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr>';
+    expect(sum).toContain(
+      `<m:e><m:r>${font}<m:t xml:space="preserve">i</m:t></m:r></m:e></m:nary><m:r>${font}<m:t xml:space="preserve">=</m:t>`,
+    );
     const integral = latexToOmml(String.raw`\int_0^1 x^2\,dx + 1`)!;
-    expect(integral).toMatch(/<m:e><m:sSup>.*dx<\/m:t><\/m:r><\/m:e><\/m:nary><m:r><m:t xml:space="preserve">\+1/);
+    expect(integral).toMatch(/<m:e><m:sSup>.*dx<\/m:t><\/m:r><\/m:e><\/m:nary><m:r><w:rPr>.*?<\/w:rPr><m:t xml:space="preserve">\+1/);
+  });
+
+  it("writes equations the way Word does, so Word on the web shows them", async () => {
+    const sum = latexToOmml(String.raw`\sum_i x_i \, y_i`)!;
+    expect(sum).toContain('<m:subHide m:val="0"/><m:supHide m:val="1"/>');
+    expect(sum).not.toMatch(/m:val="(on|off)"|<m:t[^>]*><\/m:t>/);
+    expect(sum).not.toMatch(/<m:r><m:t/);
+
+    const zip = await JSZip.loadAsync(
+      await renderDocx(fixtureDocument(), { images: new Map(), options: OPTIONS, toPng: async () => null }),
+    );
+    expect(await zip.file("word/settings.xml")!.async("string")).toContain('<m:mathPr><m:mathFont m:val="Cambria Math"/>');
+    expect(await zip.file("word/fontTable.xml")!.async("string")).toContain('<w:font w:name="Cambria Math">');
   });
 });

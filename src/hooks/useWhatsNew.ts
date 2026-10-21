@@ -6,11 +6,9 @@ import { canUpdate } from "@/lib/updates";
 import { useUIStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
 
-const CHANGELOG_URL = "https://netherstone.app/changelog";
-
-/** The website's changelog, at this version's entry. */
+/** The website's changelog page for this version. */
 export function changelogUrl(version: string) {
-  return `${CHANGELOG_URL}#v${version}`;
+  return `https://netherstone.app/changelog/v${version}`;
 }
 
 /** Says the app was updated, with a link to what changed. */

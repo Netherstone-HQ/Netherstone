@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { CodeIcon, CopyIcon, PencilIcon } from "lucide-react";
+import { CopyIcon, PencilIcon } from "lucide-react";
 import { NodeApi, type Path, type TElement } from "platejs";
 import {
   useEditorRef,
@@ -47,8 +47,6 @@ import type { TRawBlockElement } from "@/lib/markdown-raw-blocks";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useVaultStore } from "@/store";
 
-import { VerbatimBlock } from "./verbatim-block";
-
 /** The table right above the block at `path`, or null when there isn't one. */
 function tableAbove(editor: { children: unknown[] }, path: Path) {
   const index = path[path.length - 1];
@@ -64,7 +62,7 @@ function chartTitle(spec: ChartSpec, data: ChartData, x: string | undefined) {
 }
 
 const TOOLBAR_BUTTON =
-  "inline-flex h-7 items-center gap-1.5 rounded-sm px-2 font-medium text-ui-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-accent aria-pressed:bg-accent [&_svg]:size-3.5";
+  "inline-flex h-7 items-center gap-1.5 rounded-sm px-2 font-medium text-ui-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-accent [&_svg]:size-3.5";
 
 function ChartSettings({
   spec,
@@ -78,8 +76,12 @@ function ChartSettings({
   onChange: (spec: ChartSpec) => void;
 }) {
   const x = spec.x ?? columns[0] ?? "";
-  const drawn =
-    spec.y.length > 0 ? spec.y : numbers.filter((n) => n !== x).slice(0, 1);
+  const choices = numbers.filter((n) => n !== x);
+  const drawn = spec.y.length > 0 ? spec.y : choices.slice(0, 1);
+  // A column can't go along the bottom when it holds the only numbers.
+  const bottoms = columns.filter(
+    (column) => column === x || numbers.some((n) => n !== column),
+  );
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -117,7 +119,7 @@ function ChartSettings({
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper">
-            {columns.map((column) => (
+            {bottoms.map((column) => (
               <SelectItem key={column} value={column}>
                 {column}
               </SelectItem>
@@ -126,44 +128,38 @@ function ChartSettings({
         </Select>
       </div>
 
-      <fieldset className="flex flex-col gap-1.5">
-        <legend className="mb-1.5 font-medium text-ui-sm">Numbers</legend>
-        {numbers.filter((n) => n !== x).length === 0 ? (
-          <p className="text-muted-foreground text-ui-sm">
-            No other column holds only numbers.
-          </p>
-        ) : (
-          numbers
-            .filter((n) => n !== x)
-            .map((column) => {
-              const checked = drawn.includes(column);
-              const full = !checked && drawn.length >= MAX_SERIES;
-              return (
-                <label
-                  key={column}
-                  className={cn(
-                    "flex items-center gap-2 text-ui-sm",
-                    full && "opacity-50",
-                  )}
-                >
-                  <Checkbox
-                    checked={checked}
-                    disabled={full || (checked && drawn.length === 1)}
-                    onCheckedChange={(on) =>
-                      onChange({
-                        ...spec,
-                        y: on
-                          ? [...drawn, column]
-                          : drawn.filter((n) => n !== column),
-                      })
-                    }
-                  />
-                  {column}
-                </label>
-              );
-            })
-        )}
-      </fieldset>
+      {choices.length > 1 ? (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1.5 font-medium text-ui-sm">Numbers</legend>
+          {choices.map((column) => {
+            const checked = drawn.includes(column);
+            const full = !checked && drawn.length >= MAX_SERIES;
+            return (
+              <label
+                key={column}
+                className={cn(
+                  "flex items-center gap-2 text-ui-sm",
+                  full && "opacity-50",
+                )}
+              >
+                <Checkbox
+                  checked={checked}
+                  disabled={full || (checked && drawn.length === 1)}
+                  onCheckedChange={(on) =>
+                    onChange({
+                      ...spec,
+                      y: on
+                        ? [...drawn, column]
+                        : drawn.filter((n) => n !== column),
+                    })
+                  }
+                />
+                {column}
+              </label>
+            );
+          })}
+        </fieldset>
+      ) : null}
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="chart-title">Title</Label>
@@ -180,9 +176,9 @@ function ChartSettings({
 }
 
 /**
- * A chart of the table above it, with Edit, Copy as image, Send to Canvas
- * and Show Markdown. It's a raw block like any other comment, so it saves as
- * written; edits rewrite its comment.
+ * A chart of the table above it, with Edit, Copy as image and Send to
+ * Canvas. It's a raw block like any other comment, so it saves as written;
+ * edits rewrite its comment.
  */
 export function ChartBlock({
   element,
@@ -196,7 +192,6 @@ export function ChartBlock({
   const selected = useSelected();
   const focused = useFocused();
   const svgRef = useRef<SVGSVGElement>(null);
-  const [showMarkdown, setShowMarkdown] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   const spec = useMemo(() => parseChartComment(element.value), [element.value]);
@@ -281,7 +276,7 @@ export function ChartBlock({
         selected && focused && "ring-2 ring-ring ring-offset-2",
       )}
     >
-      {!readOnly ? (
+      {!readOnly && tableData ? (
         <div
           role="toolbar"
           aria-label="Chart"
@@ -292,24 +287,22 @@ export function ChartBlock({
               : "pointer-events-none opacity-0 group-focus-within/chart:pointer-events-auto group-focus-within/chart:opacity-100 group-hover/chart:pointer-events-auto group-hover/chart:opacity-100",
           )}
         >
-          {tableData ? (
-            <Popover open={isEditing} onOpenChange={setIsEditing}>
-              <PopoverTrigger asChild>
-                <button type="button" className={TOOLBAR_BUTTON}>
-                  <PencilIcon />
-                  Edit
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-64">
-                <ChartSettings
-                  spec={spec}
-                  columns={tableData.columns}
-                  numbers={numericColumns(tableData)}
-                  onChange={setSpec}
-                />
-              </PopoverContent>
-            </Popover>
-          ) : null}
+          <Popover open={isEditing} onOpenChange={setIsEditing}>
+            <PopoverTrigger asChild>
+              <button type="button" className={TOOLBAR_BUTTON}>
+                <PencilIcon />
+                Edit
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64">
+              <ChartSettings
+                spec={spec}
+                columns={tableData.columns}
+                numbers={numericColumns(tableData)}
+                onChange={setSpec}
+              />
+            </PopoverContent>
+          </Popover>
           {canDraw ? (
             <>
               <button
@@ -330,15 +323,6 @@ export function ChartBlock({
               </button>
             </>
           ) : null}
-          <button
-            type="button"
-            aria-pressed={showMarkdown}
-            className={TOOLBAR_BUTTON}
-            onClick={() => setShowMarkdown((shown) => !shown)}
-          >
-            <CodeIcon />
-            {showMarkdown ? "Hide Markdown" : "Show Markdown"}
-          </button>
         </div>
       ) : null}
 
@@ -374,10 +358,6 @@ export function ChartBlock({
             : "A chart draws the table right above it. Move it under a table."}
         </p>
       )}
-
-      {showMarkdown ? (
-        <VerbatimBlock label="Markdown" lines={[element.value]} />
-      ) : null}
     </div>
   );
 }

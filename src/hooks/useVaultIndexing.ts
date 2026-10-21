@@ -16,6 +16,7 @@ import {
 import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
 import { indexVault } from "@/lib/refresh-vault";
+import { getBrokenLinks, missingFileRows } from "@/lib/data";
 import { useDataStore } from "@/store/data";
 import {
   useAttachmentReportStore,
@@ -54,29 +55,27 @@ function flattenFilePaths(nodes: FileTreeNode[]): string[] {
 
 /**
  * Reconciles the vault's attachments once it is opened, and points out links
- * to files that are no longer in the vault.
+ * to shards or files that are no longer in the vault.
  */
-async function checkAttachments(vaultPath: string) {
-  const report = await useAttachmentReportStore.getState().check(vaultPath);
-  const missingCount = report?.missing.length ?? 0;
-  if (missingCount === 0) return;
+async function checkVaultHealth(vaultPath: string) {
+  const [report, brokenLinks] = await Promise.all([
+    useAttachmentReportStore.getState().check(vaultPath),
+    getBrokenLinks().catch(() => []),
+  ]);
+  const count =
+    brokenLinks.length + missingFileRows(report?.missing ?? []).length;
+  if (count === 0) return;
 
-  toast.warning(
-    missingCount === 1
-      ? "1 attachment is missing"
-      : `${missingCount} attachments are missing`,
-    {
-      description: "Some shards link to files that aren't in this vault.",
-      duration: 10_000,
-      action: {
-        label: "Review",
-        onClick: () => {
-          useDataStore.getState().scrollToOnOpen("broken-links");
-          useUIStore.getState().openMode("data");
-        },
+  toast.warning(count === 1 ? "1 broken link" : `${count} broken links`, {
+    duration: 10_000,
+    action: {
+      label: "Review",
+      onClick: () => {
+        useDataStore.getState().scrollToOnOpen("health");
+        useUIStore.getState().openMode("data");
       },
     },
-  );
+  });
 }
 
 function buildFilePathsKey(filePaths: readonly string[]) {
@@ -149,7 +148,7 @@ export function useVaultIndexing() {
 
     initialIndexedVaultPaths.add(currentVaultPath);
     void runIndexing(currentVaultPath).then(() =>
-      checkAttachments(currentVaultPath),
+      checkVaultHealth(currentVaultPath),
     );
   }, [currentVaultPath, runIndexing]);
 

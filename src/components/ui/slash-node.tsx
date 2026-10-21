@@ -182,7 +182,6 @@ export function SlashInputElement(
 
               {items.map(({ icon, keywords, label, value, onSelect }) => (
                 <InlineComboboxItem
-                  group={group}
                   key={value}
                   keywords={keywords}
                   label={label}

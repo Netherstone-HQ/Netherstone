@@ -55,11 +55,11 @@ describe("ConflictDialog", () => {
 
   afterEach(cleanup);
 
-  it("previews both versions and keeps both", async () => {
+  it("compares both versions and keeps both", async () => {
     render(<ConflictDialog vaultPath={VAULT} />);
     expect(screen.getByText("Choose which version to keep")).toBeTruthy();
-    expect(await screen.findByText(/mine/)).toBeTruthy();
-    expect(screen.getByText(/theirs/)).toBeTruthy();
+    expect((await screen.findByText("mine")).closest(".history-added")).toBeTruthy();
+    expect(screen.getByText("theirs").closest(".history-added")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /keep both/i }));
 

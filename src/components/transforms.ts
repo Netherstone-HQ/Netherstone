@@ -3,9 +3,13 @@
 import type { PlateEditor } from "platejs/react";
 
 import { insertCallout } from "@platejs/callout";
-import { insertCodeBlock, toggleCodeBlock } from "@platejs/code-block";
+import { insertCodeBlock } from "@platejs/code-block";
 import { insertDate } from "@platejs/date";
-import { insertColumnGroup, toggleColumnGroup } from "@platejs/layout";
+import {
+  columnsToWidths,
+  insertColumnGroup,
+  toggleColumnGroup,
+} from "@platejs/layout";
 import { triggerFloatingLink } from "@platejs/link/react";
 import { insertEquation, insertInlineEquation } from "@platejs/math";
 import {
@@ -25,6 +29,8 @@ import {
 } from "platejs";
 
 const ACTION_THREE_COLUMNS = "action_three_columns";
+
+const LIST_PROPS = [KEYS.listType, KEYS.listStart, KEYS.listChecked];
 
 const insertList = (editor: PlateEditor, type: string) => {
   editor.tf.insertNodes(
@@ -76,6 +82,42 @@ const insertInlineMap: Record<
   [KEYS.link]: (editor) => triggerFloatingLink(editor, { focused: true }),
 };
 
+/** What a list item can hold under its first line, as saved in Markdown. */
+const LIST_CONTENT_TYPES = new Set<string>([
+  KEYS.p,
+  ...KEYS.heading,
+  KEYS.blockquote,
+  KEYS.codeBlock,
+]);
+
+/**
+ * A block inserted from a list item, or from a block inside one, stays in
+ * that item: one indent deeper than the item, like the blocks under it.
+ * A list inserted there continues the list at the item's level.
+ */
+const keepInListItem = (
+  editor: PlateEditor,
+  from: TElement,
+  fromPath: Path,
+  type: string,
+) => {
+  if (typeof from.indent !== "number" || from.indent < 1) return;
+
+  const isList = type === KEYS.ul || type === KEYS.ol || type === KEYS.listTodo;
+  const isInItem = !!from[KEYS.listType] || LIST_CONTENT_TYPES.has(from.type);
+  if (!isInItem || (!isList && !LIST_CONTENT_TYPES.has(type))) return;
+
+  const indent = isList || !from[KEYS.listType] ? from.indent : from.indent + 1;
+  const at = editor.selection?.anchor.path.slice(0, fromPath.length);
+  if (!at) return;
+
+  editor.tf.unsetNodes([...LIST_PROPS, "indent"], {
+    at,
+    match: (_, path) => path.length > at.length,
+  });
+  editor.tf.setNodes({ indent }, { at });
+};
+
 type InsertBlockOptions = {
   upsert?: boolean;
 };
@@ -110,6 +152,8 @@ export const insertBlock = (
         select: true,
       });
     }
+
+    keepInListItem(editor, currentNode, path, type);
 
     if (!isSameBlockType) {
       editor.tf.removeNodes({ previousEmptyBlock: true });
@@ -146,45 +190,185 @@ const setBlockMap: Record<
   [KEYS.listTodo]: setList,
   [KEYS.ol]: setList,
   [KEYS.ul]: setList,
-  [ACTION_THREE_COLUMNS]: (editor) => toggleColumnGroup(editor, { columns: 3 }),
-  [KEYS.codeBlock]: (editor) => toggleCodeBlock(editor),
+};
+
+/** What Turn into can change: blocks whose content is text. */
+const TURN_INTO_TYPES = new Set<string>([
+  KEYS.p,
+  ...KEYS.heading,
+  KEYS.blockquote,
+  KEYS.toggle,
+  KEYS.codeBlock,
+]);
+
+/** Blocks Turn into wraps lines in, and unwraps when turning them into something else. */
+const WRAPPER_TYPES = new Set<string>([KEYS.blockquote, KEYS.codeBlock]);
+
+/**
+ * The blocks Turn into acts on for these entries (the selection's blocks by
+ * default): a code line or a quote's paragraph stands for the whole code
+ * block or quote. Anything else (math, media, tables and their cells) is
+ * left out, since renaming it would lose its content.
+ */
+export const getTurnIntoBlocks = (
+  editor: PlateEditor,
+  entries: Iterable<NodeEntry<TElement>> = editor.api.blocks<TElement>({
+    mode: "lowest",
+  }),
+) => {
+  const blocks: NodeEntry<TElement>[] = [];
+
+  for (const entry of entries) {
+    const block =
+      editor.api.above<TElement>({
+        at: entry[1],
+        match: (node) => WRAPPER_TYPES.has((node as TElement).type),
+      }) ?? entry;
+    const [node, path] = block;
+
+    if (!TURN_INTO_TYPES.has(node.type)) continue;
+    if (editor.api.some({ at: path, match: { type: editor.getType(KEYS.table) } })) {
+      continue;
+    }
+    if (blocks.some(([, other]) => PathApi.equals(other, path))) continue;
+
+    blocks.push(block);
+  }
+
+  return blocks;
+};
+
+/**
+ * Unwraps a quote or code block into its lines, so each can take the new
+ * type. A block inside a list item passes its indent on to its lines.
+ */
+const unwrapLines = (editor: PlateEditor, [node, path]: NodeEntry<TElement>) => {
+  if (!WRAPPER_TYPES.has(node.type)) return [editor.api.pathRef(path)];
+
+  const indent = node.indent;
+  const lineCount = node.children.length;
+
+  const isLine = (_: unknown, linePath: Path) =>
+    linePath.length === path.length + 1;
+
+  if (node.type === KEYS.codeBlock) {
+    editor.tf.setNodes({ type: KEYS.p }, { at: path, match: isLine });
+  }
+  if (indent !== undefined && !node[KEYS.listType]) {
+    editor.tf.setNodes({ indent }, { at: path, match: isLine });
+  }
+  editor.tf.unwrapNodes({ at: path });
+
+  return Array.from({ length: lineCount }, (_, index) =>
+    editor.api.pathRef([...PathApi.parent(path), path.at(-1)! + index]),
+  );
+};
+
+/** Wraps each run of neighbouring lines in one quote or code block. */
+const wrapLines = (editor: PlateEditor, type: string, paths: Path[]) => {
+  const runs: Path[][] = [];
+
+  for (const path of paths) {
+    const run = runs.at(-1);
+    const last = run?.at(-1);
+    if (run && last && PathApi.equals(PathApi.next(last), path)) {
+      run.push(path);
+    } else {
+      runs.push([path]);
+    }
+  }
+
+  // Last run first, so wrapping doesn't move the runs still to come.
+  for (const run of runs.reverse()) {
+    const first = editor.api.node<TElement>(run[0])![0];
+    // A block inside a list item keeps its place there; a list item leaves its list.
+    const indent = first[KEYS.listType] ? undefined : first.indent;
+    const parentPath = PathApi.parent(run[0]);
+    const isLine = (_: unknown, path: Path) =>
+      path.length === run[0].length && PathApi.isChild(path, parentPath);
+    const at = {
+      anchor: editor.api.start(run[0])!,
+      focus: editor.api.end(run.at(-1)!)!,
+    };
+
+    editor.tf.unsetNodes([...LIST_PROPS, "indent"], { at, match: isLine });
+    editor.tf.setNodes(
+      { type: type === KEYS.codeBlock ? KEYS.codeLine : KEYS.p },
+      { at, match: isLine },
+    );
+    editor.tf.wrapNodes(
+      { type, children: [], ...(indent === undefined ? {} : { indent }) },
+      { at, match: isLine },
+    );
+  }
+};
+
+/** Moves the whole block into the first of three columns. */
+const putInColumns = (editor: PlateEditor, [node, path]: NodeEntry<TElement>) => {
+  const columnGroupType = editor.getType(KEYS.columnGroup);
+  if (editor.api.above({ at: path, match: { type: columnGroupType } })) {
+    toggleColumnGroup(editor, { at: path, columns: 3 });
+    return;
+  }
+
+  editor.tf.replaceNodes(
+    {
+      type: columnGroupType,
+      children: columnsToWidths({ columns: 3 }).map((width, index) => ({
+        type: editor.getType(KEYS.column),
+        width,
+        children: [index === 0 ? node : editor.api.create.block()],
+      })),
+    },
+    { at: path },
+  );
+  editor.tf.select(editor.api.start([...path, 0])!);
 };
 
 export const setBlockType = (
   editor: PlateEditor,
   type: string,
-  { at }: { at?: Path } = {},
+  { entries }: { entries?: Iterable<NodeEntry<TElement>> } = {},
 ) => {
+  const blocks = getTurnIntoBlocks(editor, entries);
+  if (blocks.length === 0) return;
+
   editor.tf.withoutNormalizing(() => {
-    const setEntry = (entry: NodeEntry<TElement>) => {
-      const [node, path] = entry;
-
-      if (node[KEYS.listType]) {
-        editor.tf.unsetNodes([KEYS.listType, "indent"], { at: path });
-      }
-      if (type in setBlockMap) {
-        return setBlockMap[type](editor, type, entry);
-      }
-      if (node.type !== type) {
-        editor.tf.setNodes({ type }, { at: path });
-      }
-    };
-
-    if (at) {
-      const entry = editor.api.node<TElement>(at);
-
-      if (entry) {
-        setEntry(entry);
-
-        return;
-      }
+    if (type === ACTION_THREE_COLUMNS) {
+      putInColumns(editor, blocks[0]);
+      return;
     }
 
-    const entries = editor.api.blocks({ mode: "lowest" });
+    const lineRefs = blocks
+      .map(([, path]) => editor.api.pathRef(path))
+      .flatMap((ref) => {
+        const path = ref.unref();
+        const entry = path && editor.api.node<TElement>(path);
+        if (!entry || getBlockType(entry[0]) === type) return [];
+        return unwrapLines(editor, entry);
+      });
+    const paths = lineRefs
+      .map((ref) => ref.unref())
+      .filter((path): path is Path => !!path);
 
-    entries.forEach((entry) => {
-      setEntry(entry);
-    });
+    if (WRAPPER_TYPES.has(type)) {
+      wrapLines(editor, type, paths);
+      return;
+    }
+
+    for (const path of paths) {
+      const node = editor.api.node<TElement>(path)?.[0];
+      if (!node) continue;
+
+      if (node[KEYS.listType]) {
+        editor.tf.unsetNodes([...LIST_PROPS, "indent"], { at: path });
+      }
+      if (type in setBlockMap) {
+        setBlockMap[type](editor, type, [node, path]);
+      } else if (node.type !== type) {
+        editor.tf.setNodes({ type }, { at: path });
+      }
+    }
   });
 };
 

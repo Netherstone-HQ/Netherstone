@@ -18,6 +18,29 @@ const headingDepth: Record<string, number> = {
   h6: 6,
 };
 
+const STRUCTURAL_OP_TYPES = new Set([
+  "insert_node",
+  "remove_node",
+  "set_node",
+  "split_node",
+  "merge_node",
+]);
+
+/**
+ * Whether the editor's last change can change the heading list: blocks
+ * added, removed or retyped, or text typed in a heading.
+ */
+export function changesHeadings(editor: SlateEditor): boolean {
+  return editor.operations.some(
+    (op) =>
+      STRUCTURAL_OP_TYPES.has(op.type) ||
+      ((op.type === "insert_text" || op.type === "remove_text") &&
+        // A later operation in the same change may have removed the text.
+        NodeApi.has(editor, op.path) &&
+        !!editor.api.above({ at: op.path, match: (n) => isHeading(n) })),
+  );
+}
+
 /**
  * Same heading discovery as `@platejs/toc` / the in-editor TOC block, so the
  * right sidebar stays in sync with the live document (not the file on disk).

@@ -10,7 +10,7 @@ import {
 } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { formatModified, type TaggedFile } from "@/lib/tags";
-import { useUIStore, useVaultStore } from "@/store";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { selectActiveTag, useTagsStore } from "@/store/tags";
 
 function TagResult({
@@ -26,11 +26,15 @@ function TagResult({
   const shown = file.tags.find((t) => t.tag === tag) ?? file.tags[0];
   const folder = getFolderInVault(file.path, vaultPath);
 
+  /** Opens the shard scrolled to the tag shown, with the tag selected. */
   async function open() {
+    const { setPendingLinkReveal } = useEditorStore.getState();
+    if (shown) setPendingLinkReveal({ path: file.path, tag: shown.tag });
     try {
       await openEditorFile(file.path);
       useUIStore.getState().openMode("editor");
     } catch (error) {
+      setPendingLinkReveal(null);
       console.error("[Netherstone] Failed to open tagged shard:", error);
     }
   }

@@ -1,4 +1,5 @@
 import { DndPlugin } from "@platejs/dnd";
+import { createSlateEditor } from "platejs";
 import {
   createPlatePlugin,
   PlateLeaf,
@@ -8,6 +9,7 @@ import {
 
 import { EditorKit } from "@/components/editor/editor-kit";
 import { ADDED_MARK, BLOCK_CHANGE_KEY, REMOVED_MARK } from "@/lib/history-diff";
+import { useEditorStore } from "@/store/editor";
 
 function AddedLeaf(props: PlateLeafProps) {
   return (
@@ -70,3 +72,13 @@ export const VersionPreviewKit = [
   ...EditorKit.filter((plugin) => !EDIT_ONLY_PLUGINS.has(plugin.key)),
   ...HistoryDiffKit,
 ];
+
+let staticEditor: ReturnType<typeof createSlateEditor> | null = null;
+
+/** Which elements sit inside a line of text, as the editor sees them. */
+export function isInlineElement(element: any) {
+  const editor =
+    useEditorStore.getState().plateEditor ??
+    (staticEditor ??= createSlateEditor({ plugins: EditorKit }));
+  return editor.api.isInline(element);
+}

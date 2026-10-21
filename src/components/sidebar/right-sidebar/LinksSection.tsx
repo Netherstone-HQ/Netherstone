@@ -13,7 +13,7 @@ import { DrawingIcon } from "@/components/icons";
 import { Hint } from "@/components/ui/tooltip";
 import { isDrawingPath } from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
-import { openWebLink, wantsSystemBrowser } from "@/lib/open-web-link";
+import { openWebLink } from "@/lib/open-web-link";
 import { CollapsibleSection, SECTION_NOTE_CLASS } from "./CollapsibleSection";
 import { getLinkName } from "./link-utils";
 import type { DocumentLink, DocumentLinkKind } from "./types";
@@ -31,10 +31,10 @@ const ICONS: Record<DocumentLinkKind, LucideIcon> = {
   other: LinkIcon,
 };
 
-function open(link: DocumentLink, systemBrowser: boolean) {
+function open(link: DocumentLink) {
   const opening = link.resolvedPath
     ? openVaultFile(link.resolvedPath)
-    : openWebLink(link.target, { systemBrowser });
+    : openWebLink(link.target);
   opening.catch((error) => {
     console.error("[Netherstone] Failed to open link:", link.target, error);
   });
@@ -74,7 +74,7 @@ function LinkRow({ link }: { link: DocumentLink }) {
   const button = (
     <button
       type="button"
-      onClick={(event) => open(link, wantsSystemBrowser(event))}
+      onClick={() => open(link)}
       className={`${LINK_ROW_CLASS} outline-none transition-colors hover:bg-accent/40 hover:text-foreground focus-visible:bg-accent/40`}
     >
       {content}

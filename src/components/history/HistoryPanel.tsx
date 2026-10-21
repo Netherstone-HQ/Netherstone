@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { HistoryIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,23 +7,47 @@ import { Hint } from "@/components/ui/tooltip";
 import { isDrawingPath } from "@/lib/drawing-files";
 import {
   describeVersion,
+  formatDay,
   formatTime,
   groupByDay,
   listVersions,
-  type FileVersion,
+  type FileHistory,
 } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { type HistoryPlace, useHistoryStore } from "@/store/history";
 import { useVaultStore } from "@/store/vault";
 
-/** The open file's versions, newest first, loaded again as new ones are saved. */
-function useVersions(filePath: string) {
+/**
+ * The open file's history, loaded again as versions are saved and as the
+ * file changes, so the top row knows whether it's saved as a version.
+ */
+function useFileHistory(filePath: string) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const tick = useHistoryStore((s) => s.versionsTick);
+  const [fileTick, setFileTick] = useState(0);
   const [loaded, setLoaded] = useState<{
     filePath: string;
-    versions: FileVersion[];
+    history: FileHistory;
   } | null>(null);
+
+  useEffect(() => {
+    const target = filePath.replace(/\\/g, "/");
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen<{ paths?: string[] }>("vault:changed", (event) => {
+      const paths = event.payload?.paths ?? [];
+      if (paths.some((path) => path.replace(/\\/g, "/") === target)) {
+        setFileTick((n) => n + 1);
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [filePath]);
 
   useEffect(() => {
     if (!vaultPath) return;
@@ -30,21 +55,23 @@ function useVersions(filePath: string) {
     // A long history comes back with the older lines still to work out;
     // each listing gets further, so keep listing until they're all there.
     const load = (): Promise<void> =>
-      listVersions(vaultPath, filePath).then((versions) => {
+      listVersions(vaultPath, filePath).then((history) => {
         if (cancelled) return;
-        setLoaded({ filePath, versions });
-        if (versions.some((version) => !version.counted)) return load();
+        setLoaded({ filePath, history });
+        if (history.versions.some((version) => !version.counted)) return load();
       });
     load().catch((error) => {
       console.error("[Netherstone] Couldn't list versions:", error);
-      if (!cancelled) setLoaded({ filePath, versions: [] });
+      if (!cancelled) {
+        setLoaded({ filePath, history: { savedAt: null, versions: [] } });
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [vaultPath, filePath, tick]);
+  }, [vaultPath, filePath, tick, fileTick]);
 
-  return loaded?.filePath === filePath ? loaded.versions : null;
+  return loaded?.filePath === filePath ? loaded.history : null;
 }
 
 function VersionRow({
@@ -106,7 +133,8 @@ export function HistoryPanel({
   place: HistoryPlace;
   filePath: string;
 }) {
-  const versions = useVersions(filePath);
+  const history = useFileHistory(filePath);
+  const versions = history?.versions ?? null;
   // A deleted shard has no "Now": its last version shows first.
   const isDeleted = useHistoryStore(
     (s) => place === "notes" && s.deletedPath === filePath,
@@ -150,7 +178,10 @@ export function HistoryPanel({
   };
 
   const days = versions ? groupByDay(versions) : [];
-  const hasToday = !isDeleted && days[0]?.label === "Today";
+  // The top row: when the file as it is now was saved, or "Now" if it wasn't.
+  const savedAt = history?.savedAt ?? null;
+  const currentDay = savedAt === null ? "Today" : formatDay(savedAt);
+  const sharesDay = !isDeleted && days[0]?.label === currentDay;
 
   return (
     <aside
@@ -188,9 +219,9 @@ export function HistoryPanel({
         >
           {isDeleted ? null : (
             <>
-              <DayLabel>Today</DayLabel>
+              <DayLabel>{currentDay}</DayLabel>
               <VersionRow
-                time="Now"
+                time={savedAt === null ? "Now" : formatTime(savedAt)}
                 isCurrent
                 isPicked={picked === null}
                 onPick={() => pickVersion(null)}
@@ -199,7 +230,7 @@ export function HistoryPanel({
           )}
           {days.map((day, index) => (
             <div key={day.label} className="contents">
-              {index === 0 && hasToday ? null : (
+              {index === 0 && sharesDay ? null : (
                 <DayLabel>{day.label}</DayLabel>
               )}
               {day.versions.map((version) => (

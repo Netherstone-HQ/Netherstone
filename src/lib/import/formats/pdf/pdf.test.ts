@@ -93,6 +93,22 @@ describe("PDF import", () => {
     expect(shard).not.toContain("#333333");
   });
 
+  it("starts a new paragraph after a line the next one's first word would have fit on", async () => {
+    const bytes = pdfFile([
+      ["F1", 11, 72, 56, "Prepared for the north and south teams. Figures are in units sold."],
+      ["F2", 16, 72, 80, "1. Sales"],
+      ["F1", 11, 72, 100, "Warning: two shipments were counted twice in August.", "0.8 0.1 0.1"],
+      ["F1", 11, 72, 116, "The corrected totals are in the table below.", "0.1 0.3 0.8"],
+    ]);
+    const vault = memoryImport({ "Report.pdf": bytes });
+    await vault.run();
+    const paragraphs = vault.shards.get("/vault/Report.md")!.trim().split("\n\n");
+
+    expect(paragraphs).toHaveLength(4);
+    expect(paragraphs[2]).toContain("counted twice in August.");
+    expect(paragraphs[3]).toContain("The corrected totals");
+  });
+
   it("says when a file isn't a PDF", async () => {
     const vault = memoryImport({ "Broken.pdf": "not a pdf" });
     const report = await vault.run();

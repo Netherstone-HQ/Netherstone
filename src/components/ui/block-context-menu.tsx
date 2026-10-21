@@ -5,13 +5,14 @@ import {
   BlockMenuPlugin,
   BlockSelectionPlugin,
 } from '@platejs/selection/react';
-import { KEYS } from 'platejs';
 import {
   useEditorPlugin,
   useEditorReadOnly,
   usePluginOption,
 } from 'platejs/react';
 import * as React from 'react';
+
+import { getTurnIntoBlocks, setBlockType } from '@/components/transforms';
 
 import {
   ContextMenu,
@@ -23,6 +24,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { turnIntoItems } from '@/components/ui/turn-into-toolbar-button';
 
 export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const { api, editor } = useEditorPlugin(BlockMenuPlugin);
@@ -30,23 +32,17 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const openId = usePluginOption(BlockMenuPlugin, 'openId');
   const isOpen = openId === BLOCK_CONTEXT_MENU_ID;
 
-  const handleTurnInto = React.useCallback(
-    (type: string) => {
-      editor
-        .getApi(BlockSelectionPlugin)
-        .blockSelection.getNodes()
-        .forEach(([node, path]) => {
-          if (node[KEYS.listType]) {
-            editor.tf.unsetNodes([KEYS.listType, 'indent'], {
-              at: path,
-            });
-          }
+  // Read when the menu opens; the selected blocks don't change while it's open.
+  const turnIntoBlocks = isOpen
+    ? getTurnIntoBlocks(
+        editor,
+        editor.getApi(BlockSelectionPlugin).blockSelection.getNodes()
+      )
+    : [];
 
-          editor.tf.toggleBlock(type, { at: path });
-        });
-    },
-    [editor]
-  );
+  const handleTurnInto = (type: string) => {
+    setBlockType(editor, type, { entries: turnIntoBlocks });
+  };
 
   const handleAlign = React.useCallback(
     (align: 'center' | 'left' | 'right') => {
@@ -115,26 +111,22 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
             >
               Duplicate
             </ContextMenuItem>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger>Turn into</ContextMenuSubTrigger>
-              <ContextMenuSubContent className="w-48">
-                <ContextMenuItem onClick={() => handleTurnInto(KEYS.p)}>
-                  Paragraph
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => handleTurnInto(KEYS.h1)}>
-                  Heading 1
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => handleTurnInto(KEYS.h2)}>
-                  Heading 2
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => handleTurnInto(KEYS.h3)}>
-                  Heading 3
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => handleTurnInto(KEYS.blockquote)}>
-                  Blockquote
-                </ContextMenuItem>
-              </ContextMenuSubContent>
-            </ContextMenuSub>
+            {turnIntoBlocks.length > 0 && (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Turn into</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-48">
+                  {turnIntoItems.map(({ icon, label, value }) => (
+                    <ContextMenuItem
+                      key={value}
+                      onClick={() => handleTurnInto(value)}
+                    >
+                      {icon}
+                      {label}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            )}
           </ContextMenuGroup>
 
           <ContextMenuGroup>

@@ -15,6 +15,8 @@ export interface ThemeOption {
    * Swatch colors. Absent for "system", which draws light and dark split.
    */
   swatch?: ThemeSwatchColors;
+  /** Whether it draws light or dark. Absent for "system", which follows the OS. */
+  mode?: "light" | "dark";
 }
 
 export const LIGHT_SWATCH: ThemeSwatchColors = {
@@ -36,12 +38,13 @@ export const DARK_SWATCH: ThemeSwatchColors = {
  * themes: each recolors Basalt's dark tokens (App.css) under `data-theme`.
  */
 export const THEMES: ThemeOption[] = [
-  { value: "light", label: "Light", swatch: LIGHT_SWATCH },
-  { value: "dark", label: "Dark", swatch: DARK_SWATCH },
+  { value: "light", label: "Light", swatch: LIGHT_SWATCH, mode: "light" },
+  { value: "dark", label: "Dark", swatch: DARK_SWATCH, mode: "dark" },
   { value: "system", label: "Match system" },
   {
     value: "tyrant",
     label: "Tyrant",
+    mode: "dark",
     swatch: {
       background: "#0b100d",
       panel: "#0d1f15",
@@ -52,6 +55,7 @@ export const THEMES: ThemeOption[] = [
   {
     value: "bloodline",
     label: "Bloodline",
+    mode: "dark",
     swatch: {
       background: "#120808",
       panel: "#2e1416",
@@ -62,6 +66,7 @@ export const THEMES: ThemeOption[] = [
   {
     value: "citadel",
     label: "Citadel",
+    mode: "dark",
     swatch: {
       background: "#2a2a2a",
       panel: "#2e2e2e",
@@ -85,5 +90,5 @@ export function resolveThemeMode(
   prefersDark: boolean,
 ): "light" | "dark" {
   if (theme === "system") return prefersDark ? "dark" : "light";
-  return theme === "light" ? "light" : "dark";
+  return THEMES.find((option) => option.value === theme)?.mode ?? "light";
 }

@@ -63,3 +63,29 @@ test("a quote from the / menu keeps the caret inside it", async ({ page }) => {
   const saved = await lastSave(page, "Note.md");
   expect(saved).toContain("Start\n\n> Quoted line");
 });
+
+test("/block finds Blockquote, not every block in the menu", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await caretAfter(page, "Start");
+  await page.keyboard.press("Enter");
+
+  await page.keyboard.type("/block", { delay: 40 });
+  const options = page.getByRole("option");
+  await expect(options.filter({ hasText: "Blockquote" })).toBeVisible();
+  await expect(options.filter({ hasText: "Heading 1" })).toHaveCount(0);
+});
+
+test("a code block from the / menu in a list stays in the list item", async ({ page }) => {
+  await mockVault(page, {
+    files: { "List.md": "# List\n\n- First item\n- Second item\n" },
+    open: "List.md",
+  });
+  await caretAfter(page, "First item");
+  await page.keyboard.press("Enter");
+
+  await slash(page, "code");
+  await page.keyboard.type("x = 1");
+
+  const saved = await lastSave(page, "List.md");
+  expect(saved).toContain("- First item\n\n  ```\n  x = 1\n  ```\n- Second item");
+});

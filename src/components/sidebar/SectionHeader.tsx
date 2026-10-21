@@ -14,6 +14,7 @@ export function SectionHeader({
   label,
   section,
   count,
+  labelAction,
   children,
   ...props
 }: {
@@ -21,6 +22,8 @@ export function SectionHeader({
   section?: SidebarSection;
   /** How many items the section holds, shown at the right end. */
   count?: number;
+  /** A control right after the label, such as Files' Collapse all. */
+  labelAction?: React.ReactNode;
   /** Controls at the right end, such as Files' + menu. */
   children?: React.ReactNode;
 } & Omit<React.ComponentProps<"button">, "children">) {
@@ -53,6 +56,7 @@ export function SectionHeader({
       ) : (
         <span className={LABEL_CLASS}>{label}</span>
       )}
+      {labelAction}
       <div className="ml-auto flex items-center">
         {count ? (
           <span className="px-1.5 text-ui-sm text-muted-foreground tabular-nums">

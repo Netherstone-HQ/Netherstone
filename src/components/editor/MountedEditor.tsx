@@ -2,14 +2,18 @@ import { memo, useEffect, useLayoutEffect, useRef } from "react";
 import { Plate, usePlateEditor } from "platejs/react";
 import { toast } from "sonner";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
-import { getPlateHeadingList } from "@/lib/plate-toc-headings";
+import { changesHeadings, getPlateHeadingList } from "@/lib/plate-toc-headings";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { isSamePath } from "@/lib/drawing-files";
 import { rememberSavedValue, takeOutsideChange } from "@/lib/outside-changes";
 import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
-import { revealAttachment, revealLinkByText } from "./lib/link-reveal";
+import {
+  revealAttachment,
+  revealLinkByText,
+  revealTag,
+} from "./lib/link-reveal";
 import { insertManagedMediaFiles } from "./lib/media-insert";
 import {
   formatEditorLifecycleDurationMs,
@@ -17,14 +21,6 @@ import {
   getEditorLifecycleNowMs,
   logEditorLifecycle,
 } from "./lib/editor-lifecycle";
-
-const STRUCTURAL_OP_TYPES = new Set([
-  "insert_node",
-  "remove_node",
-  "set_node",
-  "split_node",
-  "merge_node",
-]);
 
 /**
  * Top-level blocks per Slate chunk. Each chunk renders with
@@ -209,7 +205,8 @@ export const MountedEditor = memo(function MountedEditor({
   ]);
 
   // A link or missing file asked for when this shard was opened (from Broken
-  // links on the Overview page): scroll to it once the shard is on screen.
+  // links on the Overview page), or a tag (from Tags): scroll to it once the
+  // shard is on screen.
   useEffect(() => {
     if (!isShown) return;
 
@@ -228,6 +225,8 @@ export const MountedEditor = memo(function MountedEditor({
     setPendingLinkReveal(null);
     if ("assetPath" in pendingLinkReveal) {
       revealAttachment(editor, pendingLinkReveal.assetPath);
+    } else if ("tag" in pendingLinkReveal) {
+      revealTag(editor, pendingLinkReveal.tag);
     } else {
       revealLinkByText(editor, pendingLinkReveal.text);
     }
@@ -296,9 +295,7 @@ export const MountedEditor = memo(function MountedEditor({
 
         bumpEditTick();
 
-        if (
-          editor.operations.some((op: any) => STRUCTURAL_OP_TYPES.has(op.type))
-        ) {
+        if (changesHeadings(editor)) {
           setTocHeadings(getPlateHeadingList(editor));
         }
       }}

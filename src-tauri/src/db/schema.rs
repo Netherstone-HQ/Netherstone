@@ -293,5 +293,6 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
         ensure_column_exists(conn, "tags", "excerpt", "TEXT")?;
         super::indexer::backfill_tag_excerpts(conn)?;
     }
+    super::indexer::remove_tags_without_letters(conn)?;
     Ok(())
 }

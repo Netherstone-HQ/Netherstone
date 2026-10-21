@@ -10,7 +10,10 @@ import { KEYS } from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
-import { DRAWING_LINK_ATTRIBUTE } from "@/lib/drawing-files";
+import {
+  DARK_SOURCE_ATTRIBUTE,
+  DRAWING_LINK_ATTRIBUTE,
+} from "@/lib/drawing-files";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
 import { textHandler } from "@/lib/markdown-escapes";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
@@ -23,18 +26,20 @@ import { remarkLiteralMdxExpressions } from "@/lib/remark-literal-mdx-expression
 /**
  * Plate saves images as `![alt](src)`, which has no room for a width. An
  * image that was resized, or that links back to the drawing it was exported
- * from, is saved as an `<img>` tag instead, which Markdown renderers show
- * at that width.
+ * from (with its dark export), is saved as an `<img>` tag instead, which
+ * Markdown renderers show at that width.
  */
 const imageRule: MdRules["img"] = {
   deserialize: defaultRules.img?.deserialize,
   serialize: (node, options) => {
     const drawing = (node as Record<string, unknown>)[DRAWING_LINK_ATTRIBUTE];
     const hasDrawing = typeof drawing === "string" && drawing.length > 0;
+    const darkSrc = (node as Record<string, unknown>)[DARK_SOURCE_ATTRIBUTE];
+    const hasDarkSrc = typeof darkSrc === "string" && darkSrc.length > 0;
     const width =
       typeof node.width === "number" && node.width > 0 ? Math.round(node.width) : null;
 
-    if (!hasDrawing && width === null) {
+    if (!hasDrawing && !hasDarkSrc && width === null) {
       return defaultRules.img!.serialize!(node, options);
     }
 
@@ -45,6 +50,7 @@ const imageRule: MdRules["img"] = {
       name: "img",
       attributes: propsToAttributes({
         src: node.url,
+        ...(hasDarkSrc ? { [DARK_SOURCE_ATTRIBUTE]: darkSrc } : {}),
         ...(alt ? { alt } : {}),
         ...(width !== null ? { width: String(width) } : {}),
         ...(hasDrawing ? { [DRAWING_LINK_ATTRIBUTE]: drawing } : {}),

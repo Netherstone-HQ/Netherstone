@@ -17,6 +17,7 @@ import {
 } from "./lib/deferred-chunks";
 import {
   revealAttachment,
+  revealChart,
   revealLinkByText,
   revealTag,
 } from "./lib/link-reveal";
@@ -261,9 +262,9 @@ export const MountedEditor = memo(function MountedEditor({
     setTocHeadings,
   ]);
 
-  // A link or missing file asked for when this shard was opened (from Broken
-  // links on the Overview page), or a tag (from Tags): scroll to it once the
-  // shard is on screen.
+  // A link, missing file or chart asked for when this shard was opened (from
+  // the Overview page), or a tag (from Tags): scroll to it once the shard is
+  // on screen.
   useEffect(() => {
     if (!isShown) return;
 
@@ -284,6 +285,8 @@ export const MountedEditor = memo(function MountedEditor({
       revealAttachment(editor, pendingLinkReveal.assetPath);
     } else if ("tag" in pendingLinkReveal) {
       revealTag(editor, pendingLinkReveal.tag);
+    } else if ("chart" in pendingLinkReveal) {
+      revealChart(editor, pendingLinkReveal.chart);
     } else {
       revealLinkByText(editor, pendingLinkReveal.text);
     }

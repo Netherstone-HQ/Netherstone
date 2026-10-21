@@ -34,7 +34,6 @@ import { useSyncStore } from "@/store/sync";
 import { PinnedSection } from "../recent/PinnedSection";
 import { RecentFilesSection } from "../recent/RecentFilesSection";
 import { TagFilterField, TagList } from "../tags/TagList";
-import { DataSidebar } from "../data/DataSidebar";
 import { FileTree } from "../vault/FileTree";
 import { NewVaultDialog } from "../vault/NewVaultDialog";
 import { openImportDialog } from "@/lib/import";
@@ -58,7 +57,6 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
 
   const setSearchModalOpen = useUIStore((s) => s.setSearchModalOpen);
   const isTagsMode = useUIStore((s) => s.appMode === "tags");
-  const isDataMode = useUIStore((s) => s.appMode === "data");
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
   const openSettings = useUIStore((s) => s.openSettings);
@@ -264,8 +262,6 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
           {isTagsMode ? (
             <TagList />
-          ) : isDataMode ? (
-            <DataSidebar />
           ) : (
             <>
               <PinnedSection />

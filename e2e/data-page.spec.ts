@@ -1,5 +1,13 @@
 import type { Page } from "@playwright/test";
-import { expect, mockVault, test, VAULT_PATH } from "./vault";
+import { editor, expect, mockVault, test, VAULT_PATH } from "./vault";
+
+const TABLE = [
+  "| Week   | km | Runs |",
+  "| ------ | -- | ---- |",
+  "| Sep 7  | 11 | 3    |",
+  "| Sep 14 | 9  | 2    |",
+  "| Sep 21 | 15 | 3    |",
+].join("\n");
 
 const FILES = {
   "Note.md": "# Note\n\nStart\n",
@@ -7,6 +15,8 @@ const FILES = {
   // to scroll.
   "Spaced repetition.md": `# Spaced repetition\n\n${"Filler.\n\n".repeat(80)}See [Leitner box](Leitner%20box.md).\n`,
   "Trip.md": `# Trip\n\n${"Filler.\n\n".repeat(80)}![photo.png](_attachments/photo.png)\n`,
+  // The second chart sits below the fold.
+  "Running log.md": `# Running log\n\n${TABLE}\n\n<!-- netherstone chart: bar; x Week; y km; title Distance -->\n\n${"Filler.\n\n".repeat(80)}${TABLE}\n\n<!-- netherstone chart: line; x Week; y Runs; title Runs -->\n`,
 };
 
 function today(offset = 0) {
@@ -49,7 +59,7 @@ async function mockData(
             };
           }
           if (command === "get_broken_links") return data.brokenLinks;
-          if (command === "get_chart_shards") return data.charts ?? [];
+          if (command === "get_charts") return data.charts ?? [];
           if (command === "reconcile_attachments") {
             return {
               fileCount: 0,
@@ -184,41 +194,129 @@ test("the calendar shows the last year across the card's width", async ({
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("charts are listed on the page and open their shard", async ({ page }) => {
+/** A chart of `TABLE`, as `get_charts` sends it. */
+function chart(name: string, index: number, comment: string) {
+  const [columns, , ...rows] = TABLE.split("\n").map((line) =>
+    line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim()),
+  );
+  return { path: `${VAULT_PATH}/${name}`, name, index, comment, columns, rows };
+}
+
+test("charts are drawn small and open their shard at the chart", async ({
+  page,
+}) => {
   await mockData(page, {
     startedOn: today(),
     entries: [],
     brokenLinks: [],
-    charts: [{ path: `${VAULT_PATH}/Trip.md`, name: "Trip.md", charts: 2 }],
+    charts: [
+      chart("Running log.md", 0, "<!-- netherstone chart: bar; x Week; y km; title Distance -->"),
+      chart("Running log.md", 1, "<!-- netherstone chart: line; x Week; y Runs; title Runs -->"),
+      chart("Budget.md", 0, "<!-- netherstone chart: bar -->"),
+      chart("Reading.md", 0, "<!-- netherstone chart: line; y km -->"),
+      chart("Garden.md", 0, "<!-- netherstone chart: bar; y Runs -->"),
+    ],
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
   await page.keyboard.press("Control+4");
-  const sidebar = page.getByRole("region", { name: "On this page" });
-  await expect(sidebar.getByRole("button", { name: "Charts" })).toBeVisible();
-  await page.getByRole("button", { name: /^Trip.*2 charts/ }).click();
+  const charts = page.getByRole("region", { name: "Charts" });
+  // The four last edited, each drawn, until you show all of them.
+  await expect(charts.getByRole("img")).toHaveCount(4);
+  await expect(charts.getByRole("img", { name: "Distance" }).locator("path")).toHaveCount(3);
+  await charts.getByRole("button", { name: "Show all 5" }).click();
+  await expect(charts.getByRole("img")).toHaveCount(5);
+  await expect(charts.getByRole("button", { name: /^Show all/ })).toHaveCount(0);
+
+  await charts.getByRole("button", { name: /^Running log Runs/ }).click();
   await expect(page.getByRole("button", { name: "Editor" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
+  await expect(editor(page).getByRole("img", { name: "Runs" })).toBeInViewport();
 });
 
-test("picking a section in the sidebar marks it, even when the page can't scroll", async ({
+test("the sidebar lists the vault's shards, as in the Editor", async ({
   page,
 }) => {
   await mockData(page, { startedOn: today(), entries: [], brokenLinks: [] });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
   await page.keyboard.press("Control+4");
-  const sidebar = page.getByRole("region", { name: "On this page" });
-  const writing = sidebar.getByRole("button", { name: "Writing" });
-  const health = sidebar.getByRole("button", { name: "Health" });
-  await health.click();
-  await expect(health).toHaveAttribute("aria-current", "true");
-  await writing.click();
-  await expect(writing).toHaveAttribute("aria-current", "true");
-  await page.waitForTimeout(500);
-  await expect(writing).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("region", { name: "On this page" })).toHaveCount(0);
+  await page
+    .getByRole("region", { name: "Files" })
+    .getByRole("button", { name: "Trip", exact: true })
+    .click();
+  await expect(page.getByRole("button", { name: "Editor" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(editor(page).getByText("Trip", { exact: true })).toBeVisible();
+});
+
+test("Health groups what needs fixing, each with its count", async ({
+  page,
+}) => {
+  await mockData(page, {
+    startedOn: today(),
+    entries: [],
+    brokenLinks: [
+      { text: "Gone", path: `${VAULT_PATH}/Note.md`, name: "Note.md" },
+      { text: "Lost", path: `${VAULT_PATH}/Note.md`, name: "Note.md" },
+    ],
+    missing: [
+      {
+        assetPath: "_attachments/photo.png",
+        shardPaths: [`${VAULT_PATH}/Trip.md`],
+        originalName: "photo.png",
+        foundAssetPath: "_attachments/photo-1.png",
+      },
+    ],
+    unused: [
+      { assetPath: "_attachments/new.png", sizeBytes: 2048, unusedSince: Math.floor(Date.now() / 1000) },
+    ],
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  const health = page.getByRole("region", { name: "Health" });
+  await expect(health.getByRole("list", { name: "Broken links" }).getByRole("button")).toHaveCount(2);
+  await expect(health.getByRole("list", { name: "Missing files" }).getByRole("button", { name: "Relink" })).toBeVisible();
+  await expect(health.getByRole("list", { name: "Unused files" }).getByText("new.png")).toBeVisible();
+  // Too new to clean up yet.
+  await expect(health.getByRole("button", { name: "Clean up" })).toHaveCount(0);
+  await expect(health.getByText("Clean up in 7 days")).toBeVisible();
+  await expect(health.getByText("Open", { exact: true })).toHaveCount(0);
+});
+
+test("the picked day sits beside the calendar when wide, under it when narrow", async ({
+  page,
+}) => {
+  await mockData(page, {
+    startedOn: today(-40),
+    entries: [entry(today(), "Note.md", 10)],
+    brokenLinks: [],
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  await page.keyboard.press("Control+4");
+  const writing = page.getByRole("region", { name: "Writing" });
+  const day = page.getByRole("region", { name: /^\w+, / });
+  await expect(day.getByText("+10 words")).toBeVisible();
+
+  const wide = [await writing.boundingBox(), await day.boundingBox()];
+  expect(wide[1]!.x).toBeGreaterThan(wide[0]!.x + wide[0]!.width);
+
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await expect
+    .poll(async () => (await day.boundingBox())!.y)
+    .toBeGreaterThan((await writing.boundingBox())!.y + (await writing.boundingBox())!.height);
+  const narrow = [await writing.boundingBox(), await day.boundingBox()];
+  expect(narrow[1]!.x).toBeCloseTo(narrow[0]!.x, 0);
 });
 
 test("unused files are cleaned up from Health", async ({ page }) => {
@@ -234,7 +332,9 @@ test("unused files are cleaned up from Health", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
 
   await page.keyboard.press("Control+4");
-  await expect(page.getByText("1 unused file")).toBeVisible();
+  await expect(
+    page.getByRole("list", { name: "Unused files" }).getByText("old.png"),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Clean up" }).click();
   await expect(
     page.getByRole("alertdialog", { name: "Move 1 unused file to trash?" }),

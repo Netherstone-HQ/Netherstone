@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   formatBytes,
   getAssetLabel,
@@ -28,32 +29,19 @@ import { missingFileRows, type BrokenLink } from "@/lib/data";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { replaceAttachmentPath, rewriteShards } from "@/lib/shard-rewrite";
 import { cn } from "@/lib/utils";
-import { useAttachmentReportStore, useEditorStore } from "@/store";
+import { useAttachmentReportStore } from "@/store";
 import {
+  Card,
+  GROUP_LABEL_CLASS,
   LINK_ROW_CLASS,
-  LIST_CLASS,
   LIST_ROW_CLASS,
-  OpenLabel,
-  ROW_ACTION_CLASS,
-  openShard,
+  openShardAt,
   plural,
 } from "./rows";
 
 const DAY_SECONDS = 24 * 60 * 60;
-
-/** Opens the shard holding `link`, scrolled to the link. */
-async function openBrokenLink(link: BrokenLink) {
-  const { setPendingLinkReveal } = useEditorStore.getState();
-  setPendingLinkReveal({ path: link.path, text: link.text });
-  if (!(await openShard(link.path))) setPendingLinkReveal(null);
-}
-
-/** Opens a shard that embeds a missing file, scrolled to the embed. */
-async function openMissingFile(shardPath: string, assetPath: string) {
-  const { setPendingLinkReveal } = useEditorStore.getState();
-  setPendingLinkReveal({ path: shardPath, assetPath });
-  if (!(await openShard(shardPath))) setPendingLinkReveal(null);
-}
+/** Fits a button in a row without making it taller. */
+const ROW_BUTTON_CLASS = "h-7 shrink-0 text-ui-sm";
 
 function shardName(shardPath: string) {
   return getVaultFileDisplayName(getFileName(shardPath));
@@ -99,29 +87,29 @@ function MissingFileRow({
   };
 
   return (
-    <li className="flex items-center">
+    <li className="flex items-center gap-1">
       <button
         type="button"
         className={LINK_ROW_CLASS}
         title={assetPath}
-        onClick={() => void openMissingFile(shardPath, assetPath)}
+        onClick={() => void openShardAt({ path: shardPath, assetPath })}
       >
         <span className="min-w-0 truncate">{name}</span>
         <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
           in {shardName(shardPath)}
         </span>
-        <OpenLabel />
       </button>
       {foundAssetPath ? (
-        <button
-          type="button"
-          className={ROW_ACTION_CLASS}
+        <Button
+          variant="outline"
+          size="sm"
+          className={ROW_BUTTON_CLASS}
           disabled={isRelinking}
           title={`Use ${foundAssetPath}`}
           onClick={() => void relink(foundAssetPath)}
         >
           Relink
-        </button>
+        </Button>
       ) : null}
     </li>
   );
@@ -153,10 +141,10 @@ function sumBytes(files: UnusedAttachment[]) {
 }
 
 /**
- * Files no shard uses. Clean up moves the ones unused for the grace period
- * to the trash after previewing them; newer ones wait.
+ * Files no shard uses, with their sizes. Clean up moves the ones unused for
+ * the grace period to the trash after previewing them; newer ones wait.
  */
-function UnusedFilesRow({
+function UnusedFiles({
   unused,
   vaultPath,
 }: {
@@ -209,30 +197,42 @@ function UnusedFilesRow({
   };
 
   return (
-    <li className="flex items-center">
-      <div className={LIST_ROW_CLASS}>
-        <span className="min-w-0 truncate">
-          {plural(unused.length, "unused file", "unused files")}
-        </span>
-        <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-          {formatBytes(sumBytes(unused))}
-        </span>
-        {ready.length === 0 ? (
-          <span className="ml-auto shrink-0 text-muted-foreground text-ui-sm">
+    <div>
+      <div className={cn(GROUP_LABEL_CLASS, "pr-1")}>
+        <span>Unused files</span>
+        <span className="tabular-nums">{unused.length.toLocaleString()}</span>
+        {ready.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(ROW_BUTTON_CLASS, "ml-auto text-foreground")}
+            onClick={() => setIsConfirmOpen(true)}
+          >
+            Clean up
+          </Button>
+        ) : (
+          <span className="ml-auto pr-1.5">
             Clean up in{" "}
             {plural(daysUntilCleanup(waiting, nowSeconds), "day", "days")}
           </span>
-        ) : null}
+        )}
       </div>
-      {ready.length > 0 ? (
-        <button
-          type="button"
-          className={ROW_ACTION_CLASS}
-          onClick={() => setIsConfirmOpen(true)}
-        >
-          Clean up
-        </button>
-      ) : null}
+      <ul aria-label="Unused files">
+        {unused.map((file) => (
+          <li
+            key={file.assetPath}
+            className={LIST_ROW_CLASS}
+            title={file.assetPath}
+          >
+            <span className="min-w-0 truncate">
+              {getAssetLabel(file.assetPath)}
+            </span>
+            <span className="ml-auto shrink-0 text-muted-foreground text-ui-sm tabular-nums">
+              {formatBytes(file.sizeBytes)}
+            </span>
+          </li>
+        ))}
+      </ul>
 
       <AlertDialog
         open={isConfirmOpen}
@@ -284,66 +284,94 @@ function UnusedFilesRow({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </li>
+    </div>
+  );
+}
+
+function Group({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className={GROUP_LABEL_CLASS}>
+        <span>{label}</span>
+        <span className="tabular-nums">{count.toLocaleString()}</span>
+      </div>
+      <ul aria-label={label}>{children}</ul>
+    </div>
   );
 }
 
 /**
  * What needs fixing in the vault: @ links to shards that don't exist, files
- * shards embed that are gone, and files no shard uses.
+ * shards embed that are gone, and files no shard uses, each in its group.
  */
 export function Health({
   links,
   report,
   vaultPath,
+  className,
 }: {
   links: BrokenLink[];
   report: AttachmentReport | null;
   vaultPath: string;
+  className?: string;
 }) {
   const missingRows = missingFileRows(report?.missing ?? []);
   const unused = report?.unused ?? [];
 
-  if (links.length === 0 && missingRows.length === 0 && unused.length === 0) {
-    return (
-      <div className="flex items-center gap-2.5 rounded-lg border bg-card p-4 text-ui">
-        <CircleCheckIcon className="size-5 shrink-0 text-chart-3" />
-        Nothing needs attention.
-      </div>
-    );
-  }
-
   return (
-    <ul className={LIST_CLASS}>
-      {links.map((link, i) => (
-        <li key={`${link.path}-${i}`}>
-          <button
-            type="button"
-            className={LINK_ROW_CLASS}
-            onClick={() => void openBrokenLink(link)}
-          >
-            <span className="min-w-0 truncate">@{link.text}</span>
-            <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-              in {getVaultFileDisplayName(link.name)}
-            </span>
-            <OpenLabel />
-          </button>
-        </li>
-      ))}
-      {missingRows.map(({ file, name, shardPath }) => (
-        <MissingFileRow
-          key={`${file.assetPath}-${shardPath}`}
-          name={name}
-          assetPath={file.assetPath}
-          foundAssetPath={file.foundAssetPath}
-          shardPath={shardPath}
-          shardPaths={file.shardPaths}
-          vaultPath={vaultPath}
-        />
-      ))}
-      {unused.length > 0 ? (
-        <UnusedFilesRow unused={unused} vaultPath={vaultPath} />
+    <Card title="Health" isList className={className}>
+      {links.length === 0 && missingRows.length === 0 && unused.length === 0 ? (
+        <div className="flex items-center gap-2.5 px-2.5 py-1 text-ui">
+          <CircleCheckIcon className="size-5 shrink-0 text-chart-3" />
+          Nothing needs attention.
+        </div>
       ) : null}
-    </ul>
+      {links.length > 0 ? (
+        <Group label="Broken links" count={links.length}>
+          {links.map((link, i) => (
+            <li key={`${link.path}-${i}`}>
+              <button
+                type="button"
+                className={LINK_ROW_CLASS}
+                onClick={() =>
+                  void openShardAt({ path: link.path, text: link.text })
+                }
+              >
+                <span className="min-w-0 truncate">@{link.text}</span>
+                <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
+                  in {getVaultFileDisplayName(link.name)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </Group>
+      ) : null}
+      {missingRows.length > 0 ? (
+        <Group label="Missing files" count={missingRows.length}>
+          {missingRows.map(({ file, name, shardPath }) => (
+            <MissingFileRow
+              key={`${file.assetPath}-${shardPath}`}
+              name={name}
+              assetPath={file.assetPath}
+              foundAssetPath={file.foundAssetPath}
+              shardPath={shardPath}
+              shardPaths={file.shardPaths}
+              vaultPath={vaultPath}
+            />
+          ))}
+        </Group>
+      ) : null}
+      {unused.length > 0 ? (
+        <UnusedFiles unused={unused} vaultPath={vaultPath} />
+      ) : null}
+    </Card>
   );
 }

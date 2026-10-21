@@ -92,6 +92,109 @@ pub fn chart_title(html: &str) -> Option<String> {
     )
 }
 
+/// A chart and the table right above it, which it's drawn from.
+#[derive(Debug, PartialEq)]
+pub struct ChartTable {
+    /// Which chart in the shard, from 0 at the top, counting every chart.
+    pub index: usize,
+    /// The chart's comment, as written.
+    pub comment: String,
+    /// The table's first row, which the chart names columns by.
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// The charts in `content` drawn from a table, each with that table's text
+/// cell by cell, as the editor reads it. A chart with no table right above
+/// it draws nothing and is left out.
+pub fn chart_tables(content: &str) -> Vec<ChartTable> {
+    let mut charts = Vec::new();
+    let mut chart_count = 0;
+    let mut depth = 0usize;
+    // The rows of the table at the top being read, then of the last block
+    // if it was a table.
+    let mut table: Option<Vec<Vec<String>>> = None;
+    let mut in_table = false;
+    let mut html: Option<String> = None;
+
+    for event in Parser::new_ext(content, markdown_options()) {
+        match event {
+            Event::Start(tag) => {
+                match tag {
+                    Tag::Table(_) if depth == 0 => {
+                        table = Some(Vec::new());
+                        in_table = true;
+                    }
+                    Tag::HtmlBlock if depth == 0 => html = Some(String::new()),
+                    Tag::TableHead | Tag::TableRow if in_table => {
+                        if let Some(rows) = table.as_mut() {
+                            rows.push(Vec::new());
+                        }
+                    }
+                    Tag::TableCell if in_table => {
+                        if let Some(row) = table.as_mut().and_then(|rows| rows.last_mut()) {
+                            row.push(String::new());
+                        }
+                    }
+                    _ if depth == 0 => table = None,
+                    _ => {}
+                }
+                depth += 1;
+            }
+            Event::End(TagEnd::Table) if depth == 1 => {
+                depth = 0;
+                in_table = false;
+            }
+            Event::End(TagEnd::HtmlBlock) if depth == 1 => {
+                depth = 0;
+                let text = html.take().unwrap_or_default();
+                let above = table.take();
+                if chart_title(&text).is_none() {
+                    continue;
+                }
+                if let Some(mut rows) = above.filter(|rows| !rows.is_empty()) {
+                    let columns = rows.remove(0);
+                    charts.push(ChartTable {
+                        index: chart_count,
+                        comment: text.trim().to_string(),
+                        columns,
+                        rows,
+                    });
+                }
+                chart_count += 1;
+            }
+            Event::End(_) => depth = depth.saturating_sub(1),
+            Event::Html(text) => {
+                if let Some(block) = html.as_mut() {
+                    block.push_str(&text);
+                }
+            }
+            Event::Text(text) | Event::Code(text) if in_table => {
+                if let Some(cell) = table
+                    .as_mut()
+                    .and_then(|rows| rows.last_mut())
+                    .and_then(|row| row.last_mut())
+                {
+                    cell.push_str(&text);
+                }
+            }
+            _ if depth == 0 => table = None,
+            _ => {}
+        }
+    }
+
+    for chart in &mut charts {
+        for cell in chart
+            .columns
+            .iter_mut()
+            .chain(chart.rows.iter_mut().flatten())
+        {
+            *cell = cell.trim().to_string();
+        }
+    }
+    charts
+}
+
 /// Parse markdown content and extract metadata.
 ///
 /// Extracts:
@@ -178,6 +281,27 @@ mod tests {
         );
         assert_eq!(meta.charts, ["Weekly km", ""]);
         assert_eq!(meta.word_count, 2);
+    }
+
+    #[test]
+    fn reads_the_table_above_each_chart() {
+        let charts = chart_tables(
+            "<!-- netherstone chart: line -->\n\n\
+             <!-- netherstone: widths 50% -->\n\
+             | Week | **km** |\n| - | - |\n| 1 | `5` |\n| 2 | 7 |\n\n\
+             <!-- netherstone chart: bar; x Week; y km; title Runs -->\n\n\
+             | a | b |\n| - | - |\n| 1 | 2 |\n\nText\n\n\
+             <!-- netherstone chart: bar -->\n",
+        );
+        assert_eq!(
+            charts,
+            [ChartTable {
+                index: 1,
+                comment: "<!-- netherstone chart: bar; x Week; y km; title Runs -->".into(),
+                columns: vec!["Week".into(), "km".into()],
+                rows: vec![vec!["1".into(), "5".into()], vec!["2".into(), "7".into()]],
+            }]
+        );
     }
 
     #[test]

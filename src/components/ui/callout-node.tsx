@@ -11,9 +11,6 @@ import { cn } from "@/lib/utils";
 
 import { EmojiPicker, EmojiPopover } from "./emoji-toolbar-button";
 
-const EMOJI_FONT_FAMILY =
-  '"Apple Color Emoji", "Segoe UI Emoji", NotoColorEmoji, "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", EmojiSymbols, sans-serif';
-
 export function CalloutElement({
   attributes,
   children,
@@ -50,10 +47,7 @@ export function CalloutElement({
               <Button
                 type="button"
                 variant="ghost"
-                className="flex size-7 select-none items-center justify-center rounded-md p-0 text-[18px] leading-none hover:bg-muted-foreground/15"
-                style={{
-                  fontFamily: EMOJI_FONT_FAMILY,
-                }}
+                className="flex size-7 select-none items-center justify-center rounded-md p-0 font-emoji text-[18px] leading-none hover:bg-muted-foreground/15"
                 contentEditable={false}
               >
                 {(props.element.icon as any) || "💡"}

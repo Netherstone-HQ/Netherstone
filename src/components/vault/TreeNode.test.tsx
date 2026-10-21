@@ -142,6 +142,7 @@ describe("TreeNode path changes", () => {
       if (command === "rename_file") return RENAMED;
       if (command === "scan_vault") return [];
       if (command === "find_shards_containing") return [];
+      if (command === "sync_snapshot_vault") return { commit: null };
       return null;
     });
   });
@@ -186,6 +187,22 @@ describe("TreeNode path changes", () => {
       `${RENAMED}/Plan.md`,
       `${VAULT}/Home.md`,
     ]);
+  });
+
+  it("saves a version right after a rename, so the history follows it", async () => {
+    renderNode(FOLDER);
+
+    openMenuOn("Work");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = await screen.findByDisplayValue("Work");
+    fireEvent.change(input, { target: { value: "Projects" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("sync_snapshot_vault", {
+        vaultPath: VAULT,
+      }),
+    );
   });
 
   it("offers Move on a folder too", () => {

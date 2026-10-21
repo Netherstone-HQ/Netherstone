@@ -106,6 +106,24 @@ export async function scanVault(vaultPath: string): Promise<FileTreeNode[]> {
   return invoke<FileTreeNode[]>("scan_vault", { vaultPath });
 }
 
+/** Another vault that a folder is inside, or that is inside it. */
+export type NestedVault = {
+  path: string;
+  /** The folder is inside this vault; otherwise this vault is inside it. */
+  containsFolder: boolean;
+};
+
+/**
+ * Another vault around or inside `folder`, which may not exist yet, or null
+ * when there is none.
+ */
+export async function findNestedVault(
+  folder: string,
+): Promise<NestedVault | null> {
+  assertTauri();
+  return invoke<NestedVault | null>("find_nested_vault", { folder });
+}
+
 /** The folder new vaults go in unless the user picks another: Documents. */
 export async function defaultVaultLocation(): Promise<string | null> {
   assertTauri();

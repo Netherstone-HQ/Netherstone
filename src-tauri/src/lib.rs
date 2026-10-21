@@ -378,6 +378,11 @@ fn sync_get_vault_record(
 }
 
 #[tauri::command(async)]
+fn find_nested_vault(folder: String) -> Result<Option<sync::state::NestedVault>, String> {
+    Ok(sync::state::find_nested_vault(&sync::sync_root()?, Path::new(&folder)))
+}
+
+#[tauri::command(async)]
 fn sync_plan_vault(vault_path: String) -> Result<sync::planner::SyncPlanSummary, String> {
     Ok(sync::planner::plan_vault(Path::new(&vault_path))?.summary())
 }
@@ -1538,6 +1543,7 @@ pub fn run() {
             github_get_installation,
             github_sign_out,
             sync_get_vault_record,
+            find_nested_vault,
             sync_plan_vault,
             sync_snapshot_vault,
             sync_snapshot_outside_change,

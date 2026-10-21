@@ -194,6 +194,43 @@ describe("Editor", () => {
     expect(screen.getByText("Last paragraph.")).toBeTruthy();
   });
 
+  describe("closing or switching away from a long shard", () => {
+    // Removing a long shard takes a while, so what comes next is shown first.
+    it("shows the empty state at once and removes the shard after", async () => {
+      await openNote(NOTE);
+      act(() => useEditorStore.getState().closeFile());
+
+      expect(screen.getByText("No shard open")).toBeTruthy();
+      const closed = document.querySelector("[data-slate-editor]");
+      expect(closed?.closest("[hidden]")).not.toBeNull();
+
+      await waitFor(() =>
+        expect(document.querySelector("[data-slate-editor]")).toBeNull(),
+      );
+    });
+
+    it("keeps the next shard's editor when the previous one is removed", async () => {
+      await openNote(NOTE);
+      act(() => {
+        useEditorStore.getState().openFile({
+          path: "C:/vault/notes/other.md",
+          content: "Other shard\n",
+        });
+      });
+
+      const next = await waitFor(() => {
+        const mounted = useEditorStore.getState().plateEditor;
+        expect(mounted?.api.string([0])).toBe("Other shard");
+        return mounted;
+      });
+      await waitFor(() =>
+        expect(document.querySelectorAll("[data-slate-editor]")).toHaveLength(1),
+      );
+
+      expect(useEditorStore.getState().plateEditor).toBe(next);
+    });
+  });
+
   it("shows a change made outside the app in place, without marking it dirty", async () => {
     const editor = await openNote(NOTE);
     const heading = editor.children[0];

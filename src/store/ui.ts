@@ -6,6 +6,7 @@ import {
   remapPathAfterMove,
 } from "@/lib/drawing-files";
 import { renamedLocalStorage } from "./renamed-storage";
+import { useShardScrollStore } from "./shard-scroll";
 
 type NavItem = "notes" | "search" | "settings" | null;
 export type SettingsCategory =
@@ -255,7 +256,8 @@ export const useUIStore = create<UIState>()(
             : [...state.pinnedFiles, file],
         })),
       // Renaming or moving a folder also updates the files inside it.
-      remapRememberedPaths: (previousPath, nextPath) =>
+      remapRememberedPaths: (previousPath, nextPath) => {
+        useShardScrollStore.getState().remapPositions(previousPath, nextPath);
         set((state) => {
           const remap = (entry: RecentFileEntry) => {
             const path = remapPathAfterMove(entry.path, previousPath, nextPath);
@@ -267,9 +269,11 @@ export const useUIStore = create<UIState>()(
             recentFiles: state.recentFiles.map(remap),
             pinnedFiles: state.pinnedFiles.map(remap),
           };
-        }),
+        });
+      },
       // Removing a folder also removes the files inside it.
-      forgetRememberedPaths: (path) =>
+      forgetRememberedPaths: (path) => {
+        useShardScrollStore.getState().forgetPositions(path);
         set((state) => ({
           recentFiles: state.recentFiles.filter(
             (entry) => !isPathWithin(entry.path, path),
@@ -277,7 +281,8 @@ export const useUIStore = create<UIState>()(
           pinnedFiles: state.pinnedFiles.filter(
             (entry) => !isPathWithin(entry.path, path),
           ),
-        })),
+        }));
+      },
 
       // ── Search Modal ───────────────────────────────────────────────────────────
       isSearchModalOpen: false,

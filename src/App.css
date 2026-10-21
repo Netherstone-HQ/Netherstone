@@ -420,7 +420,7 @@
         transition-duration: 120ms !important;
     }
 
-    /* Editor chunks (100 blocks) use `content-visibility: auto`; off-screen
+    /* Editor chunks (10 blocks) use `content-visibility: auto`; off-screen
        chunks need a placeholder height until they're measured in the
        background (see chunk-heights.ts) or rendered, instead of collapsing
        to zero. */
@@ -481,6 +481,20 @@
 .history-changes-off .history-removed,
 .history-changes-off [data-history-block="removed"] {
     display: none;
+}
+
+/* The editor's loading bar (Editor.tsx) appears after a short delay, so fast
+   opens don't flash it. Both animations run off the main thread, so the bar
+   shows and moves while a long shard is being drawn. */
+.editor-loading-bar {
+    opacity: 0;
+    animation: editor-loading-show 0s linear 150ms forwards;
+}
+
+@keyframes editor-loading-show {
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes editor-loading {

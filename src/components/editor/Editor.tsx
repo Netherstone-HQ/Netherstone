@@ -11,7 +11,9 @@ import {
 import { useShallow } from "zustand/shallow";
 import { stripLinkDecorators } from "@/components/sidebar/right-sidebar/link-utils";
 import { Button } from "@/components/ui/button";
+import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { cn } from "@/lib/utils";
 import {
   isWebPageUrl,
   openWebLink,
@@ -23,8 +25,8 @@ import { MountedEditor } from "./MountedEditor";
 import { logEditorLifecycle } from "./lib/editor-lifecycle";
 import { resolveSessionValue } from "./lib/session-value";
 
-/** Delay before showing the loading bar, so fast opens don't flash it. */
-const LOADING_BAR_DELAY_MS = 150;
+/** Longest wait for a quiet moment to remove a closed shard. */
+const REMOVE_IDLE_TIMEOUT_MS = 1000;
 
 type EditorSession = {
   tick: number;
@@ -32,6 +34,17 @@ type EditorSession = {
   content: string;
   value: any[];
   cacheHit: boolean;
+};
+
+type EditorSessions = {
+  /** The session on screen. */
+  displayed: EditorSession | null;
+  /**
+   * Closed sessions, hidden and removed in the next quiet moment. Removing a
+   * long shard takes a while, so the next one (or the empty state) is shown
+   * first.
+   */
+  leaving: EditorSession[];
 };
 
 function isExternalLink(href: string) {
@@ -138,22 +151,10 @@ class EditorErrorBoundary extends Component<
 }
 
 function EditorLoadingBar() {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(
-      () => setIsVisible(true),
-      LOADING_BAR_DELAY_MS,
-    );
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  if (!isVisible) return null;
-
   return (
     <div
       aria-label="Loading document"
-      className="pointer-events-none sticky top-0 z-50 -mb-0.5 h-0.5 overflow-hidden"
+      className="editor-loading-bar pointer-events-none sticky top-0 z-50 -mb-0.5 h-0.5 overflow-hidden"
       role="progressbar"
     >
       <div className="h-full w-1/3 animate-[editor-loading_1s_ease-in-out_infinite] bg-primary/60" />
@@ -174,21 +175,42 @@ export function Editor() {
   // and swapped in as a transition, so the previous note stays visible (and
   // the app responsive) while the new one renders, instead of a loading
   // screen followed by a long synchronous mount.
-  const [displayed, setDisplayed] = useState<EditorSession | null>(null);
+  const [{ displayed, leaving }, setSessions] = useState<EditorSessions>({
+    displayed: null,
+    leaving: [],
+  });
   const [, startSessionTransition] = useTransition();
+
+  const showSession = useCallback((next: EditorSession | null) => {
+    setSessions(({ displayed: previous, leaving: closed }) => ({
+      displayed: next,
+      leaving: previous ? [...closed, previous] : closed,
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (leaving.length === 0) return;
+
+    const idleId = requestIdle(
+      () => setSessions((sessions) => ({ ...sessions, leaving: [] })),
+      { timeout: REMOVE_IDLE_TIMEOUT_MS },
+    );
+    return () => cancelIdle(idleId);
+  }, [leaving]);
 
   // Follow renames of the displayed session. A stale session (another file is
   // being prepared) keeps its last path, so it doesn't re-register itself in
   // the store.
   useEffect(() => {
-    setDisplayed((session) =>
-      session &&
-      currentFilePath &&
-      session.tick === editorSessionTick &&
-      session.filePath !== currentFilePath
-        ? { ...session, filePath: currentFilePath }
-        : session,
-    );
+    setSessions((sessions) => {
+      const session = sessions.displayed;
+      return session &&
+        currentFilePath &&
+        session.tick === editorSessionTick &&
+        session.filePath !== currentFilePath
+        ? { ...sessions, displayed: { ...session, filePath: currentFilePath } }
+        : sessions;
+    });
   }, [currentFilePath, editorSessionTick]);
 
   useEffect(() => {
@@ -196,7 +218,7 @@ export function Editor() {
       useEditorStore.getState();
 
     if (!filePath) {
-      setDisplayed(null);
+      showSession(null);
       return;
     }
 
@@ -213,7 +235,7 @@ export function Editor() {
       if (cancelled) return;
 
       startSessionTransition(() => {
-        setDisplayed({
+        showSession({
           tick,
           filePath,
           content,
@@ -227,7 +249,7 @@ export function Editor() {
       cancelled = true;
     };
     // Only a new session (open/close) re-resolves; renames keep the tick.
-  }, [editorSessionTick]);
+  }, [editorSessionTick, showSession]);
 
   const handleEditorClick = useCallback(
     async (event: MouseEvent<HTMLDivElement>) => {
@@ -271,44 +293,48 @@ export function Editor() {
     [currentFilePath],
   );
 
-  if (!currentFilePath) {
-    // A shard on its way (say, the last one, reopened at launch) gets the
-    // loading bar rather than a flash of "No shard open".
-    return isOpeningFile ? (
-      <div className="relative min-h-full">
-        <EditorLoadingBar />
-      </div>
-    ) : (
-      <EditorEmptyState />
-    );
-  }
-
   const isStale = displayed !== null && displayed.tick !== editorSessionTick;
+  const isLoading = currentFilePath
+    ? displayed === null || isStale
+    : isOpeningFile;
+  const sessions = displayed ? [...leaving, displayed] : leaving;
 
   return (
     <div
-      className="relative min-h-full"
+      className={cn(
+        "relative min-h-full",
+        !currentFilePath && "flex flex-col",
+      )}
       onClickCapture={(event) => void handleEditorClick(event)}
     >
-      {(displayed === null || isStale) && <EditorLoadingBar />}
+      {/* A shard on its way (say, the last one, reopened at launch) gets the
+          loading bar rather than a flash of "No shard open". */}
+      {isLoading && <EditorLoadingBar />}
+      {!currentFilePath && !isOpeningFile && <EditorEmptyState />}
 
-      {displayed && (
-        // While the next note prepares, the previous one stays visible but
-        // inert: it's no longer the store's editor, so edits couldn't be saved.
-        <div className={isStale ? "opacity-60" : undefined} inert={isStale}>
-          <EditorErrorBoundary
-            key={displayed.tick}
-            filePath={displayed.filePath}
+      {sessions.map((session) => {
+        const isLeaving = session !== displayed;
+        return (
+          // While the next note prepares, the previous one stays visible but
+          // inert: it's no longer the store's editor, so edits couldn't be
+          // saved.
+          <div
+            key={session.tick}
+            className={isStale && !isLeaving ? "opacity-60" : undefined}
+            hidden={isLeaving}
+            inert={isLeaving || isStale}
           >
-            <MountedEditor
-              content={displayed.content}
-              currentFilePath={displayed.filePath}
-              initialValue={displayed.value}
-              cacheHit={displayed.cacheHit}
-            />
-          </EditorErrorBoundary>
-        </div>
-      )}
+            <EditorErrorBoundary filePath={session.filePath}>
+              <MountedEditor
+                content={session.content}
+                currentFilePath={session.filePath}
+                initialValue={session.value}
+                cacheHit={session.cacheHit}
+              />
+            </EditorErrorBoundary>
+          </div>
+        );
+      })}
     </div>
   );
 }

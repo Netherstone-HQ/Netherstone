@@ -2,6 +2,9 @@ import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 
 const MEASURE_IDLE_TIMEOUT_MS = 1000;
 
+/** Chunks whose height is pinned at their current width. */
+let pinnedChunks = new WeakSet<HTMLElement>();
+
 /**
  * Editor chunks render with `content-visibility: auto`, so off-screen chunks
  * skip layout and only reserve a placeholder height. When that placeholder is
@@ -34,18 +37,16 @@ export function measureChunkHeightsInBackground(
         return;
       }
 
-      if (!chunk.isConnected) continue;
+      if (!chunk.isConnected || pinnedChunks.has(chunk)) continue;
 
-      chunk.style.contentVisibility = "visible";
-      const height = chunk.getBoundingClientRect().height;
-      chunk.style.containIntrinsicSize = `auto ${Math.round(height)}px`;
-      chunk.style.contentVisibility = "auto";
+      pinChunkHeight(chunk);
     } while (deadline.timeRemaining() > 10);
 
     idleId = requestIdle(measureNext, { timeout: MEASURE_IDLE_TIMEOUT_MS });
   };
 
   const measureAll = () => {
+    pinnedChunks = new WeakSet();
     queue = Array.from(root.querySelectorAll<HTMLElement>("[data-slate-chunk]"));
 
     if (idleId === null) {
@@ -72,4 +73,32 @@ export function measureChunkHeightsInBackground(
     if (idleId !== null) cancelIdle(idleId);
     resizeObserver.disconnect();
   };
+}
+
+/**
+ * Pins the heights of the chunks above `el`, so its position is final: a
+ * jump to it then lands where it is, not where placeholder heights put it.
+ */
+export function pinChunkHeightsAbove(el: HTMLElement) {
+  const chunk = el.closest<HTMLElement>("[data-slate-chunk]");
+  const root = chunk?.closest<HTMLElement>("[data-slate-editor]");
+  if (!chunk || !root) return;
+
+  const chunks = root.querySelectorAll<HTMLElement>("[data-slate-chunk]");
+  for (const other of chunks) {
+    if (other === chunk) return;
+    if (!pinnedChunks.has(other)) pinChunkHeight(other);
+  }
+}
+
+/**
+ * Lays out `chunk` for one read and pins its real height as its intrinsic
+ * size, which it keeps while `content-visibility: auto` skips it.
+ */
+function pinChunkHeight(chunk: HTMLElement) {
+  pinnedChunks.add(chunk);
+  chunk.style.contentVisibility = "visible";
+  const height = chunk.getBoundingClientRect().height;
+  chunk.style.containIntrinsicSize = `auto ${Math.round(height)}px`;
+  chunk.style.contentVisibility = "auto";
 }

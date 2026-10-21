@@ -152,13 +152,6 @@ const MARKS: MarkCase[] = [
   { key: KEYS.fontSize, value: "24px" },
 ];
 
-/**
- * Comments and suggestions are editing modes, not formatting: Markdown has
- * nowhere to keep them, so they are hidden until collaboration gives them
- * storage (editor plan, decided 2026-10-18).
- */
-const MODE_KEYS = new Set<string>([KEYS.comment, KEYS.suggestion]);
-
 /** The node the media toolbar inserts once a file is chosen or a URL entered. */
 function insertMedia(editor: PlateEditor, type: string, url: string) {
   editor.tf.insertNodes({ type, url, children: [{ text: "" }] } as TElement);
@@ -280,7 +273,6 @@ describe("menu coverage guard", () => {
     "turn-into-toolbar-button.tsx",
     "fixed-toolbar-buttons.tsx",
     "floating-toolbar-buttons.tsx",
-    "more-toolbar-button.tsx",
     "font-size-toolbar-button.tsx",
     "font-color-toolbar-button.tsx",
   ];
@@ -291,7 +283,6 @@ describe("menu coverage guard", () => {
       ...BLOCKS.map((b) => b.value),
       ...INLINES.map((i) => i.value),
       ...MARKS.map((m) => m.key),
-      ...MODE_KEYS,
     ]);
     const offered = new Set<string>();
 

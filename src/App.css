@@ -31,6 +31,8 @@
     --spacing-row: 1.875rem;
     /* h-header: the app top bar and the sidebar row that lines up with it. */
     --spacing-header: 3rem;
+    /* h-toolbar: the editor toolbar and the rows that line up with it. */
+    --spacing-toolbar: 2.75rem;
 }
 
 @theme inline {

@@ -6,9 +6,7 @@ import { BlockPlaceholderKit } from "./kits/block-placeholder-kit";
 import { CalloutKit } from "./kits/callout-kit";
 import { CodeBlockKit } from "./kits/code-block-kit";
 import { ColumnKit } from "./kits/column-kit";
-import { CommentKit } from "./kits/comment-kit";
 import { DateKit } from "./kits/date-kit";
-import { DiscussionKit } from "./kits/discussion-kit";
 import { DndKit } from "./kits/dnd-kit";
 import { EmojiKit } from "./kits/emoji-kit";
 import { ExitBreakKit } from "./kits/exit-break-kit";
@@ -26,7 +24,6 @@ import { MentionKit } from "./kits/mention-kit";
 import { RawBlockKit } from "./kits/raw-block-kit";
 import { ShardLinkKit } from "./kits/shard-link-kit";
 import { SlashKit } from "./kits/slash-kit";
-import { SuggestionKit } from "./kits/suggestion-kit";
 import { TableKit } from "./kits/table-kit";
 import { TocKit } from "./kits/toc-kit";
 import { ToggleKit } from "./kits/toggle-kit";
@@ -44,9 +41,7 @@ export const EditorKit = [
   ...CalloutKit, // marked for customization or fixing emojis
   ...CodeBlockKit,
   ...ColumnKit,
-  ...CommentKit,
   ...DateKit,
-  ...DiscussionKit,
   ...DndKit,
   ...EmojiKit, // need to fix for callouts or remove
   ...ExitBreakKit, // marked for testing - tested, is good, need to check why selecting from the toolbar unfocuses editor
@@ -64,7 +59,6 @@ export const EditorKit = [
   ...RawBlockKit, // HTML the editor has no block for, kept as written
   ...ShardLinkKit, // the shard path that @ links are saved relative to
   ...SlashKit,
-  ...SuggestionKit,
   ...TableKit,
   ...TocKit,
   ...ToggleKit, // tested and it works

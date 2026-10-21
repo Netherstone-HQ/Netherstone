@@ -36,7 +36,7 @@ export function VersionBar({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-3 border-b bg-card py-2 pr-4 pl-5 text-ui">
+    <div className="flex h-toolbar shrink-0 items-center gap-3 border-b bg-card pr-4 pl-5 text-ui">
       <span className="min-w-0 truncate font-medium">
         {formatVersionTitle(version.time)}
       </span>

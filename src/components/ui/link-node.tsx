@@ -2,14 +2,11 @@
 
 import * as React from 'react';
 
-import type { TInlineSuggestionData, TLinkElement } from 'platejs';
+import type { TLinkElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
 import { getLinkAttributes } from '@platejs/link';
-import { SuggestionPlugin } from '@platejs/suggestion/react';
 import { PlateElement } from 'platejs/react';
-
-import { cn } from '@/lib/utils';
 
 /** A path with no scheme and no host, like `./other.md` or `notes/a.md`. */
 function isRelativePath(url: string) {
@@ -24,12 +21,6 @@ function isRelativePath(url: string) {
 }
 
 export function LinkElement(props: PlateElementProps<TLinkElement>) {
-  const suggestionData = props.editor
-    .getApi(SuggestionPlugin)
-    .suggestion.suggestionData(props.element) as
-    | TInlineSuggestionData
-    | undefined;
-
   const linkAttributes = getLinkAttributes(props.editor, props.element);
 
   // Plate only keeps hrefs that parse as absolute URLs, which drops links to
@@ -43,11 +34,7 @@ export function LinkElement(props: PlateElementProps<TLinkElement>) {
     <PlateElement
       {...props}
       as="a"
-      className={cn(
-        'cursor-text font-medium text-primary underline decoration-primary underline-offset-4 group-data-mod-held/editor:cursor-pointer',
-        suggestionData?.type === 'remove' && 'bg-red-100 text-red-700',
-        suggestionData?.type === 'insert' && 'bg-emerald-100 text-emerald-700'
-      )}
+      className="cursor-text font-medium text-primary underline decoration-primary underline-offset-4 group-data-mod-held/editor:cursor-pointer"
       attributes={{
         ...props.attributes,
         ...linkAttributes,

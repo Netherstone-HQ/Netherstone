@@ -13,7 +13,6 @@ import {
 import { BaseCalloutPlugin } from "@platejs/callout";
 import { BaseCaptionPlugin } from "@platejs/caption";
 import { BaseCodeBlockPlugin } from "@platejs/code-block";
-import { BaseCommentPlugin } from "@platejs/comment";
 import { BaseDatePlugin } from "@platejs/date";
 import { BaseIndentPlugin } from "@platejs/indent";
 import { BaseColumnItemPlugin, BaseColumnPlugin } from "@platejs/layout";
@@ -27,7 +26,6 @@ import {
   BaseVideoPlugin,
 } from "@platejs/media";
 import { BaseMentionInputPlugin, BaseMentionPlugin } from "@platejs/mention";
-import { BaseSuggestionPlugin } from "@platejs/suggestion";
 import { BaseTablePlugin } from "@platejs/table";
 import { BaseTocPlugin } from "@platejs/toc";
 import { BaseTogglePlugin } from "@platejs/toggle";
@@ -78,7 +76,6 @@ export const SerializationKit = [
   BaseCodeBlockPlugin,
   BaseColumnPlugin,
   BaseColumnItemPlugin,
-  BaseCommentPlugin,
   BaseDatePlugin,
   BaseFontColorPlugin.configure({
     inject: { targetPlugins: [KEYS.p], nodeProps: { defaultNodeValue: "black" } },
@@ -137,7 +134,6 @@ export const SerializationKit = [
   }),
   BaseMentionPlugin,
   BaseMentionInputPlugin,
-  BaseSuggestionPlugin,
   BaseTablePlugin,
   BaseTocPlugin.configure({ options: { topOffset: 80 } }),
   BaseTogglePlugin,

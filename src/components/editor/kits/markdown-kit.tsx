@@ -63,7 +63,6 @@ const imageRule: MdRules["img"] = {
 export const MarkdownKit = [
   MarkdownPlugin.configure({
     options: {
-      plainMarks: [KEYS.suggestion, KEYS.comment],
       // Match common markdown style (and most hand-written notes): `-` for
       // bullets and `---` for rules, instead of remark's `*` defaults.
       // Text is escaped only where Markdown needs it (`markdown-escapes.ts`).

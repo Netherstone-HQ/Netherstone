@@ -1,5 +1,5 @@
 import { SettingsGroup } from "@/components/settings/settings-ui";
-import { IS_MAC } from "@/lib/platform";
+import { formatKeys, IS_MAC } from "@/lib/platform";
 
 /** Keys as written in Plate's shortcut config ("mod+shift+x"). */
 type Shortcut = { keys: string; action: string };
@@ -48,30 +48,6 @@ const GROUPS: { title: string; shortcuts: Shortcut[] }[] = [
     ],
   },
 ];
-
-const KEY_NAMES: Record<string, string> = IS_MAC
-  ? {
-      mod: "⌘",
-      alt: "⌥",
-      shift: "⇧",
-      enter: "↩",
-      period: ".",
-      comma: ",",
-      minus: "−",
-    }
-  : {
-      mod: "Ctrl",
-      alt: "Alt",
-      shift: "Shift",
-      enter: "Enter",
-      period: ".",
-      comma: ",",
-      minus: "−",
-    };
-
-export function formatKeys(keys: string): string[] {
-  return keys.split("+").map((key) => KEY_NAMES[key] ?? key.toUpperCase());
-}
 
 export function ShortcutsSettings() {
   return (

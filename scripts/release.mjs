@@ -209,23 +209,16 @@ function releaseNotes(tag) {
 }
 
 /**
- * The push goes through whichever account the GitHub CLI has active, which
- * may be one that can't write to this repository.
+ * Git may push as an account that can't write here (a work login in the
+ * credential manager, say). A dry-run push asks GitHub without changing anything.
  */
-function checkAccount() {
-  if (!has("gh") || run("gh", ["auth", "status"], { allowFailure: true }) === null) return;
-  const repo = repositoryUrl()?.replace("https://github.com/", "");
-  if (!repo) return;
-  const login = run("gh", ["api", "user", "--jq", ".login"], { allowFailure: true });
-  const push = run("gh", ["api", `repos/${repo}`, "--jq", ".permissions.push"], {
-    allowFailure: true,
-  });
-  if (push !== "true") {
+function checkPushAccess(ref) {
+  if (run("git", ["push", "--dry-run", "--quiet", REMOTE, `HEAD:${ref}`], { allowFailure: true }) === null) {
     stop(
-      `The GitHub CLI is signed in as ${login ?? "an account"} that can't push to ${repo}. Switch with gh auth switch, then try again.`,
+      `Git can't push to ${REMOTE} with its saved credentials. Sign in to GitHub as an account that can, then try again.`,
     );
   }
-  ok(`Pushing as ${login}`);
+  ok(`Git can push to ${REMOTE}`);
 }
 
 function checkCi(skip) {
@@ -361,7 +354,7 @@ async function bump(input, values) {
   const branch = releaseBranch(next);
   checkTag(tag);
   checkBranch(branch);
-  checkAccount();
+  checkPushAccess(`refs/heads/${branch}`);
   checkCi(values["skip-ci"]);
   const notes = releaseNotes(tag);
 
@@ -428,10 +421,10 @@ ${notes.lines.map((line) => `  ${line}`).join("\n")}`);
 /** Step 2: tags the merged version on main, which starts the release workflow. */
 async function tagRelease(values) {
   checkRepository({ pull: true });
-  checkAccount();
   const version = checkVersions();
   const tag = `v${version}`;
   checkTag(tag);
+  checkPushAccess(`refs/tags/${tag}`);
 
   // Main only takes pull requests whose checks passed, so the merged bump
   // needs no second wait; anything merged after it still does.

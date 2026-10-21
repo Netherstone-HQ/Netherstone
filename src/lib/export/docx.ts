@@ -170,13 +170,15 @@ function importXml(xml: string): ImportedXmlComponent {
 const MATH_RUN_FONT = '<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr>';
 
 /**
- * Writes equations the way Word itself does, which Word on the web needs to
- * show them instead of "[Equation]": `0`/`1` for on and off, no empty runs,
- * and Cambria Math named on every run.
+ * Writes equations the way Word itself does: `0`/`1` for on and off, no
+ * empty runs, upright letters as plain math, and Cambria Math named on every
+ * run, after the math properties as the format requires.
  */
 function wordShapedOmml(omml: string) {
   return omml
     .replace(/<m:sty m:val="undefined"\/>/g, "")
+    .replace(/<m:r><w:rPr\/>/g, "<m:r>")
+    .replace(/<m:rPr><m:nor\/><\/m:rPr>/g, '<m:rPr><m:sty m:val="p"/></m:rPr>')
     .replace(/<m:rPr><\/m:rPr>/g, "")
     .replace(/ m:val="off"/g, ' m:val="0"')
     .replace(/ m:val="on"/g, ' m:val="1"')
@@ -185,10 +187,13 @@ function wordShapedOmml(omml: string) {
     .replace(/<m:ctrlPr\/>/g, `<m:ctrlPr>${MATH_RUN_FONT}</m:ctrlPr>`);
 }
 
-/** LaTeX to an Office Math (OMML) `m:oMath` element, or null. */
-export function latexToOmml(tex: string): string | null {
+/**
+ * LaTeX to an Office Math (OMML) `m:oMath` element, or null. Display math
+ * puts the limits of sums under and over them, as Word does.
+ */
+export function latexToOmml(tex: string, display = false): string | null {
   try {
-    const html = katex.renderToString(tex, { output: "mathml", throwOnError: true, strict: "ignore" });
+    const html = katex.renderToString(tex, { output: "mathml", displayMode: display, throwOnError: true, strict: "ignore" });
     const math = /<math[\s\S]*<\/math>/.exec(html)?.[0];
     if (!math) return null;
     const cleaned = styleMathLetters(
@@ -272,7 +277,7 @@ class DocxWriter {
   }
 
   private math(tex: string, display: boolean): ParagraphChild {
-    const omml = latexToOmml(tex);
+    const omml = latexToOmml(tex, display);
     if (!omml) {
       return new TextRun({ text: tex, font: this.fonts.mono, size: halfPoints(this.type.body * 0.84), color: hex(PALETTE.muted) });
     }

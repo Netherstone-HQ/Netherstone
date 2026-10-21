@@ -90,7 +90,18 @@ describe("Word export", () => {
     expect(integral).toMatch(/<m:e><m:sSup>.*dx<\/m:t><\/m:r><\/m:e><\/m:nary><m:r><w:rPr>.*?<\/w:rPr><m:t xml:space="preserve">\+1/);
   });
 
-  it("writes equations the way Word does, so Word on the web shows them", async () => {
+  it("writes upright letters with the math properties first, as the format requires", () => {
+    const integral = latexToOmml(String.raw`\int_{-\infty}^{\infty} \mathrm{d}x`)!;
+    expect(integral).toContain('<m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr><m:t xml:space="preserve">∞</m:t>');
+    expect(integral).not.toMatch(/<w:rPr\/>|<m:nor\/>/);
+  });
+
+  it("puts the limits of a displayed sum under and over it", () => {
+    expect(latexToOmml(String.raw`\sum_{i=1}^{n} i`, true)).toContain('<m:limLoc m:val="undOvr"/>');
+    expect(latexToOmml(String.raw`\sum_{i=1}^{n} i`)).toContain('<m:limLoc m:val="subSup"/>');
+  });
+
+  it("writes equations the way Word does", async () => {
     const sum = latexToOmml(String.raw`\sum_i x_i \, y_i`)!;
     expect(sum).toContain('<m:subHide m:val="0"/><m:supHide m:val="1"/>');
     expect(sum).not.toMatch(/m:val="(on|off)"|<m:t[^>]*><\/m:t>/);

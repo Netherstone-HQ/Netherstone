@@ -1,18 +1,24 @@
 #!/usr/bin/env node
-// Releases Netherstone in one step: bumps the version everywhere the release
-// workflow checks it, commits, tags and pushes. Dev-only; nothing here ships.
+// Releases Netherstone in two steps, since main only takes pull requests.
+// Dev-only; nothing here ships.
 //
 //   pnpm release beta            0.2.0-beta.1 -> 0.2.0-beta.2
 //   pnpm release stable          0.2.0-beta.2 -> 0.2.0
 //   pnpm release patch|minor|major
 //   pnpm release 0.3.0-beta.1    an exact version
 //
-//   --dry-run   run every check and show the plan, change nothing
-//   --skip-ci   release without checking CI on main (not recommended)
+// bumps the version everywhere the release workflow checks it on a new
+// branch and opens its pull request. Once that is merged,
 //
-// It stops before changing anything unless every check passes, asks you to
-// type the new version, and pushes the commit and tag together, so a release
-// commit never lands without its tag.
+//   pnpm release tag
+//
+// pulls main, asks you to type the version, and pushes its tag, which starts
+// the release workflow.
+//
+//   --dry-run   run every check and show the plan, change nothing
+//   --skip-ci   don't check CI on main (not recommended)
+//
+// Each step stops before changing anything unless every check passes.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -95,7 +101,7 @@ function readVersions() {
   };
 }
 
-function checkRepository() {
+function checkRepository({ pull = false } = {}) {
   for (const tool of ["git", "cargo"]) {
     if (!has(tool)) stop(`${tool} isn't installed or isn't on your PATH.`);
   }
@@ -121,11 +127,16 @@ function checkRepository() {
   )
     .split(/\s+/)
     .map(Number);
-  if (behind > 0) stop(`${BRANCH} is ${behind} commit(s) behind ${REMOTE}. Pull first.`);
   if (ahead > 0) {
     stop(`${BRANCH} has ${ahead} commit(s) that aren't on ${REMOTE}. Push or drop them first.`);
   }
-  ok(`Up to date with ${REMOTE}/${BRANCH}`);
+  if (behind > 0) {
+    if (!pull) stop(`${BRANCH} is ${behind} commit(s) behind ${REMOTE}. Pull first.`);
+    git("merge", "--quiet", "--ff-only", `${REMOTE}/${BRANCH}`);
+    ok(`Pulled ${behind} commit(s) from ${REMOTE}/${BRANCH}`);
+  } else {
+    ok(`Up to date with ${REMOTE}/${BRANCH}`);
+  }
 
   const name = git("config", "user.name");
   const email = git("config", "user.email");
@@ -146,7 +157,7 @@ function checkVersions() {
     const list = Object.entries(versions)
       .map(([file, version]) => `  ${file}: ${version ?? "not found"}`)
       .join("\n");
-    stop(`The version files disagree, so it's unclear what to bump from:\n${list}`);
+    stop(`The version files disagree:\n${list}`);
   }
   const [current] = distinct;
   ok(`Every version file says ${current}`);
@@ -195,6 +206,19 @@ function releaseNotes(tag) {
     heading: `${subjects.length} change(s) since ${since} become the release notes${left ? ` (${left} reverted or release commit(s) left out)` : ""}:`,
     lines: subjects.map((subject) => `- ${subject}`),
   };
+}
+
+/**
+ * Git may push as an account that can't write here (a work login in the
+ * credential manager, say). A dry-run push asks GitHub without changing anything.
+ */
+function checkPushAccess(ref) {
+  if (run("git", ["push", "--dry-run", "--quiet", REMOTE, `HEAD:${ref}`], { allowFailure: true }) === null) {
+    stop(
+      `Git can't push to ${REMOTE} with its saved credentials. Sign in to GitHub as an account that can, then try again.`,
+    );
+  }
+  ok(`Git can push to ${REMOTE}`);
 }
 
 function checkCi(skip) {
@@ -293,9 +317,165 @@ function repositoryUrl() {
   return match ? `https://github.com/${match[1]}` : null;
 }
 
+/** "0.4.0-beta.1" -> "chore/version-0-4-0-beta-1" */
+const releaseBranch = (version) => `chore/version-${version.replace(/\./g, "-")}`;
+
+function checkBranch(branch) {
+  if (git("branch", "--list", branch)) stop(`The branch ${branch} already exists locally.`);
+  if (run("git", ["ls-remote", "--heads", REMOTE, `refs/heads/${branch}`])) {
+    stop(`The branch ${branch} already exists on ${REMOTE}. Merge or delete its pull request first.`);
+  }
+  ok(`${branch} isn't taken`);
+}
+
+/** Opens the pull request with the GitHub CLI, or returns null so a link can be given instead. */
+function openPullRequest(branch, title, body) {
+  if (!has("gh") || run("gh", ["auth", "status"], { allowFailure: true }) === null) return null;
+  return run(
+    "gh",
+    ["pr", "create", "--base", BRANCH, "--head", branch, "--title", title, "--body", body],
+    { allowFailure: true },
+  );
+}
+
+// ── Steps ───────────────────────────────────────────────────────────────────
+
+/** Step 1: the version bump, on its own branch and pull request. */
+async function bump(input, values) {
+  const identity = checkRepository();
+  const current = checkVersions();
+  let next;
+  try {
+    next = nextVersion(current, input);
+  } catch (error) {
+    stop(error.message);
+  }
+  const tag = `v${next}`;
+  const branch = releaseBranch(next);
+  checkTag(tag);
+  checkBranch(branch);
+  checkPushAccess(`refs/heads/${branch}`);
+  checkCi(values["skip-ci"]);
+  const notes = releaseNotes(tag);
+
+  const kind = next.includes("-") ? "pre-release" : "stable release";
+  console.log(`
+${bold(`${current} -> ${next}`)} ${dim(`(${kind}, tag ${tag})`)}
+
+Updates ${Object.values(FILES).join(", ")},
+commits "Release ${next}" as ${identity.name} on ${branch}, then opens its pull request.
+
+${notes.heading}
+${notes.lines.map((line) => `  ${line}`).join("\n")}`);
+
+  if (values["dry-run"]) {
+    console.log(`\n${dim("Dry run: nothing was changed.")}`);
+    return;
+  }
+
+  git("switch", "--quiet", "--create", branch);
+  const back = () => {
+    restoreFiles();
+    git("switch", "--quiet", BRANCH);
+    git("branch", "--quiet", "-D", branch);
+  };
+
+  try {
+    bumpFiles(current, next);
+    git("commit", "--quiet", "-m", `Release ${next}`, "--", ...Object.values(FILES));
+  } catch (error) {
+    back();
+    throw new Error(`${error.message}\nThe version files were put back. Nothing was committed.`);
+  }
+  const author = git("log", "-1", "--format=%ae %ce");
+  if (author !== `${identity.email} ${identity.email}`) {
+    back();
+    stop(`The commit came out as ${author}, so it was undone. Nothing was pushed.`);
+  }
+  ok(`Committed "Release ${next}" on ${branch}`);
+
+  try {
+    git("push", "--quiet", "--set-upstream", REMOTE, branch);
+  } catch (error) {
+    back();
+    throw new Error(`${error.message}\nThe push failed, so the branch was undone. Nothing reached ${REMOTE}.`);
+  }
+  ok(`Pushed ${branch}`);
+
+  // Back on main, where step 2 runs. The branch lives on in its pull request.
+  git("switch", "--quiet", BRANCH);
+  git("branch", "--quiet", "-D", branch);
+
+  const pr = openPullRequest(
+    branch,
+    `Release ${next}`,
+    `Before:\n${current}\n\nAfter:\n${next}\n\nHow: once this is merged, \`pnpm release tag\` pushes ${tag}.`,
+  );
+  const url = repositoryUrl();
+  const link = pr ?? (url ? `${url}/compare/${BRANCH}...${branch}?expand=1` : null);
+  console.log(
+    `\n${green(bold(pr ? "Pull request opened." : "Open the pull request:"))}${link ? `\n${link}` : ""}\n\nOnce it's merged, run ${bold("pnpm release tag")}.`,
+  );
+}
+
+/** Step 2: tags the merged version on main, which starts the release workflow. */
+async function tagRelease(values) {
+  checkRepository({ pull: true });
+  const version = checkVersions();
+  const tag = `v${version}`;
+  checkTag(tag);
+  checkPushAccess(`refs/tags/${tag}`);
+
+  // Main only takes pull requests whose checks passed, so the merged bump
+  // needs no second wait; anything merged after it still does.
+  const subject = git("log", "-1", "--format=%s");
+  if (subject.startsWith(`Release ${version}`)) {
+    ok(`The last commit on ${BRANCH} is "${subject}"`);
+  } else {
+    checkCi(values["skip-ci"]);
+  }
+  const notes = releaseNotes(tag);
+
+  const kind = version.includes("-") ? "pre-release" : "stable release";
+  console.log(`
+${bold(`Tag ${tag}`)} ${dim(`(${kind})`)}
+
+Pushes ${tag} on ${git("rev-parse", "--short", "HEAD")}, which starts the release workflow.
+
+${notes.heading}
+${notes.lines.map((line) => `  ${line}`).join("\n")}`);
+
+  if (values["dry-run"]) {
+    console.log(`\n${dim("Dry run: nothing was changed.")}`);
+    return;
+  }
+
+  if (!(await confirm(version))) stop("That didn't match, so nothing was released.");
+
+  git("tag", tag);
+  try {
+    git("push", "--quiet", REMOTE, `refs/tags/${tag}`);
+  } catch (error) {
+    // A dropped connection can report failure after GitHub took the push.
+    if (run("git", ["ls-remote", "--tags", REMOTE, `refs/tags/${tag}`], { allowFailure: true })) {
+      throw new Error(
+        `${error.message}\nGit reported an error, but ${tag} is on ${REMOTE}, so the release went out. Check the release workflow.`,
+      );
+    }
+    git("tag", "-d", tag);
+    throw new Error(`${error.message}\nThe push failed, so the local tag was removed. Nothing reached ${REMOTE}.`);
+  }
+  ok(`Pushed ${tag}`);
+
+  const url = repositoryUrl();
+  console.log(
+    `\n${green(bold(`Released ${version}.`))} The release workflow is building it now${url ? `:\n${url}/actions/workflows/release.yml` : "."}`,
+  );
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
-const HELP = `Usage: pnpm release <${KEYWORDS.join("|")}|version> [--dry-run] [--skip-ci]
+const HELP = `Usage: pnpm release <${KEYWORDS.join("|")}|version|tag> [--dry-run] [--skip-ci]
 
   beta     the next beta:      0.2.0-beta.1 -> 0.2.0-beta.2
   stable   finish the beta:    0.2.0-beta.2 -> 0.2.0
@@ -303,6 +483,9 @@ const HELP = `Usage: pnpm release <${KEYWORDS.join("|")}|version> [--dry-run] [-
   minor    0.2.0 -> 0.3.0
   major    0.2.0 -> 1.0.0
   0.3.0-beta.1                 an exact version, like the first beta of a new line
+           These open a pull request that bumps the version.
+
+  tag      after that pull request is merged, push the tag that releases it
 
   --dry-run   check everything and show the plan, change nothing
   --skip-ci   don't check CI on main first`;
@@ -323,85 +506,8 @@ async function main() {
   }
   if (positionals.length !== 1) stop(`Say which version to release.\n\n${HELP}`);
 
-  const identity = checkRepository();
-  const current = checkVersions();
-  let next;
-  try {
-    next = nextVersion(current, positionals[0]);
-  } catch (error) {
-    stop(error.message);
-  }
-  const tag = `v${next}`;
-  checkTag(tag);
-  checkCi(values["skip-ci"]);
-  const notes = releaseNotes(tag);
-
-  const kind = next.includes("-") ? "pre-release" : "stable release";
-  console.log(`
-${bold(`${current} -> ${next}`)} ${dim(`(${kind}, tag ${tag})`)}
-
-Updates ${Object.values(FILES).join(", ")},
-commits "Release ${next}" as ${identity.name}, then pushes it with ${tag}.
-
-${notes.heading}
-${notes.lines.map((line) => `  ${line}`).join("\n")}`);
-
-  if (values["dry-run"]) {
-    console.log(`\n${dim("Dry run: nothing was changed.")}`);
-    return;
-  }
-
-  if (!(await confirm(next))) stop("That didn't match, so nothing was released.");
-
-  // Nothing may have moved while the prompt was open.
-  if (git("status", "--porcelain", "--untracked-files=no")) {
-    stop("Files changed while you were confirming. Nothing was released.");
-  }
-
-  try {
-    bumpFiles(current, next);
-  } catch (error) {
-    restoreFiles();
-    throw new Error(`${error.message}\nThe version files were put back. Nothing was committed.`);
-  }
-  ok(`Bumped to ${next}`);
-
-  try {
-    git("commit", "--quiet", "-m", `Release ${next}`, "--", ...Object.values(FILES));
-  } catch (error) {
-    restoreFiles();
-    throw new Error(`${error.message}\nThe version files were put back. Nothing was committed.`);
-  }
-  const author = git("log", "-1", "--format=%ae %ce");
-  if (author !== `${identity.email} ${identity.email}`) {
-    git("reset", "--quiet", "--keep", "HEAD~1");
-    stop(`The commit came out as ${author}, so it was undone. Nothing was pushed.`);
-  }
-  git("tag", tag);
-  ok(`Committed and tagged ${tag}`);
-
-  // Atomic: the commit and the tag land together, or neither does.
-  try {
-    git("push", "--quiet", "--atomic", REMOTE, BRANCH, `refs/tags/${tag}`);
-  } catch (error) {
-    // A dropped connection can report failure after GitHub took the push.
-    if (run("git", ["ls-remote", "--tags", REMOTE, `refs/tags/${tag}`], { allowFailure: true })) {
-      throw new Error(
-        `${error.message}\nGit reported an error, but ${tag} is on ${REMOTE}, so the release went out. Check the release workflow.`,
-      );
-    }
-    git("tag", "-d", tag);
-    git("reset", "--quiet", "--keep", "HEAD~1");
-    throw new Error(
-      `${error.message}\nThe push failed, so the local commit and tag were undone. Nothing reached ${REMOTE}.`,
-    );
-  }
-  ok(`Pushed ${BRANCH} and ${tag}`);
-
-  const url = repositoryUrl();
-  console.log(
-    `\n${green(bold(`Released ${next}.`))} The release workflow is building it now${url ? `:\n${url}/actions/workflows/release.yml` : "."}`,
-  );
+  if (positionals[0] === "tag") await tagRelease(values);
+  else await bump(positionals[0], values);
 }
 
 main().catch((error) => {

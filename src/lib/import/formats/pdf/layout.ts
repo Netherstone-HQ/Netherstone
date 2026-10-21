@@ -66,7 +66,10 @@ interface Line {
   sizes: number[];
   /** Stretches of the line separated by wide gaps: table cells, tab stops. */
   segments: Segment[];
-  /** Ends well before the column's right edge, so its line break is real. */
+  /**
+   * Ends well before the column's right edge, or where the next line's first
+   * word would have fit, so its line break is real.
+   */
   short?: boolean;
   /** Where a bullet drawn as a shape sits in front of the line. */
   bulletX?: number;
@@ -561,8 +564,12 @@ export function layoutPages(pages: PageData[]): LayoutResult {
     // The width of a full line of body text: a column's width.
     const bodyWidths = pageLines.filter((line) => Math.abs(line.size - bodySize) < 0.6).map((line) => line.right - line.x).sort((a, b) => a - b);
     const columnWidth = bodyWidths[Math.floor(bodyWidths.length * 0.9)] ?? Math.max(...pageLines.map((line) => line.right - line.x), 1);
-    for (const line of pageLines) {
-      line.short = line.right - line.x < columnWidth * 0.75;
+    pageLines.forEach((line, index) => {
+      const next = pageLines[index + 1];
+      const firstWord = next?.text.split(/\s/)[0] ?? "";
+      const charWidth = next ? (next.right - next.x) / Math.max(next.text.length, 1) : 0;
+      const nextWordFits = !!firstWord && line.right + charWidth * (firstWord.length + 1) < left + columnWidth;
+      line.short = line.right - line.x < columnWidth * 0.75 || nextWordFits;
       const mark = page.marks.find(
         (candidate) =>
           candidate.height >= line.size * 0.1 &&
@@ -573,7 +580,7 @@ export function layoutPages(pages: PageData[]): LayoutResult {
           candidate.y + candidate.height / 2 > line.y - line.size * 0.9,
       );
       if (mark) line.bulletX = mark.x;
-    }
+    });
     // Close-set tables first: they only take lines that line up exactly.
     const tableRanges = findCloseTables(pageLines, page.width);
     tableRanges.push(

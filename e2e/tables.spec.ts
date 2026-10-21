@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import {
   caretAfter,
   cellsOf,
@@ -46,16 +48,63 @@ test("editing a cell keeps the rest of the table", async ({ page }) => {
   expect(saved).toContain("After the table.");
 });
 
-test("a table without saved widths fills the text column and sizes by content", async ({
+/** Whether the table's block scrolls sideways. */
+async function scrollsSideways(page: Page, index = 0) {
+  return editor(page)
+    .locator("table")
+    .nth(index)
+    .evaluate((table) => {
+      const wrapper = table.closest("[data-slate-node='element']") as HTMLElement;
+      return wrapper.scrollWidth > wrapper.clientWidth;
+    });
+}
+
+test("a table without saved widths is as wide as its content, up to the text column", async ({
   page,
 }) => {
-  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+  await mockVault(page, {
+    files: { "Tables.md": `${TABLE_NOTE}\n| a | b |\n| - | - |\n| 1 | 2 |\n` },
+    open: "Tables.md",
+  });
+
+  const [long, small] = await measureTables(page);
+  // Long text wraps at the text column, without a scrollbar.
+  const longCells = long.columns.reduce((total, width) => total + width, 0);
+  expect(longCells).toBeGreaterThanOrEqual(long.editorWidth * 0.9);
+  expect(longCells).toBeLessThanOrEqual(long.editorWidth);
+  expect(await scrollsSideways(page, 0)).toBe(false);
+  // The long description gets most of the room.
+  expect(long.columns[1]).toBeGreaterThan(long.columns[0] * 2);
+  expect(Math.min(...long.columns)).toBeGreaterThanOrEqual(64);
+  // Two tiny cells stay small.
+  expect(small.columns.reduce((total, width) => total + width, 0)).toBeLessThan(200);
+  expect(await scrollsSideways(page, 1)).toBe(false);
+});
+
+test("percentage widths are shares of the text column", async ({ page }) => {
+  await mockVault(page, {
+    files: {
+      "Tables.md":
+        "# Tables\n\n<!-- netherstone: widths 30% 30% -->\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nAfter.\n",
+    },
+    open: "Tables.md",
+  });
 
   const [measure] = await measureTables(page);
-  expect(measure.tableWidth).toBeGreaterThanOrEqual(measure.editorWidth * 0.9);
-  // The long description gets most of the room.
-  expect(measure.columns[1]).toBeGreaterThan(measure.columns[0] * 2);
-  expect(Math.min(...measure.columns)).toBeGreaterThanOrEqual(64);
+  for (const width of measure.columns) {
+    expect(Math.abs(width - measure.editorWidth * 0.3)).toBeLessThan(4);
+  }
+  // The table starts at the text column, not pushed right like an indent.
+  const offset = await editor(page)
+    .locator("table")
+    .evaluate((table) => {
+      const root = document.querySelector("[data-slate-editor]")!;
+      const textLeft =
+        root.getBoundingClientRect().left + parseFloat(getComputedStyle(root).paddingLeft);
+      const firstCell = table.querySelector("[data-table-cell-id]")!;
+      return Math.round(firstCell.getBoundingClientRect().left - textLeft);
+    });
+  expect(Math.abs(offset)).toBeLessThanOrEqual(2);
 });
 
 test("saved widths are applied, and the comment holding them is not shown", async ({
@@ -144,13 +193,28 @@ test("the table toolbar and resize handles exist only for the table in use", asy
   await caretAfter(page, "Short");
   await expect(popover).toHaveCount(1);
   // Only the table with the caret carries handles: 3 rows, each with a
-  // handle after every column and one before the first.
-  await expect(handles).toHaveCount(12);
+  // handle after every column.
+  await expect(handles).toHaveCount(9);
 
   await caretAfter(page, "After the table.");
   await expect(popover).toHaveCount(0);
   await expect(handles).toHaveCount(0);
 
   await tables.nth(1).hover();
-  await expect(handles).toHaveCount(6);
+  await expect(handles).toHaveCount(4);
+});
+
+test("the table toolbar waits while Settings covers the shard", async ({ page }) => {
+  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+  const popover = page.locator("[data-slot='popover-content']");
+
+  await caretAfter(page, "Short");
+  await expect(popover).toHaveCount(1);
+
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
+  await settings.click();
+  await expect(popover).toHaveCount(0);
+
+  await settings.click();
+  await expect(popover).toHaveCount(1);
 });

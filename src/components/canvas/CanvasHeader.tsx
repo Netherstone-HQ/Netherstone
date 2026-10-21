@@ -70,12 +70,12 @@ export function CanvasHeader({
   const exportActions: RowAction[] = excalidrawAPI
     ? [
         {
-          label: "Add to shard…",
+          label: "Add to shard",
           icon: ImagePlusIcon,
           onSelect: startAddingToShard,
         },
         {
-          label: "Export image…",
+          label: "Export image",
           icon: ImageDownIcon,
           onSelect: () =>
             excalidrawAPI.updateScene({

@@ -513,7 +513,7 @@ export function useVaultItem(
             onSelect: handleNewFolder,
           },
           {
-            label: "Import here…",
+            label: "Import here",
             icon: ImportIcon,
             onSelect: () => openImportDialog(node.path),
           },
@@ -544,14 +544,14 @@ export function useVaultItem(
             (isDrawingPath(node.path)
               ? [
                   {
-                    label: "Add to shard…",
+                    label: "Add to shard",
                     icon: ImagePlusIcon,
                     onSelect: () => void startAddingToShard(),
                   },
                 ]
               : [
                   {
-                    label: "Export…",
+                    label: "Export",
                     icon: ShareIcon,
                     onSelect: () => openExportDialog(node.path),
                   },

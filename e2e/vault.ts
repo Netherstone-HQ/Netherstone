@@ -112,6 +112,8 @@ export type MockVaultOptions = {
   folders?: string[];
   /** The shard open when the app starts, relative to the vault. None when left out. */
   open?: string;
+  /** The drawing open on the canvas when the app starts, relative to the vault. */
+  drawing?: string;
   /** Starts with no vault open. */
   noVault?: boolean;
   /** Vaults opened before, besides this one. */
@@ -146,6 +148,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     assets = {},
     folders = [],
     open,
+    drawing,
     noVault = false,
     otherVaults = [],
     theme = "dark",
@@ -154,7 +157,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
   } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, noVault, otherVaults, versions, current }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, drawing, noVault, otherVaults, versions, current }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -203,6 +206,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
               ? [{ path: `${vaultPath}/${open}`, name: open.replace(/\.md$/, "") }]
               : [],
             pinnedFiles: [],
+            ...(drawing
+              ? { appMode: "canvas", activeDrawingPath: `${vaultPath}/${drawing}` }
+              : {}),
           },
           version: 0,
         }),
@@ -264,6 +270,16 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           return name in files || name in binaries;
         },
         read_drawing_file: ({ filePath }) => files[relative(filePath)] ?? "",
+        save_drawing_file: ({ filePath, content, expectedContent }) => {
+          // As the desktop app: a save never writes over an outside change.
+          const current = files[relative(filePath)];
+          if (expectedContent !== undefined && current !== undefined && current !== expectedContent) {
+            throw "The shard changed on disk";
+          }
+          files[relative(filePath)] = content;
+          window.__saves.push({ filePath, content });
+          return null;
+        },
         // Attachments are kept with the test's other binary files.
         persist_attachment_bytes: ({ fileName, bytes, vaultPath: vault }) => {
           allowFolder(vault);
@@ -412,6 +428,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       folders,
       theme,
       open,
+      drawing,
       noVault,
       otherVaults,
       versions,

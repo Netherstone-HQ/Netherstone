@@ -468,7 +468,7 @@ fn history_restore(
                     .map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
             }
             if is_drawing {
-                write_drawing_file(path, content)
+                write_drawing_file(path, content, None)
             } else {
                 write_markdown_file_if_unchanged(&file_path, content, expected_content.as_deref())
             }
@@ -750,7 +750,7 @@ fn write_markdown_file_if_unchanged(
     Ok(())
 }
 
-/// What a save returns when the shard changed outside the app.
+/// What a save returns when the shard or drawing changed outside the app.
 const CHANGED_ON_DISK: &str = "The shard changed on disk";
 
 /// Saves a shard. `record_writing` is set by saves of what you type in the
@@ -778,8 +778,8 @@ fn save_markdown_file(
 }
 
 /// True when the file exists and doesn't hold `expected`.
-fn changed_on_disk(file_path: &str, expected: &str) -> bool {
-    std::fs::read(file_path).is_ok_and(|bytes| bytes != expected.as_bytes())
+fn changed_on_disk(path: impl AsRef<Path>, expected: &str) -> bool {
+    std::fs::read(path).is_ok_and(|bytes| bytes != expected.as_bytes())
 }
 
 /// Logs the words written today, before the save replaces the words the shard
@@ -837,15 +837,36 @@ fn read_drawing_file(file_path: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to read drawing {}: {}", file_path, e))
 }
 
+/// Saves a drawing. `expected_content` is the drawing as the app last read
+/// or wrote it; if the file now holds something else, it changed outside the
+/// app and the save is refused rather than write over it.
 #[tauri::command(async)]
-fn save_drawing_file(file_path: String, content: String) -> Result<(), String> {
-    write_drawing_file(Path::new(&file_path), &content)
+fn save_drawing_file(
+    file_path: String,
+    content: String,
+    expected_content: Option<String>,
+) -> Result<(), String> {
+    write_drawing_file(Path::new(&file_path), &content, expected_content.as_deref())
 }
 
-fn write_drawing_file(path: &Path, content: &str) -> Result<(), String> {
+/// Merges `ours` and `theirs`, two versions of the drawing `base`, shape by
+/// shape. None when one of them isn't a drawing.
+#[tauri::command(async)]
+fn merge_drawings(
+    base: String,
+    ours: String,
+    theirs: String,
+) -> Option<sync::drawing_merge::MergedDrawing> {
+    sync::drawing_merge::merge(&base, &ours, &theirs)
+}
+
+fn write_drawing_file(path: &Path, content: &str, expected: Option<&str>) -> Result<(), String> {
     ensure_drawing_path(path)?;
 
     let _write_guard = locks::vault_writes()?;
+    if expected.is_some_and(|expected| changed_on_disk(path, expected)) {
+        return Err(CHANGED_ON_DISK.to_string());
+    }
     let tmp_path = path.with_extension("excalidraw.tmp");
 
     std::fs::write(&tmp_path, content)
@@ -1534,6 +1555,7 @@ pub fn run() {
             append_markdown_to_file,
             read_drawing_file,
             save_drawing_file,
+            merge_drawings,
             create_drawing_file,
             create_folder,
             reconcile_attachments,
@@ -1596,6 +1618,27 @@ mod tests {
         std::fs::remove_file(&shard).unwrap();
         save_markdown_file(path, "again".into(), None, Some("renamed".into())).unwrap();
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "again");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn drawing_save_refuses_to_write_over_an_outside_change() {
+        let dir = std::env::temp_dir().join(format!("netherstone-drawing-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let drawing = dir.join("Plan.excalidraw");
+        let path = drawing.to_string_lossy().into_owned();
+        std::fs::write(&drawing, "opened").unwrap();
+
+        save_drawing_file(path.clone(), "drawn".into(), Some("opened".into())).unwrap();
+        std::fs::write(&drawing, "outside").unwrap();
+        assert_eq!(
+            save_drawing_file(path.clone(), "drawn more".into(), Some("drawn".into())),
+            Err(CHANGED_ON_DISK.to_string())
+        );
+        assert_eq!(std::fs::read_to_string(&drawing).unwrap(), "outside");
+
+        save_drawing_file(path, "merged".into(), Some("outside".into())).unwrap();
+        assert_eq!(std::fs::read_to_string(&drawing).unwrap(), "merged");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

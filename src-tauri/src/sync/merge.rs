@@ -1,12 +1,14 @@
 //! Bringing changes from GitHub into the vault.
 //!
-//! The vault always keeps this device's version when both sides changed the
-//! same file: the other version is recorded as a conflict (its blob stays in
-//! the history), so nothing is lost and the user decides later. Sync never
+//! Drawings changed on both sides are merged shape by shape. Otherwise the
+//! vault keeps this device's version when both sides changed the same file:
+//! the other version is recorded as a conflict (its blob stays in the
+//! history), so nothing is lost and the user decides later. Sync never
 //! stops on a conflict and never writes conflict markers into a note.
 
+use super::drawing_merge;
 use super::state::DEFAULT_BRANCH;
-use git2::{Commit, ErrorCode, ObjectType, Oid, Repository, Signature, Tree};
+use git2::{Commit, ErrorCode, IndexEntry, ObjectType, Oid, Repository, Signature, Tree};
 use std::path::{Component, Path};
 
 const COMMITTER_NAME: &str = "Netherstone";
@@ -108,7 +110,8 @@ pub fn integrate(
 }
 
 /// Merges two histories that both moved on. Where a file changed on both
-/// sides, this device's version goes into the merge and GitHub's is reported.
+/// sides (in a drawing, the same shape), this device's version goes into the
+/// merge and GitHub's is reported.
 fn merge_diverged(
     repository: &Repository,
     local: &Commit<'_>,
@@ -138,11 +141,16 @@ fn merge_diverged(
             // A file deleted on one side and edited on the other keeps the edit.
             let chosen = match (entry.our, entry.their) {
                 (Some(ours), Some(theirs)) => {
-                    conflicts.push(IncomingConflict {
-                        path: path.clone(),
-                        theirs: theirs.id,
-                    });
-                    Some(ours)
+                    match merge_drawing(repository, &path, entry.ancestor.as_ref(), &ours, &theirs)? {
+                        Some((id, file_size)) => Some(IndexEntry { id, file_size, ..ours }),
+                        None => {
+                            conflicts.push(IncomingConflict {
+                                path: path.clone(),
+                                theirs: theirs.id,
+                            });
+                            Some(ours)
+                        }
+                    }
                 }
                 (ours, theirs) => ours.or(theirs),
             };
@@ -179,6 +187,37 @@ fn merge_diverged(
         .map_err(|e| git_error("Failed to save merged backup", e))?;
 
     Ok((id, conflicts))
+}
+
+/// A drawing changed on both sides, merged shape by shape: the merged blob
+/// and its size. None when it isn't a drawing, or the same shape changed on
+/// both sides.
+fn merge_drawing(
+    repository: &Repository,
+    path: &str,
+    ancestor: Option<&IndexEntry>,
+    ours: &IndexEntry,
+    theirs: &IndexEntry,
+) -> Result<Option<(Oid, u32)>, String> {
+    if !crate::vault::is_drawing_path(Path::new(path)) {
+        return Ok(None);
+    }
+    let read = |id: Oid| {
+        repository
+            .find_blob(id)
+            .map(|blob| String::from_utf8_lossy(blob.content()).into_owned())
+            .map_err(|e| git_error("Failed to read merge conflicts", e))
+    };
+    let base = ancestor.map(|entry| read(entry.id)).transpose()?.unwrap_or_default();
+    let Some(merged) = drawing_merge::merge(&base, &read(ours.id)?, &read(theirs.id)?)
+        .filter(|merged| !merged.conflicted)
+    else {
+        return Ok(None);
+    };
+    let id = repository
+        .blob(merged.content.as_bytes())
+        .map_err(|e| git_error("Failed to resolve merge", e))?;
+    Ok(Some((id, merged.content.len() as u32)))
 }
 
 /// Only plain relative paths are written: no `..`, no absolute paths, and
@@ -424,6 +463,48 @@ mod tests {
         // The merge went up, so the laptop now gets the desktop's version.
         laptop.sync();
         assert_eq!(laptop.read("Note.md").as_deref(), Some("desktop version"));
+    }
+
+    #[test]
+    fn merges_a_drawing_shape_by_shape() {
+        let (dir, remote) = setup("merge-drawing");
+        let laptop = Device::new(&dir, "laptop", &remote);
+        let desktop = Device::new(&dir, "desktop", &remote);
+        let shape = |id: &str, version: i64| {
+            format!(r#"{{ "id": "{id}", "type": "rectangle", "version": {version}, "versionNonce": {version} }}"#)
+        };
+        let drawing = |shapes: &[String]| format!(r#"{{ "elements": [{}] }}"#, shapes.join(", "));
+        let ids = |device: &Device| {
+            let value: serde_json::Value =
+                serde_json::from_str(&device.read("Plan.excalidraw").unwrap()).unwrap();
+            value["elements"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|shape| format!("{}{}", shape["id"].as_str().unwrap(), shape["version"]))
+                .collect::<Vec<_>>()
+        };
+        laptop.write("Plan.excalidraw", &drawing(&[shape("a", 1), shape("b", 1)]));
+        laptop.sync();
+        desktop.sync();
+
+        laptop.write("Plan.excalidraw", &drawing(&[shape("a", 2), shape("b", 1), shape("laptop", 1)]));
+        laptop.sync();
+        desktop.write("Plan.excalidraw", &drawing(&[shape("a", 1), shape("b", 2), shape("desktop", 1)]));
+        let pulled = desktop.sync();
+
+        assert!(pulled.conflicts.is_empty());
+        assert_eq!(ids(&desktop), ["a2", "b2", "laptop1", "desktop1"]);
+        laptop.sync();
+        assert_eq!(ids(&laptop), ids(&desktop));
+
+        // The same shape changed on both: a conflict, as for a shard.
+        laptop.write("Plan.excalidraw", &drawing(&[shape("a", 3)]));
+        laptop.sync();
+        desktop.write("Plan.excalidraw", &drawing(&[shape("a", 4)]));
+        let pulled = desktop.sync();
+        assert_eq!(pulled.conflicts.len(), 1);
+        assert_eq!(ids(&desktop), ["a4"]);
     }
 
     #[test]

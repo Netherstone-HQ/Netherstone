@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  CaptureUpdateAction,
   Excalidraw,
   getSceneVersion,
   MainMenu,
@@ -21,6 +22,7 @@ import type { SaveState } from "@/components/SaveStatus";
 import { useHeldSize } from "@/components/canvas/useHeldSize";
 import {
   createDrawingFile,
+  mergeDrawings,
   readDrawingFile,
   saveDrawingFile,
   scanVault,
@@ -30,8 +32,13 @@ import {
   parseDrawing,
   refreshLinkedDrawingImages,
 } from "@/lib/drawing-exports";
-import { registerDrawingSaver } from "@/lib/drawing-files";
+import {
+  getVaultFileDisplayName,
+  registerDrawingSaver,
+} from "@/lib/drawing-files";
+import { isChangedOnDiskError } from "@/lib/outside-changes";
 import { IS_MAC } from "@/lib/platform";
+import { saveOutsideChangeVersion } from "@/lib/sync";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
 
@@ -40,6 +47,8 @@ import "@excalidraw/excalidraw/index.css";
 const DRAWING_SAVE_DELAY_MS = 1000;
 
 type SceneElements = Parameters<NonNullable<ExcalidrawProps["onChange"]>>[0];
+
+type DrawingScene = Awaited<ReturnType<typeof parseDrawing>>;
 
 type Scene = {
   elements: SceneElements;
@@ -102,12 +111,36 @@ const SIDEBAR_SHORTCUT = IS_MAC ? "⌘B" : "Ctrl+B";
 const showDrawings = () => useUIStore.getState().setSidebarOpen(true);
 
 /**
+ * Saves `previous`, the drawing as the app last read or wrote it, and the
+ * outside change now on disk as versions, so whichever is kept, the other
+ * can be restored. Not awaited: it can wait on a sync, and the canvas
+ * shouldn't.
+ */
+function keepBothInHistory(filePath: string, previous: string) {
+  const vaultPath = useVaultStore.getState().currentVaultPath;
+  if (!vaultPath) return;
+  saveOutsideChangeVersion(vaultPath, filePath, previous).catch((error) =>
+    console.error(
+      "[Netherstone] Couldn't save versions of the outside change:",
+      error,
+    ),
+  );
+}
+
+/**
  * Loads the drawing open when the canvas mounts and autosaves changes to the
  * current `drawingPath`, which may change without a remount when the drawing
  * is renamed or moved. A scratch canvas is saved as a new "Untitled" drawing
  * in the vault as soon as something is drawn on it.
+ *
+ * When the drawing changes outside the app (another app, or sync), the
+ * canvas shows what's on disk, merged shape by shape with unsaved changes.
+ * A save never writes over a change it hasn't shown.
  */
-function useDrawingPersistence(drawingPath: string | null) {
+function useDrawingPersistence(
+  drawingPath: string | null,
+  excalidrawAPI: ExcalidrawImperativeAPI | null,
+) {
   const openDrawing = useUIStore((s) => s.openDrawing);
   const setActiveDrawingPath = useUIStore((s) => s.setActiveDrawingPath);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -119,8 +152,11 @@ function useDrawingPersistence(drawingPath: string | null) {
 
   const pathRef = useRef(drawingPath);
   const vaultPathRef = useRef(currentVaultPath);
+  const apiRef = useRef(excalidrawAPI);
   const latestSceneRef = useRef<Scene | null>(null);
   const lastSavedKeyRef = useRef<string | null>(null);
+  // The file as the app last read or wrote it; null for a new drawing.
+  const lastSavedTextRef = useRef<string | null>(null);
   const writingKeyRef = useRef<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const pendingWritesRef = useRef(0);
@@ -131,6 +167,7 @@ function useDrawingPersistence(drawingPath: string | null) {
 
   pathRef.current = drawingPath;
   vaultPathRef.current = currentVaultPath;
+  apiRef.current = excalidrawAPI;
 
   useEffect(() => {
     if (!initialPath) return;
@@ -138,10 +175,11 @@ function useDrawingPersistence(drawingPath: string | null) {
     let cancelled = false;
 
     readDrawingFile(initialPath)
-      .then(parseDrawing)
-      .then((restored) => {
+      .then(async (text) => ({ text, restored: await parseDrawing(text) }))
+      .then(({ text, restored }) => {
         if (cancelled) return;
 
+        lastSavedTextRef.current = text;
         lastSavedKeyRef.current = getSceneSaveKey(restored);
         setInitialData(restored);
       })
@@ -162,7 +200,87 @@ function useDrawingPersistence(drawingPath: string | null) {
     };
   }, [initialPath, openDrawing]);
 
-  const writeLatestScene = useCallback(async () => {
+  /**
+   * Shows the drawing on disk if it changed since the app last read or wrote
+   * it, merged with unsaved changes. Where both changed a shape, the unsaved
+   * version is kept; both versions are saved in history.
+   */
+  const showOutsideChange = useCallback(async (): Promise<void> => {
+    const path = pathRef.current;
+    const api = apiRef.current;
+    const saved = lastSavedTextRef.current;
+    if (!path || !api || saved === null) return;
+
+    let text: string;
+    try {
+      text = await readDrawingFile(path);
+    } catch {
+      // Gone.
+      return;
+    }
+    if (text === saved) return;
+
+    // Unsaved changes are merged in. Without any, the drawing on disk shows.
+    const scene = latestSceneRef.current;
+    const key = scene ? getSceneSaveKey(scene) : lastSavedKeyRef.current;
+    const merged =
+      scene && key !== lastSavedKeyRef.current
+        ? await mergeDrawings(saved, serializeScene(scene), text)
+        : { content: text, conflicted: false };
+    let outside: DrawingScene;
+    let next: DrawingScene;
+    try {
+      if (!merged) throw new Error("Not a drawing");
+      [outside, next] = await Promise.all([
+        parseDrawing(text),
+        parseDrawing(merged.content),
+      ]);
+    } catch {
+      // Not a drawing, or not yet: another app may still be writing it.
+      return;
+    }
+
+    if (pathRef.current !== path || apiRef.current !== api) return;
+    // Drawn on meanwhile: merge again with that.
+    const latest = latestSceneRef.current;
+    if ((latest ? getSceneSaveKey(latest) : lastSavedKeyRef.current) !== key) {
+      return showOutsideChange();
+    }
+
+    keepBothInHistory(path, saved);
+    api.addFiles(Object.values(next.files));
+    api.updateScene({
+      elements: next.elements,
+      appState: {
+        viewBackgroundColor: next.appState.viewBackgroundColor,
+        gridModeEnabled: next.appState.gridModeEnabled,
+        gridSize: next.appState.gridSize,
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    // Undo steps from before can't apply to the new drawing.
+    api.history.clear();
+    // What a save right now must write; onChange may come later.
+    latestSceneRef.current = {
+      elements: api.getSceneElementsIncludingDeleted(),
+      appState: api.getAppState(),
+      files: api.getFiles(),
+    };
+    lastSavedTextRef.current = text;
+    lastSavedKeyRef.current = getSceneSaveKey(outside);
+
+    if (merged.conflicted) {
+      toast.info(
+        `${getVaultFileDisplayName(getShardName(path))} also changed outside Netherstone`,
+        {
+          description:
+            "Where you both changed a shape, your version was kept. The other one is in History.",
+        },
+      );
+    }
+  }, []);
+
+  const writeLatestScene = useCallback(async (): Promise<void> => {
     const scene = latestSceneRef.current;
     if (!scene) return;
 
@@ -197,14 +315,30 @@ function useDrawingPersistence(drawingPath: string | null) {
           );
       }
 
+      const content = serializeScene(scene);
       suppressVaultChangePath(path, { reason: "autosave" });
-      await saveDrawingFile(path, serializeScene(scene));
+      try {
+        await saveDrawingFile(
+          path,
+          content,
+          lastSavedTextRef.current ?? undefined,
+        );
+      } catch (error) {
+        if (!isChangedOnDiskError(error)) throw error;
+        // Show the outside change, then save it merged with these changes.
+        const saved = lastSavedTextRef.current;
+        await showOutsideChange();
+        if (lastSavedTextRef.current === saved) throw error;
+        writingKeyRef.current = null;
+        return writeLatestScene();
+      }
+      lastSavedTextRef.current = content;
       lastSavedKeyRef.current = key;
       exportsStaleRef.current = true;
     } finally {
       writingKeyRef.current = null;
     }
-  }, [setActiveDrawingPath]);
+  }, [setActiveDrawingPath, showOutsideChange]);
 
   const flush = useCallback(() => {
     if (timerRef.current !== null) {
@@ -227,7 +361,11 @@ function useDrawingPersistence(drawingPath: string | null) {
         setStatus("failed");
         console.error("[Netherstone] Failed to save drawing:", error);
         toast.error("Couldn't save drawing", {
-          description: error instanceof Error ? error.message : String(error),
+          description: isChangedOnDiskError(error)
+            ? "It was changed outside Netherstone and can't be read."
+            : error instanceof Error
+              ? error.message
+              : String(error),
         });
       },
     );
@@ -281,6 +419,15 @@ function useDrawingPersistence(drawingPath: string | null) {
     [flush, refreshExports],
   );
 
+  const reload = useCallback(() => {
+    saveChainRef.current = saveChainRef.current
+      .then(showOutsideChange)
+      .catch((error) =>
+        console.error("[Netherstone] Couldn't reload the drawing:", error),
+      );
+    return saveChainRef.current;
+  }, [showOutsideChange]);
+
   useEffect(() => {
     const unregister = registerDrawingSaver({
       hasPendingSave: () =>
@@ -289,13 +436,14 @@ function useDrawingPersistence(drawingPath: string | null) {
         exportsStaleRef.current,
       flush,
       finish,
+      reload,
     });
 
     return () => {
       unregister();
       void finish();
     };
-  }, [finish, flush]);
+  }, [finish, flush, reload]);
 
   // The canvas stays mounted while notes are shown, so leaving canvas mode
   // does not unmount it.
@@ -347,8 +495,10 @@ export function ExcalidrawCanvas({
   onExcalidrawAPI,
   onSaveStateChange,
 }: ExcalidrawCanvasProps) {
-  const { initialData, onSceneChange, status } =
-    useDrawingPersistence(drawingPath);
+  const { initialData, onSceneChange, status } = useDrawingPersistence(
+    drawingPath,
+    excalidrawAPI,
+  );
   const [isGridShown, setIsGridShown] = useState(false);
 
   useHandleLibrary({ excalidrawAPI });

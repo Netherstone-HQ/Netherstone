@@ -344,13 +344,37 @@ export async function readDrawingFile(filePath: string): Promise<string> {
   return invoke<string>("read_drawing_file", { filePath });
 }
 
-/** Atomically writes a `.excalidraw` drawing's JSON. */
+/**
+ * Atomically writes a `.excalidraw` drawing's JSON. With `expectedContent`,
+ * the drawing as the app last read or wrote it, the save is refused if the
+ * file changed outside the app since (see `isChangedOnDiskError`).
+ */
 export async function saveDrawingFile(
   filePath: string,
   content: string,
+  expectedContent?: string,
 ): Promise<void> {
   assertTauri();
-  return invoke("save_drawing_file", { filePath, content });
+  return invoke("save_drawing_file", { filePath, content, expectedContent });
+}
+
+export type MergedDrawing = {
+  content: string;
+  /** A shape changed on both sides; ours was kept. */
+  conflicted: boolean;
+};
+
+/**
+ * Merges `ours` and `theirs`, two versions of the drawing `base`, shape by
+ * shape. Null when one of them isn't a drawing.
+ */
+export async function mergeDrawings(
+  base: string,
+  ours: string,
+  theirs: string,
+): Promise<MergedDrawing | null> {
+  assertTauri();
+  return invoke<MergedDrawing | null>("merge_drawings", { base, ours, theirs });
 }
 
 /**

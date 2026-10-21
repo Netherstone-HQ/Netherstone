@@ -103,14 +103,16 @@ type DrawingSaver = {
   flush: () => Promise<void>;
   /** Saves, then updates images exported from the drawing. */
   finish: () => Promise<void>;
+  /** Shows what's on disk if the drawing changed outside the app. */
+  reload: () => Promise<void>;
 };
 
 let activeDrawingSaver: DrawingSaver | null = null;
 
 /**
  * Registers the open canvas's saver so other code can flush its pending
- * autosave before the drawing is switched, renamed, moved, deleted or the
- * window closes. Returns an unregister function.
+ * autosave before the drawing is switched, renamed, moved, deleted, synced
+ * or the window closes. Returns an unregister function.
  */
 export function registerDrawingSaver(saver: DrawingSaver) {
   activeDrawingSaver = saver;
@@ -137,6 +139,15 @@ export async function flushPendingDrawingSave() {
  */
 export async function finishDrawingSession() {
   await activeDrawingSaver?.finish();
+}
+
+/**
+ * Shows what's on disk in the open drawing when its file changed outside the
+ * app, merged shape by shape with unsaved changes, so the next save doesn't
+ * write over it.
+ */
+export async function reloadOpenDrawingIfChanged() {
+  await activeDrawingSaver?.reload();
 }
 
 // ── Exported images ───────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-/** Formatting shared by the attachment settings rows. */
+/** Formatting shared by the attachment rows in Settings and Overview. */
 
 export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;

@@ -17,21 +17,26 @@ export function ToggleElement(props: PlateElementProps) {
 
   return (
     <PlateElement {...props} className="pl-6">
-      <Button
-        size="icon"
-        variant="ghost"
-        className="-left-0.5 absolute top-0 size-6 cursor-pointer select-none items-center justify-center rounded-md p-px text-muted-foreground transition-colors hover:bg-accent [&_svg]:size-4"
+      {/* One text line tall, so the arrow sits on the summary's line. */}
+      <span
+        className="-left-0.5 absolute top-0 flex h-[1lh] items-center"
         contentEditable={false}
-        {...buttonProps}
       >
-        <ChevronRight
-          className={
-            open
-              ? 'rotate-90 transition-transform duration-75'
-              : 'rotate-0 transition-transform duration-75'
-          }
-        />
-      </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-6 cursor-pointer select-none items-center justify-center rounded-md p-px text-muted-foreground transition-colors hover:bg-accent [&_svg]:size-4"
+          {...buttonProps}
+        >
+          <ChevronRight
+            className={
+              open
+                ? 'rotate-90 transition-transform duration-75'
+                : 'rotate-0 transition-transform duration-75'
+            }
+          />
+        </Button>
+      </span>
       {props.children}
     </PlateElement>
   );

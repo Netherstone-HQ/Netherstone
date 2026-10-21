@@ -22,8 +22,10 @@ export const mediaResizeHandleVariants = cva(
   {
     variants: {
       direction: {
-        left: '-left-3 -ml-3 pl-3',
-        right: '-right-3 -mr-3 items-end pr-3',
+        // Inside the picture's edges, so a full-width picture keeps its
+        // grips in the text column, clear of the block drag handle.
+        left: 'left-0 pl-2',
+        right: 'right-0 items-end pr-2',
       },
     },
   }

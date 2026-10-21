@@ -208,6 +208,26 @@ function releaseNotes(tag) {
   };
 }
 
+/**
+ * The push goes through whichever account the GitHub CLI has active, which
+ * may be one that can't write to this repository.
+ */
+function checkAccount() {
+  if (!has("gh") || run("gh", ["auth", "status"], { allowFailure: true }) === null) return;
+  const repo = repositoryUrl()?.replace("https://github.com/", "");
+  if (!repo) return;
+  const login = run("gh", ["api", "user", "--jq", ".login"], { allowFailure: true });
+  const push = run("gh", ["api", `repos/${repo}`, "--jq", ".permissions.push"], {
+    allowFailure: true,
+  });
+  if (push !== "true") {
+    stop(
+      `The GitHub CLI is signed in as ${login ?? "an account"} that can't push to ${repo}. Switch with gh auth switch, then try again.`,
+    );
+  }
+  ok(`Pushing as ${login}`);
+}
+
 function checkCi(skip) {
   if (skip) {
     warn(yellow("Skipping the CI check (--skip-ci)"));
@@ -341,6 +361,7 @@ async function bump(input, values) {
   const branch = releaseBranch(next);
   checkTag(tag);
   checkBranch(branch);
+  checkAccount();
   checkCi(values["skip-ci"]);
   const notes = releaseNotes(tag);
 
@@ -407,6 +428,7 @@ ${notes.lines.map((line) => `  ${line}`).join("\n")}`);
 /** Step 2: tags the merged version on main, which starts the release workflow. */
 async function tagRelease(values) {
   checkRepository({ pull: true });
+  checkAccount();
   const version = checkVersions();
   const tag = `v${version}`;
   checkTag(tag);

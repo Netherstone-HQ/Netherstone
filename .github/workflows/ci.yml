@@ -85,8 +85,40 @@ jobs:
       - if: needs.browser-shard.result != 'success'
         run: exit 1
 
+  # Whether this run needs the Rust tests: always on main, and on a pull
+  # request only when it changes src-tauri/ or this file.
+  changes:
+    name: Changed files
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.check.outputs.rust }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          if grep -qE '^(src-tauri/|\.github/workflows/ci\.yml$)' <<< "$files"; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # A skipped job counts as passed, so the required check doesn't hold up a
+  # pull request that leaves the Rust code alone. If the file check fails, the
+  # tests run anyway.
   rust:
     name: Rust tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

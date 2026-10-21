@@ -1,13 +1,17 @@
 name: CodeQL (Rust)
 
 # Scanning the Rust backend takes several minutes, so it has its own workflow
-# and isn't a required check. It runs on every pull request: one that skips it
-# shows "1 configuration not found", since main has a Rust scan to compare to.
+# and isn't a required check. On a pull request it only runs when the Rust code
+# or this file changes. One that skips it shows "1 configuration not found",
+# since main has a Rust scan to compare to.
 
 on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - "src-tauri/**"
+      - ".github/workflows/codeql-rust.yml"
   schedule:
     - cron: "17 4 * * 1"
 

@@ -13,6 +13,6 @@ export const REVEAL_LABEL = IS_MAC
  * Whether a shortcut's modifier is held: ⌘ on a Mac, Ctrl elsewhere. Ctrl on
  * a Mac is left alone, since text fields use it (Ctrl+N moves down a line).
  */
-export function hasModKey(e: KeyboardEvent): boolean {
+export function hasModKey(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
   return IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }

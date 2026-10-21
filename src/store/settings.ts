@@ -18,6 +18,8 @@ export type ReadingFont = "newsreader" | "geist" | "system";
 export type TextSize = "small" | "default" | "large";
 export type ContentWidth = "narrow" | "default" | "wide" | "full";
 export type NewShardLocation = "vault-root" | "current-folder";
+/** Where a web link opens: beside the editor, or in the system browser. */
+export type LinkOpener = "browser-panel" | "your-browser";
 /** How much bigger or smaller the whole interface is, in percent. */
 export type Zoom = 80 | 90 | 100 | 110 | 125 | 150;
 /** Minutes between automatic syncs. */
@@ -30,6 +32,7 @@ export interface Preferences {
   showRecentFiles: boolean;
   recentFilesLimit: number;
   confirmBeforeDelete: boolean;
+  openLinksIn: LinkOpener;
 
   // ── Appearance ──────────────────────────────────────────────────────────────
   theme: ThemePreference;
@@ -119,6 +122,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   showRecentFiles: true,
   recentFilesLimit: DEFAULT_RECENT_FILES_LIMIT,
   confirmBeforeDelete: true,
+  openLinksIn: "browser-panel",
 
   theme: "dark",
   readingFont: "newsreader",

@@ -2,6 +2,7 @@
 import {
   act,
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -20,6 +21,7 @@ import { openEditorFile } from "@/lib/open-editor-file";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import { useSettingsStore } from "@/store/settings";
 import { Editor } from "./Editor";
 
 vi.mock("@tauri-apps/plugin-opener", async (importOriginal) => ({
@@ -438,10 +440,26 @@ describe("Editor", () => {
       );
       afterEach(() => vi.mocked(openUrl).mockClear());
 
-      it("opens a web link in the browser panel", async () => {
+      const ctrlClick = (name: string) => {
+        fireEvent.click(screen.getByText(name), { ctrlKey: true });
+      };
+
+      it("leaves a web link to edit on a plain click", async () => {
         await openNote(`${LINKS}\n`);
 
-        click("Site");
+        const event = createEvent.click(screen.getByText("Site"));
+        fireEvent(screen.getByText("Site"), event);
+        await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(useUIStore.getState().isBrowserPanelOpen).toBe(false);
+        expect(openUrl).not.toHaveBeenCalled();
+      });
+
+      it("opens a web link in the browser panel with Ctrl", async () => {
+        await openNote(`${LINKS}\n`);
+
+        ctrlClick("Site");
 
         await waitFor(() =>
           expect(useUIStore.getState().isBrowserPanelOpen).toBe(true),
@@ -457,7 +475,7 @@ describe("Editor", () => {
         act(() => useUIStore.setState({ isBrowserPanelOpen: true }));
         await openNote(`${LINKS}\n`);
 
-        click("Site");
+        ctrlClick("Site");
 
         await waitFor(() =>
           expect(useUIStore.getState().browserUrlRequest).toBe(
@@ -466,18 +484,17 @@ describe("Editor", () => {
         );
       });
 
-      it.each([
-        ["Ctrl", { ctrlKey: true }],
-        ["Cmd", { metaKey: true }],
-      ])("opens a web link in the system browser with %s", async (_, keys) => {
+      it("opens a web link in your browser when Settings says so", async () => {
+        act(() => useSettingsStore.setState({ openLinksIn: "your-browser" }));
         await openNote(`${LINKS}\n`);
 
-        fireEvent.click(screen.getByText("Site"), keys);
+        ctrlClick("Site");
 
         await waitFor(() =>
           expect(openUrl).toHaveBeenCalledWith("https://example.com/docs"),
         );
         expect(useUIStore.getState().isBrowserPanelOpen).toBe(false);
+        act(() => useSettingsStore.setState({ openLinksIn: "browser-panel" }));
       });
     });
 

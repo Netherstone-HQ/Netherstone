@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ADDED_MARK,
   BLOCK_CHANGE_KEY,
+  GAP_BLOCK,
+  GAP_INLINE,
   REMOVED_MARK,
   diffShardValues,
   hasChanges,
@@ -139,7 +141,7 @@ describe("sideOf", () => {
     expect(JSON.stringify(side)).not.toContain("Only in the version");
   });
 
-  it("drops a link only the other side has", () => {
+  it("marks where a link only the other side has is", () => {
     const link = { type: "a", url: "x", children: [t("link")] };
     const both = diffShardValues(
       [p(t("A "), link, t(" b"))],
@@ -148,7 +150,38 @@ describe("sideOf", () => {
     );
     const current = sideOf(both, "current");
     expect(JSON.stringify(current)).not.toContain('"url"');
+    expect(JSON.stringify(current)).toContain(GAP_INLINE);
     const version = sideOf(both, "version");
     expect(JSON.stringify(version)).toContain('"url"');
+  });
+
+  it("marks where words only the other side has are", () => {
+    const both = diffShardValues(
+      [p(t("Use cold water"))],
+      [p(t("Use water"))],
+      isInline,
+    );
+    const current = strip(sideOf(both, "current"));
+    expect(current[0].children).toEqual([
+      t("Use "),
+      { type: GAP_INLINE, children: [t("")] },
+      t("water"),
+    ]);
+  });
+
+  it("doesn't mark a gap next to words that took the other side's place", () => {
+    const side = sideOf(merged(), "current");
+    expect(JSON.stringify(side)).not.toContain(GAP_INLINE);
+    expect(JSON.stringify(side)).not.toContain(GAP_BLOCK);
+  });
+
+  it("marks one gap where blocks only the other side has are", () => {
+    const both = diffShardValues(
+      [p(t("A")), p(t("New 1")), p(t("New 2")), p(t("B"))],
+      [p(t("A")), p(t("B"))],
+      isInline,
+    );
+    const types = sideOf(both, "current").map((node) => node.type);
+    expect(types).toEqual(["p", GAP_BLOCK, "p"]);
   });
 });

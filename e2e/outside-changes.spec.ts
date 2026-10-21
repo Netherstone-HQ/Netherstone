@@ -63,6 +63,26 @@ test("typing and an outside change to the same paragraph asks which to keep", as
   expect(await lastSave(page, "Note.md")).toBe("# Note\n\nFirst. Typed.\n");
 });
 
+test("the versions to choose from open on the change and mark what's missing", async ({
+  page,
+}) => {
+  const filler = Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1}.`).join("\n\n");
+  await mockVault(page, {
+    files: { "Note.md": `# Note\n\n${filler}\n\nThe old cold end.\n` },
+    open: "Note.md",
+  });
+  await caretAfter(page, "The old cold end.");
+  await page.keyboard.type(" Typed.");
+  await changeOutside(page, "Note.md", `# Note\n\n${filler}\n\nThe old end.\n`);
+
+  const yours = page.locator(`[aria-label="Your version"]`);
+  const outside = page.locator(`[aria-label="Outside version"]`);
+  await expect(yours.locator(".history-added", { hasText: "cold" })).toBeInViewport();
+  await expect(outside.locator(".history-gap")).toHaveCount(2);
+  await expect(outside.locator(".history-gap").first()).toBeInViewport();
+  await page.screenshot({ path: "test-results/conflict-preview.png" });
+});
+
 /** The element the open shard scrolls in. */
 function editorScroller(page: Page) {
   return editor(page).evaluateHandle((element) => {

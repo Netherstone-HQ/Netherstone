@@ -33,15 +33,22 @@ export interface BrokenLink {
   name: string;
 }
 
-/** A shard holding at least one chart. */
-export interface ChartShard {
+/** A chart drawn from a table, with that table's text. */
+export interface ShardChart {
+  /** The shard holding the chart. */
   path: string;
   name: string;
-  charts: number;
+  /** Which chart in the shard, from 0 at the top. */
+  index: number;
+  /** The chart's comment, as written. */
+  comment: string;
+  columns: string[];
+  rows: string[][];
 }
 
-export function getChartShards() {
-  return invoke<ChartShard[]>("get_chart_shards");
+/** Every chart drawn from a table, those in the shards edited last first. */
+export function getCharts() {
+  return invoke<ShardChart[]>("get_charts");
 }
 
 export function getWritingLog(vaultPath: string) {

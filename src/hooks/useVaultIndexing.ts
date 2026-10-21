@@ -17,7 +17,6 @@ import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
 import { indexVault } from "@/lib/refresh-vault";
 import { getBrokenLinks, missingFileRows } from "@/lib/data";
-import { useDataStore } from "@/store/data";
 import {
   useAttachmentReportStore,
   useEditorStore,
@@ -70,10 +69,7 @@ async function checkVaultHealth(vaultPath: string) {
     duration: 10_000,
     action: {
       label: "Review",
-      onClick: () => {
-        useDataStore.getState().scrollToOnOpen("health");
-        useUIStore.getState().openMode("data");
-      },
+      onClick: () => useUIStore.getState().openMode("data"),
     },
   });
 }

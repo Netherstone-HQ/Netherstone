@@ -16,6 +16,8 @@ export const SERIES_CLASSES = [
 const WIDTH = 640;
 const HEIGHT = 240;
 const PLOT = { top: 10, right: 8, bottom: 26, left: 44 };
+/** A small chart has no room for its numbers or labels. */
+const COMPACT_PLOT = { top: 6, right: 4, bottom: 2, left: 4 };
 /** Labels along the bottom at most; the others are skipped. */
 const MAX_LABELS = 10;
 
@@ -47,12 +49,13 @@ function barPath(x: number, width: number, base: number, end: number) {
 
 /**
  * A bar or line chart drawn in SVG from the theme's colours. Hovering a
- * column shows its values.
+ * column shows its values, except on a compact chart, drawn small without
+ * its numbers and labels.
  */
 export const ChartSvg = forwardRef<
   SVGSVGElement,
-  { kind: ChartKind; data: ChartData; label: string }
->(function ChartSvg({ kind, data, label }, ref) {
+  { kind: ChartKind; data: ChartData; label: string; isCompact?: boolean }
+>(function ChartSvg({ kind, data, label, isCompact = false }, ref) {
   const [hovered, setHovered] = useState<number | null>(null);
   const { labels, series } = data;
 
@@ -62,13 +65,14 @@ export const ChartSvg = forwardRef<
   const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values));
   const low = ticks[0];
   const high = ticks[ticks.length - 1];
+  const plot = isCompact ? COMPACT_PLOT : PLOT;
 
-  const plotWidth = WIDTH - PLOT.left - PLOT.right;
-  const plotHeight = HEIGHT - PLOT.top - PLOT.bottom;
+  const plotWidth = WIDTH - plot.left - plot.right;
+  const plotHeight = HEIGHT - plot.top - plot.bottom;
   const y = (value: number) =>
-    PLOT.top + plotHeight - ((value - low) / (high - low)) * plotHeight;
+    plot.top + plotHeight - ((value - low) / (high - low)) * plotHeight;
   const band = plotWidth / Math.max(1, labels.length);
-  const bandX = (index: number) => PLOT.left + band * index;
+  const bandX = (index: number) => plot.left + band * index;
   const labelEvery = Math.ceil(labels.length / MAX_LABELS);
 
   const groupWidth = Math.min(band * 0.7, 44 * series.length);
@@ -90,27 +94,29 @@ export const ChartSvg = forwardRef<
         {ticks.map((tick) => (
           <g key={tick}>
             <line
-              x1={PLOT.left}
-              x2={WIDTH - PLOT.right}
+              x1={plot.left}
+              x2={WIDTH - plot.right}
               y1={y(tick)}
               y2={y(tick)}
               className={tick === 0 ? "stroke-border" : "stroke-border/50"}
               strokeWidth={1}
             />
-            <text
-              x={PLOT.left - 8}
-              y={y(tick)}
-              dy="0.35em"
-              textAnchor="end"
-              className="fill-muted-foreground text-[12px]"
-            >
-              {formatValue(tick)}
-            </text>
+            {isCompact ? null : (
+              <text
+                x={plot.left - 8}
+                y={y(tick)}
+                dy="0.35em"
+                textAnchor="end"
+                className="fill-muted-foreground text-[12px]"
+              >
+                {formatValue(tick)}
+              </text>
+            )}
           </g>
         ))}
 
         {labels.map((name, index) =>
-          index % labelEvery === 0 ? (
+          !isCompact && index % labelEvery === 0 ? (
             <text
               key={index}
               x={bandX(index) + band / 2}
@@ -156,7 +162,7 @@ export const ChartSvg = forwardRef<
                   <polyline
                     points={points.join(" ")}
                     fill="none"
-                    strokeWidth={2}
+                    strokeWidth={isCompact ? 3 : 2}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                   />
@@ -177,25 +183,27 @@ export const ChartSvg = forwardRef<
           <line
             x1={bandX(hovered) + band / 2}
             x2={bandX(hovered) + band / 2}
-            y1={PLOT.top}
-            y2={PLOT.top + plotHeight}
+            y1={plot.top}
+            y2={plot.top + plotHeight}
             className="stroke-muted-foreground/50"
             strokeWidth={1}
           />
         ) : null}
 
         {/* Hit targets: a whole column each, larger than any bar. */}
-        {labels.map((_, index) => (
-          <rect
-            key={index}
-            x={bandX(index)}
-            y={PLOT.top}
-            width={band}
-            height={plotHeight}
-            fill="transparent"
-            onMouseEnter={() => setHovered(index)}
-          />
-        ))}
+        {isCompact
+          ? null
+          : labels.map((_, index) => (
+              <rect
+                key={index}
+                x={bandX(index)}
+                y={plot.top}
+                width={band}
+                height={plotHeight}
+                fill="transparent"
+                onMouseEnter={() => setHovered(index)}
+              />
+            ))}
       </svg>
 
       {hovered !== null ? (

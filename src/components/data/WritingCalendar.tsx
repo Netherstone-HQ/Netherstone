@@ -19,25 +19,7 @@ function levelStyle(level: CalendarLevel): CSSProperties | undefined {
 }
 
 const CELL = "aspect-square w-full rounded-[2px]";
-const KEY_CELL = "size-2.5 rounded-[2px]";
 const WEEKDAYS = ["Mon", "", "Wed", "", "Fri", "", ""];
-
-/** The shades from no writing to the most, for the key under the calendar. */
-export function CalendarKey() {
-  return (
-    <span className="flex items-center gap-1" aria-hidden="true">
-      Less
-      {([0, 1, 2, 3, 4] as const).map((level) => (
-        <span
-          key={level}
-          className={cn(KEY_CELL, "bg-muted")}
-          style={levelStyle(level)}
-        />
-      ))}
-      More
-    </span>
-  );
-}
 
 /**
  * The weeks as columns of days, Monday at the top, newest on the right,

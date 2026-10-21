@@ -1,11 +1,11 @@
 //! What the Overview page shows: the words written each day, the @ links
-//! that point to shards that don't exist, and the shards with charts.
+//! that point to shards that don't exist, and the charts.
 //!
 //! Words come from the vault's local history, which every device and outside
 //! edits add to. Days before the history began keep this device's own count,
 //! from what was typed in the editor.
 
-use super::parser::{LinkType, parse_markdown};
+use super::parser::{LinkType, chart_tables, parse_markdown};
 use crate::sync::writing::WritingHistory;
 use rusqlite::{Connection, params};
 use serde::Serialize;
@@ -58,26 +58,51 @@ pub struct BrokenLink {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-pub struct ChartShard {
+pub struct ShardChart {
+    /// The shard holding the chart.
     pub path: String,
     pub name: String,
-    pub charts: i64,
+    /// Which chart in the shard, from 0 at the top.
+    pub index: usize,
+    /// The chart's comment, which the page reads its settings from.
+    pub comment: String,
+    /// The table it's drawn from: its first row, then the others.
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<String>>,
 }
 
-/// The shards holding a chart, by name.
-pub fn get_chart_shards(conn: &Connection) -> rusqlite::Result<Vec<ChartShard>> {
+/// Every chart drawn from a table, those in the shards edited last first.
+pub fn get_charts(conn: &Connection) -> rusqlite::Result<Vec<ShardChart>> {
     let mut stmt = conn.prepare(
-        "SELECT f.path, f.name, COUNT(*) FROM charts c JOIN files f ON f.id = c.file_id
-         GROUP BY f.id ORDER BY f.name COLLATE NOCASE, f.path",
+        "SELECT f.path, f.name, s.content FROM files f JOIN fts_search s ON s.rowid = f.id
+         WHERE EXISTS (SELECT 1 FROM charts c WHERE c.file_id = f.id)
+         ORDER BY f.last_modified DESC, f.path",
     )?;
-    stmt.query_map([], |row| {
-        Ok(ChartShard {
-            path: row.get(0)?,
-            name: row.get(1)?,
-            charts: row.get(2)?,
+    let shards = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    Ok(shards
+        .into_iter()
+        .flat_map(|(path, name, content)| {
+            chart_tables(&content)
+                .into_iter()
+                .map(move |chart| ShardChart {
+                    path: path.clone(),
+                    name: name.clone(),
+                    index: chart.index,
+                    comment: chart.comment,
+                    columns: chart.columns,
+                    rows: chart.rows,
+                })
         })
-    })?
-    .collect()
+        .collect())
 }
 
 /// Today's date on this device, as `YYYY-MM-DD`.
@@ -441,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_shards_with_charts() {
+    fn lists_charts_with_their_tables() {
         let dir = std::env::temp_dir().join(format!("netherstone-charts-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
@@ -455,11 +480,22 @@ mod tests {
         for name in ["Runs.md", "Plain.md"] {
             crate::db::indexer::index_file(&conn, &dir.join(name)).unwrap();
         }
-        let shards = get_chart_shards(&conn).unwrap();
+        let charts = get_charts(&conn).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
 
-        let shown: Vec<_> = shards.iter().map(|s| (s.name.as_str(), s.charts)).collect();
-        assert_eq!(shown, [("Runs.md", 1)]);
+        let shown: Vec<_> = charts
+            .iter()
+            .map(|c| (c.name.as_str(), c.index, c.columns.clone(), c.rows.clone()))
+            .collect();
+        assert_eq!(
+            shown,
+            [(
+                "Runs.md",
+                0,
+                vec!["a".to_string(), "b".to_string()],
+                vec![vec!["1".to_string(), "2".to_string()]]
+            )]
+        );
     }
 
     #[test]

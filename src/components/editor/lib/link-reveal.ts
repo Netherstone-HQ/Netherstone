@@ -7,6 +7,8 @@ import {
   type TRange,
 } from "platejs";
 
+import { isChartComment } from "@/lib/chart";
+import { RAW_BLOCK_KEY } from "@/lib/markdown-raw-blocks";
 import { scrollPlateToNode } from "@/lib/plate-toc-headings";
 
 function linkText(node: Record<string, unknown>): string | null {
@@ -117,4 +119,33 @@ export function revealTag(editor: SlateEditor, tag: string) {
   if (!range) return;
 
   scrollPlateToNode(editor, range.anchor.path, () => range);
+}
+
+/** The shard's chart at `index`, counting its charts from the top. */
+export function findChart(
+  editor: SlateEditor,
+  index: number,
+): Path | undefined {
+  let seen = 0;
+  for (const [i, node] of editor.children.entries()) {
+    const value = (node as Record<string, unknown>).value;
+    if (
+      node.type !== RAW_BLOCK_KEY ||
+      typeof value !== "string" ||
+      !isChartComment(value)
+    ) {
+      continue;
+    }
+    if (seen === index) return [i];
+    seen++;
+  }
+  return undefined;
+}
+
+/** Scrolls to the shard's chart at `index`. */
+export function revealChart(editor: SlateEditor, index: number) {
+  const path = findChart(editor, index);
+  if (!path) return;
+
+  scrollPlateToNode(editor, path, () => editor.api.start(path));
 }

@@ -16,11 +16,15 @@ function logEditorStoreLifecycle(
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-/** In the shard at `path`: a link by its text, a missing file's embed, or a tag. */
+/**
+ * In the shard at `path`: a link by its text, a missing file's embed, a tag,
+ * or a chart by its place among the shard's charts.
+ */
 export type PendingReveal =
   | { path: string; text: string }
   | { path: string; assetPath: string }
-  | { path: string; tag: string };
+  | { path: string; tag: string }
+  | { path: string; chart: number };
 
 export interface OpenEditorFilePayload {
   path: string;
@@ -51,8 +55,8 @@ interface EditorState {
   setOpeningFilePath: (path: string | null) => void;
 
   /**
-   * An @ link (by its text) or a missing file to scroll to once `path` is on
-   * screen. Opening any other file drops it.
+   * An @ link (by its text), a missing file, a tag or a chart to scroll to
+   * once `path` is on screen. Opening any other file drops it.
    */
   pendingLinkReveal: PendingReveal | null;
   setPendingLinkReveal: (reveal: PendingReveal | null) => void;

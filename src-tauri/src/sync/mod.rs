@@ -8,6 +8,7 @@
 //! See `docs/GIT_SYNC_ARCHITECTURE.md` for the overall design.
 
 pub mod conflicts;
+pub mod drawing_merge;
 pub mod history;
 pub mod writing;
 pub mod merge;

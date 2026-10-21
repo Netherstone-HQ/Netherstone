@@ -6,12 +6,16 @@ import {
   startVaultWatcher,
   stopVaultWatcher,
 } from "@/lib/commands";
-import { isPathWithin, isSamePath } from "@/lib/drawing-files";
+import {
+  isPathWithin,
+  isSamePath,
+  reloadOpenDrawingIfChanged,
+} from "@/lib/drawing-files";
 import { deleteAstCache } from "@/lib/editor-ast-cache";
 import { invalidateAstWarmPaths } from "@/lib/editor-ast-warm-state";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
-import { useEditorStore, useVaultStore } from "@/store";
+import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 
 type VaultChangedPayload = {
   paths?: string[];
@@ -23,8 +27,9 @@ type VaultChangedPayload = {
  * is rescanned and the file tree is updated.
  *
  * If the open shard was deleted or moved outside the app, it is closed, so
- * the next edit doesn't write it back to its old path. If it was changed,
- * the editor shows the new text, so the next save doesn't write over it.
+ * the next edit doesn't write it back to its old path. If it or the open
+ * drawing was changed, the new text shows, so the next save doesn't write
+ * over it.
  *
  * Cleans up the watcher and the event listener when the vault changes or
  * the component unmounts.
@@ -101,6 +106,12 @@ export function useVaultWatcher() {
       ) {
         void reloadOpenShardIfChanged();
       }
+      if (
+        changedPaths.length === 0 ||
+        changedPaths.some((filePath) => isOpenDrawing(filePath))
+      ) {
+        void reloadOpenDrawingIfChanged();
+      }
 
       try {
         const tree = await scanVault(path);
@@ -124,6 +135,11 @@ export function useVaultWatcher() {
       stopVaultWatcher().catch(console.error);
     };
   }, [currentVaultPath, setFileTree]);
+}
+
+function isOpenDrawing(filePath: string) {
+  const openPath = useUIStore.getState().activeDrawingPath;
+  return !!openPath && isSamePath(openPath, filePath);
 }
 
 function isOpenShard(filePath: string) {

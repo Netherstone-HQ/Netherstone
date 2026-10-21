@@ -30,10 +30,19 @@ test("a narrow toolbar moves buttons into the ⋯ menu", async ({ page }) => {
   // Bold from the menu applies to the selected text.
   await editor(page).getByText("Use 350 g water.").selectText();
   await toolbar.locator("button:has(svg.lucide-ellipsis)").click();
-  const menu = page.getByRole("dialog");
-  await expect(menu.locator("svg.lucide-superscript")).toBeVisible();
-  await menu.locator("button:has(svg.lucide-bold)").click();
+  const menu = page.getByRole("menu");
+  await expect(
+    menu.getByRole("menuitem", { name: "Superscript" }),
+  ).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Bold" }).click();
   await expect(editor(page).locator("strong")).toHaveText("Use 350 g water.");
+
+  // A dropdown button opens as a submenu.
+  await page.setViewportSize({ width: 700, height: 800 });
+  await toolbar.locator("button:has(svg.lucide-ellipsis)").click();
+  await menu.getByRole("menuitem", { name: "Turn into" }).hover();
+  await page.getByRole("menuitemradio", { name: "Heading 2" }).click();
+  await expect(editor(page).locator("h2")).toHaveText("Use 350 g water.");
 });
 
 test("the History header is as tall as the toolbar", async ({ page }) => {

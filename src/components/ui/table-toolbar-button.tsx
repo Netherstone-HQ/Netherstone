@@ -2,8 +2,6 @@
 
 import * as React from 'react';
 
-import type { DropdownMenuProps } from '@radix-ui/react-dropdown-menu';
-
 import { TablePlugin, useTableMergeState } from '@platejs/table/react';
 import {
   ArrowDown,
@@ -21,20 +19,17 @@ import { KEYS } from 'platejs';
 import { useEditorPlugin, useEditorSelector } from 'platejs/react';
 
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
-import { ToolbarButton } from './toolbar';
+import { ToolbarButton, ToolbarDropdown } from './toolbar';
 
-export function TableToolbarButton(props: DropdownMenuProps) {
+export function TableToolbarButton({ submenu }: { submenu?: boolean }) {
   const tableSelected = useEditorSelector(
     (editor) => editor.api.some({ match: { type: KEYS.table } }),
     []
@@ -45,166 +40,168 @@ export function TableToolbarButton(props: DropdownMenuProps) {
   const mergeState = useTableMergeState();
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false} {...props}>
-      <DropdownMenuTrigger asChild>
+    <ToolbarDropdown
+      open={open}
+      onOpenChange={setOpen}
+      button={
         <ToolbarButton pressed={open} tooltip="Table" isDropdown>
           <Table />
         </ToolbarButton>
-      </DropdownMenuTrigger>
+      }
+      contentProps={{
+        align: 'start',
+        className: 'flex w-[180px] min-w-0 flex-col',
+      }}
+      submenu={submenu ? { icon: <Table />, label: 'Table' } : undefined}
+    >
+      <DropdownMenuGroup>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
+            <Grid3x3Icon className="size-4" />
+            <span>Table</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="m-0 p-0">
+            <TablePicker />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
-      <DropdownMenuContent
-        className="flex w-[180px] min-w-0 flex-col"
-        align="start"
-      >
-        <DropdownMenuGroup>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
-              <Grid3x3Icon className="size-4" />
-              <span>Table</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="m-0 p-0">
-              <TablePicker />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-              disabled={!tableSelected}
-            >
-              <div className="size-4" />
-              <span>Cell</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!mergeState.canMerge}
-                onSelect={() => {
-                  tf.table.merge();
-                  editor.tf.focus();
-                }}
-              >
-                <Combine />
-                Merge cells
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!mergeState.canSplit}
-                onSelect={() => {
-                  tf.table.split();
-                  editor.tf.focus();
-                }}
-              >
-                <Ungroup />
-                Split cell
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-              disabled={!tableSelected}
-            >
-              <div className="size-4" />
-              <span>Row</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!tableSelected}
-                onSelect={() => {
-                  tf.insert.tableRow({ before: true });
-                  editor.tf.focus();
-                }}
-              >
-                <ArrowUp />
-                Insert row before
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!tableSelected}
-                onSelect={() => {
-                  tf.insert.tableRow();
-                  editor.tf.focus();
-                }}
-              >
-                <ArrowDown />
-                Insert row after
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!tableSelected}
-                onSelect={() => {
-                  tf.remove.tableRow();
-                  editor.tf.focus();
-                }}
-              >
-                <XIcon />
-                Delete row
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-              disabled={!tableSelected}
-            >
-              <div className="size-4" />
-              <span>Column</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!tableSelected}
-                onSelect={() => {
-                  tf.insert.tableColumn({ before: true });
-                  editor.tf.focus();
-                }}
-              >
-                <ArrowLeft />
-                Insert column before
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!tableSelected}
-                onSelect={() => {
-                  tf.insert.tableColumn();
-                  editor.tf.focus();
-                }}
-              >
-                <ArrowRight />
-                Insert column after
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-w-[180px]"
-                disabled={!tableSelected}
-                onSelect={() => {
-                  tf.remove.tableColumn();
-                  editor.tf.focus();
-                }}
-              >
-                <XIcon />
-                Delete column
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-
-          <DropdownMenuItem
-            className="min-w-[180px]"
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger
+            className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
             disabled={!tableSelected}
-            onSelect={() => {
-              tf.remove.table();
-              editor.tf.focus();
-            }}
           >
-            <Trash2Icon />
-            Delete table
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+            <div className="size-4" />
+            <span>Cell</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!mergeState.canMerge}
+              onSelect={() => {
+                tf.table.merge();
+                editor.tf.focus();
+              }}
+            >
+              <Combine />
+              Merge cells
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!mergeState.canSplit}
+              onSelect={() => {
+                tf.table.split();
+                editor.tf.focus();
+              }}
+            >
+              <Ungroup />
+              Split cell
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger
+            className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            disabled={!tableSelected}
+          >
+            <div className="size-4" />
+            <span>Row</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!tableSelected}
+              onSelect={() => {
+                tf.insert.tableRow({ before: true });
+                editor.tf.focus();
+              }}
+            >
+              <ArrowUp />
+              Insert row before
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!tableSelected}
+              onSelect={() => {
+                tf.insert.tableRow();
+                editor.tf.focus();
+              }}
+            >
+              <ArrowDown />
+              Insert row after
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!tableSelected}
+              onSelect={() => {
+                tf.remove.tableRow();
+                editor.tf.focus();
+              }}
+            >
+              <XIcon />
+              Delete row
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger
+            className="gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            disabled={!tableSelected}
+          >
+            <div className="size-4" />
+            <span>Column</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!tableSelected}
+              onSelect={() => {
+                tf.insert.tableColumn({ before: true });
+                editor.tf.focus();
+              }}
+            >
+              <ArrowLeft />
+              Insert column before
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!tableSelected}
+              onSelect={() => {
+                tf.insert.tableColumn();
+                editor.tf.focus();
+              }}
+            >
+              <ArrowRight />
+              Insert column after
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="min-w-[180px]"
+              disabled={!tableSelected}
+              onSelect={() => {
+                tf.remove.tableColumn();
+                editor.tf.focus();
+              }}
+            >
+              <XIcon />
+              Delete column
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuItem
+          className="min-w-[180px]"
+          disabled={!tableSelected}
+          onSelect={() => {
+            tf.remove.table();
+            editor.tf.focus();
+          }}
+        >
+          <Trash2Icon />
+          Delete table
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </ToolbarDropdown>
   );
 }
 

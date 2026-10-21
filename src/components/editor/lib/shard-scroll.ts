@@ -65,7 +65,10 @@ export function readScrollPosition(
 
   const scrollerRect = scroller.getBoundingClientRect();
   const rootRect = root.getBoundingClientRect();
-  const x = rootRect.left + rootRect.width / 2;
+  // Just inside the text column's left edge: blocks start there, while
+  // narrow ones (a small table) don't reach the middle.
+  const x =
+    rootRect.left + (parseFloat(getComputedStyle(root).paddingLeft) || 0) + 4;
   const top = scrollerRect.top + getStickyTopInset(scroller);
 
   for (let probe = 0; probe < PROBE_COUNT; probe++) {

@@ -57,8 +57,9 @@ export function ModeSwitcher() {
   const activeNavItem = useUIStore((s) => s.activeNavItem);
   const setActiveNavItem = useUIStore((s) => s.setActiveNavItem);
 
+  // Above the left sidebar, which slides in and out beneath it.
   return (
-    <div className="flex h-full w-12 shrink-0 flex-col items-center gap-1.5 border-r bg-sidebar pb-2.5 pt-1">
+    <div className="relative z-32 flex h-full w-12 shrink-0 flex-col items-center gap-1.5 border-r bg-sidebar pb-2.5 pt-1">
       {MODES.map(({ mode, label, icon: Icon }) => (
         <Fragment key={mode}>
           {/* A divider sets Canvas apart from the modes for shards. */}

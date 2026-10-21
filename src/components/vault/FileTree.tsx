@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { FilePlusIcon, FolderPlusIcon, PlusIcon } from "lucide-react";
+import {
+  ChevronsDownUpIcon,
+  FilePlusIcon,
+  FolderPlusIcon,
+  PlusIcon,
+} from "lucide-react";
 
 import { DrawingIcon } from "@/components/icons";
 import { SectionHeader } from "@/components/sidebar/SectionHeader";
@@ -18,7 +23,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu } from "@/components/ui/sidebar";
 import { Hint } from "@/components/ui/tooltip";
-import { useVaultStore } from "@/store";
+import { isPathWithin } from "@/lib/drawing-files";
+import { useUIStore, useVaultStore } from "@/store";
 import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
@@ -36,6 +42,12 @@ export function FileTree({ onNewShard }: FileTreeProps) {
   const { fileTree, isVaultLoading, currentVaultPath } = useVaultStore();
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
+  const hasOpenFolder = useUIStore((s) =>
+    currentVaultPath
+      ? s.openFolders.some((path) => isPathWithin(path, currentVaultPath))
+      : false,
+  );
+  const collapseAllFolders = useUIStore((s) => s.collapseAllFolders);
   const [isCreatingRootShard, setIsCreatingRootShard] = useState(false);
   const addMenu = useMenuAction();
   const rootMenu = useMenuAction();
@@ -53,7 +65,25 @@ export function FileTree({ onNewShard }: FileTreeProps) {
       aria-label="Files"
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      <SectionHeader label="Files">
+      <SectionHeader
+        label="Files"
+        labelAction={
+          hasOpenFolder ? (
+            <Hint label="Collapse all">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Collapse all"
+                className="text-muted-foreground"
+                onClick={() => collapseAllFolders(currentVaultPath)}
+              >
+                <ChevronsDownUpIcon />
+              </Button>
+            </Hint>
+          ) : null
+        }
+      >
         <DropdownMenu>
           <Hint label="New">
             <DropdownMenuTrigger asChild>

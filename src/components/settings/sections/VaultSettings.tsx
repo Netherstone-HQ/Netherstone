@@ -10,6 +10,7 @@ import {
 } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { openVaultDialog } from "@/lib/commands";
+import { chooseVaultFolder } from "@/lib/nested-vault";
 import { openVault } from "@/lib/open-vault";
 import { REVEAL_LABEL } from "@/lib/platform";
 import { indexVault } from "@/lib/refresh-vault";
@@ -106,7 +107,8 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
 }
 
 async function openOther() {
-  const path = await openVaultDialog();
+  const picked = await openVaultDialog();
+  const path = picked && (await chooseVaultFolder(picked, "open"));
   if (path) await openVault(path).catch(showError);
 }
 

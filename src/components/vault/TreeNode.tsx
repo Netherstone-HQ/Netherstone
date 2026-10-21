@@ -25,7 +25,12 @@ import {
 } from "@/components/vault/tree-layout";
 import { useOpenFilePath } from "@/components/vault/useOpenFilePath";
 import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
+import {
+  useFileConflict,
+  useFolderHasConflict,
+} from "@/components/vault/useSyncConflict";
 import { useVaultItem } from "@/components/vault/useVaultItem";
+import { Hint } from "@/components/ui/tooltip";
 import { isPathWithin, isSamePath } from "@/lib/drawing-files";
 import {
   EXPAND_ON_HOVER_MS,
@@ -34,6 +39,7 @@ import {
 } from "@/lib/tree-drag";
 import { cn } from "@/lib/utils";
 import { useUIStore, useVaultStore } from "@/store";
+import { useSyncStore } from "@/store/sync";
 import type { FileTreeNode } from "@/store";
 
 /** How long a folder revealed from the breadcrumb stays highlighted. */
@@ -45,7 +51,13 @@ type TreeNodeProps = {
 };
 
 export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  // Kept in the store, so a folder stays open when its row is drawn again,
+  // as after a rename or a restart.
+  const isOpen = useUIStore((s) =>
+    s.openFolders.some((path) => isSamePath(path, node.path)),
+  );
+  const setFolderOpen = useUIStore((s) => s.setFolderOpen);
+  const setIsOpen = (open: boolean) => setFolderOpen(node.path, open);
   const [isRevealed, setIsRevealed] = useState(false);
   const rowButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -58,6 +70,10 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       : null,
   );
   const endTreeReveal = useUIStore((s) => s.endTreeReveal);
+
+  const conflict = useFileConflict(node.path);
+  const folderHasConflict = useFolderHasConflict(node.path);
+  const showConflict = useSyncStore((s) => s.showConflict);
 
   const item = useVaultItem(node, { onNewFolder: () => setIsOpen(true) });
   const { displayName, isRenaming } = item;
@@ -81,15 +97,18 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
   // An item held over a closed folder opens it, so nested folders are reachable.
   useEffect(() => {
     if (!drop.isOver || isOpen) return;
-    const timer = window.setTimeout(() => setIsOpen(true), EXPAND_ON_HOVER_MS);
+    const timer = window.setTimeout(
+      () => setFolderOpen(node.path, true),
+      EXPAND_ON_HOVER_MS,
+    );
     return () => window.clearTimeout(timer);
-  }, [drop.isOver, isOpen]);
+  }, [drop.isOver, isOpen, node.path, setFolderOpen]);
 
   // Folders open down to a revealed folder, which then shows itself. Each
   // one mounts as its parent opens, so this also runs on mount.
   useEffect(() => {
     if (!reveal || node.kind !== "directory") return;
-    setIsOpen(true);
+    setFolderOpen(node.path, true);
     if (!isSamePath(reveal.path, node.path)) return;
 
     rowButtonRef.current?.scrollIntoView({ block: "nearest" });
@@ -100,7 +119,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
       endTreeReveal(reveal);
     }, REVEAL_HIGHLIGHT_MS);
     return () => window.clearTimeout(timer);
-  }, [reveal, node.kind, node.path, endTreeReveal]);
+  }, [reveal, node.kind, node.path, endTreeReveal, setFolderOpen]);
 
   const rowIndent = getRowIndent(depth);
   const showChildrenGuide =
@@ -128,6 +147,12 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     <span className="block min-w-0 flex-1 truncate">{displayName}</span>
   );
 
+  // A closed folder shows that a file inside it needs a decision.
+  const folderConflictDot =
+    node.kind === "directory" && folderHasConflict && !isOpen ? (
+      <ConflictDot />
+    ) : null;
+
   const row = (
     <div
       className={cn(
@@ -154,6 +179,7 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           >
             {slot}
             {name}
+            {folderConflictDot}
           </button>
         </CollapsibleTrigger>
       ) : (
@@ -166,6 +192,19 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           {name}
         </button>
       )}
+
+      {node.kind === "file" && conflict && !isRenaming ? (
+        <Hint label="Changed on two devices">
+          <button
+            type="button"
+            aria-label="Choose which version to keep"
+            onClick={() => showConflict(conflict)}
+            className="flex size-5 shrink-0 items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          >
+            <ConflictDot />
+          </button>
+        </Hint>
+      ) : null}
 
       {isRenaming ? (
         <span className="shrink-0" style={{ width: `${ACTION_SLOT_PX}px` }} />
@@ -239,5 +278,15 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
         </CollapsibleContent>
       </Collapsible>
     </SidebarMenuItem>
+  );
+}
+
+/** The mark on a file changed here and on GitHub, waiting for a decision. */
+function ConflictDot() {
+  return (
+    <span
+      aria-hidden="true"
+      className="mx-1 size-2 shrink-0 rounded-full bg-amber-500"
+    />
   );
 }

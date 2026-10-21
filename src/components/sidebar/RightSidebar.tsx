@@ -61,7 +61,7 @@ export function RightSidebar() {
       className={cn(
         "relative shrink-0 overflow-hidden",
         slides && "transition-[width] duration-200 ease-linear",
-        showsHistory ? "w-80" : isOpen ? "w-72" : "w-0",
+        isPanelOpen ? "w-72" : "w-0",
       )}
       inert={!isPanelOpen}
     >

@@ -14,7 +14,6 @@ import {
   insertMedia,
   insertVideoPlaceholder,
 } from "@platejs/media";
-import { SuggestionPlugin } from "@platejs/suggestion/react";
 import { TablePlugin } from "@platejs/table/react";
 import { insertToc } from "@platejs/toc";
 import {
@@ -113,9 +112,7 @@ export const insertBlock = (
     }
 
     if (!isSameBlockType) {
-      editor.getApi(SuggestionPlugin).suggestion.withoutSuggestions(() => {
-        editor.tf.removeNodes({ previousEmptyBlock: true });
-      });
+      editor.tf.removeNodes({ previousEmptyBlock: true });
     }
   });
 };

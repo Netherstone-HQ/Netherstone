@@ -35,7 +35,8 @@ import {
   resolveVaultRelativePath,
 } from '@/lib/drawing-files';
 import { openDrawingFile } from '@/lib/open-vault-file';
-import { useUIStore, useVaultStore } from '@/store';
+import { useEditorOnScreen } from '@/hooks/useEditorOnScreen';
+import { useVaultStore } from '@/store';
 
 import { CaptionButton } from './caption';
 
@@ -59,10 +60,9 @@ export function MediaToolbar({
     []
   );
   const isImagePreviewOpen = useImagePreviewValue('isOpen', editor.id);
-  // The editor stays mounted (hidden) in canvas mode; its toolbar must not.
-  const isNotesMode = useUIStore((s) => s.appMode === 'notes');
+  const isEditorOnScreen = useEditorOnScreen();
   const open =
-    isNotesMode &&
+    isEditorOnScreen &&
     isFocusedLast &&
     !readOnly &&
     selected &&

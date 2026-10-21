@@ -16,3 +16,36 @@ export const REVEAL_LABEL = IS_MAC
 export function hasModKey(e: KeyboardEvent): boolean {
   return IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }
+
+const KEY_NAMES: Record<string, string> = IS_MAC
+  ? {
+      mod: "⌘",
+      alt: "⌥",
+      shift: "⇧",
+      enter: "↩",
+      period: ".",
+      comma: ",",
+      minus: "−",
+    }
+  : {
+      mod: "Ctrl",
+      alt: "Alt",
+      shift: "Shift",
+      enter: "Enter",
+      period: ".",
+      comma: ",",
+      minus: "−",
+    };
+
+/**
+ * A shortcut's keys, written as in Plate's config ("mod+shift+x"),
+ * named for this system.
+ */
+export function formatKeys(keys: string): string[] {
+  return keys.split("+").map((key) => KEY_NAMES[key] ?? key.toUpperCase());
+}
+
+/** A button's tooltip with its shortcut: "Bold (Ctrl+B)", or "Bold (⌘+B)". */
+export function withShortcut(label: string, keys: string): string {
+  return `${label} (${formatKeys(keys).join("+")})`;
+}

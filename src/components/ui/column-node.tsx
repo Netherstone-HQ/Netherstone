@@ -39,6 +39,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useEditorOnScreen } from '@/hooks/useEditorOnScreen';
 import { cn } from '@/lib/utils';
 
 export const ColumnElement = withHOC(
@@ -163,7 +164,10 @@ function ColumnFloatingToolbar({ children }: React.PropsWithChildren) {
   );
   const isFocusedLast = useFocusedLast();
 
-  const open = isFocusedLast && !readOnly && selected && isCollapsed;
+  const isEditorOnScreen = useEditorOnScreen();
+
+  const open =
+    isEditorOnScreen && isFocusedLast && !readOnly && selected && isCollapsed;
 
   const onColumnChange = (widths: string[]) => {
     setColumns(editor, {

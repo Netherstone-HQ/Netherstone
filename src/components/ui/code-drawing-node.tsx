@@ -31,6 +31,7 @@ import debounce from 'lodash/debounce.js';
 import { Trash2, DownloadIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useEditorOnScreen } from '@/hooks/useEditorOnScreen';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Popover,
@@ -203,7 +204,13 @@ export function CodeDrawingElement(
     []
   );
 
-  const open = isFocusedLast && !readOnly && selected && selectionCollapsed;
+  const isEditorOnScreen = useEditorOnScreen();
+  const open =
+    isEditorOnScreen &&
+    isFocusedLast &&
+    !readOnly &&
+    selected &&
+    selectionCollapsed;
 
   const content = (
     <PlateElement {...props}>

@@ -110,8 +110,12 @@ export type MockVaultOptions = {
   assets?: Record<string, Buffer>;
   /** Empty folders shown in the sidebar. */
   folders?: string[];
-  /** The shard open when the app starts, relative to the vault. */
-  open: string;
+  /** The shard open when the app starts, relative to the vault. None when left out. */
+  open?: string;
+  /** Starts with no vault open. */
+  noVault?: boolean;
+  /** Vaults opened before, besides this one. */
+  otherVaults?: string[];
   theme?: "light" | "dark";
   /** Earlier versions of files, newest first, by vault-relative path. */
   versions?: Record<string, MockVersion[]>;
@@ -134,13 +138,15 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     assets = {},
     folders = [],
     open,
+    noVault = false,
+    otherVaults = [],
     theme = "dark",
     versions = {},
     savedAt = {},
   } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, versions, savedAt }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, noVault, otherVaults, versions, savedAt }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -159,7 +165,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       localStorage.setItem(
         "netherstone-vault",
         JSON.stringify({
-          state: { currentVaultPath: vaultPath, recentVaults: [vaultPath] },
+          state: {
+            currentVaultPath: noVault ? null : vaultPath,
+            recentVaults: noVault ? otherVaults : [vaultPath, ...otherVaults],
+          },
           version: 0,
         }),
       );
@@ -182,12 +191,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             isSidebarOpenOutsideCanvas: true,
             isRightSidebarOpen: false,
             activeNavItem: "notes",
-            recentFiles: [
-              {
-                path: `${vaultPath}/${open}`,
-                name: open.replace(/\.md$/, ""),
-              },
-            ],
+            recentFiles: open
+              ? [{ path: `${vaultPath}/${open}`, name: open.replace(/\.md$/, "") }]
+              : [],
             pinnedFiles: [],
           },
           version: 0,
@@ -387,6 +393,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       folders,
       theme,
       open,
+      noVault,
+      otherVaults,
       versions,
       savedAt,
     },
@@ -421,7 +429,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
   });
 
   await page.goto("/");
-  await page.locator("[data-slate-editor]").first().waitFor();
+  if (open) await page.locator("[data-slate-editor]").first().waitFor();
 }
 
 export const editor = (page: Page) => page.locator("[data-slate-editor]").first();

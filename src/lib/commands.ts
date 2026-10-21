@@ -3,11 +3,6 @@ import type { FileTreeNode } from "@/store";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface ShardDialogResult {
-  filePath: string;
-  vaultPath: string;
-}
-
 export type MediaDialogKind = "audio" | "file" | "image" | "video";
 
 export interface PersistedAttachment {
@@ -339,20 +334,6 @@ export async function fileExists(filePath: string): Promise<boolean> {
 export async function showLinkedFile(filePath: string): Promise<boolean> {
   assertTauri();
   return invoke<boolean>("show_linked_file", { filePath });
-}
-
-/**
- * Opens a native .md file picker.
- * Returns the picked shard path and its parent directory as the vault path,
- * or null if the user cancelled.
- */
-export async function openShardDialog(
-  defaultDirectory?: string | null,
-): Promise<ShardDialogResult | null> {
-  assertTauri();
-  return invoke<ShardDialogResult | null>("open_shard_dialog", {
-    defaultDirectory: defaultDirectory ?? null,
-  });
 }
 
 // ── Drawings ──────────────────────────────────────────────────────────────────

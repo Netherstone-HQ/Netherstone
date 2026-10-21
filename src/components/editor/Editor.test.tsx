@@ -123,6 +123,7 @@ function selectEndOf(editor: SlateEditor, index: number) {
 beforeEach(() => {
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "debug").mockImplementation(() => {});
+  useVaultStore.getState().setCurrentVaultPath("C:/vault");
 });
 
 afterEach(() => {

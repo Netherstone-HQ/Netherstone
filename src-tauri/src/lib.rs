@@ -105,36 +105,6 @@ fn create_vault(parent: String, name: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
-fn open_shard_dialog(
-    app: tauri::AppHandle,
-    default_directory: Option<String>,
-) -> Option<vault::ShardDialogResult> {
-    let mut dialog = app
-        .dialog()
-        .file()
-        .add_filter("Shard", &["md"])
-        .set_title("Open shard");
-
-    if let Some(default_directory) = default_directory {
-        let directory = std::path::Path::new(&default_directory);
-        if directory.is_dir() {
-            dialog = dialog.set_directory(directory);
-        }
-    }
-
-    let file_path = dialog
-        .blocking_pick_file()
-        .and_then(|p| p.into_path().ok())?;
-
-    let vault_path = file_path.parent()?.to_string_lossy().to_string();
-
-    Some(vault::ShardDialogResult {
-        file_path: file_path.to_string_lossy().to_string(),
-        vault_path,
-    })
-}
-
-#[tauri::command(async)]
 fn open_media_files_dialog(
     app: tauri::AppHandle,
     media_kind: Option<String>,
@@ -1521,7 +1491,6 @@ pub fn run() {
             open_vault_dialog,
             default_vault_location,
             create_vault,
-            open_shard_dialog,
             open_media_files_dialog,
             import_shard,
             open_import_dialog,

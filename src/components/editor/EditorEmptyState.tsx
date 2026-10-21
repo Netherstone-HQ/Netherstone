@@ -1,69 +1,37 @@
 import { useState } from "react";
-import { FileIcon, FolderOpenIcon, PlusIcon } from "lucide-react";
+import { FolderInputIcon, ImportIcon, PlusIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyContent,
-  EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { openShardDialog, openVaultDialog, scanVault } from "@/lib/commands";
-import { openEditorFile } from "@/lib/open-editor-file";
+import { openVaultDialog } from "@/lib/commands";
+import { openImportDialog } from "@/lib/import";
+import { chooseVaultFolder } from "@/lib/nested-vault";
+import { folderName, openVault } from "@/lib/open-vault";
 import { useVaultStore } from "@/store";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
+import { NewVaultDialog } from "@/components/vault/NewVaultDialog";
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
 
 export function EditorEmptyState() {
   const [isNewShardDialogOpen, setIsNewShardDialogOpen] = useState(false);
-  const {
-    currentVaultPath,
-    setCurrentVaultPath,
-    setFileTree,
-    setVaultLoading,
-  } = useVaultStore();
-
-  const hasVault = currentVaultPath !== null;
-
-  async function switchVault(vaultPath: string) {
-    setCurrentVaultPath(vaultPath);
-    setVaultLoading(true);
-    try {
-      const tree = await scanVault(vaultPath);
-      setFileTree(tree);
-    } catch (err) {
-      console.error("[Netherstone] Failed to scan vault:", err);
-    } finally {
-      setVaultLoading(false);
-    }
-  }
+  const [isNewVaultOpen, setIsNewVaultOpen] = useState(false);
+  const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
 
   async function handleOpenVault() {
-    const path = await openVaultDialog();
+    const picked = await openVaultDialog();
+    const path = picked && (await chooseVaultFolder(picked, "open"));
     if (!path) return;
-    await switchVault(path);
-  }
-
-  async function handleOpenShard() {
-    const result = await openShardDialog();
-    if (!result) return;
-
-    const { filePath, vaultPath } = result;
-
-    const norm = (p: string) => p.replace(/\\/g, "/");
-    const isInCurrentVault =
-      currentVaultPath !== null &&
-      norm(filePath).startsWith(norm(currentVaultPath) + "/");
-
-    if (!isInCurrentVault) {
-      await switchVault(vaultPath);
-    }
-
     try {
-      await openEditorFile(filePath);
+      await openVault(path);
     } catch (error) {
-      console.error("Failed to load file:", error);
+      console.error("[Netherstone] Failed to open vault:", error);
+      toast.error(`Couldn't open ${folderName(path)}`);
     }
   }
 
@@ -74,34 +42,34 @@ export function EditorEmptyState() {
           <EmptyMedia variant="icon" className="opacity-80">
             <NetherstoneMark variant="mono" className="size-6" />
           </EmptyMedia>
-          <EmptyTitle>No shard open</EmptyTitle>
-          <EmptyDescription>
-            {hasVault
-              ? "Create a new shard or open an existing one to get started."
-              : "Open a vault or shard to get started."}
-          </EmptyDescription>
+          <EmptyTitle>
+            {currentVaultPath ? "No shard open" : "No vault open"}
+          </EmptyTitle>
         </EmptyHeader>
         <EmptyContent className="max-w-none flex-row items-center justify-center gap-2">
-          {hasVault ? (
+          {currentVaultPath ? (
             <>
               <Button onClick={() => setIsNewShardDialogOpen(true)}>
                 <PlusIcon />
                 New shard
               </Button>
-              <Button variant="outline" onClick={() => void handleOpenShard()}>
-                <FileIcon />
-                Open shard
+              <Button
+                variant="outline"
+                onClick={() => openImportDialog(currentVaultPath)}
+              >
+                <ImportIcon />
+                Import
               </Button>
             </>
           ) : (
             <>
-              <Button onClick={() => void handleOpenVault()}>
-                <FolderOpenIcon />
-                Open vault
+              <Button onClick={() => setIsNewVaultOpen(true)}>
+                <PlusIcon />
+                New vault
               </Button>
-              <Button variant="outline" onClick={() => void handleOpenShard()}>
-                <FileIcon />
-                Open shard
+              <Button variant="outline" onClick={() => void handleOpenVault()}>
+                <FolderInputIcon />
+                Open vault
               </Button>
             </>
           )}
@@ -112,6 +80,7 @@ export function EditorEmptyState() {
         open={isNewShardDialogOpen}
         onOpenChange={setIsNewShardDialogOpen}
       />
+      <NewVaultDialog open={isNewVaultOpen} onOpenChange={setIsNewVaultOpen} />
     </>
   );
 }

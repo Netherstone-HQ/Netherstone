@@ -1,8 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CircleCheckIcon } from "lucide-react";
 
 import { LeftSidebarToggle } from "@/components/PanelToggles";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   buildCalendar,
@@ -11,7 +9,7 @@ import {
   monthTotals,
   parseDay,
   totalsByDay,
-  type BrokenLink,
+  type ChartShard,
   type DayTotal,
   type WritingEntry,
 } from "@/lib/data";
@@ -19,45 +17,58 @@ import {
   getFolderInVault,
   getVaultFileDisplayName,
 } from "@/lib/drawing-files";
-import { getAssetLabel } from "@/components/settings/attachment-format";
-import type { MissingAttachment } from "@/lib/commands";
-import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
 import { openDeletedShardHistory } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
-import {
-  useAttachmentReportStore,
-  useEditorStore,
-  useUIStore,
-  useVaultStore,
-} from "@/store";
+import { useAttachmentReportStore, useVaultStore } from "@/store";
 import { DATA_SECTIONS, useDataStore, type DataSection } from "@/store/data";
+import { Health } from "./Health";
+import {
+  LINK_ROW_CLASS,
+  LIST_CLASS,
+  LIST_ROW_CLASS,
+  OpenLabel,
+  openShard,
+  plural,
+} from "./rows";
 import { CalendarKey, WritingCalendar } from "./WritingCalendar";
 
-const HALF_YEAR_WEEKS = 27;
 const YEAR_WEEKS = 53;
+/** A picked day lists this many shards until you ask for all of them. */
+const DAY_SHARDS_SHOWN = 6;
 
-function plural(count: number, one: string, many: string) {
-  return `${count.toLocaleString()} ${count === 1 ? one : many}`;
+/**
+ * Set while the page scrolls to a section picked in the sidebar, so the
+ * scroll doesn't mark another one; cleared once scrolling stops.
+ */
+let sectionPinTimer: number | null = null;
+
+function pinSection() {
+  if (sectionPinTimer !== null) clearTimeout(sectionPinTimer);
+  sectionPinTimer = window.setTimeout(() => {
+    sectionPinTimer = null;
+  }, 150);
 }
 
-async function openShard(path: string): Promise<boolean> {
-  try {
-    await openEditorFile(path);
-    useUIStore.getState().openMode("editor");
-    return true;
-  } catch (error) {
-    console.error("[Netherstone] Failed to open shard from Overview:", error);
-    return false;
-  }
-}
-
-/** Scrolls the Overview page to `section`, for the sidebar's list. */
+/**
+ * Scrolls the Overview page to `section`, for the sidebar's list, and marks
+ * its title, which is all that shows when the page can't scroll there.
+ */
 export function showDataSection(section: DataSection) {
   useDataStore.getState().setSection(section);
+  pinSection();
   document
     .getElementById(`data-${section}`)
     ?.scrollIntoView({ block: "start", behavior: "smooth" });
+
+  const title = document.getElementById(`data-${section}-title`);
+  if (title) {
+    const accent = getComputedStyle(title).getPropertyValue("--accent");
+    title.animate(
+      [{ backgroundColor: accent }, { backgroundColor: "transparent" }],
+      { duration: 1200, easing: "ease-out" },
+    );
+  }
 }
 
 function Tile({
@@ -82,13 +93,6 @@ function Tile({
   );
 }
 
-const LIST_ROW_CLASS =
-  "flex w-full min-w-0 items-baseline gap-2.5 rounded-lg px-3 py-2 text-left text-ui outline-none transition-colors";
-const LINK_ROW_CLASS = cn(
-  LIST_ROW_CLASS,
-  "hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring",
-);
-
 function DayShards({
   day,
   total,
@@ -104,6 +108,16 @@ function DayShards({
     month: "long",
   });
   const shards = total?.shards ?? [];
+  const [showAll, setShowAll] = useState(false);
+  // Shards that still exist first, then the deleted ones in their own group;
+  // the cap counts both.
+  const ordered = [
+    ...shards.filter((entry) => entry.exists),
+    ...shards.filter((entry) => !entry.exists),
+  ];
+  const shown = showAll ? ordered : ordered.slice(0, DAY_SHARDS_SHOWN);
+  const kept = shown.filter((entry) => entry.exists);
+  const deleted = shown.filter((entry) => !entry.exists);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -113,12 +127,38 @@ function DayShards({
           ? "nothing written"
           : plural(shards.length, "shard", "shards")}
       </h3>
-      {shards.length > 0 ? (
+      {kept.length > 0 ? (
         <ul className="flex flex-col gap-0.5">
-          {shards.map((entry) => (
+          {kept.map((entry) => (
             <DayShard key={entry.path} entry={entry} vaultPath={vaultPath} />
           ))}
         </ul>
+      ) : null}
+      {deleted.length > 0 ? (
+        <>
+          <h4
+            className={cn(
+              "px-3 pb-1 font-normal text-muted-foreground text-ui-sm",
+              kept.length > 0 && "pt-3",
+            )}
+          >
+            Deleted
+          </h4>
+          <ul aria-label="Deleted" className="flex flex-col gap-0.5">
+            {deleted.map((entry) => (
+              <DayShard key={entry.path} entry={entry} vaultPath={vaultPath} />
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {shown.length < ordered.length ? (
+        <button
+          type="button"
+          className={cn(LINK_ROW_CLASS, "text-muted-foreground")}
+          onClick={() => setShowAll(true)}
+        >
+          Show all {ordered.length.toLocaleString()}
+        </button>
       ) : null}
     </div>
   );
@@ -138,7 +178,7 @@ function DayShard({
         {getVaultFileDisplayName(entry.name)}
       </span>
       <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-        {entry.exists ? folder : "Deleted"}
+        {folder}
       </span>
       <span className="ml-auto shrink-0 text-muted-foreground text-ui-sm tabular-nums">
         +{plural(entry.words, "word", "words")}
@@ -170,7 +210,6 @@ function DayShard({
 
 function Writing({ vaultPath }: { vaultPath: string }) {
   const log = useDataStore((s) => s.log);
-  const [showYear, setShowYear] = useState(false);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const today = new Date();
   const todayKey = dayKey(today);
@@ -182,9 +221,9 @@ function Writing({ vaultPath }: { vaultPath: string }) {
         days,
         today: parseDay(todayKey),
         startedOn: log?.started_on ?? todayKey,
-        weekCount: showYear ? YEAR_WEEKS : HALF_YEAR_WEEKS,
+        weekCount: YEAR_WEEKS,
       }),
-    [days, todayKey, log?.started_on, showYear],
+    [days, todayKey, log?.started_on],
   );
 
   if (!log) return null;
@@ -208,20 +247,6 @@ function Writing({ vaultPath }: { vaultPath: string }) {
 
       {hasWriting ? (
         <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-4">
-          <div className="flex items-center">
-            <span className="text-muted-foreground text-ui-sm">
-              {showYear ? "Last 12 months" : "Last 6 months"}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={() => setShowYear((year) => !year)}
-            >
-              {showYear ? "Show the last 6 months" : "Show the whole year"}
-            </Button>
-          </div>
           <WritingCalendar
             weeks={weeks}
             pickedDay={shownDay}
@@ -246,6 +271,7 @@ function Writing({ vaultPath }: { vaultPath: string }) {
 
       {hasWriting ? (
         <DayShards
+          key={shownDay}
           day={shownDay}
           total={days.get(shownDay)}
           vaultPath={vaultPath}
@@ -255,87 +281,31 @@ function Writing({ vaultPath }: { vaultPath: string }) {
   );
 }
 
-/** Opens the shard holding `link`, scrolled to the link. */
-async function openBrokenLink(link: BrokenLink) {
-  const { setPendingLinkReveal } = useEditorStore.getState();
-  setPendingLinkReveal({ path: link.path, text: link.text });
-  if (!(await openShard(link.path))) setPendingLinkReveal(null);
-}
-
-/** Opens a shard that embeds a missing file, scrolled to the embed. */
-async function openMissingFile(shardPath: string, assetPath: string) {
-  const { setPendingLinkReveal } = useEditorStore.getState();
-  setPendingLinkReveal({ path: shardPath, assetPath });
-  if (!(await openShard(shardPath))) setPendingLinkReveal(null);
-}
-
-/** One row per shard embedding each missing file. */
-export function missingFileRows(missing: MissingAttachment[]) {
-  return missing.flatMap((file) =>
-    file.shardPaths.map((shardPath) => ({
-      assetPath: file.assetPath,
-      name: file.originalName ?? getAssetLabel(file.assetPath),
-      shardPath,
-    })),
-  );
-}
-
-function OpenLabel() {
-  return (
-    <span className="ml-auto shrink-0 text-chart-4 text-ui-sm dark:text-chart-2">
-      Open
-    </span>
-  );
-}
-
-function BrokenLinks({
-  links,
-  missing,
+/** The shards with charts, each opening in the Editor. */
+function Charts({
+  shards,
+  vaultPath,
 }: {
-  links: BrokenLink[];
-  missing: MissingAttachment[];
+  shards: ChartShard[];
+  vaultPath: string;
 }) {
-  const missingRows = missingFileRows(missing);
-  if (links.length === 0 && missingRows.length === 0) {
-    return (
-      <div className="flex items-center gap-2.5 rounded-lg border bg-card p-4 text-ui">
-        <CircleCheckIcon className="size-5 shrink-0 text-chart-3" />
-        No broken links.
-      </div>
-    );
-  }
-
   return (
-    <ul className="flex flex-col rounded-lg border bg-card p-1.5">
-      {links.map((link, i) => (
-        <li key={`${link.path}-${i}`}>
+    <ul className={LIST_CLASS}>
+      {shards.map((shard) => (
+        <li key={shard.path}>
           <button
             type="button"
             className={LINK_ROW_CLASS}
-            onClick={() => void openBrokenLink(link)}
+            onClick={() => void openShard(shard.path)}
           >
-            <span className="min-w-0 truncate">@{link.text}</span>
-            <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-              in {getVaultFileDisplayName(link.name)}
+            <span className="min-w-0 truncate">
+              {getVaultFileDisplayName(shard.name)}
             </span>
-            <OpenLabel />
-          </button>
-        </li>
-      ))}
-      {missingRows.map((row) => (
-        <li key={`${row.assetPath}-${row.shardPath}`}>
-          <button
-            type="button"
-            className={LINK_ROW_CLASS}
-            title={row.assetPath}
-            onClick={() => void openMissingFile(row.shardPath, row.assetPath)}
-          >
-            <span className="min-w-0 truncate">{row.name}</span>
             <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-              in{" "}
-              {getVaultFileDisplayName(
-                row.shardPath.split(/[\\/]/).pop() ?? row.shardPath,
-              )}
+              {getFolderInVault(shard.path, vaultPath)}
+            </span>
+            <span className="shrink-0 text-muted-foreground text-ui-sm tabular-nums">
+              {plural(shard.charts, "chart", "charts")}
             </span>
             <OpenLabel />
           </button>
@@ -345,35 +315,64 @@ function BrokenLinks({
   );
 }
 
-/** The missing files in the vault's attachment report, checked on each visit. */
-function useMissingFiles(vaultPath: string | null, version: number) {
+/** The vault's attachment report, checked again on each visit. */
+function useAttachmentReport(vaultPath: string | null, version: number) {
   const check = useAttachmentReportStore((s) => s.check);
-  const missing = useAttachmentReportStore((s) =>
-    s.vaultPath === vaultPath ? (s.report?.missing ?? null) : null,
+  const report = useAttachmentReportStore((s) =>
+    s.vaultPath === vaultPath ? s.report : null,
   );
 
   useEffect(() => {
     if (vaultPath) void check(vaultPath);
   }, [vaultPath, version, check]);
 
-  return missing ?? [];
+  return report;
 }
 
-/** The Overview page: your writing in this vault, then its broken links. */
+function Section({
+  id,
+  title,
+  className,
+  children,
+}: {
+  id: DataSection;
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      id={`data-${id}`}
+      aria-labelledby={`data-${id}-title`}
+      className={cn("flex scroll-mt-10 flex-col gap-3", className)}
+    >
+      <h2
+        id={`data-${id}-title`}
+        className="-mx-1.5 rounded-md px-1.5 font-semibold text-lg tracking-tight"
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/** The Overview page: your writing in this vault, its charts and its health. */
 export function DataView() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const log = useDataStore((s) => s.log);
   const brokenLinks = useDataStore((s) => s.brokenLinks);
+  const chartShards = useDataStore((s) => s.chartShards);
   const status = useDataStore((s) => s.status);
   const version = useDataStore((s) => s.version);
   const load = useDataStore((s) => s.load);
   const setSection = useDataStore((s) => s.setSection);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const missing = useMissingFiles(vaultPath, version);
+  const report = useAttachmentReport(vaultPath, version);
   const pendingSection = useDataStore((s) => s.pendingSection);
   const hasContent = !!log && !!vaultPath && status !== "error";
 
-  // Asked for from elsewhere, such as the missing files toast.
+  // Asked for from elsewhere, such as the broken links toast.
   useLayoutEffect(() => {
     if (!hasContent || !pendingSection) return;
     useDataStore.getState().scrollToOnOpen(null);
@@ -389,6 +388,10 @@ export function DataView() {
   // The sidebar marks the last section whose top has scrolled past the top
   // of the page, or the last one once the page can't scroll further.
   function trackSection() {
+    if (sectionPinTimer !== null) {
+      pinSection();
+      return;
+    }
     const scroller = scrollRef.current;
     if (!scroller) return;
     const top = scroller.getBoundingClientRect().top + 80;
@@ -421,35 +424,24 @@ export function DataView() {
           {plural(log.shard_count, "shard", "shards")}
         </p>
 
-        <section
-          id="data-writing"
-          aria-labelledby="data-writing-title"
-          className="flex scroll-mt-10 flex-col gap-4"
-        >
-          <h2
-            id="data-writing-title"
-            className="font-semibold text-lg tracking-tight"
-          >
-            Writing
-          </h2>
+        <Section id="writing" title="Writing" className="gap-4">
           <Writing vaultPath={vaultPath} />
-        </section>
+        </Section>
+
+        {chartShards.length > 0 ? (
+          <>
+            <Separator className="my-9" />
+            <Section id="charts" title="Charts">
+              <Charts shards={chartShards} vaultPath={vaultPath} />
+            </Section>
+          </>
+        ) : null}
 
         <Separator className="my-9" />
 
-        <section
-          id="data-broken-links"
-          aria-labelledby="data-broken-links-title"
-          className="flex scroll-mt-10 flex-col gap-3"
-        >
-          <h2
-            id="data-broken-links-title"
-            className="font-semibold text-lg tracking-tight"
-          >
-            Broken links
-          </h2>
-          <BrokenLinks links={brokenLinks} missing={missing} />
-        </section>
+        <Section id="health" title="Health">
+          <Health links={brokenLinks} report={report} vaultPath={vaultPath} />
+        </Section>
       </>
     );
   }

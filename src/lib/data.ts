@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getAssetLabel } from "@/components/settings/attachment-format";
+import type { MissingAttachment } from "@/lib/commands";
 
 /** A shard's writing on one day, from the vault's history or this device's log. */
 export interface WritingEntry {
@@ -48,6 +50,17 @@ export function getWritingLog(vaultPath: string) {
 
 export function getBrokenLinks() {
   return invoke<BrokenLink[]>("get_broken_links");
+}
+
+/** One row per shard embedding each missing file. */
+export function missingFileRows(missing: MissingAttachment[]) {
+  return missing.flatMap((file) =>
+    file.shardPaths.map((shardPath) => ({
+      file,
+      name: file.originalName ?? getAssetLabel(file.assetPath),
+      shardPath,
+    })),
+  );
 }
 
 // ── Days ─────────────────────────────────────────────────────────────────────

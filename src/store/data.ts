@@ -11,7 +11,8 @@ import {
 /** The Overview page's sections, top to bottom, as the sidebar lists them. */
 export const DATA_SECTIONS = [
   { id: "writing", label: "Writing" },
-  { id: "broken-links", label: "Broken links" },
+  { id: "charts", label: "Charts" },
+  { id: "health", label: "Health" },
 ] as const;
 export type DataSection = (typeof DATA_SECTIONS)[number]["id"];
 
@@ -20,7 +21,7 @@ interface DataState {
   vaultPath: string | null;
   log: WritingLog | null;
   brokenLinks: BrokenLink[];
-  /** The shards with charts, for the sidebar. */
+  /** The shards with charts. */
   chartShards: ChartShard[];
   status: "idle" | "loading" | "ready" | "error";
   /** Bumped when the index changes, so an open Overview page loads again. */
@@ -30,7 +31,7 @@ interface DataState {
   /** A section to scroll to once the page has loaded. */
   pendingSection: DataSection | null;
   /**
-   * Loads the vault's writing and broken links, keeping the last figures on
+   * Loads the vault's writing, charts and broken links, keeping the last figures on
    * screen meanwhile. Runs on every visit: saves don't mark it stale.
    */
   load: (vaultPath: string) => Promise<void>;

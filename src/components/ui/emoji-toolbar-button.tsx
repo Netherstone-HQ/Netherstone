@@ -129,10 +129,6 @@ export function EmojiPicker({
         "flex flex-col rounded-xl bg-popover text-popover-foreground",
         "h-92 w-80 border shadow-md",
       )}
-      style={{
-        fontFamily:
-          '"Apple Color Emoji", "Segoe UI Emoji", NotoColorEmoji, "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", EmojiSymbols, sans-serif',
-      }}
     >
       <EmojiPickerNavigation
         onClick={handleCategoryClick}
@@ -199,14 +195,7 @@ const EmojiButton = React.memo(function EmojiButton({
         className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100"
         aria-hidden="true"
       />
-      <span
-        className="relative"
-        style={{
-          fontFamily:
-            '"Apple Color Emoji", "Segoe UI Emoji", NotoColorEmoji, "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", EmojiSymbols',
-        }}
-        data-emoji-set="native"
-      >
+      <span className="relative font-emoji" data-emoji-set="native">
         {emoji.skins[0].native}
       </span>
     </button>
@@ -287,7 +276,7 @@ function EmojiPickerContent({
               style={{ width: getRowWidth }}
               data-id={categoryId}
             >
-              <div className="-top-px sticky z-1 bg-popover/90 p-1 py-2 font-semibold text-sm backdrop-blur-xs">
+              <div className="-top-px sticky z-1 bg-popover p-1 py-2 font-semibold text-sm">
                 {i18n.categories[categoryId]}
               </div>
               <div
@@ -324,7 +313,7 @@ function EmojiPickerContent({
   const SearchList = React.useCallback(
     () => (
       <div style={{ width: getRowWidth }} data-id="search">
-        <div className="-top-px sticky z-1 bg-popover/90 p-1 py-2 font-semibold text-card-foreground text-sm backdrop-blur-xs">
+        <div className="-top-px sticky z-1 bg-popover p-1 py-2 font-semibold text-card-foreground text-sm">
           {i18n.searchResult}
         </div>
         <div className="relative flex flex-wrap">
@@ -432,13 +421,7 @@ function EmojiPickerSearchAndClear({
 function EmojiPreview({ emoji }: Pick<UseEmojiPickerType, "emoji">) {
   return (
     <div className="flex h-14 max-h-14 min-h-14 items-center border-muted border-t p-2">
-      <div
-        className="flex items-center justify-center text-2xl"
-        style={{
-          fontFamily:
-            '"Apple Color Emoji", "Segoe UI Emoji", NotoColorEmoji, "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", EmojiSymbols, sans-serif',
-        }}
-      >
+      <div className="flex items-center justify-center font-emoji text-2xl">
         {emoji?.skins[0].native}
       </div>
       <div className="overflow-hidden pl-2">
@@ -452,13 +435,7 @@ function EmojiPreview({ emoji }: Pick<UseEmojiPickerType, "emoji">) {
 function NoEmoji({ i18n }: Pick<UseEmojiPickerType, "i18n">) {
   return (
     <div className="flex h-14 max-h-14 min-h-14 items-center border-muted border-t p-2">
-      <div
-        className="flex items-center justify-center text-2xl"
-        style={{
-          fontFamily:
-            '"Apple Color Emoji", "Segoe UI Emoji", NotoColorEmoji, "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", EmojiSymbols, sans-serif',
-        }}
-      >
+      <div className="flex items-center justify-center font-emoji text-2xl">
         😢
       </div>
       <div className="overflow-hidden pl-2">
@@ -474,13 +451,7 @@ function NoEmoji({ i18n }: Pick<UseEmojiPickerType, "i18n">) {
 function PickAnEmoji({ i18n }: Pick<UseEmojiPickerType, "i18n">) {
   return (
     <div className="flex h-14 max-h-14 min-h-14 items-center border-muted border-t p-2">
-      <div
-        className="flex items-center justify-center text-2xl"
-        style={{
-          fontFamily:
-            '"Apple Color Emoji", "Segoe UI Emoji", NotoColorEmoji, "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", EmojiSymbols, sans-serif',
-        }}
-      >
+      <div className="flex items-center justify-center font-emoji text-2xl">
         ☝️
       </div>
       <div className="overflow-hidden pl-2">

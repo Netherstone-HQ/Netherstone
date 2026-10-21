@@ -49,6 +49,7 @@ const BLOCKS = new Set([
 ]);
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const PAGE_LINK = /\.(html?|md|markdown)$/i;
 
 function tag(element: Element) {
   return element.tagName.toLowerCase();
@@ -152,20 +153,12 @@ class HtmlReader {
   private align: Align | undefined;
   private visited = 0;
   private dataImages = 0;
-  private missingImages = 0;
 
   constructor(private readonly context: ImportContext) {}
 
   async read(root: Element) {
     await this.blockChildren(root, {});
     this.flush();
-    if (this.missingImages) {
-      this.context.warn(
-        this.missingImages === 1
-          ? "1 picture wasn't found next to the page."
-          : `${this.missingImages} pictures weren't found next to the page.`,
-      );
-    }
     // Pages are full of empty spacer elements; keep none at the ends.
     while (this.blocks.length && isEmptyParagraph(this.blocks[0])) this.blocks.shift();
     while (this.blocks.length && isEmptyParagraph(this.blocks[this.blocks.length - 1])) this.blocks.pop();
@@ -280,7 +273,6 @@ class HtmlReader {
     await reader.blockChildren(element, marks);
     reader.flush();
     this.visited = reader.visited;
-    this.missingImages += reader.missingImages;
     this.dataImages = Math.max(this.dataImages, reader.dataImages);
     return reader.blocks;
   }
@@ -326,7 +318,10 @@ class HtmlReader {
     if (!href || href.startsWith("#") || /^javascript:/i.test(href)) return null;
     if (URL_SCHEME.test(href)) return /^(https?|mailto|tel):/i.test(href) ? href : null;
     const path = href.split(/[?#]/)[0];
-    return this.context.linkTo(path) ?? (await this.context.attachRelated(path));
+    const linked = this.context.linkTo(path);
+    if (linked) return linked;
+    // A page or note that wasn't imported isn't an attachment.
+    return PAGE_LINK.test(path) ? null : await this.context.attachRelated(path);
   }
 
   private async image(element: Element) {
@@ -348,7 +343,6 @@ class HtmlReader {
       url = src;
     } else if (src) {
       url = await this.context.attachRelated(src.split(/[?#]/)[0]);
-      if (!url) this.missingImages += 1;
     }
     if (!url) return;
 

@@ -14,15 +14,20 @@ pub fn markdown_options() -> Options {
 
 /// The tags in a run of text, as the byte offset of each `#` and the tag: a
 /// whitespace-separated word that starts with `#`, without trailing
-/// punctuation.
+/// punctuation, with at least one letter (so `#3` is a number, not a tag).
 pub fn tags_in(text: &str) -> impl Iterator<Item = (usize, &str)> {
     text.split_whitespace().filter_map(move |word| {
         let tag = word
             .strip_prefix('#')?
             .trim_end_matches(|c: char| c.is_ascii_punctuation());
         let offset = word.as_ptr() as usize - text.as_ptr() as usize;
-        (!tag.is_empty()).then_some((offset, tag))
+        has_letter(tag).then_some((offset, tag))
     })
+}
+
+/// Whether `tag` has a letter, as every tag must.
+pub fn has_letter(tag: &str) -> bool {
+    tag.chars().any(char::is_alphabetic)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -323,6 +328,14 @@ mod tests {
         assert_eq!(blocks[0].tags, [(10, "ideas".to_string())]);
         assert_eq!(&blocks[0].text[10..16], "#ideas");
         assert_eq!(blocks[1].tags, [(5, "todo".to_string())]);
+    }
+
+    #[test]
+    fn tags_need_a_letter() {
+        let tags: Vec<_> = tags_in("Step #3 of #2026, #q3 and #été, # alone.")
+            .map(|(_, tag)| tag)
+            .collect();
+        assert_eq!(tags, ["q3", "été"]);
     }
 
     #[test]

@@ -25,6 +25,65 @@ describe("import engine", () => {
     expect(report.created[0].warnings).toEqual(["1 link points to a note that wasn't imported; it's plain text now."]);
   });
 
+  it("brings attachments from where the shard is on disk, as another vault wrote them", async () => {
+    const vault = memoryImport(
+      {
+        "Notes/Trip.md":
+          "# Trip\n\n![](_attachments/cat.png)\n\n" +
+          '<audio src="_attachments/song.mp3" />\n\n<file name="plan.pdf" src="../_attachments/plan.pdf" />\n\n' +
+          "![](beside.png) and ![](_attachments/gone.png)\n\nSee [Hub](../Hub.md).\n",
+      },
+      {
+        from: "/other/Vault",
+        disk: {
+          "/other/Vault/_attachments/cat.png": PNG,
+          "/other/Vault/_attachments/song.mp3": "mp3",
+          "/other/Vault/_attachments/plan.pdf": "pdf",
+          "/other/Vault/Notes/beside.png": PNG,
+          "/other/Vault/Hub.md": "# Hub",
+        },
+      },
+    );
+    const report = await vault.run();
+    const markdown = vault.shards.get("/vault/Notes/Trip.md")!;
+
+    expect(markdown).toContain("![](_attachments/cat.png)");
+    expect(markdown).toContain('<audio src="_attachments/song.mp3" />');
+    expect(markdown).toContain('<file name="plan.pdf" src="_attachments/plan.pdf" />');
+    expect(markdown).toContain("![](_attachments/beside.png) and ![](_attachments/gone.png)");
+    expect(markdown).toContain("See Hub.");
+    expect([...vault.attachments.keys()].sort()).toEqual([
+      "_attachments/beside.png",
+      "_attachments/cat.png",
+      "_attachments/plan.pdf",
+      "_attachments/song.mp3",
+    ]);
+    expect(report.attachments.sort()).toEqual([...vault.attachments.keys()].sort());
+    expect(report.created[0].warnings).toEqual([
+      "1 link points to a note that wasn't imported; it's plain text now.",
+      "1 file it uses wasn't found.",
+    ]);
+  });
+
+  it("leaves attachments behind when asked, with their links as written", async () => {
+    const vault = memoryImport(
+      { "Trip.md": "![](_attachments/cat.png)\n" },
+      { from: "/other/Vault", disk: { "/other/Vault/_attachments/cat.png": PNG } },
+    );
+    const report = await vault.run({ bringAttachments: false });
+
+    expect(vault.shards.get("/vault/Trip.md")).toBe("![](_attachments/cat.png)\n");
+    expect(vault.attachments.size).toBe(0);
+    expect(report.created[0].warnings).toEqual([]);
+  });
+
+  it("says how to bring the attachments of a dropped shard", async () => {
+    const vault = memoryImport({ "Trip.md": "![](_attachments/cat.png)\n" }, { dropped: true });
+    const report = await vault.run();
+
+    expect(report.created[0].warnings).toEqual(["1 file it uses wasn't found. Pick it with Files to bring its attachments."]);
+  });
+
   it("reports files it can't read and leaves out ones it doesn't import", async () => {
     const vault = memoryImport({ "Old.doc": "x", "data.bin": "x", "ok.txt": "Fine" });
     const report = await vault.run();

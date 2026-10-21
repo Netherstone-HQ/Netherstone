@@ -143,6 +143,17 @@ fn note_for(commit: &Commit, path: &str) -> Option<Note> {
         .find(|note| note.path() == path)
 }
 
+/// A file's history, for the history panel.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileHistory {
+    /// When the file as it is now was saved as a version, or `None` when it
+    /// has changed since (or was never saved): the panel's top row.
+    pub saved_at: Option<i64>,
+    /// Its earlier versions, newest first.
+    pub versions: Vec<FileVersion>,
+}
+
 /// One change to the file found walking back through the history.
 struct Change {
     id: Oid,
@@ -154,19 +165,20 @@ struct Change {
 }
 
 /// The versions of `file_path`, newest first, following renames. The newest
-/// is left out when it matches the file on disk: that's the file as it is now.
+/// is left out when it matches the file on disk: that's the file as it is now,
+/// and `saved_at` says when it was saved.
 pub fn list_versions(
     sync_root: &Path,
     vault_path: &Path,
     file_path: &Path,
-) -> Result<Vec<FileVersion>, String> {
+) -> Result<FileHistory, String> {
     // No lock: Git objects never change once written, and the panel shouldn't
     // wait for a sync to finish.
     let Some(repository) = open_existing(sync_root, vault_path)? else {
-        return Ok(Vec::new());
+        return Ok(FileHistory::default());
     };
     let Some(head) = repo::head_commit(&repository)? else {
-        return Ok(Vec::new());
+        return Ok(FileHistory::default());
     };
 
     let mut path = super::vault_relative(vault_path, file_path)?;
@@ -182,7 +194,7 @@ pub fn list_versions(
     {
         match commit.parent(0) {
             Ok(parent) => commit = parent,
-            Err(_) => return Ok(Vec::new()),
+            Err(_) => return Ok(FileHistory::default()),
         }
     }
     let mut changes = Vec::new();
@@ -245,10 +257,11 @@ pub fn list_versions(
     }
 
     let on_disk = Oid::hash_file(ObjectType::Blob, file_path).ok();
-    if changes
+    let saved_at = changes
         .first()
-        .is_some_and(|change| Some(change.blob) == on_disk)
-    {
+        .filter(|change| Some(change.blob) == on_disk)
+        .map(|change| change.time);
+    if saved_at.is_some() {
         changes.remove(0);
     }
 
@@ -256,7 +269,7 @@ pub fn list_versions(
     let deadline = Instant::now() + SUMMARY_BUDGET;
     // Some comparisons are always made, so listing again always gets further.
     let mut worked_out = 0;
-    Ok(changes
+    let versions = changes
         .into_iter()
         .map(|change| {
             let summary = change.previous.and_then(|previous| {
@@ -280,7 +293,8 @@ pub fn list_versions(
                 counted: summary.is_some() || change.previous.is_none(),
             }
         })
-        .collect())
+        .collect();
+    Ok(FileHistory { saved_at, versions })
 }
 
 /// How long one listing may spend comparing versions, newest first, so the
@@ -516,8 +530,10 @@ mod tests {
         save(&sync_root, &vault, "Note.md", "One two three four five");
         save(&sync_root, &vault, "Note.md", "One three four five six");
 
-        let versions = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
-        // The newest matches the file on disk: that's "Now".
+        let history = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
+        let versions = history.versions;
+        // The newest matches the file on disk: that's "Now", saved then.
+        assert!(history.saved_at.is_some());
         assert_eq!(
             kinds(&versions),
             [VersionKind::Edited, VersionKind::Created]
@@ -528,9 +544,11 @@ mod tests {
             "One two three"
         );
 
-        // Typed since the last version: it shows again.
+        // Typed since the last version: it shows again, and "Now" isn't saved.
         fs::write(vault.join("Note.md"), "Unsaved as a version").unwrap();
-        let versions = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
+        let history = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
+        assert_eq!(history.saved_at, None);
+        let versions = history.versions;
         assert_eq!(versions.len(), 3);
         assert_eq!((versions[0].added, versions[0].removed), (1, 1));
     }
@@ -542,6 +560,7 @@ mod tests {
         assert!(
             list_versions(&sync_root, &vault, &vault.join("Note.md"))
                 .unwrap()
+                .versions
                 .is_empty()
         );
         assert!(!sync_root.exists() || fs::read_dir(&sync_root).unwrap().next().is_none());
@@ -556,7 +575,7 @@ mod tests {
         crate::sync::snapshot_vault(&sync_root, &vault).unwrap();
         save(&sync_root, &vault, "New.md", "Some more text here, renamed");
 
-        let versions = list_versions(&sync_root, &vault, &vault.join("New.md")).unwrap();
+        let versions = list_versions(&sync_root, &vault, &vault.join("New.md")).unwrap().versions;
         assert_eq!(
             kinds(&versions),
             [VersionKind::Edited, VersionKind::Created]
@@ -572,14 +591,14 @@ mod tests {
         fs::write(vault.join("Note.md"), "Third").unwrap();
 
         let file = vault.join("Note.md");
-        let versions = list_versions(&sync_root, &vault, &file).unwrap();
+        let versions = list_versions(&sync_root, &vault, &file).unwrap().versions;
         let first = versions.last().unwrap();
         let write = |text: &str| fs::write(&file, text).map_err(|e| e.to_string());
         let result = restore(&sync_root, &vault, &file, &first.blob, first.time, write).unwrap();
         assert_eq!(result.content, "First");
         assert_eq!(fs::read_to_string(&file).unwrap(), "First");
 
-        let versions = list_versions(&sync_root, &vault, &file).unwrap();
+        let versions = list_versions(&sync_root, &vault, &file).unwrap().versions;
         // Third (saved before restoring), Second, First; the restored one is Now.
         assert_eq!(versions.len(), 3);
         let undo = result.undo.unwrap();
@@ -590,7 +609,7 @@ mod tests {
 
         restore(&sync_root, &vault, &file, &undo.blob, undo.time, write).unwrap();
         assert_eq!(fs::read_to_string(&file).unwrap(), "Third");
-        let versions = list_versions(&sync_root, &vault, &file).unwrap();
+        let versions = list_versions(&sync_root, &vault, &file).unwrap().versions;
         assert_eq!(versions[0].kind, VersionKind::Restored);
         assert_eq!(versions[0].restored_from, Some(first.time));
     }
@@ -605,7 +624,7 @@ mod tests {
         crate::sync::snapshot_vault(&sync_root, &vault).unwrap();
 
         let file = vault.join("Folder/Note.md");
-        let versions = list_versions(&sync_root, &vault, &file).unwrap();
+        let versions = list_versions(&sync_root, &vault, &file).unwrap().versions;
         // Its last version too: nothing on disk is "Now".
         assert_eq!(
             kinds(&versions),
@@ -636,7 +655,7 @@ mod tests {
         .unwrap();
         fs::write(vault.join("Note.md"), "Typed after").unwrap();
 
-        let versions = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
+        let versions = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap().versions;
         assert_eq!(
             kinds(&versions),
             [

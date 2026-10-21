@@ -206,3 +206,48 @@ export function hasChanges(merged: Node[]): boolean {
       : (node.children ?? []).some(walk);
   return merged.some(walk);
 }
+
+/**
+ * One side of a merged value, for two versions shown side by side: the
+ * version's (`"version"`) or the shard's as it is now (`"current"`), with
+ * what only that side has marked as added.
+ */
+export function sideOf(merged: Node[], side: "version" | "current"): Node[] {
+  const own = side === "version" ? ADDED_MARK : REMOVED_MARK;
+  const other = side === "version" ? REMOVED_MARK : ADDED_MARK;
+  const ownBlock: BlockChange = side === "version" ? "added" : "removed";
+
+  const leaf = (node: Node): Node | null => {
+    if (node[other]) return null;
+    const { [own]: marked, [ADDED_MARK]: _a, [REMOVED_MARK]: _r, ...rest } = node;
+    return marked ? { ...rest, [ADDED_MARK]: true } : rest;
+  };
+
+  const element = (node: Node): Node | null => {
+    const change = node[BLOCK_CHANGE_KEY];
+    if (change && change !== ownBlock) return null;
+    const texts: Node[] = [];
+    const walkTexts = (child: Node) =>
+      isText(child) ? texts.push(child) : (child.children ?? []).forEach(walkTexts);
+    walkTexts(node);
+    // An inline element only the other side has.
+    if (!change && texts.length > 0 && texts.every((text) => text[other])) {
+      return null;
+    }
+
+    const inline = (node.children ?? []).some(isText);
+    const children = (node.children ?? [])
+      .map((child: Node) => (isText(child) ? leaf(child) : element(child)))
+      .filter((child: Node | null): child is Node => child !== null);
+    const { [BLOCK_CHANGE_KEY]: _, ...rest } = node;
+    return {
+      ...rest,
+      ...(change ? { [BLOCK_CHANGE_KEY]: "added" } : {}),
+      children: inline || children.length === 0 ? withTextAround(children) : children,
+    };
+  };
+
+  return merged
+    .map(element)
+    .filter((node): node is Node => node !== null);
+}

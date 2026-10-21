@@ -28,6 +28,11 @@ export interface ImportIO {
   saveShard(path: string, markdown: string): Promise<void>;
   /** Stores an attachment and returns its link, `_attachments/photo.png`. */
   saveAttachment(name: string, bytes: Uint8Array): Promise<string>;
+  /**
+   * Whether a path exists on disk. Left out where files have no path on
+   * disk (dropped in), so files they use can't be looked for there.
+   */
+  exists?(path: string): Promise<boolean>;
   /** Writes a Plate value as the Markdown of the shard at `filePath`. */
   serialize(nodes: PlateNode[], filePath: string): Promise<string>;
   /** Lets the window paint between steps. */
@@ -53,6 +58,8 @@ export interface ImportedShard {
 
 export interface ImportReport {
   created: ImportedShard[];
+  /** Every attachment the shards link to, new or already in the vault. */
+  attachments: string[];
   /** Files that aren't documents Netherstone reads and no document used, by path. */
   skipped: string[];
   failed: { source: string; error: string }[];
@@ -63,6 +70,11 @@ export interface RunImportOptions {
   sources: ImportSource[];
   /** The vault folder the shards go in. */
   targetDir: string;
+  /**
+   * Copies the pictures, sound, video and files shards use into the vault's
+   * attachments. Off, their links stay as written. On by default.
+   */
+  bringAttachments?: boolean;
   io: ImportIO;
   onProgress?: (progress: ImportProgress) => void;
   signal?: AbortSignal;
@@ -97,16 +109,27 @@ function dirName(path: string) {
 /** Resolves `.` and `..` in a relative path; null when it climbs out. */
 function joinRelative(base: string, target: string): string | null {
   const parts = base ? base.split("/") : [];
+  // An absolute base keeps its root: `/` or `C:`.
+  const floor = base.startsWith("/") || /^[a-z]:/i.test(base) ? 1 : 0;
   for (const segment of target.split("/")) {
     if (!segment || segment === ".") continue;
     if (segment === "..") {
-      if (parts.length === 0) return null;
+      if (parts.length <= floor) return null;
       parts.pop();
     } else {
       parts.push(segment);
     }
   }
   return parts.join("/");
+}
+
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** `target` as a plain relative path, or null for URLs and absolute paths. */
+function relativeTarget(target: string) {
+  const cleaned = POSIX(decode(target.trim())).replace(/^<|>$/g, "");
+  if (!cleaned || cleaned.startsWith("/") || URL_SCHEME.test(cleaned)) return null;
+  return cleaned;
 }
 
 function decode(target: string) {
@@ -201,7 +224,8 @@ function closest(matches: ImportSource[], fromPath: string) {
 export async function runImport(options: RunImportOptions): Promise<ImportReport> {
   const { io, signal, onProgress } = options;
   const lookup = options.importerFor ?? importerFor;
-  const report: ImportReport = { created: [], skipped: [], failed: [], cancelled: false };
+  const bringAttachments = options.bringAttachments ?? true;
+  const report: ImportReport = { created: [], attachments: [], skipped: [], failed: [], cancelled: false };
 
   const documents: { source: ImportSource; importer: Importer }[] = [];
   for (const source of options.sources) {
@@ -224,8 +248,54 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
 
   const index = new SourceIndex(options.sources);
   const attachments = new Map<string, Promise<string | null>>();
+  const linked = new Set<string>();
   const used = new Set<string>();
   const total = documents.length;
+
+  /** Reads and stores a file once, however many shards use it. */
+  const attach = (path: string, name: string) => {
+    let link = attachments.get(path);
+    if (!link) {
+      link = io
+        .readFile(path)
+        .then((bytes) => io.saveAttachment(name, bytes))
+        .catch(() => null);
+      attachments.set(path, link);
+    }
+    return link;
+  };
+
+  // Netherstone writes attachment links from the vault's root
+  // (`_attachments/x.png`), so a shard from another vault finds them from
+  // the folder above it that holds `_attachments`. Found once per folder.
+  const roots = new Map<string, Promise<string | null>>();
+  const vaultRootOf = (dir: string, exists: (path: string) => Promise<boolean>) => {
+    let root = roots.get(dir);
+    if (!root) {
+      root = (async () => {
+        for (let current = dir; current; current = dirName(current)) {
+          if (await exists(`${current}/_attachments`).catch(() => false)) return current;
+        }
+        return null;
+      })();
+      roots.set(dir, root);
+    }
+    return root;
+  };
+
+  /** A file a shard uses that wasn't picked, found where the shard is on disk. */
+  const findOnDisk = async (source: ImportSource, target: string) => {
+    const exists = io.exists;
+    const relative = relativeTarget(target);
+    if (!exists || !relative) return null;
+    const dir = dirName(POSIX(source.path));
+    const beside = joinRelative(dir, relative);
+    if (beside && (await exists(beside).catch(() => false))) return beside;
+    const root = await vaultRootOf(dir, exists);
+    const fromRoot = root ? joinRelative(root, relative) : null;
+    if (fromRoot && fromRoot !== beside && (await exists(fromRoot).catch(() => false))) return fromRoot;
+    return null;
+  };
 
   const checkCancelled = () => {
     if (signal?.aborted) throw new Cancelled();
@@ -235,6 +305,7 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
     const { source, importer } = documents[position];
     const destination = destinationOf.get(source)!;
     const warnings: string[] = [];
+    let missingFiles = 0;
     onProgress?.({ done: position, total, current: source.relativePath });
 
     const name = baseName(POSIX(source.relativePath));
@@ -248,20 +319,23 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
 
     const context: ImportContext = {
       file,
-      addAttachment: (attachmentName, bytes) => io.saveAttachment(attachmentName, bytes),
-      attachRelated: (target) => {
+      addAttachment: async (attachmentName, bytes) => {
+        const link = await io.saveAttachment(attachmentName, bytes);
+        linked.add(link);
+        return link;
+      },
+      attachRelated: async (target) => {
+        if (!bringAttachments) return decode(target);
         const related = index.find(source.relativePath, target);
-        if (!related) return Promise.resolve(null);
-        used.add(related.relativePath);
-        // A picture many files use is read and stored once.
-        let link = attachments.get(related.path);
-        if (!link) {
-          link = io
-            .readFile(related.path)
-            .then((bytes) => io.saveAttachment(baseName(POSIX(related.relativePath)), bytes))
-            .catch(() => null);
-          attachments.set(related.path, link);
-        }
+        if (related) used.add(related.relativePath);
+        const onDisk = related ? null : await findOnDisk(source, target);
+        const link = related
+          ? await attach(related.path, baseName(POSIX(related.relativePath)))
+          : onDisk
+            ? await attach(onDisk, baseName(onDisk))
+            : null;
+        if (link) linked.add(link);
+        else missingFiles += 1;
         return link;
       },
       linkTo: (target) => {
@@ -285,6 +359,11 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
       checkCancelled();
       const output = await importer.convert(file, context);
       checkCancelled();
+      if (missingFiles > 0) {
+        const message =
+          missingFiles === 1 ? "1 file it uses wasn't found." : `${missingFiles} files it uses weren't found.`;
+        context.warn(io.exists ? message : `${message} Pick it with Files to bring its attachments.`);
+      }
       const markdown =
         output.markdown !== undefined ? output.markdown : await io.serialize(output.nodes, destination);
       checkCancelled();
@@ -303,6 +382,7 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
 
   // Pictures and files the documents brought in weren't left out.
   report.skipped = report.skipped.filter((path) => !used.has(path));
+  report.attachments = [...linked];
   onProgress?.({ done: report.created.length + report.failed.length, total, current: null });
   return report;
 }

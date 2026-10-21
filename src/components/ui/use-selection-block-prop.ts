@@ -8,7 +8,7 @@ type Options<T> = {
 
 /**
  * A property shared by the blocks the selection touches, for a toolbar
- * button that shows the current alignment, line height or block type.
+ * button that shows the current alignment or line height.
  *
  * Plate's `useSelectionFragmentProp` copies the whole document on every
  * change to cut the selection out of it, which in a long shard costs more

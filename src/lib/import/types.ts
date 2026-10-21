@@ -40,8 +40,10 @@ export interface ImportContext {
   addAttachment(name: string, bytes: Uint8Array): Promise<string>;
   /**
    * Stores a file the one being imported refers to (an image next to it),
-   * found by the path written in it or by name alone as Obsidian-style
-   * embeds do, and returns its link. Null when there is no such file.
+   * found among the picked files by the path written in it or by name alone
+   * as Obsidian-style embeds do, else on disk where the file is, and returns
+   * its link. Null when there is no such file. With attachments left behind,
+   * it is the path as written.
    */
   attachRelated(target: string): Promise<string | null>;
   /**

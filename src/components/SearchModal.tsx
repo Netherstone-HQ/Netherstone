@@ -77,6 +77,9 @@ type SearchError = keyof typeof SEARCH_ERRORS;
 
 const MAX_RECENT = 5;
 
+/** How long a search runs before the spinner shows, so a quick one doesn't flicker. */
+const SPINNER_DELAY_MS = 200;
+
 /**
  * The words of a search as the backend splits them (`search_terms` in
  * `db/queries.rs`), so a name is highlighted where the search matched it.
@@ -141,7 +144,7 @@ function Notice({
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
-      className="flex flex-col items-center gap-1.5 px-6 py-10 text-center"
+      className="my-auto flex flex-col items-center gap-1.5 px-6 py-10 text-center"
     >
       <Icon
         className={cn(
@@ -165,6 +168,9 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showSpinner, setShowSpinner] = useState(false);
+  /** The search the results and error are the answer to. */
+  const [answeredQuery, setAnsweredQuery] = useState("");
   const [searchError, setSearchError] = useState<SearchError | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -181,15 +187,26 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     if (!open) {
       setQuery("");
       setResults([]);
+      setAnsweredQuery("");
       setSearchError(null);
       setSelectedIndex(0);
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!isSearching) return;
+    const timer = setTimeout(() => setShowSpinner(true), SPINNER_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      setShowSpinner(false);
+    };
+  }, [isSearching]);
+
   const performSearch = useCallback(async (searchQuery: string) => {
     const id = ++searchIdRef.current;
     if (searchQuery.trim().length === 0) {
       setResults([]);
+      setAnsweredQuery("");
       setSearchError(null);
       setIsSearching(false);
       return;
@@ -203,12 +220,14 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
       });
       if (id !== searchIdRef.current) return;
       setResults(searchResults);
+      setAnsweredQuery(searchQuery);
       setSearchError(null);
       setSelectedIndex(0);
     } catch (error) {
       if (id !== searchIdRef.current) return;
       console.error("Search failed:", error);
       setResults([]);
+      setAnsweredQuery(searchQuery);
       setSearchError(error === "unavailable" ? "unavailable" : "failed");
     } finally {
       if (id === searchIdRef.current) setIsSearching(false);
@@ -300,7 +319,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         }
       />
     );
-  } else if (hasQuery && rows.length === 0 && !isSearching) {
+  } else if (hasQuery && rows.length === 0 && answeredQuery === query) {
     body = (
       <Notice
         icon={SearchXIcon}
@@ -371,7 +390,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     );
   } else if (!hasQuery) {
     body = (
-      <p className="px-6 py-10 text-center text-muted-foreground text-ui-sm">
+      <p className="my-auto px-6 py-10 text-center text-muted-foreground text-ui-sm">
         Search shard names and text across your vault.
       </p>
     );
@@ -389,7 +408,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         </DialogDescription>
 
         <label className="flex h-13 items-center gap-2.5 border-b pr-3.5 pl-4">
-          {isSearching ? (
+          {showSpinner ? (
             <LoaderCircleIcon className="size-4.5 shrink-0 animate-spin text-muted-foreground" />
           ) : (
             <SearchIcon className="size-4.5 shrink-0 text-muted-foreground" />
@@ -408,7 +427,16 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
           </kbd>
         </label>
 
-        <div className="max-h-100 overflow-y-auto">{body}</div>
+        {/* A fixed height, so the dialog keeps its size whatever it shows:
+            without the footer, the list takes its place. */}
+        <div
+          className={cn(
+            "flex flex-col overflow-y-auto",
+            rows.length > 0 ? "h-100" : "h-109",
+          )}
+        >
+          {body}
+        </div>
 
         {rows.length > 0 ? (
           <div className="flex h-9 items-center justify-between border-t px-3.5 text-muted-foreground text-xs">

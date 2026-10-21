@@ -201,6 +201,102 @@ pub fn load_or_create_record(
     Ok(record)
 }
 
+/// How many folders below a folder are searched for another vault's marker.
+const NESTED_VAULT_SCAN_LIMIT: usize = 5_000;
+
+/// Another vault around or inside a folder about to become a vault.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NestedVault {
+    pub path: String,
+    /// The folder is inside this vault; otherwise this vault is inside it.
+    pub contains_folder: bool,
+}
+
+/// `path` with links resolved, for comparing. A folder that doesn't exist
+/// yet resolves through the nearest one that does.
+fn canonical(path: &Path) -> PathBuf {
+    match (path.canonicalize(), path.parent(), path.file_name()) {
+        (Ok(resolved), _, _) => resolved,
+        (Err(_), Some(parent), Some(name)) => canonical(parent).join(name),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// The vaults this device knows from their records, where they still are,
+/// as recorded and resolved.
+fn recorded_vaults(sync_root: &Path) -> Vec<(PathBuf, PathBuf)> {
+    let Ok(entries) = std::fs::read_dir(sync_root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let id = entry.file_name().to_string_lossy().to_string();
+            let record = read_record(sync_root, &id).ok()??;
+            let path = PathBuf::from(&record.vault_path);
+            // A record whose folder moved or was deleted names no vault.
+            (read_vault_id(&path).as_deref() == Some(record.vault_id.as_str()))
+                .then(|| (canonical(&path), path))
+        })
+        .collect()
+}
+
+/// The first vault marker in a folder below `folder`, skipping hidden ones.
+fn marked_vault_below(folder: &Path) -> Option<PathBuf> {
+    let mut queue = std::collections::VecDeque::from([folder.to_path_buf()]);
+    let mut scanned = 0;
+    while let Some(dir) = queue.pop_front() {
+        scanned += 1;
+        if scanned > NESTED_VAULT_SCAN_LIMIT {
+            return None;
+        }
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let hidden = entry.file_name().to_string_lossy().starts_with('.');
+            if hidden || !entry.file_type().is_ok_and(|t| t.is_dir()) {
+                continue;
+            }
+            let path = entry.path();
+            if read_vault_id(&path).is_some() {
+                return Some(path);
+            }
+            queue.push_back(path);
+        }
+    }
+    None
+}
+
+/// Another vault that `folder` (which may not exist yet) is inside, or that
+/// is inside it, from vault markers and this device's records. A vault
+/// around the folder comes first.
+pub fn find_nested_vault(sync_root: &Path, folder: &Path) -> Option<NestedVault> {
+    let resolved = canonical(folder);
+    let recorded = recorded_vaults(sync_root);
+    let found = |path: &Path, contains_folder| NestedVault {
+        path: path.to_string_lossy().to_string(),
+        contains_folder,
+    };
+
+    for parent in folder.ancestors().skip(1) {
+        let parent_resolved = canonical(parent);
+        if read_vault_id(parent).is_some()
+            || recorded.iter().any(|(vault, _)| *vault == parent_resolved)
+        {
+            return Some(found(parent, true));
+        }
+    }
+    if let Some((_, inner)) = recorded
+        .iter()
+        .find(|(vault, _)| vault.starts_with(&resolved) && *vault != resolved)
+    {
+        return Some(found(inner, false));
+    }
+    marked_vault_below(folder).map(|inner| found(&inner, false))
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -290,5 +386,42 @@ pub(crate) mod tests {
 
         let original_again = load_or_create_record(&sync_root, &vault).unwrap();
         assert_eq!(original_again, original);
+    }
+
+    #[test]
+    fn finds_a_vault_around_or_inside_a_folder() {
+        let dir = temp_dir("nested");
+        let sync_root = dir.join("sync");
+        let outer = dir.join("Outer");
+        let inner = outer.join("Notes").join("Inner");
+        fs::create_dir_all(&inner).unwrap();
+        let alone = dir.join("Alone");
+        fs::create_dir_all(&alone).unwrap();
+        load_or_create_record(&sync_root, &outer).unwrap();
+
+        let around = find_nested_vault(&sync_root, &inner).unwrap();
+        assert!(around.contains_folder);
+        assert_eq!(canonical(Path::new(&around.path)), canonical(&outer));
+
+        // A vault about to be created inside one is found too.
+        let new_vault = outer.join("Not yet");
+        assert!(find_nested_vault(&sync_root, &new_vault).unwrap().contains_folder);
+
+        load_or_create_record(&sync_root, &inner).unwrap();
+        let below = find_nested_vault(&sync_root, &dir).unwrap();
+        assert!(!below.contains_folder);
+
+        assert_eq!(find_nested_vault(&sync_root, &alone), None);
+    }
+
+    #[test]
+    fn finds_a_marked_vault_below_without_a_record() {
+        let dir = temp_dir("nested-marker");
+        let inner = dir.join("Copied vault");
+        write_vault_id(&inner, "abc123").unwrap();
+
+        let below = find_nested_vault(&dir.join("sync"), &dir).unwrap();
+        assert!(!below.contains_folder);
+        assert_eq!(canonical(Path::new(&below.path)), canonical(&inner));
     }
 }

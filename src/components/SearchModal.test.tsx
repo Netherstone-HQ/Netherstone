@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openVaultFile } from "@/lib/open-vault-file";
@@ -70,6 +70,15 @@ describe("SearchModal", () => {
     vi.mocked(invoke).mockResolvedValue([]);
     search("tile grout");
     expect(await screen.findByText("No shards match “tile grout”")).toBeTruthy();
+  });
+
+  it("doesn't say nothing matches before the search answers", async () => {
+    vi.mocked(invoke).mockReturnValue(new Promise(() => {}));
+    search("tile grout");
+    const noMatch = () => screen.queryByText("No shards match “tile grout”");
+    expect(noMatch()).toBeNull();
+    await waitFor(() => expect(invoke).toHaveBeenCalled());
+    expect(noMatch()).toBeNull();
   });
 
   it("says when the search index can't be opened", async () => {

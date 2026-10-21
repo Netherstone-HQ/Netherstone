@@ -1,10 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CopyIcon, FilePlusIcon } from "lucide-react";
-import { createSlateEditor } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import { toast } from "sonner";
 
-import { EditorKit } from "@/components/editor/editor-kit";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
 import type { RowAction } from "@/components/vault/RowActions";
@@ -15,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useVaultStore } from "@/store/vault";
-import { VersionPreviewKit } from "./history-diff-kit";
+import { isInlineElement, VersionPreviewKit } from "./history-diff-kit";
 import { VersionBar } from "./VersionBar";
 
 type Loaded = {
@@ -24,16 +22,6 @@ type Loaded = {
   /** The version laid over the shard as it is now. */
   value: any[];
 };
-
-let staticEditor: ReturnType<typeof createSlateEditor> | null = null;
-
-/** Which elements sit inside a line of text, as the editor sees them. */
-function isInline(element: any) {
-  const editor =
-    useEditorStore.getState().plateEditor ??
-    (staticEditor ??= createSlateEditor({ plugins: EditorKit }));
-  return editor.api.isInline(element);
-}
 
 /** The shard as it is now, as the editor shows it. */
 async function currentValue(filePath: string) {
@@ -68,7 +56,7 @@ function useLoadedVersion(
       setLoaded({
         id: version.id,
         markdown,
-        value: current ? diffShardValues(value, current, isInline) : value,
+        value: current ? diffShardValues(value, current, isInlineElement) : value,
       });
     })().catch((error) => {
       console.error("[Netherstone] Couldn't show a version:", error);

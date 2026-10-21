@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const files = new Map<string, string>();
 
-vi.mock("@excalidraw/excalidraw", () => ({
-  exportToBlob: async () => ({ arrayBuffer: async () => new ArrayBuffer(3) }),
+const exportToBlob = vi.fn(async (_options: unknown) => ({
+  arrayBuffer: async () => new ArrayBuffer(3),
 }));
+vi.mock("@excalidraw/excalidraw", () => ({ exportToBlob }));
 vi.mock("@/hooks/useAutosave", () => ({ flushPendingAutosave: vi.fn() }));
 vi.mock("@/lib/open-editor-file", () => ({ openEditorFile: vi.fn() }));
 vi.mock("@/lib/commands", () => ({
@@ -34,6 +35,7 @@ const scene = { elements: [], appState: {}, files: {} };
 describe("addDrawingToShard", () => {
   beforeEach(() => {
     files.clear();
+    exportToBlob.mockClear();
     vi.mocked(openEditorFile).mockClear();
   });
 
@@ -43,8 +45,15 @@ describe("addDrawingToShard", () => {
     const result = await addDrawingToShard(scene, DRAWING, SHARD, VAULT);
 
     expect(result).toBe("added");
+    expect(
+      exportToBlob.mock.calls.map(
+        ([options]) =>
+          (options as { appState: { exportWithDarkMode: boolean } }).appState
+            .exportWithDarkMode,
+      ),
+    ).toEqual([false, true]);
     expect(files.get(SHARD)).toBe(
-      '# Ideas\n\n<img src="_attachments/Plan.png" alt="Plan" width="480" data-excalidraw="Sketches/Plan.excalidraw" />\n',
+      '# Ideas\n\n<img src="_attachments/Plan.png" data-dark-src="_attachments/Plan-dark.png" alt="Plan" width="480" data-excalidraw="Sketches/Plan.excalidraw" />\n',
     );
   });
 
@@ -59,7 +68,7 @@ describe("addDrawingToShard", () => {
 
     expect(result).toBe("replaced");
     expect(files.get(SHARD)).toBe(
-      '<img src="_attachments/Plan.png" alt="Plan" width="300" data-excalidraw="Sketches/Plan.excalidraw" />',
+      '<img src="_attachments/Plan.png" data-dark-src="_attachments/Plan-dark.png" alt="Plan" width="300" data-excalidraw="Sketches/Plan.excalidraw" />',
     );
     expect(openEditorFile).toHaveBeenCalledWith(SHARD);
   });

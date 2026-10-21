@@ -33,7 +33,7 @@ export function LinkElement(props: PlateElementProps<TLinkElement>) {
   const linkAttributes = getLinkAttributes(props.editor, props.element);
 
   // Plate only keeps hrefs that parse as absolute URLs, which drops links to
-  // other notes. Without an href, Editor.tsx can't open them on click. A
+  // other notes. Without an href, Editor.tsx can't open them on Ctrl+click. A
   // relative path has no scheme, so it can't be a javascript: URL.
   if (!linkAttributes.href && isRelativePath(props.element.url)) {
     linkAttributes.href = props.element.url;
@@ -44,16 +44,13 @@ export function LinkElement(props: PlateElementProps<TLinkElement>) {
       {...props}
       as="a"
       className={cn(
-        'font-medium text-primary underline decoration-primary underline-offset-4',
+        'cursor-text font-medium text-primary underline decoration-primary underline-offset-4 group-data-mod-held/editor:cursor-pointer',
         suggestionData?.type === 'remove' && 'bg-red-100 text-red-700',
         suggestionData?.type === 'insert' && 'bg-emerald-100 text-emerald-700'
       )}
       attributes={{
         ...props.attributes,
         ...linkAttributes,
-        onClick: (e) => {
-          // Let Editor.tsx onClickCapture handle internal routing
-        },
         onMouseOver: (e) => {
           e.stopPropagation();
         },

@@ -1,4 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { type LinkOpener, useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 
 /** An http(s) page, not one of the app's own asset or file URLs. */
@@ -15,23 +16,15 @@ export function isWebPageUrl(href: string) {
   }
 }
 
-/** Ctrl or Cmd held while clicking asks for the system browser. */
-export function wantsSystemBrowser(event: {
-  ctrlKey: boolean;
-  metaKey: boolean;
-}) {
-  return event.ctrlKey || event.metaKey;
-}
-
 /**
- * Opens web pages in the browser panel, or in the system browser when asked.
+ * Opens web pages where `openIn` says, or where Settings says by default.
  * Anything else (mailto:, tel:) goes to the system's own app.
  */
 export async function openWebLink(
   href: string,
-  { systemBrowser = false }: { systemBrowser?: boolean } = {},
+  openIn: LinkOpener = useSettingsStore.getState().openLinksIn,
 ) {
-  if (systemBrowser || !isWebPageUrl(href)) {
+  if (openIn === "your-browser" || !isWebPageUrl(href)) {
     await openUrl(href);
     return;
   }

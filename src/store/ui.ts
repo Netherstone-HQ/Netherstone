@@ -65,6 +65,11 @@ interface UIState {
   treeReveal: { path: string } | null;
   /** Opens the left sidebar on `path` in the file tree. */
   revealInTree: (path: string) => void;
+  /** Folders open in the file tree, across vaults and restarts. */
+  openFolders: string[];
+  setFolderOpen: (path: string, open: boolean) => void;
+  /** Closes every folder in the vault at `vaultPath`. */
+  collapseAllFolders: (vaultPath: string) => void;
   /** Ends `reveal`, unless another one has replaced it. */
   endTreeReveal: (reveal: { path: string }) => void;
 
@@ -107,9 +112,15 @@ interface UIState {
   /** Files pinned to the top of the sidebar, across vaults (shown per vault). */
   pinnedFiles: RecentFileEntry[];
   togglePinnedFile: (file: RecentFileEntry) => void;
-  /** Points recent and pinned files at `nextPath` after a rename or move. */
+  /**
+   * Points recent and pinned files, and open folders, at `nextPath` after a
+   * rename or move.
+   */
   remapRememberedPaths: (previousPath: string, nextPath: string) => void;
-  /** Drops recent and pinned files at or inside `path` once it's deleted. */
+  /**
+   * Drops recent and pinned files, and open folders, at or inside `path`
+   * once it's deleted.
+   */
   forgetRememberedPaths: (path: string) => void;
 
   // ── Search Modal ───────────────────────────────────────────────────────────
@@ -183,6 +194,25 @@ export const useUIStore = create<UIState>()(
         set((state) =>
           state.treeReveal === reveal ? { treeReveal: null } : {},
         ),
+      openFolders: [],
+      setFolderOpen: (path, open) =>
+        set((state) => {
+          const isOpen = state.openFolders.some((entry) =>
+            isSamePath(entry, path),
+          );
+          if (open === isOpen) return {};
+          return {
+            openFolders: open
+              ? [...state.openFolders, path]
+              : state.openFolders.filter((entry) => !isSamePath(entry, path)),
+          };
+        }),
+      collapseAllFolders: (vaultPath) =>
+        set((state) => ({
+          openFolders: state.openFolders.filter(
+            (entry) => !isPathWithin(entry, vaultPath),
+          ),
+        })),
 
       // ── Right Sidebar ──────────────────────────────────────────────────────────
       isRightSidebarOpen: true,
@@ -268,6 +298,9 @@ export const useUIStore = create<UIState>()(
           return {
             recentFiles: state.recentFiles.map(remap),
             pinnedFiles: state.pinnedFiles.map(remap),
+            openFolders: state.openFolders.map(
+              (path) => remapPathAfterMove(path, previousPath, nextPath) ?? path,
+            ),
           };
         });
       },
@@ -280,6 +313,9 @@ export const useUIStore = create<UIState>()(
           ),
           pinnedFiles: state.pinnedFiles.filter(
             (entry) => !isPathWithin(entry.path, path),
+          ),
+          openFolders: state.openFolders.filter(
+            (entry) => !isPathWithin(entry, path),
           ),
         }));
       },
@@ -325,6 +361,7 @@ export const useUIStore = create<UIState>()(
         pinnedFiles: state.pinnedFiles,
         sidebarWidth: state.sidebarWidth,
         collapsedSections: state.collapsedSections,
+        openFolders: state.openFolders,
         appMode: state.appMode,
         activeDrawingPath: state.activeDrawingPath,
       }),

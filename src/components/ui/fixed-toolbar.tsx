@@ -39,7 +39,7 @@ export function FixedToolbar(props: React.ComponentProps<typeof Toolbar>) {
   }, []);
 
   return (
-    <div className="sticky top-0 left-0 z-30 overflow-hidden rounded-t-lg border-b border-b-border bg-background/95 backdrop-blur-sm supports-backdrop-blur:bg-background/60">
+    <div className="sticky top-0 left-0 z-30 overflow-hidden rounded-t-lg border-b border-b-border bg-background">
       <Toolbar
         {...props}
         ref={scrollRef}

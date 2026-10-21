@@ -219,6 +219,10 @@ function prepareMarkdownInput(
       sanitized += escapeMdxUnsafeHtmlText(source);
     } else if (kind === "raw-block") {
       rawBlocks.push(source);
+      // An HTML block ends the table or paragraph on the line above it (a
+      // chart written right under its table), but its placeholder is plain
+      // text that would carry them on, so it gets a line of its own.
+      if (/[^\n]\n$/.test(sanitized)) sanitized += "\n";
       sanitized += rawBlockPlaceholder(rawBlocks.length - 1);
     } else if (kind === "indented-code") {
       sanitized += `\`\`\`\n${codeValues.get(start) ?? source}\n\`\`\``;

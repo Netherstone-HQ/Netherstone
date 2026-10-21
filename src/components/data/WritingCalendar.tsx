@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
 import type { CalendarLevel, CalendarWeek } from "@/lib/data";
@@ -18,7 +18,8 @@ function levelStyle(level: CalendarLevel): CSSProperties | undefined {
   };
 }
 
-const CELL = "size-3 shrink-0 rounded-[2px]";
+const CELL = "aspect-square w-full rounded-[2px]";
+const KEY_CELL = "size-2.5 rounded-[2px]";
 const WEEKDAYS = ["Mon", "", "Wed", "", "Fri", "", ""];
 
 /** The shades from no writing to the most, for the key under the calendar. */
@@ -29,7 +30,7 @@ export function CalendarKey() {
       {([0, 1, 2, 3, 4] as const).map((level) => (
         <span
           key={level}
-          className={cn(CELL, "bg-muted")}
+          className={cn(KEY_CELL, "bg-muted")}
           style={levelStyle(level)}
         />
       ))}
@@ -39,8 +40,9 @@ export function CalendarKey() {
 }
 
 /**
- * The weeks as columns of days, Monday at the top, newest on the right. Days
- * you wrote on are shaded by how much; picking one shows its shards.
+ * The weeks as columns of days, Monday at the top, newest on the right,
+ * stretched to the card's width. Days you wrote on are shaded by how much;
+ * picking one shows its shards.
  */
 export function WritingCalendar({
   weeks,
@@ -56,86 +58,78 @@ export function WritingCalendar({
   isInert?: boolean;
   locale?: string;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const longDate = new Intl.DateTimeFormat(locale, { dateStyle: "long" });
 
-  // The newest weeks are on the right; start there when they don't all fit.
-  useLayoutEffect(() => {
-    const scroller = scrollRef.current;
-    if (scroller) scroller.scrollLeft = scroller.scrollWidth;
-  }, [weeks.length]);
-
   return (
-    <div className="flex gap-2">
-      <div
-        aria-hidden="true"
-        className="flex shrink-0 flex-col gap-0.75 pt-4.5 text-[11px] text-muted-foreground leading-3"
-      >
-        {WEEKDAYS.map((label, i) => (
-          <span key={i} className="h-3">
+    <div
+      role={isInert ? undefined : "group"}
+      aria-label={isInert ? undefined : "Days written"}
+      className="grid gap-0.5"
+      style={{
+        gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))`,
+      }}
+    >
+      {WEEKDAYS.map((label, i) => (
+        // Out of the flow, so the labels don't make their rows taller than
+        // the days once those shrink.
+        <span
+          key={i}
+          aria-hidden="true"
+          className="relative w-8"
+          style={{ gridColumn: 1, gridRow: i + 2 }}
+        >
+          <span className="absolute top-1/2 left-0 -translate-y-1/2 text-[11px] text-muted-foreground leading-3">
             {label}
           </span>
-        ))}
-      </div>
-      {/* Padded so the picked day's ring isn't clipped at the edges. */}
-      <div ref={scrollRef} className="-m-1 min-w-0 overflow-x-auto p-1">
-        <div className="flex w-max flex-col gap-1.5">
-          <div aria-hidden="true" className="flex h-3 gap-0.75">
-            {weeks.map((week, i) => (
-              <span
-                key={i}
-                className="w-3 shrink-0 overflow-visible whitespace-nowrap text-[11px] text-muted-foreground leading-3"
-              >
-                {week.label}
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-0.75" role={isInert ? undefined : "group"} aria-label={isInert ? undefined : "Days written"}>
-            {weeks.map((week, i) => (
-              <div key={i} className="flex flex-col gap-0.75">
-                {week.days.map((day) => {
-                  if (day.isFuture) {
-                    return <span key={day.day} className={CELL} />;
-                  }
-                  const label = `${longDate.format(day.date)}: ${
-                    day.level === 0
-                      ? "nothing written"
-                      : `${day.words.toLocaleString(locale)} ${day.words === 1 ? "word" : "words"}`
-                  }`;
-                  const className = cn(
-                    CELL,
-                    "bg-muted",
-                    day.isBeforeStart && "opacity-40",
-                    day.day === pickedDay &&
-                      "ring-2 ring-foreground ring-offset-1 ring-offset-card",
-                  );
-                  return isInert ? (
-                    <span
-                      key={day.day}
-                      className={className}
-                      style={levelStyle(day.level)}
-                    />
-                  ) : (
-                    <button
-                      key={day.day}
-                      type="button"
-                      title={label}
-                      aria-label={label}
-                      aria-pressed={day.day === pickedDay}
-                      onClick={() => onPick?.(day.day)}
-                      className={cn(
-                        className,
-                        "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card",
-                      )}
-                      style={levelStyle(day.level)}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+        </span>
+      ))}
+      {weeks.map((week, w) => (
+        <Fragment key={w}>
+          <span
+            aria-hidden="true"
+            className="overflow-visible whitespace-nowrap pb-1 text-[11px] text-muted-foreground leading-3"
+            style={{ gridColumn: w + 2, gridRow: 1 }}
+          >
+            {week.label}
+          </span>
+          {week.days.map((day, d) => {
+            const place = { gridColumn: w + 2, gridRow: d + 2 };
+            if (day.isFuture) {
+              return <span key={day.day} className={CELL} style={place} />;
+            }
+            const label = `${longDate.format(day.date)}: ${
+              day.level === 0
+                ? "nothing written"
+                : `${day.words.toLocaleString(locale)} ${day.words === 1 ? "word" : "words"}`
+            }`;
+            const className = cn(
+              CELL,
+              "bg-muted",
+              day.isBeforeStart && "opacity-40",
+              day.day === pickedDay &&
+                "ring-2 ring-foreground ring-offset-1 ring-offset-card",
+            );
+            const style = { ...place, ...levelStyle(day.level) };
+            return isInert ? (
+              <span key={day.day} className={className} style={style} />
+            ) : (
+              <button
+                key={day.day}
+                type="button"
+                title={label}
+                aria-label={label}
+                aria-pressed={day.day === pickedDay}
+                onClick={() => onPick?.(day.day)}
+                className={cn(
+                  className,
+                  "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card",
+                )}
+                style={style}
+              />
+            );
+          })}
+        </Fragment>
+      ))}
     </div>
   );
 }

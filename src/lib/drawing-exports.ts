@@ -37,16 +37,6 @@ function getFileName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
-function timestampedCanvasFileName() {
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[:.]/g, "-")
-    .replace("T", "_")
-    .replace("Z", "");
-
-  return `excalidraw-canvas-${timestamp}.png`;
-}
-
 /** Parses a `.excalidraw` file into restored scene data. */
 export async function parseDrawing(json: string) {
   const data = json.trim() ? JSON.parse(json) : {};
@@ -79,16 +69,17 @@ export async function readDrawingScene(
  * Renders `scene` to a PNG with its export options, at least at 2x, and
  * stores it as an attachment in `vaultPath`.
  */
-export async function persistScenePng(
+async function persistScenePng(
   { elements, appState, files }: ExportableScene,
   vaultPath: string,
-  name?: string,
+  name: string,
+  dark: boolean,
 ) {
   const exportScale = Math.max(Number(appState.exportScale) || 1, 2);
   // Excalidraw is large; load it only when there is a drawing to export.
   const { exportToBlob } = await import("@excalidraw/excalidraw");
   const blob = await exportToBlob({
-    appState: { ...appState, exportScale },
+    appState: { ...appState, exportScale, exportWithDarkMode: dark },
     elements: elements.filter((element) => !element.isDeleted),
     files,
     getDimensions: (width: number, height: number) => ({
@@ -100,10 +91,34 @@ export async function persistScenePng(
   });
 
   return persistAttachmentBytes(
-    name ? `${name}.png` : timestampedCanvasFileName(),
+    `${name}.png`,
     new Uint8Array(await blob.arrayBuffer()),
     vaultPath,
   );
+}
+
+/**
+ * The image tag for `scene` exported from `drawingPath`, light and dark, so
+ * the drawing reads the same as on the canvas in either theme.
+ */
+async function exportDrawingImages(
+  scene: ExportableScene,
+  drawingPath: string,
+  vaultPath: string,
+) {
+  const alt = getDrawingAltText(drawingPath);
+  const light = await persistScenePng(scene, vaultPath, alt, false);
+  const dark = await persistScenePng(scene, vaultPath, `${alt}-dark`, true);
+  const drawingRef = toVaultRelativePath(drawingPath, vaultPath);
+
+  return (width: string | null) =>
+    buildDrawingImageTag({
+      src: light.assetPath,
+      darkSrc: dark.assetPath,
+      alt,
+      width: width ?? "480",
+      drawingRef,
+    });
 }
 
 /** Alt text for an image exported from `drawingPath`. */
@@ -129,18 +144,7 @@ export async function refreshLinkedDrawingImages(
   const shardPaths = await findLinkingShards(vaultPath, drawingRef);
   if (shardPaths.length === 0) return 0;
 
-  const attachment = await persistScenePng(
-    scene,
-    vaultPath,
-    getDrawingAltText(drawingPath),
-  );
-  const buildTag = (width: string | null) =>
-    buildDrawingImageTag({
-      src: attachment.assetPath,
-      alt: getDrawingAltText(drawingPath),
-      width: width ?? "480",
-      drawingRef,
-    });
+  const buildTag = await exportDrawingImages(scene, drawingPath, vaultPath);
 
   return rewriteShards(shardPaths, (markdown) =>
     replaceLinkedDrawingImages(markdown, drawingRef, buildTag),
@@ -159,16 +163,8 @@ export async function addDrawingToShard(
   shardPath: string,
   vaultPath: string,
 ): Promise<"added" | "replaced"> {
-  const alt = getDrawingAltText(drawingPath);
   const drawingRef = toVaultRelativePath(drawingPath, vaultPath);
-  const attachment = await persistScenePng(scene, vaultPath, alt);
-  const buildTag = (width: string | null) =>
-    buildDrawingImageTag({
-      src: attachment.assetPath,
-      alt,
-      width: width ?? "480",
-      drawingRef,
-    });
+  const buildTag = await exportDrawingImages(scene, drawingPath, vaultPath);
 
   // Save the open shard's edits first, so they are part of what is read.
   await flushPendingAutosave();

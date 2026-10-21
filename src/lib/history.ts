@@ -34,9 +34,19 @@ export type RestoreResult = {
   undo: { blob: string; time: number } | null;
 };
 
-/** The file's earlier versions, newest first. The file as it is now isn't one. */
+/** A file's history, for the history panel. */
+export type FileHistory = {
+  /**
+   * When the file as it is now was saved as a version (Unix seconds), or
+   * null when it changed since or was never saved.
+   */
+  savedAt: number | null;
+  /** Its earlier versions, newest first. The file as it is now isn't one. */
+  versions: FileVersion[];
+};
+
 export function listVersions(vaultPath: string, filePath: string) {
-  return invoke<FileVersion[]>("history_list_versions", {
+  return invoke<FileHistory>("history_list_versions", {
     vaultPath,
     filePath,
   });

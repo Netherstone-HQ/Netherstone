@@ -22,6 +22,12 @@ export function getVaultFileDisplayName(fileName: string) {
  */
 export const DRAWING_LINK_ATTRIBUTE = "data-excalidraw";
 
+/**
+ * Attribute on an exported canvas image naming the same drawing exported
+ * dark. Netherstone shows it in dark themes; other apps show `src`.
+ */
+export const DARK_SOURCE_ATTRIBUTE = "data-dark-src";
+
 /** `filePath` relative to `vaultPath`, with `/` separators. */
 export function toVaultRelativePath(filePath: string, vaultPath: string) {
   const file = normalizePath(filePath);
@@ -146,17 +152,20 @@ function escapeHtmlAttribute(value: string) {
 /** Builds the `<img>` tag for a canvas exported into a shard. */
 export function buildDrawingImageTag({
   src,
+  darkSrc,
   alt,
   width,
   drawingRef,
 }: {
   src: string;
+  darkSrc: string;
   alt: string;
   width: string;
   drawingRef: string | null;
 }) {
   const attributes = [
     `src="${escapeHtmlAttribute(src)}"`,
+    `${DARK_SOURCE_ATTRIBUTE}="${escapeHtmlAttribute(darkSrc)}"`,
     `alt="${escapeHtmlAttribute(alt)}"`,
     `width="${escapeHtmlAttribute(width)}"`,
     ...(drawingRef

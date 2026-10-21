@@ -340,6 +340,10 @@ fn ensure_attachment_record_for_existing_asset(
     Ok(true)
 }
 
+/// HTML attributes that point at a file. `data-dark-src` is a drawing's dark
+/// export, shown instead of `src` in dark themes.
+const SOURCE_ATTRIBUTES: [&str; 4] = ["netherstoneStoredSource", "src", "data-dark-src", "href"];
+
 fn html_reference_kind(html: &str) -> AttachmentReferenceKind {
     let lower = html.trim_start().to_ascii_lowercase();
 
@@ -404,7 +408,7 @@ fn push_html_attachment_reference(references: &mut Vec<ParsedAttachmentReference
     let default_kind = html_reference_kind(html);
     let mut seen_paths = HashSet::new();
 
-    for attr_name in ["netherstoneStoredSource", "src", "href"] {
+    for attr_name in SOURCE_ATTRIBUTES {
         let Some(value) = extract_html_attr_value(html, attr_name) else {
             continue;
         };
@@ -948,7 +952,7 @@ fn parse_link_destinations(content: &str) -> Vec<String> {
                 destinations.push(dest_url.to_string());
             }
             Event::Html(html) | Event::InlineHtml(html) => {
-                for attr_name in ["netherstoneStoredSource", "src", "href"] {
+                for attr_name in SOURCE_ATTRIBUTES {
                     if let Some(value) = extract_html_attr_value(&html, attr_name) {
                         destinations.push(
                             value
@@ -1533,6 +1537,20 @@ mod tests {
                 "{extension}"
             );
         }
+    }
+
+    #[test]
+    fn a_drawing_image_uses_its_dark_export_too() {
+        let paths: Vec<String> = parse_attachment_references(
+            "<img src=\"_attachments/Plan.png\" data-dark-src=\"_attachments/Plan-dark.png\" alt=\"Plan\" />\n",
+        )
+        .into_iter()
+        .map(|reference| reference.asset_path)
+        .collect();
+        assert_eq!(
+            paths,
+            ["_attachments/Plan.png", "_attachments/Plan-dark.png"]
+        );
     }
 
     const USED_HASH: &str = "ab00000000000000000000000000000000000000000000000000000000000000";

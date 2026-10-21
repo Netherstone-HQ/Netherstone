@@ -36,6 +36,31 @@ test("lists versions by day under Now", async ({ page }) => {
   await expect(panel.getByText("Created")).toBeVisible();
 });
 
+test("names the current version by when it was saved", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Bread.md": "# Bread\n\nUse 350 g water.\n" },
+    open: "Bread.md",
+    versions: {
+      "Bread.md": [{ time: now - 7200, content: "# Bread\n", kind: "created" }],
+    },
+    savedAt: { "Bread.md": now - 60 },
+  });
+  await page.getByRole("button", { name: "Show history" }).click();
+  const panel = page.getByRole("complementary", { name: "History" });
+
+  const saved = await page.evaluate(
+    (seconds) =>
+      new Intl.DateTimeFormat(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(seconds * 1000)),
+    now - 60,
+  );
+  await expect(panel.getByText("Current")).toBeVisible();
+  await expect(panel.getByText(saved)).toBeVisible();
+  await expect(panel.getByText("Now")).toHaveCount(0);
+});
+
 test("shows an earlier version with what a restore would change", async ({
   page,
 }) => {

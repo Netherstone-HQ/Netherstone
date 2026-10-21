@@ -106,6 +106,24 @@ export async function scanVault(vaultPath: string): Promise<FileTreeNode[]> {
   return invoke<FileTreeNode[]>("scan_vault", { vaultPath });
 }
 
+/** Another vault that a folder is inside, or that is inside it. */
+export type NestedVault = {
+  path: string;
+  /** The folder is inside this vault; otherwise this vault is inside it. */
+  containsFolder: boolean;
+};
+
+/**
+ * Another vault around or inside `folder`, which may not exist yet, or null
+ * when there is none.
+ */
+export async function findNestedVault(
+  folder: string,
+): Promise<NestedVault | null> {
+  assertTauri();
+  return invoke<NestedVault | null>("find_nested_vault", { folder });
+}
+
 /** The folder new vaults go in unless the user picks another: Documents. */
 export async function defaultVaultLocation(): Promise<string | null> {
   assertTauri();
@@ -176,6 +194,22 @@ export async function listImportSources(
 export async function readImportFile(path: string): Promise<Uint8Array> {
   assertTauri();
   return new Uint8Array(await invoke<ArrayBuffer>("read_import_file", { path }));
+}
+
+/**
+ * Takes an import back: its shards go to the trash like deleted ones, then
+ * the attachments it brought in that nothing else links to. `since` is when
+ * the import started, in unix seconds.
+ */
+export async function undoImport(
+  vaultPath: string,
+  targetDir: string,
+  shardPaths: string[],
+  assetPaths: string[],
+  since: number,
+): Promise<void> {
+  assertTauri();
+  await invoke("undo_import", { vaultPath, targetDir, shardPaths, assetPaths, since });
 }
 
 /** Free shard paths in `targetDir`, one per `Folder/Name`, never existing files. */

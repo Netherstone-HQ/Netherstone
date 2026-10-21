@@ -22,7 +22,9 @@ How Netherstone stores the images, files, audio and video that shards link to.
 - Older vaults may hold files under their hash (`_attachments/0c/0cbd….png`).
   They keep working.
 - `.excalidraw` drawings are ordinary vault files. A drawing placed in a shard
-  is exported as a PNG attachment and refreshed when the drawing changes.
+  is exported as two PNG attachments, light (`src`) and dark
+  (`data-dark-src`), and refreshed when the drawing changes. Dark themes show
+  the dark one; other apps show `src`.
 
 ## Lifecycle
 
@@ -33,14 +35,15 @@ How Netherstone stores the images, files, audio and video that shards link to.
    `_attachments/` and records it.
 2. **Save:** saving a shard refreshes its references.
 3. **Check:** when a vault opens, on the Overview page, and from Settings,
-   `reconcile_attachments` reports missing files (listed under Broken links
-   on the Overview page), unused files and files linked from outside
-   `_attachments/`.
+   `reconcile_attachments` reports missing files and unused files (both
+   under Health on the Overview page) and files linked from outside
+   `_attachments/` (in Settings).
 4. **Clean up:** files unused for 7 days can be moved to the Trash from
-   Settings. Each file is re-checked before removal.
+   Health on the Overview page. Each file is re-checked before removal.
 
 A missing file shows its original name in the editor. If a file with the same
-content exists, one click relinks every shard that used it.
+content exists, one click (in the editor or in Health) relinks every shard
+that used it.
 
 ## Sync eligibility
 

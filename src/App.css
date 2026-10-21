@@ -39,8 +39,8 @@
     --font-sans:
         "Geist Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont,
         "Segoe UI Variable Display", "Segoe UI", Helvetica, Arial, sans-serif,
-        "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-        "Noto Color Emoji";
+        var(--emoji-font), "Segoe UI Symbol";
+    --font-emoji: var(--emoji-font);
     --font-mono:
         "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco,
         Consolas, "Liberation Mono", "Courier New", monospace;
@@ -88,9 +88,14 @@
 
 /* Reading preferences (Settings > Appearance), set on <html> by ThemeProvider. */
 :root {
+    /*
+     * The bundled emoji font comes first: system emoji fonts lag behind (and
+     * Windows has no flags), so newer emoji would split into their parts.
+     */
+    --emoji-font: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji";
     --reading-font:
         "Newsreader Variable", "Iowan Old Style", Georgia, "Times New Roman",
-        serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+        serif, var(--emoji-font);
     --reading-size: 1.0625rem;
     /* Half the reading column, so the editor can pad to center it. */
     --reading-half-width: 350px;
@@ -102,14 +107,13 @@
     --reading-font:
         "Geist Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont,
         "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif,
-        "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+        var(--emoji-font);
 }
 
 :root[data-reading-font="system"] {
     --reading-font:
         system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
-        "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji",
-        "Segoe UI Emoji", "Noto Color Emoji";
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif, var(--emoji-font);
 }
 
 :root[data-text-size="small"] { --reading-size: 0.9375rem; }
@@ -426,6 +430,11 @@
        to zero. */
     [data-slate-chunk] {
         contain-intrinsic-size: auto 5000px;
+        /* `content-visibility` also clips painting to the chunk's box, which
+           hid the drag handles in the gutter left of each block. The box
+           reaches into the gutter; the blocks stay where they were. */
+        margin-left: -2rem;
+        padding-left: 2rem;
     }
 }
 

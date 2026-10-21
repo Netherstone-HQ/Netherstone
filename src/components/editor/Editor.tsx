@@ -9,20 +9,16 @@ import {
   useTransition,
 } from "react";
 import { useShallow } from "zustand/shallow";
-import { stripLinkDecorators } from "@/components/sidebar/right-sidebar/link-utils";
 import { Button } from "@/components/ui/button";
 import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { hasModKey } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import {
-  isWebPageUrl,
-  openWebLink,
-  wantsSystemBrowser,
-} from "@/lib/open-web-link";
 import { useEditorStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
 import { logEditorLifecycle } from "./lib/editor-lifecycle";
+import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
 
 /** Longest wait for a quiet moment to remove a closed shard. */
@@ -47,55 +43,24 @@ type EditorSessions = {
   leaving: EditorSession[];
 };
 
-function isExternalLink(href: string) {
-  return (
-    /^(https?:|mailto:|tel:|ftp:|file:|data:|blob:|asset:)/i.test(href) ||
-    /^https?:\/\/(?:asset|file)\.localhost\//i.test(href)
-  );
-}
+/** Whether Ctrl (⌘ on a Mac) is held, so links can show they'll open. */
+function useModKeyHeld() {
+  const [held, setHeld] = useState(false);
 
-function resolveInternalLinkPath(
-  currentFilePath: string,
-  href: string,
-): string | null {
-  const cleanedHref = stripLinkDecorators(href);
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setHeld(hasModKey(event));
+    const release = () => setHeld(false);
+    window.addEventListener("keydown", update);
+    window.addEventListener("keyup", update);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", update);
+      window.removeEventListener("keyup", update);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
 
-  if (
-    !cleanedHref ||
-    cleanedHref.startsWith("#") ||
-    cleanedHref.startsWith("/") ||
-    isExternalLink(cleanedHref)
-  ) {
-    return null;
-  }
-
-  const normalizedCurrentPath = currentFilePath.replace(/\\/g, "/");
-  const lastSlashIndex = normalizedCurrentPath.lastIndexOf("/");
-  const baseDir =
-    lastSlashIndex >= 0
-      ? normalizedCurrentPath.slice(0, lastSlashIndex)
-      : normalizedCurrentPath;
-
-  const parts = `${baseDir}/${cleanedHref}`.split("/");
-  const resolvedParts: string[] = [];
-
-  for (const part of parts) {
-    if (!part || part === ".") continue;
-
-    if (part === "..") {
-      if (
-        resolvedParts.length > 1 ||
-        (resolvedParts.length === 1 && !resolvedParts[0].endsWith(":"))
-      ) {
-        resolvedParts.pop();
-      }
-      continue;
-    }
-
-    resolvedParts.push(part);
-  }
-
-  return resolvedParts.join("/");
+  return held;
 }
 
 /**
@@ -180,6 +145,7 @@ export function Editor() {
     leaving: [],
   });
   const [, startSessionTransition] = useTransition();
+  const isModKeyHeld = useModKeyHeld();
 
   const showSession = useCallback((next: EditorSession | null) => {
     setSessions(({ displayed: previous, leaving: closed }) => ({
@@ -252,7 +218,7 @@ export function Editor() {
   }, [editorSessionTick, showSession]);
 
   const handleEditorClick = useCallback(
-    async (event: MouseEvent<HTMLDivElement>) => {
+    (event: MouseEvent<HTMLDivElement>) => {
       if (!currentFilePath) return;
 
       const target = event.target;
@@ -264,31 +230,16 @@ export function Editor() {
       const href = link.getAttribute("href")?.trim();
       if (!href || href.startsWith("#")) return;
 
-      if (isWebPageUrl(href)) {
+      // A link in the text opens on Ctrl+click; a plain click edits it.
+      const isTextLink = link.dataset.slateNode === "element";
+      if (isTextLink && !hasModKey(event)) {
         event.preventDefault();
-        event.stopPropagation();
-
-        try {
-          await openWebLink(href, { systemBrowser: wantsSystemBrowser(event) });
-        } catch (error) {
-          console.error("Failed to open web link:", href, error);
-        }
         return;
       }
 
-      if (isExternalLink(href)) return;
-
-      const resolvedPath = resolveInternalLinkPath(currentFilePath, href);
-      if (!resolvedPath) return;
-
+      if (!openLinkTarget(href, currentFilePath)) return;
       event.preventDefault();
       event.stopPropagation();
-
-      try {
-        await openEditorFile(resolvedPath);
-      } catch (error) {
-        console.error("Failed to open linked file:", resolvedPath, error);
-      }
     },
     [currentFilePath],
   );
@@ -302,10 +253,11 @@ export function Editor() {
   return (
     <div
       className={cn(
-        "relative min-h-full",
+        "group/editor relative min-h-full",
         !currentFilePath && "flex flex-col",
       )}
-      onClickCapture={(event) => void handleEditorClick(event)}
+      data-mod-held={isModKeyHeld || undefined}
+      onClickCapture={handleEditorClick}
     >
       {/* A shard on its way (say, the last one, reopened at launch) gets the
           loading bar rather than a flash of "No shard open". */}

@@ -142,7 +142,7 @@ export async function convertMarkdown(source: string, context: ImportContext): P
     // <img src="_attachments/x.png" />, <audio src="…" />, …
     value = await replaceAsync(value, MEDIA_SRC, async (match) => {
       const [whole, before, quoted] = match;
-      const target = quoted.slice(1, -1).replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+      const target = quoted.slice(1, -1).replace(/&quot;/g, '"').replace(/&amp;/g, "&");
       if (!target || URL_SCHEME.test(target) || target.startsWith("/") || target.startsWith("#")) return whole;
       const link = await context.attachRelated(target.split(/[?#]/)[0]);
       return link ? `${before}"${escapeAttribute(link)}"` : whole;

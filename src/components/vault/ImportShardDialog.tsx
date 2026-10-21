@@ -6,25 +6,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { ShardDialogResult } from "@/lib/commands";
+import {
+  closeOutsideShard,
+  importOutsideShard,
+  openOutsideShardVault,
+  useOutsideShard,
+} from "@/lib/open-shard-file";
 
-interface ImportShardDialogProps {
-  shard: ShardDialogResult | null;
-  onImport: () => void;
-  onOpenVault: () => void;
-  onClose: () => void;
-}
-
-export function ImportShardDialog({
-  shard,
-  onImport,
-  onOpenVault,
-  onClose,
-}: ImportShardDialogProps) {
+/** Asks what to do with a shard opened from outside the vault. */
+export function ImportShardDialog() {
+  const shard = useOutsideShard((s) => s.shard);
   const fileName = shard?.filePath.split(/[\\/]/).pop() ?? "";
 
   return (
-    <Dialog open={shard !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={shard !== null}
+      onOpenChange={(open) => !open && closeOutsideShard()}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Shard is outside the vault</DialogTitle>
@@ -35,10 +33,12 @@ export function ImportShardDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <Button variant="outline" onClick={onOpenVault}>
+          <Button variant="outline" onClick={() => void openOutsideShardVault()}>
             Switch vault
           </Button>
-          <Button onClick={onImport}>Import into vault</Button>
+          <Button onClick={() => void importOutsideShard()}>
+            Import into vault
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

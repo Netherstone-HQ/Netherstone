@@ -2,17 +2,6 @@ use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
 
-// ── Dialog Results ────────────────────────────────────────────────────────────
-
-/// Returned by `open_shard_dialog`. Contains the picked file and its parent
-/// directory, which becomes the vault root if the file is outside the current vault.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ShardDialogResult {
-    pub file_path: String,
-    pub vault_path: String,
-}
-
 // ── Types ────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]

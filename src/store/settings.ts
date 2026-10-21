@@ -100,7 +100,8 @@ interface SettingsState extends Preferences {
 export const DEFAULT_MEDIA_INSERTION_PREFERENCE: MediaInsertionPreference =
   "vault-import";
 export const DEFAULT_RECENT_FILES_LIMIT = 3;
-export const MIN_RECENT_FILES_LIMIT = 1;
+/** Recent always lists the open shard first, so one would show nothing else. */
+export const MIN_RECENT_FILES_LIMIT = 2;
 export const MAX_RECENT_FILES_LIMIT = 20;
 export const SYNC_INTERVALS: SyncInterval[] = [5, 15, 30, 60];
 /** The steps browsers zoom in, so Ctrl+= feels the same here. */
@@ -231,7 +232,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "netherstone-settings",
       storage: renamedLocalStorage("netherite-settings"),
-      version: 2,
+      version: 3,
       partialize: (state) => {
         const saved: Partial<Preferences> &
           Pick<
@@ -259,6 +260,12 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 2 && state.recentFilesLimit === 0) {
           state.showRecentFiles = false;
           state.recentFilesLimit = DEFAULT_RECENT_FILES_LIMIT;
+        }
+        // Version 2 allowed a Recent of one, which is only the open shard.
+        if (version < 3 && state.recentFilesLimit !== undefined) {
+          state.recentFilesLimit = clampRecentFilesLimit(
+            state.recentFilesLimit,
+          );
         }
         return state as SettingsState;
       },

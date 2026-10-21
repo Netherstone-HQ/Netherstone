@@ -87,6 +87,17 @@ describe("settings store", () => {
     });
   });
 
+  it("raises a saved Recent count of one to two", async () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ state: { recentFilesLimit: 1 }, version: 2 }),
+    );
+    const { useSettingsStore } = await loadStore();
+    expect(useSettingsStore.getState().recentFilesLimit).toBe(2);
+    useSettingsStore.getState().setPreference("recentFilesLimit", 1);
+    expect(useSettingsStore.getState().recentFilesLimit).toBe(2);
+  });
+
   it("moves settings saved under the old Netherite key", async () => {
     localStorage.setItem(
       LEGACY_STORE_KEY,
@@ -164,7 +175,7 @@ describe("settings store", () => {
     const { useSettingsStore } = await loadStore();
     useSettingsStore.getState().completeOnboarding();
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) ?? "{}");
-    expect(saved.version).toBe(2);
+    expect(saved.version).toBe(3);
     expect(saved.state.onboardingCompletedAt).toEqual(expect.any(String));
     expect(saved.state.theme).toBe("dark");
     expect(saved.state.setTheme).toBeUndefined();

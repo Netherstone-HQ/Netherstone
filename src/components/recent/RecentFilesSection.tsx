@@ -19,10 +19,10 @@ import { useOpenFilePath } from "@/components/vault/useOpenFilePath";
 import {
   getFolderInVault,
   getVaultFileDisplayName,
-  isPathWithin,
   isSamePath,
 } from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
+import { shownRecentFiles } from "@/lib/recent-files";
 import { cn } from "@/lib/utils";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 
@@ -45,13 +45,14 @@ export function RecentFilesSection() {
   const showRecentFiles = useSettingsStore((s) => s.showRecentFiles);
   const recentFilesLimit = useSettingsStore((s) => s.recentFilesLimit);
 
-  if (!currentVaultPath || !showRecentFiles) return null;
+  const visibleRecentFiles = shownRecentFiles(
+    recentFiles,
+    currentVaultPath,
+    showRecentFiles,
+    recentFilesLimit,
+  );
 
-  const visibleRecentFiles = recentFiles
-    .filter((file) => isPathWithin(file.path, currentVaultPath))
-    .slice(0, recentFilesLimit);
-
-  if (visibleRecentFiles.length === 0) return null;
+  if (!currentVaultPath || visibleRecentFiles.length === 0) return null;
 
   return (
     <section aria-label="Recent" className="shrink-0">

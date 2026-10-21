@@ -1,7 +1,12 @@
 import { toast } from "sonner";
-import { finishDrawingSession, isDrawingPath } from "@/lib/drawing-files";
+import {
+  finishDrawingSession,
+  isDrawingPath,
+  isSamePath,
+} from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { createDrawingFile, scanVault } from "@/lib/commands";
+import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
@@ -22,8 +27,16 @@ export async function openDrawingFile(filePath: string) {
   });
 }
 
+/** Whether `filePath` is the shard in the Editor, or the one opening. */
+function isShardOpen(filePath: string) {
+  const { currentFilePath, openingFilePath } = useEditorStore.getState();
+  const openPath = openingFilePath ?? currentFilePath;
+  return openPath !== null && isSamePath(openPath, filePath);
+}
+
 /**
  * Opens any file from the vault: drawings in Canvas, shards in the Editor.
+ * The shard already open stays as it is.
  */
 export async function openVaultFile(filePath: string) {
   if (isDrawingPath(filePath)) {
@@ -31,7 +44,12 @@ export async function openVaultFile(filePath: string) {
     return;
   }
 
-  await openEditorFile(filePath);
+  if (isShardOpen(filePath)) {
+    const { deletedPath, closeHistory } = useHistoryStore.getState();
+    if (deletedPath !== null) closeHistory();
+  } else {
+    await openEditorFile(filePath);
+  }
   useUIStore.getState().openMode("editor");
 }
 

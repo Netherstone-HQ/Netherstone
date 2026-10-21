@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -24,11 +25,12 @@ export function NestedVaultDialog() {
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle>Vaults on vaults on vaults</DialogTitle>
+          <DialogDescription>
             {question?.containsFolder
-              ? `This folder is inside ${other}`
-              : `${other} is inside this folder`}
-          </DialogTitle>
+              ? `This folder is inside ${other}.`
+              : `${other} is inside this folder.`}
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button

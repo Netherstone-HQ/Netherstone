@@ -30,7 +30,6 @@ import {
   useFolderHasConflict,
 } from "@/components/vault/useSyncConflict";
 import { useVaultItem } from "@/components/vault/useVaultItem";
-import { Hint } from "@/components/ui/tooltip";
 import { isPathWithin, isSamePath } from "@/lib/drawing-files";
 import {
   EXPAND_ON_HOVER_MS,
@@ -144,14 +143,15 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
     );
 
   const name = (
-    <span className="block min-w-0 flex-1 truncate">{displayName}</span>
+    <span className="block min-w-0 truncate">{displayName}</span>
   );
 
-  // A closed folder shows that a file inside it needs a decision.
-  const folderConflictDot =
-    node.kind === "directory" && folderHasConflict && !isOpen ? (
-      <ConflictDot />
-    ) : null;
+  // Beside the name: a file changed here and on GitHub, or a closed folder
+  // holding one.
+  const conflictDot =
+    node.kind === "file"
+      ? conflict && <ConflictDot />
+      : folderHasConflict && !isOpen && <ConflictDot />;
 
   const row = (
     <div
@@ -179,32 +179,24 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
           >
             {slot}
             {name}
-            {folderConflictDot}
+            {conflictDot}
           </button>
         </CollapsibleTrigger>
       ) : (
         <button
           type="button"
-          onClick={() => void item.open()}
+          onClick={() => {
+            void item.open();
+            // A file waiting for a decision asks for it as it opens.
+            if (conflict) showConflict(conflict);
+          }}
           className={ROW_BUTTON_CLASS}
         >
           {slot}
           {name}
+          {conflictDot}
         </button>
       )}
-
-      {node.kind === "file" && conflict && !isRenaming ? (
-        <Hint label="Changed on two devices">
-          <button
-            type="button"
-            aria-label="Choose which version to keep"
-            onClick={() => showConflict(conflict)}
-            className="flex size-5 shrink-0 items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-          >
-            <ConflictDot />
-          </button>
-        </Hint>
-      ) : null}
 
       {isRenaming ? (
         <span className="shrink-0" style={{ width: `${ACTION_SLOT_PX}px` }} />
@@ -285,8 +277,9 @@ export function TreeNode({ node, depth = 0 }: TreeNodeProps) {
 function ConflictDot() {
   return (
     <span
-      aria-hidden="true"
-      className="mx-1 size-2 shrink-0 rounded-full bg-amber-500"
+      role="img"
+      aria-label="Changed on two devices"
+      className="ml-1.5 size-2 shrink-0 rounded-full bg-amber-500"
     />
   );
 }

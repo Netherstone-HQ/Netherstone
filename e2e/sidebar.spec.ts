@@ -85,13 +85,13 @@ test("the rail stays on top while the sidebar slides away", async ({ page }) => 
   }
 });
 
-test("a file with a sync conflict is marked and opens the choice", async ({ page }) => {
+test("a file with a sync conflict is marked by its name and asks for the choice on opening", async ({ page }) => {
   await mockConflict(page, "Note.md");
   await mockVault(page, { files: FILES, open: "Note.md" });
   await page.goto("/");
 
-  const mark = files(page).getByRole("button", { name: "Choose which version to keep" });
-  await expect(mark).toBeVisible();
-  await mark.click();
+  const row = files(page).getByRole("button", { name: "Note Changed on two devices" });
+  await expect(row.getByRole("img", { name: "Changed on two devices" })).toBeVisible();
+  await row.click();
   await expect(page.getByRole("dialog", { name: "Choose which version to keep" })).toBeVisible();
 });

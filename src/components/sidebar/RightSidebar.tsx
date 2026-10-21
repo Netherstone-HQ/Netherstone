@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
+import { ListTreeIcon } from "lucide-react";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
-import { SECTION_NOTE_CLASS } from "./right-sidebar/CollapsibleSection";
 import { DetailsSection } from "./right-sidebar/DetailsSection";
 import { LinkedFromSection } from "./right-sidebar/LinkedFromSection";
 import { LinksSection } from "./right-sidebar/LinksSection";
@@ -82,9 +82,12 @@ export function RightSidebar() {
         {hasShard ? (
           <ShardSections isOpen={isOpen} />
         ) : (
-          <p className={SECTION_NOTE_CLASS}>
-            Open a shard to see its outline, links and details.
-          </p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 pb-12">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <ListTreeIcon className="size-4.5" />
+            </div>
+            <p className="text-ui-sm text-muted-foreground">No shard open</p>
+          </div>
         )}
       </aside>
     </div>

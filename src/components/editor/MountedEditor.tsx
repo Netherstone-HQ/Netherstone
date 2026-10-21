@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useRef } from "react";
 import { Plate, usePlateEditor } from "platejs/react";
 import { toast } from "sonner";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
-import { getPlateHeadingList } from "@/lib/plate-toc-headings";
+import { changesHeadings, getPlateHeadingList } from "@/lib/plate-toc-headings";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { isSamePath } from "@/lib/drawing-files";
 import { rememberSavedValue, takeOutsideChange } from "@/lib/outside-changes";
@@ -17,14 +17,6 @@ import {
   getEditorLifecycleNowMs,
   logEditorLifecycle,
 } from "./lib/editor-lifecycle";
-
-const STRUCTURAL_OP_TYPES = new Set([
-  "insert_node",
-  "remove_node",
-  "set_node",
-  "split_node",
-  "merge_node",
-]);
 
 /**
  * Top-level blocks per Slate chunk. Each chunk renders with
@@ -296,9 +288,7 @@ export const MountedEditor = memo(function MountedEditor({
 
         bumpEditTick();
 
-        if (
-          editor.operations.some((op: any) => STRUCTURAL_OP_TYPES.has(op.type))
-        ) {
+        if (changesHeadings(editor)) {
           setTocHeadings(getPlateHeadingList(editor));
         }
       }}

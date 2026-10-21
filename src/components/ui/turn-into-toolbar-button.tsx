@@ -24,9 +24,7 @@ import {
   SquareIcon,
 } from 'lucide-react';
 import { KEYS } from 'platejs';
-import { useEditorRef } from 'platejs/react';
-
-import { useSelectionBlockProp } from '@/components/ui/use-selection-block-prop';
+import { useEditorRef, useEditorSelector } from 'platejs/react';
 
 import {
   DropdownMenu,
@@ -36,6 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   getBlockType,
+  getTurnIntoBlocks,
   setBlockType,
 } from '@/components/transforms';
 
@@ -131,10 +130,15 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
   const editor = useEditorRef();
   const [open, setOpen] = React.useState(false);
 
-  const value = useSelectionBlockProp({
-    defaultValue: KEYS.p,
-    getProp: getBlockType,
-  });
+  // null: nothing in the selection can be turned into something else.
+  const value = useEditorSelector((editor) => {
+    if (!editor.selection) return KEYS.p;
+    const types = new Set(
+      getTurnIntoBlocks(editor).map(([node]) => getBlockType(node))
+    );
+    if (types.size === 0) return null;
+    return types.size === 1 ? [...types][0] : undefined;
+  }, []);
   const selectedItem = React.useMemo(
     () =>
       turnIntoItems.find((item) => item.value === (value ?? KEYS.p)) ??
@@ -147,6 +151,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
       <DropdownMenuTrigger asChild>
         <ToolbarButton
           className="min-w-[125px]"
+          disabled={value === null}
           pressed={open}
           tooltip="Turn into"
           isDropdown
@@ -164,7 +169,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
         align="start"
       >
         <ToolbarMenuGroup
-          value={value}
+          value={value ?? undefined}
           onValueChange={(type) => {
             setBlockType(editor, type);
           }}

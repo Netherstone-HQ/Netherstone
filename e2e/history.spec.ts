@@ -43,7 +43,7 @@ test("names the current version by when it was saved", async ({ page }) => {
     versions: {
       "Bread.md": [{ time: now - 7200, content: "# Bread\n", kind: "created" }],
     },
-    savedAt: { "Bread.md": now - 60 },
+    current: { "Bread.md": { time: now - 60 } },
   });
   await page.getByRole("button", { name: "Show history" }).click();
   const panel = page.getByRole("complementary", { name: "History" });
@@ -59,6 +59,22 @@ test("names the current version by when it was saved", async ({ page }) => {
   await expect(panel.getByText("Current")).toBeVisible();
   await expect(panel.getByText(saved)).toBeVisible();
   await expect(panel.getByText("Now")).toHaveCount(0);
+});
+
+test("says when the current version renamed the shard", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Bread.md": "# Bread\n" },
+    open: "Bread.md",
+    versions: {
+      "Bread.md": [{ time: now - 7200, content: "# Bread\n", kind: "created" }],
+    },
+    current: {
+      "Bread.md": { time: now - 60, kind: "renamed", renamedFrom: "Dough.md" },
+    },
+  });
+  await page.getByRole("button", { name: "Show history" }).click();
+  const panel = page.getByRole("complementary", { name: "History" });
+  await expect(panel.getByText("Renamed from Dough")).toBeVisible();
 });
 
 test("shows an earlier version with what a restore would change", async ({
@@ -100,4 +116,17 @@ test("a shard without versions says so", async ({ page }) => {
   await mockVault(page, { files: { "New.md": "# New\n" }, open: "New.md" });
   await page.getByRole("button", { name: "Show history" }).click();
   await expect(page.getByText("No earlier versions yet")).toBeVisible();
+});
+
+test("opens from search while typing in the editor", async ({ page }) => {
+  await openHistoryOn(page);
+  await page.getByRole("button", { name: "Close history" }).click();
+  await editor(page).getByText("350 g").click();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const search = page.getByRole("dialog", { name: "Search" });
+  await expect(search.getByPlaceholder("Search your vault")).toBeFocused();
+  await page.keyboard.type("history");
+  await search.getByText("Show history").click();
+  await expect(page.getByRole("complementary", { name: "History" })).toBeVisible();
 });

@@ -61,6 +61,8 @@ pub enum VersionKind {
     Restored,
     /// Brought in by a sync, from another device.
     Synced,
+    /// Renamed or moved, with the same content.
+    Renamed,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -74,6 +76,10 @@ pub struct FileVersion {
     pub kind: VersionKind,
     /// For a restored version, when the version it brought back was saved.
     pub restored_from: Option<i64>,
+    /// Its path in this version, vault-relative.
+    pub path: String,
+    /// The path it had before, when this version renamed or moved it.
+    pub renamed_from: Option<String>,
     /// Words (shards) or shapes (drawings) compared with the version before.
     pub added: usize,
     pub removed: usize,
@@ -147,9 +153,9 @@ fn note_for(commit: &Commit, path: &str) -> Option<Note> {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileHistory {
-    /// When the file as it is now was saved as a version, or `None` when it
-    /// has changed since (or was never saved): the panel's top row.
-    pub saved_at: Option<i64>,
+    /// The version the file as it is now was saved as, or `None` when it has
+    /// changed since (or was never saved): the panel's top row.
+    pub current: Option<FileVersion>,
     /// Its earlier versions, newest first.
     pub versions: Vec<FileVersion>,
 }
@@ -162,11 +168,13 @@ struct Change {
     previous: Option<Oid>,
     kind: VersionKind,
     restored_from: Option<i64>,
+    path: String,
+    renamed_from: Option<String>,
 }
 
-/// The versions of `file_path`, newest first, following renames. The newest
-/// is left out when it matches the file on disk: that's the file as it is now,
-/// and `saved_at` says when it was saved.
+/// The versions of `file_path`, newest first, following renames, which are
+/// versions too. The newest is `current` when it matches the file on disk:
+/// that's the file as it is now.
 pub fn list_versions(
     sync_root: &Path,
     vault_path: &Path,
@@ -222,10 +230,11 @@ pub fn list_versions(
             previous = renamed.as_deref().and_then(|old| blob_at(parent_tree, old));
         }
 
-        if previous != Some(blob) {
+        if previous != Some(blob) || renamed.is_some() {
             let note = note_for(&commit, &path);
             let kind = match (&note, previous) {
                 (_, None) => VersionKind::Created,
+                (_, Some(previous)) if previous == blob => VersionKind::Renamed,
                 (Some(Note::Restored { .. }), _) => VersionKind::Restored,
                 (Some(Note::OutsideChange { .. }), _) => VersionKind::OutsideChange,
                 _ if commit.parent_count() > 1 => VersionKind::Synced,
@@ -241,6 +250,8 @@ pub fn list_versions(
                     Some(Note::Restored { from, .. }) => Some(from),
                     _ => None,
                 },
+                path: path.clone(),
+                renamed_from: renamed.clone(),
             });
         }
 
@@ -257,22 +268,16 @@ pub fn list_versions(
     }
 
     let on_disk = Oid::hash_file(ObjectType::Blob, file_path).ok();
-    let saved_at = changes
-        .first()
-        .filter(|change| Some(change.blob) == on_disk)
-        .map(|change| change.time);
-    if saved_at.is_some() {
-        changes.remove(0);
-    }
+    let is_current = changes.first().is_some_and(|change| Some(change.blob) == on_disk);
 
     let is_drawing = crate::vault::is_drawing_path(file_path);
     let deadline = Instant::now() + SUMMARY_BUDGET;
     // Some comparisons are always made, so listing again always gets further.
     let mut worked_out = 0;
-    let versions = changes
+    let mut versions: Vec<FileVersion> = changes
         .into_iter()
         .map(|change| {
-            let summary = change.previous.and_then(|previous| {
+            let summary = change.previous.filter(|previous| *previous != change.blob).and_then(|previous| {
                 cached_summary(previous, change.blob).or_else(|| {
                     (worked_out < MIN_SUMMARIES || Instant::now() < deadline).then(|| {
                         worked_out += 1;
@@ -287,14 +292,19 @@ pub fn list_versions(
                 time: change.time,
                 kind: change.kind,
                 restored_from: change.restored_from,
+                path: change.path,
+                renamed_from: change.renamed_from,
                 added,
                 removed,
                 changed,
-                counted: summary.is_some() || change.previous.is_none(),
+                counted: summary.is_some()
+                    || change.previous.is_none()
+                    || change.kind == VersionKind::Renamed,
             }
         })
         .collect();
-    Ok(FileHistory { saved_at, versions })
+    let current = is_current.then(|| versions.remove(0));
+    Ok(FileHistory { current, versions })
 }
 
 /// How long one listing may spend comparing versions, newest first, so the
@@ -533,7 +543,7 @@ mod tests {
         let history = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
         let versions = history.versions;
         // The newest matches the file on disk: that's "Now", saved then.
-        assert!(history.saved_at.is_some());
+        assert!(history.current.is_some());
         assert_eq!(
             kinds(&versions),
             [VersionKind::Edited, VersionKind::Created]
@@ -547,7 +557,7 @@ mod tests {
         // Typed since the last version: it shows again, and "Now" isn't saved.
         fs::write(vault.join("Note.md"), "Unsaved as a version").unwrap();
         let history = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
-        assert_eq!(history.saved_at, None);
+        assert!(history.current.is_none());
         let versions = history.versions;
         assert_eq!(versions.len(), 3);
         assert_eq!((versions[0].added, versions[0].removed), (1, 1));
@@ -578,8 +588,28 @@ mod tests {
         let versions = list_versions(&sync_root, &vault, &vault.join("New.md")).unwrap().versions;
         assert_eq!(
             kinds(&versions),
-            [VersionKind::Edited, VersionKind::Created]
+            [VersionKind::Renamed, VersionKind::Edited, VersionKind::Created]
         );
+        assert_eq!(versions[0].renamed_from.as_deref(), Some("Old.md"));
+        assert!(versions[0].counted);
+        assert_eq!(versions[1].renamed_from, None);
+    }
+
+    #[test]
+    fn a_rename_with_edits_is_one_version() {
+        let (vault, sync_root) = setup("history-rename-edit");
+        fs::create_dir_all(vault.join("Folder")).unwrap();
+        let text = "First line\nSecond line\nThird line\nFourth line\n";
+        save(&sync_root, &vault, "Old.md", text);
+        fs::remove_file(vault.join("Old.md")).unwrap();
+        save(&sync_root, &vault, "Folder/Old.md", &format!("{text}Fifth\n"));
+
+        let history = list_versions(&sync_root, &vault, &vault.join("Folder/Old.md")).unwrap();
+        let current = history.current.unwrap();
+        assert_eq!(current.kind, VersionKind::Edited);
+        assert_eq!(current.renamed_from.as_deref(), Some("Old.md"));
+        assert_eq!((current.added, current.removed), (1, 0));
+        assert_eq!(kinds(&history.versions), [VersionKind::Created]);
     }
 
     #[test]

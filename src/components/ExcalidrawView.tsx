@@ -11,8 +11,7 @@ import { CanvasHeader } from "@/components/canvas/CanvasHeader";
 import { DrawingVersionView } from "@/components/history/DrawingVersionView";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import type { SaveState } from "@/components/SaveStatus";
-import { useTheme } from "@/components/theme/theme-provider";
-import { resolveThemeMode } from "@/components/theme/themes";
+import { useThemeMode } from "@/components/theme/theme-provider";
 import { isPathWithin } from "@/lib/drawing-files";
 import { cn } from "@/lib/utils";
 import { useUIStore, useVaultStore } from "@/store";
@@ -41,7 +40,6 @@ function isLibraryReturnUrl(url: string) {
 }
 
 export function ExcalidrawView() {
-  const { theme } = useTheme();
   const setBrowserPanelOpen = useUIStore((s) => s.setCanvasBrowserPanelOpen);
   const isBrowserPanelOpen = useUIStore((s) => s.isCanvasBrowserPanelOpen);
   const setBrowserLastUrl = useUIStore((s) => s.setCanvasBrowserLastUrl);
@@ -49,12 +47,7 @@ export function ExcalidrawView() {
   const drawingSessionKey = useUIStore((s) => s.drawingSessionKey);
   const openDrawing = useUIStore((s) => s.openDrawing);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
-  const [excalidrawTheme, setExcalidrawTheme] = useState<"light" | "dark">(() =>
-    resolveThemeMode(
-      theme,
-      window.matchMedia("(prefers-color-scheme: dark)").matches,
-    ),
-  );
+  const excalidrawTheme = useThemeMode();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
@@ -63,20 +56,6 @@ export function ExcalidrawView() {
   const closeHistory = useHistoryStore((s) => s.closeHistory);
   const shownVersion = useShownVersion("canvas");
 
-  useEffect(() => {
-    if (theme !== "system") {
-      setExcalidrawTheme(resolveThemeMode(theme, false));
-      return;
-    }
-
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => {
-      setExcalidrawTheme(e.matches ? "dark" : "light");
-    };
-    setExcalidrawTheme(mq.matches ? "dark" : "light");
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [theme]);
 
   // A drawing from another vault stays closed after switching vaults.
   const drawingPath =

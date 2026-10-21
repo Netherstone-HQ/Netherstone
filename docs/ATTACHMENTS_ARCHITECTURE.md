@@ -22,7 +22,9 @@ How Netherstone stores the images, files, audio and video that shards link to.
 - Older vaults may hold files under their hash (`_attachments/0c/0cbd….png`).
   They keep working.
 - `.excalidraw` drawings are ordinary vault files. A drawing placed in a shard
-  is exported as a PNG attachment and refreshed when the drawing changes.
+  is exported as two PNG attachments, light (`src`) and dark
+  (`data-dark-src`), and refreshed when the drawing changes. Dark themes show
+  the dark one; other apps show `src`.
 
 ## Lifecycle
 

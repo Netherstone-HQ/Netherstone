@@ -15,6 +15,7 @@ import { loadMarkdown, roundTrip } from "@/test/markdown";
 const exportTag = (drawingRef: string | null, width = "480") =>
   buildDrawingImageTag({
     src: "_attachments/ab/new.png",
+    darkSrc: "_attachments/ab/new-dark.png",
     alt: "Flow",
     width,
     drawingRef,
@@ -87,7 +88,7 @@ describe("linked drawing images", () => {
     );
 
     expect(next).toContain(
-      'src="_attachments/ab/new.png" alt="Flow" width="300"',
+      'src="_attachments/ab/new.png" data-dark-src="_attachments/ab/new-dark.png" alt="Flow" width="300"',
     );
     expect(next).not.toContain("old.png");
     expect(next).toContain('src="other.png"');

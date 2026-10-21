@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { useSettingsStore } from "@/store/settings";
 import type { ThemePreference } from "@/store/settings";
@@ -32,31 +32,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       .catch((error) => console.error("Failed to set zoom:", error));
   }, [zoom]);
 
+  const mode = useThemeMode();
+
   useEffect(() => {
     const root = window.document.documentElement;
-    const apply = (resolved: "light" | "dark") => {
-      root.classList.remove("light", "dark");
-      root.classList.add(resolved);
-    };
+    root.classList.remove("light", "dark");
+    root.classList.add(mode);
 
-    // Named themes are dark themes that recolor the dark tokens.
+    // Named themes recolor the light or dark tokens.
     if (isNamedTheme(theme)) root.dataset.theme = theme;
     else delete root.dataset.theme;
-
-    if (theme !== "system") {
-      apply(resolveThemeMode(theme, false));
-      return;
-    }
-
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    apply(resolveThemeMode(theme, query.matches));
-    const onChange = (e: MediaQueryListEvent) =>
-      apply(resolveThemeMode(theme, e.matches));
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, [theme]);
+  }, [theme, mode]);
 
   return <>{children}</>;
+}
+
+const DARK_QUERY = "(prefers-color-scheme: dark)";
+
+function subscribeToSystemTheme(onChange: () => void) {
+  const query = window.matchMedia(DARK_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+const systemPrefersDark = () => window.matchMedia(DARK_QUERY).matches;
+
+/** Whether the app draws light or dark right now, following the OS for "system". */
+export function useThemeMode(): "light" | "dark" {
+  const theme = useSettingsStore((s) => s.theme);
+  const prefersDark = useSyncExternalStore(
+    subscribeToSystemTheme,
+    systemPrefersDark,
+  );
+  return resolveThemeMode(theme, prefersDark);
 }
 
 /** The theme setting. Onboarding and Settings both change it through here. */

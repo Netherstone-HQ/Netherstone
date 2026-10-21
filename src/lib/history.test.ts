@@ -11,6 +11,8 @@ const version = (overrides: Partial<FileVersion>): FileVersion => ({
   time: at(0),
   kind: "edited",
   restoredFrom: null,
+  path: "Notes/Plan.md",
+  renamedFrom: null,
   added: 0,
   removed: 0,
   changed: 0,
@@ -19,6 +21,25 @@ const version = (overrides: Partial<FileVersion>): FileVersion => ({
 });
 
 describe("describeVersion", () => {
+  it("names a rename or move", () => {
+    const renamed = (renamedFrom: string, path = "Notes/Plan.md") =>
+      describeVersion(version({ kind: "renamed", renamedFrom, path }), false, now);
+    expect(renamed("Notes/Draft.md")).toBe("Renamed from Draft");
+    expect(renamed("Work/Plan.md")).toBe("Moved from Work");
+    expect(renamed("Plan.md")).toBe("Moved into Notes");
+    expect(renamed("Work/Draft.md")).toBe("Renamed from Draft");
+  });
+
+  it("names a rename saved with edits", () => {
+    expect(
+      describeVersion(
+        version({ renamedFrom: "Notes/Draft.md", added: 12 }),
+        false,
+        now,
+      ),
+    ).toBe("Renamed from Draft, added 12 words");
+  });
+
   it("says what changed in a shard, naming the unit once", () => {
     expect(
       describeVersion(version({ added: 14, removed: 2 }), false, now),

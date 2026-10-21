@@ -74,6 +74,7 @@ import {
   useVaultStore,
 } from "@/store";
 import type { FileTreeNode } from "@/store";
+import { useHistoryStore } from "@/store/history";
 
 export function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -300,6 +301,7 @@ export function useVaultItem(
     >,
     reason: "rename" | "move",
   ) => {
+    useHistoryStore.getState().setPathChangeTarget(newPath);
     remapActiveDrawingPath(node.path, newPath);
     suppressPathChange(node, newPath, reason);
 
@@ -344,9 +346,13 @@ export function useVaultItem(
 
     // Saved now, so the history follows the new name at once.
     if (currentVaultPath) {
-      saveVaultVersion(currentVaultPath).catch((error) =>
-        console.error(`[Netherstone] Couldn't save a version after ${reason}:`, error),
-      );
+      saveVaultVersion(currentVaultPath)
+        .catch((error) =>
+          console.error(`[Netherstone] Couldn't save a version after ${reason}:`, error),
+        )
+        .finally(useHistoryStore.getState().endPathChange);
+    } else {
+      useHistoryStore.getState().endPathChange();
     }
   };
 
@@ -366,6 +372,7 @@ export function useVaultItem(
       const persistedOpenFile = await persistOpenFileBeforePathChange("rename");
       await flushDrawingAffectedBy(node.path);
       suppressPathChange(node, null, "rename");
+      useHistoryStore.getState().startPathChange(node.path);
 
       const newPath = await invoke<string>("rename_file", {
         oldPath: node.path,
@@ -376,6 +383,7 @@ export function useVaultItem(
       cancelRename();
     } catch (error) {
       console.error("Failed to rename:", error);
+      useHistoryStore.getState().endPathChange();
       alert(error instanceof Error ? error.message : String(error));
       cancelRename();
     } finally {
@@ -429,6 +437,7 @@ export function useVaultItem(
       const persistedOpenFile = await persistOpenFileBeforePathChange("move");
       await flushDrawingAffectedBy(node.path);
       suppressPathChange(node, null, "move");
+      useHistoryStore.getState().startPathChange(node.path);
 
       const newPath = await invoke<string>("move_file", {
         sourcePath: node.path,
@@ -438,6 +447,7 @@ export function useVaultItem(
       await finishPathChange(newPath, persistedOpenFile, "move");
     } catch (error) {
       console.error("Failed to move:", error);
+      useHistoryStore.getState().endPathChange();
       alert(error instanceof Error ? error.message : String(error));
       throw error;
     }

@@ -10,6 +10,8 @@ import { ImagePlugin, useMediaState } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, withHOC } from "platejs/react";
 
+import { useThemeMode } from "@/components/theme/theme-provider";
+import { DARK_SOURCE_ATTRIBUTE } from "@/lib/drawing-files";
 import { useVaultStore } from "@/store";
 import {
   resolveMediaSource,
@@ -58,6 +60,12 @@ function getImageSource(
   return "";
 }
 
+/** The dark export of a drawing's image, shown in dark themes. */
+function getDarkImageSource(element: PersistedImageElement): string | null {
+  const source = (element as Record<string, unknown>)[DARK_SOURCE_ATTRIBUTE];
+  return typeof source === "string" && source.trim() ? source.trim() : null;
+}
+
 function getResolvedAttachmentPath(
   resolved: ResolvedMediaSource,
   element: PersistedImageElement,
@@ -93,15 +101,20 @@ export const ImageElement = withHOC(
     } = useMediaState();
     const width = useResizableValue("width");
     const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
+    const darkSource =
+      useThemeMode() === "dark" ? getDarkImageSource(props.element) : null;
     const source = React.useMemo(
-      () => getImageSource(props.element, unsafeUrl),
-      [props.element, unsafeUrl],
+      () => darkSource ?? getImageSource(props.element, unsafeUrl),
+      [darkSource, props.element, unsafeUrl],
     );
+    const explicitRenderUrl = darkSource
+      ? undefined
+      : props.element.netherstoneRenderUrl;
 
     const [resolvedSource, setResolvedSource] =
       React.useState<ResolvedMediaSource>(() =>
         resolveMediaSourceSync(source, {
-          explicitRenderUrl: props.element.netherstoneRenderUrl,
+          explicitRenderUrl,
           vaultPath: currentVaultPath,
         }),
       );
@@ -136,13 +149,13 @@ export const ImageElement = withHOC(
       let cancelled = false;
 
       const syncResolved = resolveMediaSourceSync(source, {
-        explicitRenderUrl: props.element.netherstoneRenderUrl,
+        explicitRenderUrl,
         vaultPath: currentVaultPath,
       });
       setResolvedSource(syncResolved);
 
       void resolveMediaSource(source, {
-        explicitRenderUrl: props.element.netherstoneRenderUrl,
+        explicitRenderUrl,
         vaultPath: currentVaultPath,
         checkExistence:
           syncResolved.kind === "vault" || syncResolved.kind === "local",
@@ -154,7 +167,7 @@ export const ImageElement = withHOC(
       return () => {
         cancelled = true;
       };
-    }, [currentVaultPath, props.element.netherstoneRenderUrl, source]);
+    }, [currentVaultPath, explicitRenderUrl, source]);
 
     // Until the app may show a file outside the vault, nothing is drawn, so
     // it never shows as broken.

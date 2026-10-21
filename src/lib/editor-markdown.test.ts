@@ -218,6 +218,17 @@ describe("conversions by design", () => {
     expect(roundTrip(markdown)).toBe(markdown);
   });
 
+  it("ends a table at a comment on the line right under it", () => {
+    const value = loadMarkdown(
+      "| Week | km |\n| - | - |\n| 1 | 12 |\n<!-- netherstone chart: bar; x Week; y km -->\n",
+    );
+    expect(value.map((node) => node.type)).toEqual(["table", "raw_block"]);
+    expect(value[0].children).toHaveLength(2);
+    expect(
+      roundTrip("| a | b |\n| - | - |\n| 1 | 2 |\n<!-- netherstone chart: bar -->\n"),
+    ).toBe("| a | b |\n| - | - |\n| 1 | 2 |\n\n<!-- netherstone chart: bar -->\n");
+  });
+
   it("keeps inline HTML as marks, not raw blocks", () => {
     expect(loadMarkdown("<u>whole line</u>\n")[0].type).toBe("p");
     expect(roundTrip("Some <mark>text</mark> here.\n")).toBe("Some <mark>text</mark> here.\n");

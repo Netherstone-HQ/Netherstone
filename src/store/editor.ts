@@ -16,10 +16,11 @@ function logEditorStoreLifecycle(
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-/** In the shard at `path`: a link by its text, or a missing file's embed. */
+/** In the shard at `path`: a link by its text, a missing file's embed, or a tag. */
 export type PendingReveal =
   | { path: string; text: string }
-  | { path: string; assetPath: string };
+  | { path: string; assetPath: string }
+  | { path: string; tag: string };
 
 export interface OpenEditorFilePayload {
   path: string;

@@ -8,9 +8,15 @@ import { type VariantProps, cva } from 'class-variance-authority';
 import { ChevronDown } from 'lucide-react';
 
 import {
+  DropdownMenu,
+  DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipTrigger } from '@/components/ui/tooltip';
@@ -385,5 +391,48 @@ export function ToolbarMenuGroup({
         {children}
       </DropdownMenuRadioGroup>
     </>
+  );
+}
+
+/**
+ * A toolbar button's dropdown. In the ⋯ menu (`submenu` set), the same items
+ * open as a submenu from a labelled row.
+ */
+export function ToolbarDropdown({
+  button,
+  children,
+  contentProps,
+  disabled,
+  onOpenChange,
+  open,
+  submenu,
+}: {
+  button: React.ReactNode;
+  children: React.ReactNode;
+  contentProps?: React.ComponentProps<typeof DropdownMenuContent>;
+  disabled?: boolean;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  submenu?: { icon: React.ReactNode; label: string };
+}) {
+  if (submenu) {
+    return (
+      <DropdownMenuSub open={open} onOpenChange={onOpenChange}>
+        <DropdownMenuSubTrigger disabled={disabled}>
+          {submenu.icon}
+          {submenu.label}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className={contentProps?.className}>
+          {children}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
+      <DropdownMenuContent {...contentProps}>{children}</DropdownMenuContent>
+    </DropdownMenu>
   );
 }

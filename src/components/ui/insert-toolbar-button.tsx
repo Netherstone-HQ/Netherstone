@@ -2,8 +2,6 @@
 
 import * as React from "react";
 
-import type { DropdownMenuProps } from "@radix-ui/react-dropdown-menu";
-
 import {
   CalendarIcon,
   ChevronRightIcon,
@@ -29,15 +27,10 @@ import {
 import { KEYS } from "platejs";
 import { type PlateEditor, useEditorRef } from "platejs/react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { insertBlock, insertInlineElement } from "@/components/transforms";
 
-import { ToolbarButton, ToolbarMenuGroup } from "./toolbar";
+import { ToolbarButton, ToolbarDropdown, ToolbarMenuGroup } from "./toolbar";
 
 type Group = {
   group: string;
@@ -208,40 +201,42 @@ const groups: Group[] = [
   },
 ];
 
-export function InsertToolbarButton(props: DropdownMenuProps) {
+export function InsertToolbarButton({ submenu }: { submenu?: boolean }) {
   const editor = useEditorRef();
   const [open, setOpen] = React.useState(false);
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false} {...props}>
-      <DropdownMenuTrigger asChild>
+    <ToolbarDropdown
+      open={open}
+      onOpenChange={setOpen}
+      button={
         <ToolbarButton pressed={open} tooltip="Insert" isDropdown>
           <PlusIcon />
         </ToolbarButton>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent
-        className="flex max-h-125 min-w-0 flex-col overflow-y-auto"
-        align="start"
-      >
-        {groups.map(({ group, items: nestedItems }) => (
-          <ToolbarMenuGroup key={group} label={group}>
-            {nestedItems.map(({ icon, label, value, onSelect }) => (
-              <DropdownMenuItem
-                key={value}
-                className="min-w-45"
-                onSelect={() => {
-                  onSelect(editor, value);
-                  editor.tf.focus();
-                }}
-              >
-                {icon}
-                {label}
-              </DropdownMenuItem>
-            ))}
-          </ToolbarMenuGroup>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      }
+      contentProps={{
+        align: "start",
+        className: "flex max-h-125 min-w-0 flex-col overflow-y-auto",
+      }}
+      submenu={submenu ? { icon: <PlusIcon />, label: "Insert" } : undefined}
+    >
+      {groups.map(({ group, items: nestedItems }) => (
+        <ToolbarMenuGroup key={group} label={group}>
+          {nestedItems.map(({ icon, label, value, onSelect }) => (
+            <DropdownMenuItem
+              key={value}
+              className="min-w-45"
+              onSelect={() => {
+                onSelect(editor, value);
+                editor.tf.focus();
+              }}
+            >
+              {icon}
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </ToolbarMenuGroup>
+      ))}
+    </ToolbarDropdown>
   );
 }

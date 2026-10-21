@@ -3,10 +3,7 @@
 
 import React from "react";
 
-import type {
-  DropdownMenuItemProps,
-  DropdownMenuProps,
-} from "@radix-ui/react-dropdown-menu";
+import type { DropdownMenuItemProps } from "@radix-ui/react-dropdown-menu";
 
 import { useComposedRef } from "@udecode/cn";
 import debounce from "lodash/debounce.js";
@@ -18,12 +15,7 @@ import {
 } from "platejs/react";
 
 import { buttonVariants } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -32,7 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import { ToolbarButton, ToolbarMenuGroup } from "./toolbar";
+import { ToolbarButton, ToolbarDropdown, ToolbarMenuGroup } from "./toolbar";
 
 const MAX_CUSTOM_COLORS = 19;
 const HEX_COLOR_RE = /^#[\da-f]{6}$/i;
@@ -75,11 +67,14 @@ function getEditorColorMarks(editor: PlateEditor, nodeType: string): string[] {
 export function FontColorToolbarButton({
   children,
   nodeType,
+  submenu,
   tooltip,
 }: {
+  children: React.ReactNode;
   nodeType: string;
-  tooltip?: string;
-} & DropdownMenuProps) {
+  tooltip: string;
+  submenu?: boolean;
+}) {
   const editor = useEditorRef();
 
   const selectionDefined = useEditorSelector(
@@ -188,27 +183,29 @@ export function FontColorToolbarButton({
   }, [color, selectionDefined]);
 
   return (
-    <DropdownMenu modal={false} onOpenChange={onToggle} open={open}>
-      <DropdownMenuTrigger asChild>
+    <ToolbarDropdown
+      open={open}
+      onOpenChange={onToggle}
+      button={
         <ToolbarButton pressed={open} tooltip={tooltip}>
           {children}
         </ToolbarButton>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="start">
-        <ColorPicker
-          clearColor={clearColor}
-          color={selectedColor || color}
-          colors={DEFAULT_COLORS}
-          colorsQueue={colorsQueue}
-          customColors={DEFAULT_CUSTOM_COLORS}
-          recordColorUsage={recordColorUsage}
-          updateColor={updateColorAndClose}
-          updateCustomColor={updateColor}
-          updatedColor={updatedColor}
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      }
+      contentProps={{ align: "start" }}
+      submenu={submenu ? { icon: children, label: tooltip } : undefined}
+    >
+      <ColorPicker
+        clearColor={clearColor}
+        color={selectedColor || color}
+        colors={DEFAULT_COLORS}
+        colorsQueue={colorsQueue}
+        customColors={DEFAULT_CUSTOM_COLORS}
+        recordColorUsage={recordColorUsage}
+        updateColor={updateColorAndClose}
+        updateCustomColor={updateColor}
+        updatedColor={updatedColor}
+      />
+    </ToolbarDropdown>
   );
 }
 

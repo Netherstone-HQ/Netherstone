@@ -2,9 +2,6 @@
 
 import * as React from 'react';
 
-import type { DropdownMenuProps } from '@radix-ui/react-dropdown-menu';
-import type { TElement } from 'platejs';
-
 import { DropdownMenuItemIndicator } from '@radix-ui/react-dropdown-menu';
 import {
   CheckIcon,
@@ -26,19 +23,14 @@ import {
 import { KEYS } from 'platejs';
 import { useEditorRef, useEditorSelector } from 'platejs/react';
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
 import {
   getBlockType,
   getTurnIntoBlocks,
   setBlockType,
 } from '@/components/transforms';
 
-import { ToolbarButton, ToolbarMenuGroup } from './toolbar';
+import { ToolbarButton, ToolbarDropdown, ToolbarMenuGroup } from './toolbar';
 
 export const turnIntoItems = [
   {
@@ -126,7 +118,7 @@ export const turnIntoItems = [
   },
 ];
 
-export function TurnIntoToolbarButton(props: DropdownMenuProps) {
+export function TurnIntoToolbarButton({ submenu }: { submenu?: boolean }) {
   const editor = useEditorRef();
   const [open, setOpen] = React.useState(false);
 
@@ -147,8 +139,11 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
   );
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false} {...props}>
-      <DropdownMenuTrigger asChild>
+    <ToolbarDropdown
+      open={open}
+      onOpenChange={setOpen}
+      disabled={value === null}
+      button={
         <ToolbarButton
           className="min-w-[125px]"
           disabled={value === null}
@@ -158,40 +153,42 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
         >
           {selectedItem.label}
         </ToolbarButton>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent
-        className="ignore-click-outside/toolbar min-w-0"
-        onCloseAutoFocus={(e) => {
+      }
+      contentProps={{
+        align: 'start',
+        className: 'ignore-click-outside/toolbar min-w-0',
+        onCloseAutoFocus: (e) => {
           e.preventDefault();
           editor.tf.focus();
+        },
+      }}
+      submenu={
+        submenu ? { icon: <PilcrowIcon />, label: 'Turn into' } : undefined
+      }
+    >
+      <ToolbarMenuGroup
+        value={value ?? undefined}
+        onValueChange={(type) => {
+          setBlockType(editor, type);
         }}
-        align="start"
+        label="Turn into"
       >
-        <ToolbarMenuGroup
-          value={value ?? undefined}
-          onValueChange={(type) => {
-            setBlockType(editor, type);
-          }}
-          label="Turn into"
-        >
-          {turnIntoItems.map(({ icon, label, value: itemValue }) => (
-            <DropdownMenuRadioItem
-              key={itemValue}
-              className="min-w-[180px] pl-2 *:first:[span]:hidden"
-              value={itemValue}
-            >
-              <span className="pointer-events-none absolute right-2 flex size-3.5 items-center justify-center">
-                <DropdownMenuItemIndicator>
-                  <CheckIcon />
-                </DropdownMenuItemIndicator>
-              </span>
-              {icon}
-              {label}
-            </DropdownMenuRadioItem>
-          ))}
-        </ToolbarMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        {turnIntoItems.map(({ icon, label, value: itemValue }) => (
+          <DropdownMenuRadioItem
+            key={itemValue}
+            className="min-w-[180px] pl-2 *:first:[span]:hidden"
+            value={itemValue}
+          >
+            <span className="pointer-events-none absolute right-2 flex size-3.5 items-center justify-center">
+              <DropdownMenuItemIndicator>
+                <CheckIcon />
+              </DropdownMenuItemIndicator>
+            </span>
+            {icon}
+            {label}
+          </DropdownMenuRadioItem>
+        ))}
+      </ToolbarMenuGroup>
+    </ToolbarDropdown>
   );
 }

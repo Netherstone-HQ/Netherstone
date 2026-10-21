@@ -4,7 +4,6 @@ import * as React from 'react';
 
 import type { Alignment } from '@platejs/basic-styles';
 import type { TElement } from 'platejs';
-import type { DropdownMenuProps } from '@radix-ui/react-dropdown-menu';
 
 import { TextAlignPlugin } from '@platejs/basic-styles/react';
 import {
@@ -18,14 +17,11 @@ import { useEditorPlugin } from 'platejs/react';
 import { useSelectionBlockProp } from '@/components/ui/use-selection-block-prop';
 
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { ToolbarButton } from './toolbar';
+import { ToolbarButton, ToolbarDropdown } from './toolbar';
 
 const items = [
   {
@@ -48,7 +44,7 @@ const items = [
 
 const getAlign = (node: TElement) => node.align as string | undefined;
 
-export function AlignToolbarButton(props: DropdownMenuProps) {
+export function AlignToolbarButton({ submenu }: { submenu?: boolean }) {
   const { editor, tf } = useEditorPlugin(TextAlignPlugin);
   const value =
     useSelectionBlockProp({
@@ -61,32 +57,34 @@ export function AlignToolbarButton(props: DropdownMenuProps) {
     items.find((item) => item.value === value)?.icon ?? AlignLeftIcon;
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen} modal={false} {...props}>
-      <DropdownMenuTrigger asChild>
+    <ToolbarDropdown
+      open={open}
+      onOpenChange={setOpen}
+      button={
         <ToolbarButton pressed={open} tooltip="Align" isDropdown>
           <IconValue />
         </ToolbarButton>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent className="min-w-0" align="start">
-        <DropdownMenuRadioGroup
-          value={value}
-          onValueChange={(value) => {
-            tf.textAlign.setNodes(value as Alignment);
-            editor.tf.focus();
-          }}
-        >
-          {items.map(({ icon: Icon, value: itemValue }) => (
-            <DropdownMenuRadioItem
-              key={itemValue}
-              className="pl-2 data-[state=checked]:bg-accent *:first:[span]:hidden"
-              value={itemValue}
-            >
-              <Icon />
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      }
+      contentProps={{ align: 'start', className: 'min-w-0' }}
+      submenu={submenu ? { icon: <IconValue />, label: 'Align' } : undefined}
+    >
+      <DropdownMenuRadioGroup
+        value={value}
+        onValueChange={(value) => {
+          tf.textAlign.setNodes(value as Alignment);
+          editor.tf.focus();
+        }}
+      >
+        {items.map(({ icon: Icon, value: itemValue }) => (
+          <DropdownMenuRadioItem
+            key={itemValue}
+            className="pl-2 data-[state=checked]:bg-accent *:first:[span]:hidden"
+            value={itemValue}
+          >
+            <Icon />
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </ToolbarDropdown>
   );
 }

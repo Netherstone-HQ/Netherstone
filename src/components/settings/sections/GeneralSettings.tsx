@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import {
+  PreferenceSegments,
   PreferenceSwitch,
   SettingRow,
   SettingsGroup,
@@ -37,6 +38,17 @@ export function GeneralSettings() {
 
       <SettingsGroup title="Sidebar">
         <RecentShardsRows />
+      </SettingsGroup>
+
+      <SettingsGroup title="Links">
+        <PreferenceSegments
+          name="openLinksIn"
+          label="Open links in"
+          options={[
+            { value: "browser-panel", label: "Browser panel" },
+            { value: "your-browser", label: "Your browser" },
+          ]}
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Deleting">

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ExternalLinkIcon,
   PauseIcon,
   RotateCwIcon,
   XIcon,
@@ -25,6 +26,7 @@ import {
 
 import { Progress } from "@/components/ui/progress";
 import { Hint } from "@/components/ui/tooltip";
+import { isWebPageUrl, openWebLink } from "@/lib/open-web-link";
 
 const DEFAULT_BROWSER_URL = "https://netherstone.app";
 
@@ -342,6 +344,23 @@ export function BrowserPanel({
             aria-label="Browser address"
             disabled={isBusy || !isBrowserReady}
           />
+
+          <Hint label="Open in your browser" side="top">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                openWebLink(currentUrl, "your-browser").catch((error) => {
+                  console.error("Failed to open page:", currentUrl, error);
+                });
+              }}
+              disabled={!isWebPageUrl(currentUrl)}
+              aria-label="Open in your browser"
+            >
+              <ExternalLinkIcon />
+            </Button>
+          </Hint>
 
           <Hint label="Close browser panel" side="top">
             <Button

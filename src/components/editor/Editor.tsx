@@ -9,18 +9,14 @@ import {
   useTransition,
 } from "react";
 import { useShallow } from "zustand/shallow";
-import { stripLinkDecorators } from "@/components/sidebar/right-sidebar/link-utils";
 import { Button } from "@/components/ui/button";
 import { openEditorFile } from "@/lib/open-editor-file";
-import {
-  isWebPageUrl,
-  openWebLink,
-  wantsSystemBrowser,
-} from "@/lib/open-web-link";
+import { hasModKey } from "@/lib/platform";
 import { useEditorStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
 import { logEditorLifecycle } from "./lib/editor-lifecycle";
+import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
 
 /** Delay before showing the loading bar, so fast opens don't flash it. */
@@ -34,55 +30,24 @@ type EditorSession = {
   cacheHit: boolean;
 };
 
-function isExternalLink(href: string) {
-  return (
-    /^(https?:|mailto:|tel:|ftp:|file:|data:|blob:|asset:)/i.test(href) ||
-    /^https?:\/\/(?:asset|file)\.localhost\//i.test(href)
-  );
-}
+/** Whether Ctrl (⌘ on a Mac) is held, so links can show they'll open. */
+function useModKeyHeld() {
+  const [held, setHeld] = useState(false);
 
-function resolveInternalLinkPath(
-  currentFilePath: string,
-  href: string,
-): string | null {
-  const cleanedHref = stripLinkDecorators(href);
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setHeld(hasModKey(event));
+    const release = () => setHeld(false);
+    window.addEventListener("keydown", update);
+    window.addEventListener("keyup", update);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", update);
+      window.removeEventListener("keyup", update);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
 
-  if (
-    !cleanedHref ||
-    cleanedHref.startsWith("#") ||
-    cleanedHref.startsWith("/") ||
-    isExternalLink(cleanedHref)
-  ) {
-    return null;
-  }
-
-  const normalizedCurrentPath = currentFilePath.replace(/\\/g, "/");
-  const lastSlashIndex = normalizedCurrentPath.lastIndexOf("/");
-  const baseDir =
-    lastSlashIndex >= 0
-      ? normalizedCurrentPath.slice(0, lastSlashIndex)
-      : normalizedCurrentPath;
-
-  const parts = `${baseDir}/${cleanedHref}`.split("/");
-  const resolvedParts: string[] = [];
-
-  for (const part of parts) {
-    if (!part || part === ".") continue;
-
-    if (part === "..") {
-      if (
-        resolvedParts.length > 1 ||
-        (resolvedParts.length === 1 && !resolvedParts[0].endsWith(":"))
-      ) {
-        resolvedParts.pop();
-      }
-      continue;
-    }
-
-    resolvedParts.push(part);
-  }
-
-  return resolvedParts.join("/");
+  return held;
 }
 
 /**
@@ -176,6 +141,7 @@ export function Editor() {
   // screen followed by a long synchronous mount.
   const [displayed, setDisplayed] = useState<EditorSession | null>(null);
   const [, startSessionTransition] = useTransition();
+  const isModKeyHeld = useModKeyHeld();
 
   // Follow renames of the displayed session. A stale session (another file is
   // being prepared) keeps its last path, so it doesn't re-register itself in
@@ -230,7 +196,7 @@ export function Editor() {
   }, [editorSessionTick]);
 
   const handleEditorClick = useCallback(
-    async (event: MouseEvent<HTMLDivElement>) => {
+    (event: MouseEvent<HTMLDivElement>) => {
       if (!currentFilePath) return;
 
       const target = event.target;
@@ -242,31 +208,16 @@ export function Editor() {
       const href = link.getAttribute("href")?.trim();
       if (!href || href.startsWith("#")) return;
 
-      if (isWebPageUrl(href)) {
+      // A link in the text opens on Ctrl+click; a plain click edits it.
+      const isTextLink = link.dataset.slateNode === "element";
+      if (isTextLink && !hasModKey(event)) {
         event.preventDefault();
-        event.stopPropagation();
-
-        try {
-          await openWebLink(href, { systemBrowser: wantsSystemBrowser(event) });
-        } catch (error) {
-          console.error("Failed to open web link:", href, error);
-        }
         return;
       }
 
-      if (isExternalLink(href)) return;
-
-      const resolvedPath = resolveInternalLinkPath(currentFilePath, href);
-      if (!resolvedPath) return;
-
+      if (!openLinkTarget(href, currentFilePath)) return;
       event.preventDefault();
       event.stopPropagation();
-
-      try {
-        await openEditorFile(resolvedPath);
-      } catch (error) {
-        console.error("Failed to open linked file:", resolvedPath, error);
-      }
     },
     [currentFilePath],
   );
@@ -287,8 +238,9 @@ export function Editor() {
 
   return (
     <div
-      className="relative min-h-full"
-      onClickCapture={(event) => void handleEditorClick(event)}
+      className="group/editor relative min-h-full"
+      data-mod-held={isModKeyHeld || undefined}
+      onClickCapture={handleEditorClick}
     >
       {(displayed === null || isStale) && <EditorLoadingBar />}
 

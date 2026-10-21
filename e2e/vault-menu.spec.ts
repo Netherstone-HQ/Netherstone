@@ -76,7 +76,7 @@ test("with no vault open, the menu only opens or creates one", async ({ page }) 
 test("with no shard open, the editor offers New shard and Import", async ({ page }) => {
   await mockVault(page, { files: FILES });
 
-  await expect(page.getByText("No shard open")).toBeVisible();
+  await expect(page.getByRole("main").getByText("No shard open")).toBeVisible();
   const buttons = page.locator('[data-slot="empty-content"] button');
   await expect(buttons).toHaveText(["New shard", "Import"]);
 

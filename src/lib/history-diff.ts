@@ -207,10 +207,34 @@ export function hasChanges(merged: Node[]): boolean {
   return merged.some(walk);
 }
 
+/** Where the other version has text this one doesn't, inside a line. */
+export const GAP_INLINE = "historyGap";
+/** Where the other version has a block this one doesn't. */
+export const GAP_BLOCK = "historyGapBlock";
+
+const gap = (type: string): Node => ({ type, children: [{ text: "" }] });
+const isGap = (node: Node) => node.type === GAP_INLINE || node.type === GAP_BLOCK;
+
+/** One gap for each stretch, and none next to what this side has in its place. */
+function tidyGaps(nodes: Node[], isOwn: (node: Node) => boolean): Node[] {
+  const result: Node[] = [];
+  for (const node of nodes) {
+    const previous = result[result.length - 1];
+    if (isGap(node) && previous && (isGap(previous) || isOwn(previous))) continue;
+    if (previous && isGap(previous) && isOwn(node)) result.pop();
+    result.push(node);
+  }
+  return result;
+}
+
+const textsOf = (node: Node): Node[] =>
+  isText(node) ? [node] : (node.children ?? []).flatMap(textsOf);
+
 /**
  * One side of a merged value, for two versions shown side by side: the
  * version's (`"version"`) or the shard's as it is now (`"current"`), with
- * what only that side has marked as added.
+ * what only that side has marked as added, and a gap where only the other
+ * side has something.
  */
 export function sideOf(merged: Node[], side: "version" | "current"): Node[] {
   const own = side === "version" ? ADDED_MARK : REMOVED_MARK;
@@ -218,36 +242,52 @@ export function sideOf(merged: Node[], side: "version" | "current"): Node[] {
   const ownBlock: BlockChange = side === "version" ? "added" : "removed";
 
   const leaf = (node: Node): Node | null => {
-    if (node[other]) return null;
+    if (node[other]) return node.text ? gap(GAP_INLINE) : null;
     const { [own]: marked, [ADDED_MARK]: _a, [REMOVED_MARK]: _r, ...rest } = node;
     return marked ? { ...rest, [ADDED_MARK]: true } : rest;
   };
 
-  const element = (node: Node): Node | null => {
+  const ownInline = (node: Node) => {
+    const texts = textsOf(node);
+    return texts.length > 0 && texts.every((text) => text[ADDED_MARK]);
+  };
+
+  /** `place`: at the top, in another block, or in a line of text. */
+  const element = (node: Node, place: "top" | "block" | "line"): Node | null => {
     const change = node[BLOCK_CHANGE_KEY];
-    if (change && change !== ownBlock) return null;
-    const texts: Node[] = [];
-    const walkTexts = (child: Node) =>
-      isText(child) ? texts.push(child) : (child.children ?? []).forEach(walkTexts);
-    walkTexts(node);
+    // Gaps between blocks only at the top, where any block can go.
+    if (change && change !== ownBlock) return place === "top" ? gap(GAP_BLOCK) : null;
     // An inline element only the other side has.
-    if (!change && texts.length > 0 && texts.every((text) => text[other])) {
-      return null;
+    if (place === "line" && textsOf(node).every((text) => text[other])) {
+      return gap(GAP_INLINE);
     }
 
     const inline = (node.children ?? []).some(isText);
     const children = (node.children ?? [])
-      .map((child: Node) => (isText(child) ? leaf(child) : element(child)))
+      .map((child: Node) =>
+        isText(child) ? leaf(child) : element(child, inline ? "line" : "block"),
+      )
       .filter((child: Node | null): child is Node => child !== null);
     const { [BLOCK_CHANGE_KEY]: _, ...rest } = node;
     return {
       ...rest,
       ...(change ? { [BLOCK_CHANGE_KEY]: "added" } : {}),
-      children: inline || children.length === 0 ? withTextAround(children) : children,
+      children:
+        inline || children.length === 0
+          ? withTextAround(
+              tidyGaps(
+                children.filter((child: Node) => !isText(child) || child.text),
+                ownInline,
+              ),
+            )
+          : children,
     };
   };
 
-  return merged
-    .map(element)
-    .filter((node): node is Node => node !== null);
+  return tidyGaps(
+    merged
+      .map((node) => element(node, "top"))
+      .filter((node): node is Node => node !== null),
+    (node) => node[BLOCK_CHANGE_KEY] === "added",
+  );
 }

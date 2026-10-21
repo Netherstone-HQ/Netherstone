@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
@@ -37,6 +37,19 @@ export function RightSidebar() {
   const closeHistory = useHistoryStore((s) => s.closeHistory);
   const showsHistory = isHistoryOpen && filePath !== null;
   const isOpen = isSidebarOpen && !showsHistory;
+  const isPanelOpen = isSidebarOpen || showsHistory;
+
+  // The panel slides as it opens or closes; History and the sidebar swap in
+  // place.
+  const [shown, setShown] = useState({ isPanelOpen, showsHistory });
+  const [slides, setSlides] = useState(true);
+  if (
+    shown.isPanelOpen !== isPanelOpen ||
+    shown.showsHistory !== showsHistory
+  ) {
+    setShown({ isPanelOpen, showsHistory });
+    setSlides(shown.isPanelOpen !== isPanelOpen);
+  }
 
   // Closing the shard closes its history.
   useEffect(() => {
@@ -46,10 +59,11 @@ export function RightSidebar() {
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden transition-[width] duration-200 ease-linear",
+        "relative shrink-0 overflow-hidden",
+        slides && "transition-[width] duration-200 ease-linear",
         showsHistory ? "w-80" : isOpen ? "w-72" : "w-0",
       )}
-      inert={!isOpen && !showsHistory}
+      inert={!isPanelOpen}
     >
       {showsHistory ? (
         <div className="absolute inset-y-0 right-0">
@@ -59,8 +73,9 @@ export function RightSidebar() {
       <aside
         aria-label="Right sidebar"
         className={cn(
-          "absolute inset-y-0 flex w-72 flex-col gap-3 overflow-y-auto border-l bg-sidebar p-2 transition-[right] duration-200 ease-linear",
-          isOpen ? "right-0" : "-right-72",
+          "absolute inset-y-0 flex w-72 flex-col gap-3 overflow-y-auto border-l bg-sidebar p-2",
+          slides && "transition-[right] duration-200 ease-linear",
+          isSidebarOpen ? "right-0" : "-right-72",
           showsHistory && "invisible",
         )}
       >

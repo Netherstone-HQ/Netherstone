@@ -4,7 +4,7 @@ import { HistoryIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
-import { isDrawingPath } from "@/lib/drawing-files";
+import { isDrawingPath, remapPathAfterMove } from "@/lib/drawing-files";
 import {
   describeVersion,
   formatDay,
@@ -17,6 +17,15 @@ import { cn } from "@/lib/utils";
 import { type HistoryPlace, useHistoryStore } from "@/store/history";
 import { useVaultStore } from "@/store/vault";
 
+/** True when `filePath` is `before` after the rename or move under way. */
+function useIsRenamedFrom(before: string | undefined, filePath: string) {
+  return useHistoryStore((s) => {
+    const change = s.pathChange;
+    if (!before || before === filePath || !change?.to) return false;
+    return remapPathAfterMove(before, change.from, change.to) === filePath;
+  });
+}
+
 /**
  * The open file's history, loaded again as versions are saved and as the
  * file changes, so the top row knows whether it's saved as a version.
@@ -24,11 +33,17 @@ import { useVaultStore } from "@/store/vault";
 function useFileHistory(filePath: string) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const tick = useHistoryStore((s) => s.versionsTick);
+  const isChangingPath = useHistoryStore((s) => s.pathChange !== null);
   const [fileTick, setFileTick] = useState(0);
   const [loaded, setLoaded] = useState<{
     filePath: string;
     history: FileHistory;
   } | null>(null);
+
+  // Renamed or moved: its list follows it until it's listed under the new
+  // path, which waits for the version saved after the change.
+  const isRenamed = useIsRenamedFrom(loaded?.filePath, filePath);
+  if (isRenamed && loaded) setLoaded({ filePath, history: loaded.history });
 
   useEffect(() => {
     const target = filePath.replace(/\\/g, "/");
@@ -50,7 +65,7 @@ function useFileHistory(filePath: string) {
   }, [filePath]);
 
   useEffect(() => {
-    if (!vaultPath) return;
+    if (!vaultPath || isChangingPath) return;
     let cancelled = false;
     // A long history comes back with the older lines still to work out;
     // each listing gets further, so keep listing until they're all there.
@@ -63,13 +78,13 @@ function useFileHistory(filePath: string) {
     load().catch((error) => {
       console.error("[Netherstone] Couldn't list versions:", error);
       if (!cancelled) {
-        setLoaded({ filePath, history: { savedAt: null, versions: [] } });
+        setLoaded({ filePath, history: { current: null, versions: [] } });
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [vaultPath, filePath, tick, fileTick]);
+  }, [vaultPath, filePath, tick, fileTick, isChangingPath]);
 
   return loaded?.filePath === filePath ? loaded.history : null;
 }
@@ -145,13 +160,15 @@ export function HistoryPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const isDrawing = isDrawingPath(filePath);
 
-  // Another file opened: show it as it is now.
+  // Another file opened: show it as it is now. A rename or move keeps the
+  // version on screen.
   const shownPathRef = useRef(filePath);
+  const isRenamed = useIsRenamedFrom(shownPathRef.current, filePath);
   useEffect(() => {
     if (shownPathRef.current === filePath) return;
     shownPathRef.current = filePath;
-    pickVersion(null);
-  }, [filePath, pickVersion]);
+    if (!isRenamed) pickVersion(null);
+  }, [filePath, isRenamed, pickVersion]);
 
   // A version that's no longer listed (it became "Now") isn't shown.
   useEffect(() => {
@@ -178,9 +195,10 @@ export function HistoryPanel({
   };
 
   const days = versions ? groupByDay(versions) : [];
-  // The top row: when the file as it is now was saved, or "Now" if it wasn't.
-  const savedAt = history?.savedAt ?? null;
-  const currentDay = savedAt === null ? "Today" : formatDay(savedAt);
+  // The top row: the version the file as it is now was saved as, or "Now"
+  // if it wasn't.
+  const current = history?.current ?? null;
+  const currentDay = current === null ? "Today" : formatDay(current.time);
   const sharesDay = !isDeleted && days[0]?.label === currentDay;
 
   return (
@@ -221,7 +239,12 @@ export function HistoryPanel({
             <>
               <DayLabel>{currentDay}</DayLabel>
               <VersionRow
-                time={savedAt === null ? "Now" : formatTime(savedAt)}
+                time={current === null ? "Now" : formatTime(current.time)}
+                detail={
+                  current === null
+                    ? undefined
+                    : describeVersion(current, isDrawing)
+                }
                 isCurrent
                 isPicked={picked === null}
                 onPick={() => pickVersion(null)}

@@ -18,6 +18,11 @@ interface HistoryState {
   showChanges: boolean;
   /** Changes when a version is saved, so an open panel lists it. */
   versionsTick: number;
+  /**
+   * A rename or move under way, until the version saved after it: `to` is
+   * null until the new path is known. An open panel keeps its list meanwhile.
+   */
+  pathChange: { from: string; to: string | null } | null;
 
   openHistory: (place: HistoryPlace) => void;
   openDeletedHistory: (path: string) => void;
@@ -25,6 +30,9 @@ interface HistoryState {
   pickVersion: (version: FileVersion | null) => void;
   setShowChanges: (show: boolean) => void;
   versionsChanged: () => void;
+  startPathChange: (from: string) => void;
+  setPathChangeTarget: (to: string) => void;
+  endPathChange: () => void;
 }
 
 export const useHistoryStore = create<HistoryState>((set) => ({
@@ -33,6 +41,7 @@ export const useHistoryStore = create<HistoryState>((set) => ({
   picked: null,
   showChanges: true,
   versionsTick: 0,
+  pathChange: null,
 
   openHistory: (openIn) =>
     set((state) =>
@@ -47,6 +56,12 @@ export const useHistoryStore = create<HistoryState>((set) => ({
   setShowChanges: (showChanges) => set({ showChanges }),
   versionsChanged: () =>
     set((state) => ({ versionsTick: state.versionsTick + 1 })),
+  startPathChange: (from) => set({ pathChange: { from, to: null } }),
+  setPathChangeTarget: (to) =>
+    set((state) =>
+      state.pathChange ? { pathChange: { ...state.pathChange, to } } : {},
+    ),
+  endPathChange: () => set({ pathChange: null }),
 }));
 
 /** The version on screen in `place`, if one is. */

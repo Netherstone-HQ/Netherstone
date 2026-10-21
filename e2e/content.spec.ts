@@ -220,7 +220,7 @@ test("the export preview draws each format, and Word and web pages save", async 
   });
 
   await page.getByRole("button", { name: "Actions for Report" }).first().click();
-  await page.getByRole("menuitem", { name: "Export…" }).click();
+  await page.getByRole("menuitem", { name: "Export", exact: true }).click();
 
   const preview = page.locator("iframe[title='Preview of Report']");
   const formats = page.getByRole("radiogroup", { name: "Format" });
@@ -238,7 +238,7 @@ test("the export preview draws each format, and Word and web pages save", async 
     expect.stringMatching(/^<!doctype html>/i),
   ]);
   await page.getByRole("button", { name: "Actions for Report" }).first().click();
-  await page.getByRole("menuitem", { name: "Export…" }).click();
+  await page.getByRole("menuitem", { name: "Export", exact: true }).click();
   await formats.getByRole("radio", { name: /Word/ }).click();
   await page.getByRole("button", { name: "Export Word document" }).click();
   await expect.poll(() => page.evaluate(() => window.__exports.at(-1))).toMatch(/^PK/);
@@ -253,7 +253,7 @@ test("a PDF imports into a shard", async ({ page }) => {
   });
 
   await page.getByText("Inbox", { exact: true }).first().click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Import here…" }).click();
+  await page.getByRole("menuitem", { name: "Import here" }).click();
   await page.getByRole("button", { name: /Files/ }).click();
 
   await expect

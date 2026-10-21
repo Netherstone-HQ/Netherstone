@@ -2,13 +2,21 @@ import { DndPlugin } from "@platejs/dnd";
 import { createSlateEditor } from "platejs";
 import {
   createPlatePlugin,
+  PlateElement,
+  type PlateElementProps,
   PlateLeaf,
   type PlateLeafProps,
   type RenderNodeWrapper,
 } from "platejs/react";
 
 import { EditorKit } from "@/components/editor/editor-kit";
-import { ADDED_MARK, BLOCK_CHANGE_KEY, REMOVED_MARK } from "@/lib/history-diff";
+import {
+  ADDED_MARK,
+  BLOCK_CHANGE_KEY,
+  GAP_BLOCK,
+  GAP_INLINE,
+  REMOVED_MARK,
+} from "@/lib/history-diff";
 import { useEditorStore } from "@/store/editor";
 
 function AddedLeaf(props: PlateLeafProps) {
@@ -24,6 +32,26 @@ function RemovedLeaf(props: PlateLeafProps) {
     <PlateLeaf {...props} as="del" className="history-removed">
       {props.children}
     </PlateLeaf>
+  );
+}
+
+/** Where the other of two versions has text this one doesn't. */
+function GapInline(props: PlateElementProps) {
+  return (
+    <PlateElement {...props} as="span">
+      <span contentEditable={false} className="history-gap" />
+      {props.children}
+    </PlateElement>
+  );
+}
+
+/** Where the other of two versions has a block this one doesn't. */
+function GapBlock(props: PlateElementProps) {
+  return (
+    <PlateElement {...props}>
+      <div contentEditable={false} className="history-gap-block" />
+      {props.children}
+    </PlateElement>
   );
 }
 
@@ -53,6 +81,14 @@ const HistoryDiffKit = [
   createPlatePlugin({
     key: REMOVED_MARK,
     node: { isLeaf: true, component: RemovedLeaf },
+  }),
+  createPlatePlugin({
+    key: GAP_INLINE,
+    node: { isElement: true, isInline: true, isVoid: true, component: GapInline },
+  }),
+  createPlatePlugin({
+    key: GAP_BLOCK,
+    node: { isElement: true, isVoid: true, component: GapBlock },
   }),
   createPlatePlugin({
     key: BLOCK_CHANGE_KEY,

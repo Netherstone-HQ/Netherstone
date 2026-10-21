@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Plate, usePlateEditor } from "platejs/react";
 import { toast } from "sonner";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
@@ -10,11 +10,18 @@ import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
 import {
+  ChunkDrawer,
+  ChunkDrawerContext,
+  registerChunkDrawer,
+  renderDeferredChunk,
+} from "./lib/deferred-chunks";
+import {
   revealAttachment,
   revealLinkByText,
   revealTag,
 } from "./lib/link-reveal";
 import { insertManagedMediaFiles } from "./lib/media-insert";
+import { getShardScrollPosition, useShardScroll } from "./lib/shard-scroll";
 import {
   formatEditorLifecycleDurationMs,
   getEditorLifecycleDurationMs,
@@ -25,10 +32,14 @@ import {
 /**
  * Top-level blocks per Slate chunk. Each chunk renders with
  * `content-visibility: auto`, so the browser skips layout and paint for
- * off-screen chunks, and edits only re-render the chunk they touch.
- * Plate's default (1000) is too coarse to help typical long notes.
+ * off-screen chunks, and edits only re-render the chunk they touch. Small
+ * enough that laying out or drawing one chunk (a shard of tables is heavy)
+ * fits in an idle moment. Plate's default (1000) is too coarse to help.
  */
-const EDITOR_CHUNK_SIZE = 100;
+const EDITOR_CHUNK_SIZE = 10;
+
+/** Blocks drawn before the shard is shown; the rest follow in the background. */
+const FIRST_DRAWN_BLOCKS = 4 * EDITOR_CHUNK_SIZE;
 
 type MountedEditorProps = {
   content: string;
@@ -64,6 +75,23 @@ export const MountedEditor = memo(function MountedEditor({
   const usePlateEditorDurationMs = getEditorLifecycleDurationMs(
     usePlateEditorStartMs,
   );
+
+  // Where the shard was left, and its blocks up to there drawn right away so
+  // it can open at that place.
+  const [savedPosition] = useState(() =>
+    getShardScrollPosition(currentFilePath),
+  );
+  const [drawer] = useState(
+    () => new ChunkDrawer((savedPosition?.block ?? 0) + FIRST_DRAWN_BLOCKS),
+  );
+  const [opensAtLink] = useState(() => {
+    const { pendingLinkReveal } = useEditorStore.getState();
+    return (
+      pendingLinkReveal !== null &&
+      isSamePath(pendingLinkReveal.path, currentFilePath)
+    );
+  });
+  useShardScroll(editor, currentFilePath, savedPosition, !opensAtLink);
 
   if (!mountRenderLoggedRef.current) {
     mountRenderLoggedRef.current = true;
@@ -127,6 +155,16 @@ export const MountedEditor = memo(function MountedEditor({
     }
   };
 
+  // Select all and jumps to the end act on what's drawn, so draw it all.
+  const handleKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      (event.key === "a" || event.key === "A" || event.key === "End")
+    ) {
+      drawer.drawAll();
+    }
+  };
+
   const handleDropCapture = (event: React.DragEvent<HTMLDivElement>) => {
     if (insertFilesFromEvent(event.dataTransfer?.files, "drop")) {
       event.preventDefault();
@@ -165,6 +203,21 @@ export const MountedEditor = memo(function MountedEditor({
     };
   }, [cacheHit, currentFilePath, nodeCount]);
 
+  useLayoutEffect(() => {
+    registerChunkDrawer(editor, drawer);
+  }, [drawer, editor]);
+
+  const [isFullyDrawn, setIsFullyDrawn] = useState(false);
+  useEffect(
+    () =>
+      drawer.drawInBackground(
+        () => editor.children.length,
+        EDITOR_CHUNK_SIZE,
+        () => setIsFullyDrawn(true),
+      ),
+    [drawer, editor],
+  );
+
   useEffect(() => {
     rememberSavedValue(editor, editor.children);
     setPlateEditor(editor);
@@ -192,8 +245,12 @@ export const MountedEditor = memo(function MountedEditor({
         lifetime: formatEditorLifecycleDurationMs(mountStartMsRef.current),
       });
 
-      setPlateEditor(null);
-      setTocHeadings([]);
+      // The next shard may already be on screen (this one is removed after
+      // it's shown); only clear what's still this one's.
+      if (useEditorStore.getState().plateEditor === editor) {
+        setPlateEditor(null);
+        setTocHeadings([]);
+      }
     };
   }, [
     cacheHit,
@@ -232,12 +289,14 @@ export const MountedEditor = memo(function MountedEditor({
     }
   }, [currentFilePath, editor, isShown]);
 
+  // Measured once what's drawn first is on screen, and again once the rest
+  // is: measuring each part as it's drawn slowed drawing a long shard.
   useEffect(() => {
     const root = editor.api.toDOMNode(editor);
     if (!root) return;
 
     return measureChunkHeightsInBackground(root);
-  }, [editor]);
+  }, [editor, isFullyDrawn]);
 
   useEffect(() => {
     if (cacheHit || didWriteColdOpenCacheRef.current) return;
@@ -300,12 +359,19 @@ export const MountedEditor = memo(function MountedEditor({
         }
       }}
     >
-      <EditorContainer
-        onDropCapture={handleDropCapture}
-        onPasteCapture={handlePasteCapture}
-      >
-        <PlateEditor placeholder="Start writing..." spellCheck={spellcheck} />
-      </EditorContainer>
+      <ChunkDrawerContext.Provider value={drawer}>
+        <EditorContainer
+          onDropCapture={handleDropCapture}
+          onKeyDownCapture={handleKeyDownCapture}
+          onPasteCapture={handlePasteCapture}
+        >
+          <PlateEditor
+            placeholder="Start writing..."
+            renderChunk={renderDeferredChunk}
+            spellCheck={spellcheck}
+          />
+        </EditorContainer>
+      </ChunkDrawerContext.Provider>
     </Plate>
   );
 });

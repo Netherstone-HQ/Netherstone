@@ -100,7 +100,10 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
 
   const openStarted = Date.now();
   await openShard(page, "Long");
-  await editor(page).getByText("Paragraph 0 with").waitFor({ timeout: 60_000 });
+  // Until all of it is drawn: a long shard's later parts follow its first.
+  await editor(page)
+    .getByText("The end.")
+    .waitFor({ state: "attached", timeout: 60_000 });
   const openMs = Date.now() - openStarted;
 
   const scroller = await editorScroller(page);

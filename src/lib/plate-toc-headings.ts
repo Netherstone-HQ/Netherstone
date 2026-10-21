@@ -8,6 +8,8 @@ import {
   type SlateEditor,
   type TElement,
 } from "platejs";
+import { pinChunkHeightsAbove } from "@/components/editor/lib/chunk-heights";
+import { drawBlocksThrough } from "@/components/editor/lib/deferred-chunks";
 
 const headingDepth: Record<string, number> = {
   h1: 1,
@@ -140,7 +142,7 @@ function findScrollableAncestor(start: HTMLElement | null): HTMLElement | null {
 }
 
 /** Sticky UI (e.g. fixed toolbar) inside the same scroll root as the heading. */
-function getStickyTopInset(scrollRoot: HTMLElement): number {
+export function getStickyTopInset(scrollRoot: HTMLElement): number {
   const stickies = scrollRoot.querySelectorAll<HTMLElement>(".sticky");
   let max = 0;
 
@@ -159,7 +161,7 @@ function getStickyTopInset(scrollRoot: HTMLElement): number {
  * `content-visibility: auto`. A chunk that was never laid out has no real
  * position for its contents, so lay it out for this one read.
  */
-function getRenderedRect(el: HTMLElement): DOMRect {
+export function getRenderedRect(el: HTMLElement): DOMRect {
   const chunk = el.closest<HTMLElement>("[data-slate-chunk]");
   if (!chunk) return el.getBoundingClientRect();
 
@@ -203,6 +205,14 @@ export function scrollPlateToNode(
   const node = NodeApi.get(editor, path);
   if (!node) return;
 
+  // A long shard draws its later parts after opening; wait for this one.
+  if (!drawBlocksThrough(editor, path[0])) {
+    window.requestAnimationFrame(() =>
+      scrollPlateToNode(editor, path, getSelection, behavior),
+    );
+    return;
+  }
+
   const el = editor.api.toDOMNode(node);
   if (!el || !(el instanceof HTMLElement)) return;
 
@@ -238,6 +248,7 @@ export function scrollPlateToNode(
     const topOffset =
       stickyInset > 0 ? stickyInset + gapPx : Math.max(48, pluginOffset);
 
+    pinChunkHeightsAbove(el);
     const rootRect = scrollRoot.getBoundingClientRect();
     const elRect = getRenderedRect(el);
     const nextTop = Math.max(

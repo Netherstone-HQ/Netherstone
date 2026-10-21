@@ -9,7 +9,11 @@ import { rememberSavedValue, takeOutsideChange } from "@/lib/outside-changes";
 import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
-import { revealAttachment, revealLinkByText } from "./lib/link-reveal";
+import {
+  revealAttachment,
+  revealLinkByText,
+  revealTag,
+} from "./lib/link-reveal";
 import { insertManagedMediaFiles } from "./lib/media-insert";
 import {
   formatEditorLifecycleDurationMs,
@@ -209,7 +213,8 @@ export const MountedEditor = memo(function MountedEditor({
   ]);
 
   // A link or missing file asked for when this shard was opened (from Broken
-  // links on the Overview page): scroll to it once the shard is on screen.
+  // links on the Overview page), or a tag (from Tags): scroll to it once the
+  // shard is on screen.
   useEffect(() => {
     if (!isShown) return;
 
@@ -228,6 +233,8 @@ export const MountedEditor = memo(function MountedEditor({
     setPendingLinkReveal(null);
     if ("assetPath" in pendingLinkReveal) {
       revealAttachment(editor, pendingLinkReveal.assetPath);
+    } else if ("tag" in pendingLinkReveal) {
+      revealTag(editor, pendingLinkReveal.tag);
     } else {
       revealLinkByText(editor, pendingLinkReveal.text);
     }

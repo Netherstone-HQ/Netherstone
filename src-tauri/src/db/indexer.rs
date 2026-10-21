@@ -1,5 +1,5 @@
 use super::queries::locate_tags;
-use crate::markdown_text::text_blocks;
+use crate::markdown_text::{has_letter, text_blocks};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
@@ -327,6 +327,19 @@ pub(crate) fn backfill_tag_excerpts(conn: &Connection) -> rusqlite::Result<()> {
         insert_tags(&tx, file_id, content.as_deref().unwrap_or(""), tags)?;
     }
     tx.commit()
+}
+
+/// Removes tags without a letter, such as `#3`, indexed before tags needed
+/// one; files only drop them when they change otherwise.
+pub(crate) fn remove_tags_without_letters(conn: &Connection) -> rusqlite::Result<()> {
+    let tags: Vec<String> = conn
+        .prepare("SELECT DISTINCT tag FROM tags")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for tag in tags.into_iter().filter(|tag| !has_letter(tag)) {
+        conn.execute("DELETE FROM tags WHERE tag = ?1", params![tag])?;
+    }
+    Ok(())
 }
 
 /// Check if a file needs to be re-indexed.

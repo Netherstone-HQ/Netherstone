@@ -1,4 +1,11 @@
-import { KEYS, NodeApi, type Path, type SlateEditor } from "platejs";
+import {
+  KEYS,
+  NodeApi,
+  TextApi,
+  type Path,
+  type SlateEditor,
+  type TRange,
+} from "platejs";
 
 import { scrollPlateToNode } from "@/lib/plate-toc-headings";
 
@@ -77,4 +84,37 @@ export function revealLinkByText(editor: SlateEditor, text: string) {
     const focus = editor.api.after(path) ?? editor.api.end(path);
     return anchor && focus ? { anchor, focus } : undefined;
   });
+}
+
+/** Punctuation a tag may end with, which isn't part of it (as `tags_in`). */
+const TRAILING_PUNCTUATION = "[!-/:-@[-`{-~]*";
+
+/** Where `#tag` is first written as a word, outside code. */
+export function findTag(editor: SlateEditor, tag: string): TRange | undefined {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `(?<!\\S)#${escaped}(?=${TRAILING_PUNCTUATION}(?:\\s|$))`,
+    "u",
+  );
+
+  for (const [node, path] of editor.api.nodes({ at: [], match: TextApi.isText })) {
+    if (node.code) continue;
+    if (editor.api.above({ at: path, match: { type: KEYS.codeBlock } })) continue;
+
+    const match = pattern.exec(node.text as string);
+    if (!match) continue;
+    return {
+      anchor: { path, offset: match.index },
+      focus: { path, offset: match.index + match[0].length },
+    };
+  }
+  return undefined;
+}
+
+/** Scrolls to the first `#tag` and selects it. */
+export function revealTag(editor: SlateEditor, tag: string) {
+  const range = findTag(editor, tag);
+  if (!range) return;
+
+  scrollPlateToNode(editor, range.anchor.path, () => range);
 }

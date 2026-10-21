@@ -5,10 +5,36 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 
+/** Whether the dialog is open, for its backdrop's fade in and out. */
+const DialogOpenContext = React.createContext(false);
+
+/**
+ * Not modal, so Radix draws no backdrop of its own; `DialogContent` draws
+ * one, which needs to know whether the dialog is open.
+ */
 function Dialog({
+  open: openProp,
+  defaultOpen = false,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root modal={false} data-slot="dialog" {...props} />;
+  const [openState, setOpenState] = React.useState(defaultOpen);
+  const open = openProp ?? openState;
+
+  return (
+    <DialogOpenContext.Provider value={open}>
+      <DialogPrimitive.Root
+        modal={false}
+        data-slot="dialog"
+        open={open}
+        onOpenChange={(next) => {
+          if (openProp === undefined) setOpenState(next);
+          onOpenChange?.(next);
+        }}
+        {...props}
+      />
+    </DialogOpenContext.Provider>
+  );
 }
 
 function DialogTrigger({
@@ -29,18 +55,19 @@ function DialogClose({
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-function DialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+/**
+ * Dims the app behind the dialog. Takes the props the portal passes it,
+ * including the ref it watches to let the fade out finish.
+ */
+function DialogOverlay(props: React.ComponentProps<"div">) {
+  const open = React.useContext(DialogOpenContext);
   return (
-    <DialogPrimitive.Overlay
-      data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-        className,
-      )}
+    <div
       {...props}
+      data-slot="dialog-overlay"
+      data-state={open ? "open" : "closed"}
+      aria-hidden="true"
+      className="fixed inset-0 isolate z-50 bg-black/40 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
     />
   );
 }
@@ -155,7 +182,6 @@ export {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
   DialogPortal,
   DialogTitle,
   DialogTrigger,

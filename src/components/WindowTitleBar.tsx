@@ -100,7 +100,7 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
       className={cn(
         "flex h-9 shrink-0 items-center justify-between pl-3",
         !bare &&
-          "border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80",
+          "border-b bg-background",
       )}
     >
       <div

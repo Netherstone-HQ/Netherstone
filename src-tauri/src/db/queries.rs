@@ -623,6 +623,23 @@ mod tests {
     }
 
     #[test]
+    fn drops_number_tags_indexed_before_tags_needed_a_letter() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, 'a.md', 'a.md', 0, 0, '');
+             INSERT INTO tags (file_id, tag) VALUES (1, '3'), (1, 'q3'), (1, '2026');",
+        )
+        .unwrap();
+
+        crate::db::schema::init_schema(&conn).unwrap();
+
+        let files = get_tagged_files(&conn).unwrap();
+        let tags: Vec<_> = files[0].tags.iter().map(|t| t.tag.as_str()).collect();
+        assert_eq!(tags, ["q3"]);
+    }
+
+    #[test]
     fn lists_files_linking_to_a_shard_with_the_linking_line() {
         let vault =
             std::env::temp_dir().join(format!("netherstone-linked-from-{}", std::process::id()));

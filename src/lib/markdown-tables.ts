@@ -11,8 +11,9 @@ import { createRawBlockNode, RAW_BLOCK_KEY } from "@/lib/markdown-raw-blocks";
  *     <!-- netherstone: widths 120 240; merge A1:B1 C2:C3; fill A1=#fee; noborder B2 top left -->
  *
  * - `widths`: the column widths in pixels, once a column edge was dragged,
- *   or as shares of the text column when written by hand (`widths 25% 75%`).
- *   A table without them fills the text column and sizes by content.
+ *   or as shares of the text column when written by hand (`widths 30% 30%`
+ *   takes 60% of it). A table without them is as wide as its content, up to
+ *   the text column.
  * - `merge`: each merged cell as the range it covers, spreadsheet style.
  *   The pipe table keeps an empty cell for every covered position, so it
  *   stays rectangular for other apps.

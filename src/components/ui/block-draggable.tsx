@@ -221,17 +221,13 @@ function DraggableControls({
     }
   };
 
-  // Align the handle with the block's first line. Read from the block's own
-  // DOM node once on mount: looking it up through Slate on every element
-  // change runs before Slate has mapped the new element and throws mid-typing.
+  // Center the handle on the block's first line of text. Read from the
+  // block's own DOM node on mount: looking it up through Slate on every
+  // element change runs before Slate has mapped the new element and throws
+  // mid-typing.
   React.useLayoutEffect(() => {
-    const blockElement = blockWrapperRef.current?.firstElementChild;
-    if (!blockElement) return;
-
-    const marginTop = Number.parseFloat(
-      window.getComputedStyle(blockElement).marginTop,
-    );
-    setDragButtonTop(Number.isFinite(marginTop) ? marginTop : 0);
+    const wrapper = blockWrapperRef.current;
+    if (wrapper) setDragButtonTop(firstLineHandleTop(wrapper));
   }, [blockWrapperRef]);
 
   const wasDraggingRef = React.useRef(false);
@@ -277,10 +273,10 @@ function DraggableControls({
               )}
             >
               <Button
-                className="absolute left-0 h-6 w-full p-0"
+                className="absolute left-0 h-6 w-full p-0 transition-colors"
                 data-plate-prevent-deselect
                 ref={handleRef}
-                style={{ top: `${dragButtonTop + 3}px` }}
+                style={{ top: `${dragButtonTop}px` }}
                 variant="ghost"
               >
                 <DragHandle
@@ -303,6 +299,43 @@ function DraggableControls({
       />
     </>
   );
+}
+
+const HANDLE_HEIGHT = 24;
+
+/**
+ * The handle's top inside the block wrapper, centred on the first line of
+ * editable text (an empty block still has Slate's zero-width text). Blocks
+ * without text, like images, put it at the top of their content.
+ */
+function firstLineHandleTop(wrapper: HTMLElement) {
+  const top = wrapper.getBoundingClientRect().top;
+  const walker = document.createTreeWalker(wrapper, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      node.parentElement?.closest(
+        '[contenteditable="false"], [data-slate-spacer]',
+      )
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
+  });
+
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent) continue;
+
+    const range = document.createRange();
+    range.setStart(node, 0);
+    range.setEnd(node, 1);
+    const rect = range.getClientRects()[0];
+    if (!rect) continue;
+
+    return Math.round(rect.top + rect.height / 2 - top - HANDLE_HEIGHT / 2);
+  }
+
+  const block = wrapper.firstElementChild;
+  const marginTop = block
+    ? Number.parseFloat(window.getComputedStyle(block).marginTop)
+    : 0;
+  return (Number.isFinite(marginTop) ? marginTop : 0) + 3;
 }
 
 function Gutter({

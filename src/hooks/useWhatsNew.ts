@@ -8,7 +8,7 @@ import { useSettingsStore } from "@/store/settings";
 
 /** The website's changelog page for this version. */
 export function changelogUrl(version: string) {
-  return `https://netherstone.app/changelog/v${version}`;
+  return `https://netherstone.app/changelog/v${version}?ref=app`;
 }
 
 /** Says the app was updated, with a link to what changed. */

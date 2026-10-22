@@ -28,7 +28,7 @@ import { Progress } from "@/components/ui/progress";
 import { Hint } from "@/components/ui/tooltip";
 import { isWebPageUrl, openWebLink } from "@/lib/open-web-link";
 
-const DEFAULT_BROWSER_URL = "https://netherstone.app";
+const DEFAULT_BROWSER_URL = "https://netherstone.app/?ref=app";
 
 interface BrowserPanelProps {
   webviewLabel?: string;

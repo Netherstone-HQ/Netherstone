@@ -95,7 +95,7 @@ describe("useWhatsNew", () => {
       browserLastUrl: changelogUrl(version),
     });
     expect(changelogUrl("0.4.0")).toBe(
-      "https://netherstone.app/changelog/v0.4.0",
+      "https://netherstone.app/changelog/v0.4.0?ref=app",
     );
   });
 });

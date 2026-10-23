@@ -7,14 +7,16 @@
 
 _Your knowledge, set in stone._
 
+[netherstone.app](https://netherstone.app)
+
 </div>
 
 ![Netherstone with a shard open in the editor](docs/screenshot.png)
 
-Netherstone is a desktop app for your knowledge: notes, documents, drawings
-and more. Every shard is a document saved as a plain Markdown file in a
-folder you choose, so your work stays yours, readable by any app, and fully
-available offline.
+Netherstone is an open-source, local-first desktop app for your knowledge:
+notes, documents, drawings and more. Every shard is a document saved as a
+plain Markdown file in a folder you choose, so your work stays yours,
+readable by any app, and fully available offline.
 
 ## Download
 
@@ -36,6 +38,9 @@ isn't code-signed yet. We plan to sign it in a future version.
   `#tags`, and see each document's outline.
 - **Drawings and attachments.** Sketch with Excalidraw, and drop in images,
   PDFs, audio and video.
+- **Bring it in, take it out.** Import Word, PDF, HTML, Markdown, CSV and
+  text files, one at a time or a whole folder. Export any document to PDF,
+  Word or HTML, with your choice of typeface, page size and margins.
 - **Free sync you own.** Back up each vault to your own private GitHub
   account and keep it in sync across devices. No technical setup.
 - **Nothing lost.** Saves are crash-safe, and when a shard changed on two
@@ -68,6 +73,12 @@ pnpm test:e2e
 [Architecture](docs/ARCHITECTURE.md) ·
 [Attachments](docs/ATTACHMENTS_ARCHITECTURE.md) ·
 [Git sync](docs/GIT_SYNC_ARCHITECTURE.md)
+
+## Community
+
+Questions, ideas and feedback are welcome in
+[Discussions](https://github.com/Netherstone-HQ/Netherstone/discussions).
+Found a bug? [Open an issue](https://github.com/Netherstone-HQ/Netherstone/issues).
 
 ## License
 

@@ -58,8 +58,9 @@ when the connection comes back. Network failures show "Offline".
 ## Local history
 
 Every vault has this history, with or without sync: the same repository,
-committed by the same planner. A version is saved a minute after changes stop
-and a minute after the vault opens (`src/hooks/useLocalHistory.ts`). When the
+committed by the same planner. A version is saved a minute after changes stop,
+every ten minutes while they keep coming, and a minute after the vault opens
+(`src/hooks/useLocalHistory.ts`). When the
 open shard changes outside the app, the text the app last saved and the new
 text are both saved first (`snapshot_outside_change`), so neither is lost
 whatever the user keeps. Unchanged vaults make no version.

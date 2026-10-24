@@ -25,9 +25,21 @@ export interface ImportIO {
   readFile(path: string): Promise<Uint8Array>;
   /** Free `.md` paths in `targetDir`, one per `Folder/Name`, in order. */
   reservePaths(targetDir: string, relativePaths: string[]): Promise<string[]>;
-  saveShard(path: string, markdown: string): Promise<void>;
+  /**
+   * Writes a shard at a reserved path, or at the next free name when
+   * something took that one since. Returns where it went.
+   */
+  saveShard(path: string, markdown: string): Promise<string>;
+  /** Points the links in saved `shards` to `oldPath` at `newPath`. */
+  fixLinks(shards: string[], oldPath: string, newPath: string): Promise<void>;
   /** Stores an attachment and returns its link, `_attachments/photo.png`. */
   saveAttachment(name: string, bytes: Uint8Array): Promise<string>;
+  /**
+   * Copies the file at `path` in as an attachment and returns its link.
+   * Left out where files have no path on disk (dropped in); they are read
+   * and stored with `saveAttachment` instead.
+   */
+  copyAttachment?(path: string): Promise<string>;
   /**
    * Whether a path exists on disk. Left out where files have no path on
    * disk (dropped in), so files they use can't be looked for there.
@@ -245,6 +257,9 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
   );
   const destinationOf = new Map<ImportSource, string>();
   documents.forEach(({ source }, index) => destinationOf.set(source, destinations[index]));
+  /** For each imported file, the documents whose shards link to it. */
+  const linkedFrom = new Map<ImportSource, Set<ImportSource>>();
+  const saved = new Set<ImportSource>();
 
   const index = new SourceIndex(options.sources);
   const attachments = new Map<string, Promise<string | null>>();
@@ -256,10 +271,10 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
   const attach = (path: string, name: string) => {
     let link = attachments.get(path);
     if (!link) {
-      link = io
-        .readFile(path)
-        .then((bytes) => io.saveAttachment(name, bytes))
-        .catch(() => null);
+      const stored = io.copyAttachment
+        ? io.copyAttachment(path)
+        : io.readFile(path).then((bytes) => io.saveAttachment(name, bytes));
+      link = stored.catch(() => null);
       attachments.set(path, link);
     }
     return link;
@@ -341,7 +356,8 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
       linkTo: (target) => {
         const linked = index.find(source.relativePath, target, ["md", "html", "htm", "docx", "txt"]);
         const linkedDestination = linked ? destinationOf.get(linked) : undefined;
-        if (!linkedDestination) return null;
+        if (!linked || !linkedDestination) return null;
+        linkedFrom.set(linked, (linkedFrom.get(linked) ?? new Set()).add(source));
         return encodeShardLinkPath(relativePath(destination, linkedDestination));
       },
       report: (detail) => onProgress?.({ done: position, total, current: source.relativePath, detail }),
@@ -367,8 +383,22 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
       const markdown =
         output.markdown !== undefined ? output.markdown : await io.serialize(output.nodes, destination);
       checkCancelled();
-      await io.saveShard(destination, markdown);
-      report.created.push({ source: source.relativePath, path: destination, format: importer.label, warnings });
+      const savedAt = await io.saveShard(destination, markdown);
+      saved.add(source);
+      if (savedAt !== destination) {
+        // Something took the name since it was reserved. Shards linking to
+        // it from now on find it where it went; those already saved are fixed.
+        destinationOf.set(source, savedAt);
+        const linking = [...(linkedFrom.get(source) ?? [])]
+          .filter((from) => from !== source && saved.has(from))
+          .map((from) => destinationOf.get(from)!);
+        if (linking.length) {
+          await io
+            .fixLinks(linking, destination, savedAt)
+            .catch(() => context.warn("Links to it from other imported shards weren't updated."));
+        }
+      }
+      report.created.push({ source: source.relativePath, path: savedAt, format: importer.label, warnings });
     } catch (error) {
       if (error instanceof Cancelled || (error instanceof DOMException && error.name === "AbortError")) {
         report.cancelled = true;

@@ -229,7 +229,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       ];
 
       type Args = Record<string, string>;
-      const handlers: Record<string, (args: Args) => unknown> = {
+      type Options = { headers?: Record<string, string> };
+      const handlers: Record<string, (args: Args, options?: Options) => unknown> = {
         scan_vault: ({ vaultPath }) => {
           allowFolder(vaultPath);
           return tree;
@@ -281,11 +282,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           return null;
         },
         // Attachments are kept with the test's other binary files.
-        persist_attachment_bytes: ({ fileName, bytes, vaultPath: vault }) => {
-          allowFolder(vault);
-          const assetPath = `_attachments/${fileName}`;
+        persist_attachment_bytes: (bytes, options) => {
+          allowFolder(decodeURIComponent(options!.headers!["x-vault-path"]));
+          const assetPath = `_attachments/${decodeURIComponent(options!.headers!["x-file-name"])}`;
           binaries[assetPath] = btoa(
-            String.fromCharCode(...(bytes as unknown as number[])),
+            String.fromCharCode(...(bytes as unknown as Uint8Array)),
           );
           return {
             assetPath,
@@ -322,7 +323,16 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         save_imported_shard: ({ filePath, content }) => {
           files[relative(filePath)] = content;
           window.__saves.push({ filePath, content });
-          return null;
+          return filePath;
+        },
+        import_attachment: ({ path }) => {
+          const assetPath = `_attachments/${path.slice(path.lastIndexOf("/") + 1)}`;
+          binaries[assetPath] = binaries[relative(path)];
+          return {
+            assetPath,
+            absolutePath: `${vaultPath}/${assetPath}`,
+            syncStatus: "syncable",
+          };
         },
         get_file_metadata: ({ filePath }) => {
           const content = files[relative(filePath)] ?? "";
@@ -404,9 +414,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         // As on Windows; the route below serves these from `assets`.
         convertFileSrc: (path: string) =>
           `http://asset.localhost/${encodeURIComponent(path)}`,
-        invoke: async (command: string, args: Args = {}) => {
+        invoke: async (command: string, args: Args = {}, options?: Options) => {
           window.__commands.push({ command, args });
-          if (handlers[command]) return handlers[command](args);
+          if (handlers[command]) return handlers[command](args, options);
           if (command.startsWith("plugin:event|listen")) {
             const { event, handler } = args as unknown as { event: string; handler: number };
             (listeners[event] ??= []).push(handler);

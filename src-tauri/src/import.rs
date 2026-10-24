@@ -3,15 +3,63 @@
 //! The app converts each file itself (see `src/lib/import`). This side lists
 //! the files a person picked, reads them, and finds free names for the shards
 //! they become, so an import never overwrites anything already in the vault.
+//! It reads nothing but the picked files, and the attachment folders of the
+//! vaults they come from.
 //! It also takes an import back when the person asks right after.
 
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::db::attachments::ATTACHMENTS_DIR_NAME;
 use crate::vault;
+use crate::vault_access::is_within;
+
+/// The files and folders picked for the import running now.
+pub struct PickedSources {
+    picked: Mutex<Vec<PathBuf>>,
+}
+
+static PICKED: PickedSources = PickedSources::new();
+
+pub fn picked() -> &'static PickedSources {
+    &PICKED
+}
+
+impl PickedSources {
+    const fn new() -> Self {
+        Self {
+            picked: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Notes what the person just picked in the import dialog, in place of
+    /// what they picked before.
+    pub fn allow(&self, paths: &[PathBuf]) {
+        *self.picked.lock().unwrap_or_else(|e| e.into_inner()) = paths.to_vec();
+    }
+
+    /// Checks that an import may read `path`: a picked file, a file in a
+    /// picked folder, or a file in an `_attachments` folder above one, where
+    /// shards from another vault keep their pictures.
+    pub fn check(&self, path: &Path) -> Result<(), String> {
+        let picked = self.picked.lock().unwrap_or_else(|e| e.into_inner());
+        let allowed = picked.iter().any(|source| {
+            is_within(source, path)
+                || source
+                    .ancestors()
+                    .skip(1)
+                    .any(|folder| is_within(&folder.join(ATTACHMENTS_DIR_NAME), path))
+        });
+        if allowed {
+            Ok(())
+        } else {
+            Err(format!("{} wasn't picked for import", path.display()))
+        }
+    }
+}
 
 /// A file found among the picked files and folders.
 #[derive(Debug, Serialize, PartialEq)]
@@ -147,23 +195,31 @@ fn key(path: &Path) -> String {
     path.to_string_lossy().to_lowercase()
 }
 
-/// Checks that `path` is a new `.md` file inside `vault_root` and creates its
-/// folders, ready for the shard to be written.
-pub fn prepare_new_shard(vault_root: &Path, path: &Path) -> Result<(), String> {
+/// Claims a new `.md` file inside `vault_root` for an imported shard: `path`,
+/// or when something took that name since it was reserved, the first free
+/// `_1`, `_2`, … after it. Creates its folders and returns where it is.
+pub fn prepare_new_shard(vault_root: &Path, path: &Path) -> Result<PathBuf, String> {
     if !vault::is_markdown_path(path) {
         return Err(format!("Not a shard: {}", path.display()));
     }
     if path.components().any(|c| matches!(c, Component::ParentDir)) || !path.starts_with(vault_root) {
         return Err(format!("{} is outside the vault", path.display()));
     }
-    if path.exists() {
-        return Err(format!("{} already exists", path.display()));
+    let parent = path.parent().ok_or_else(|| format!("Not a shard: {}", path.display()))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create folder {}: {}", parent.display(), e))?;
+
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let candidates = std::iter::once(path.to_path_buf())
+        .chain((1..).map(|n| parent.join(format!("{}_{}.md", stem, n))));
+    for candidate in candidates {
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(_) => return Ok(candidate),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("Failed to create {}: {}", candidate.display(), e)),
+        }
     }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create folder {}: {}", parent.display(), e))?;
-    }
-    Ok(())
+    unreachable!("an endless list of names")
 }
 
 /// Removes the folders an undone import leaves empty, from each shard's
@@ -275,14 +331,36 @@ mod tests {
     }
 
     #[test]
-    fn refuses_paths_outside_the_vault_or_already_there() {
+    fn a_name_taken_since_it_was_reserved_moves_to_the_next_free_one() {
         let vault = temp_dir("prepare");
         std::fs::write(vault.join("Taken.md"), "x").unwrap();
+        std::fs::write(vault.join("Taken_1.md"), "y").unwrap();
 
-        assert!(prepare_new_shard(&vault, &vault.join("Taken.md")).is_err());
+        assert_eq!(prepare_new_shard(&vault, &vault.join("Taken.md")).unwrap(), vault.join("Taken_2.md"));
+        assert_eq!(std::fs::read_to_string(vault.join("Taken.md")).unwrap(), "x");
         assert!(prepare_new_shard(&vault, &vault.join("../Escape.md")).is_err());
-        assert!(prepare_new_shard(&vault, &vault.join("Deep/New.md")).is_ok());
+        assert!(prepare_new_shard(&vault, &vault.join("Notes.txt")).is_err());
+        assert_eq!(prepare_new_shard(&vault, &vault.join("Deep/New.md")).unwrap(), vault.join("Deep/New.md"));
         assert!(vault.join("Deep").is_dir());
+    }
+
+    #[test]
+    fn imports_read_only_what_was_picked_and_attachment_folders_above_it() {
+        let root = temp_dir("picked");
+        let vault = root.join("Other vault");
+        let picked = PickedSources::new();
+        picked.allow(&[vault.join("Notes"), root.join("Single.docx")]);
+
+        assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_ok());
+        assert!(picked.check(&root.join("Single.docx")).is_ok());
+        assert!(picked.check(&vault.join("_attachments/photo.png")).is_ok());
+        assert!(picked.check(&root.join("_attachments/scan.pdf")).is_ok());
+        assert!(picked.check(&vault.join("Private/Diary.md")).is_err());
+        assert!(picked.check(&root.join("Other.docx")).is_err());
+        assert!(picked.check(&vault.join("Notes/../Private/Diary.md")).is_err());
+
+        picked.allow(&[root.join("Single.docx")]);
+        assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_err());
     }
 
     #[test]

@@ -226,13 +226,36 @@ export async function reserveImportPaths(
   return invoke<string[]>("reserve_import_paths", { targetDir, relativePaths });
 }
 
+/**
+ * Writes an imported shard at `filePath`, or at the next free name when that
+ * was taken since it was reserved. Returns where it went.
+ */
 export async function saveImportedShard(
   vaultPath: string,
   filePath: string,
   content: string,
+): Promise<string> {
+  assertTauri();
+  return invoke<string>("save_imported_shard", { vaultPath, filePath, content });
+}
+
+/** Points the links in `shardPaths` to `oldPath` at `newPath`. */
+export async function fixImportedLinks(
+  shardPaths: string[],
+  oldPath: string,
+  newPath: string,
 ): Promise<void> {
   assertTauri();
-  await invoke("save_imported_shard", { vaultPath, filePath, content });
+  await invoke("fix_imported_links", { shardPaths, oldPath, newPath });
+}
+
+/** Copies a file an imported shard uses into the vault's attachments. */
+export async function importAttachment(
+  path: string,
+  vaultPath: string,
+): Promise<PersistedAttachment> {
+  assertTauri();
+  return invoke<PersistedAttachment>("import_attachment", { path, vaultPath });
 }
 
 /**
@@ -256,10 +279,11 @@ export async function persistAttachmentBytes(
   vaultPath: string,
 ): Promise<PersistedAttachment> {
   assertTauri();
-  return invoke<PersistedAttachment>("persist_attachment_bytes", {
-    fileName,
-    bytes: Array.from(bytes),
-    vaultPath,
+  return invoke<PersistedAttachment>("persist_attachment_bytes", bytes, {
+    headers: {
+      "x-file-name": encodeURIComponent(fileName),
+      "x-vault-path": encodeURIComponent(vaultPath),
+    },
   });
 }
 

@@ -201,26 +201,45 @@ fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
         dialog.blocking_pick_files().unwrap_or_default()
     };
 
-    picked
+    let picked: Vec<std::path::PathBuf> = picked
         .into_iter()
         .filter_map(|path| path.into_path().ok())
+        .collect();
+    import::picked().allow(&picked);
+    picked
+        .into_iter()
         .map(|path| path.to_string_lossy().into_owned())
         .collect()
 }
 
 /// Lists the files in the picked files and folders.
 #[tauri::command(async)]
-fn list_import_sources(paths: Vec<String>) -> Vec<import::ImportSourceFile> {
+fn list_import_sources(paths: Vec<String>) -> Result<Vec<import::ImportSourceFile>, String> {
     let paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
-    import::list_sources(&paths)
+    for path in &paths {
+        import::picked().check(path)?;
+    }
+    Ok(import::list_sources(&paths))
 }
 
 /// Reads a file being imported, as raw bytes.
 #[tauri::command(async)]
 fn read_import_file(path: String) -> Result<tauri::ipc::Response, String> {
+    import::picked().check(Path::new(&path))?;
     std::fs::read(&path)
         .map(tauri::ipc::Response::new)
         .map_err(|e| format!("Could not read {}: {}", path, e))
+}
+
+/// Copies a file an imported shard uses into the vault's attachments.
+#[tauri::command(async)]
+fn import_attachment(
+    app: tauri::AppHandle,
+    path: String,
+    vault_path: String,
+) -> Result<db::attachments::PersistedAttachment, String> {
+    import::picked().check(Path::new(&path))?;
+    persist_attachment_file(app, path, vault_path)
 }
 
 /// Takes an import back: moves the shards it made to the trash, like
@@ -261,15 +280,39 @@ fn reserve_import_paths(target_dir: String, relative_paths: Vec<String>) -> Resu
     import::reserve_shard_paths(Path::new(&target_dir), &relative_paths)
 }
 
-/// Writes an imported shard to a path `reserve_import_paths` gave out.
+/// Writes an imported shard to a path `reserve_import_paths` gave out, or the
+/// next free one when that was taken since. Returns where it went.
 #[tauri::command(async)]
-fn save_imported_shard(vault_path: String, file_path: String, content: String) -> Result<(), String> {
+fn save_imported_shard(vault_path: String, file_path: String, content: String) -> Result<String, String> {
     open_vault_only(&vault_path)?;
     let writes = locks::vault_writes()?;
-    import::prepare_new_shard(Path::new(&vault_path), Path::new(&file_path))?;
-    write_shard(&writes, &file_path, &content)
+    let path = import::prepare_new_shard(Path::new(&vault_path), Path::new(&file_path))?;
+    let path = path.to_string_lossy().into_owned();
+    if let Err(error) = write_shard(&writes, &path, &content) {
+        let _ = std::fs::remove_file(&path);
+        return Err(error);
+    }
+    Ok(path)
 }
 
+/// Points the links in shards this import already saved at `new_path`,
+/// where the shard reserved at `old_path` went instead.
+#[tauri::command(async)]
+fn fix_imported_links(shard_paths: Vec<String>, old_path: String, new_path: String) -> Result<(), String> {
+    let moved = [shard_links::MovedShard { old: old_path, new: new_path }];
+    let writes = locks::vault_writes()?;
+    for shard in &shard_paths {
+        in_open_vault(shard)?;
+        let markdown = std::fs::read_to_string(shard)
+            .map_err(|e| format!("Failed to read {}: {}", shard, e))?;
+        if let Some(fixed) = shard_links::rewrite_moved_links(&markdown, shard, shard, &moved) {
+            write_shard(&writes, shard, &fixed)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies a file on this computer into the vault's attachments.
 #[tauri::command(async)]
 fn persist_attachment_file(
     app: tauri::AppHandle,
@@ -281,23 +324,28 @@ fn persist_attachment_file(
     let vault = std::path::Path::new(&vault_path);
     asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
+    let writes = locks::vault_writes()?;
 
-    db::attachments::persist_attachment_file(&conn, vault, source)
+    db::attachments::persist_attachment_file(&conn, &writes, vault, source)
 }
 
+/// Stores a file the app holds (pasted, dropped or made) as an attachment.
+/// The body is the file; its name and the vault come URI-encoded in the
+/// `x-file-name` and `x-vault-path` headers.
 #[tauri::command(async)]
 fn persist_attachment_bytes(
     app: tauri::AppHandle,
-    file_name: String,
-    bytes: Vec<u8>,
-    vault_path: String,
+    request: tauri::ipc::Request<'_>,
 ) -> Result<db::attachments::PersistedAttachment, String> {
+    let file_name = export::header(&request, "x-file-name").ok_or("The file is missing its name.")?;
+    let vault_path = export::header(&request, "x-vault-path").ok_or("The file is missing its vault.")?;
     open_vault_only(&vault_path)?;
     let vault = std::path::Path::new(&vault_path);
     asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
+    let writes = locks::vault_writes()?;
 
-    db::attachments::persist_attachment_bytes(&conn, vault, &file_name, &bytes)
+    db::attachments::persist_attachment_bytes(&conn, &writes, vault, &file_name, export::raw_body(&request)?)
 }
 
 /// Re-checks the vault's attachments against its shards and the attachment
@@ -1627,6 +1675,8 @@ pub fn run() {
             save_imported_shard,
             persist_attachment_file,
             persist_attachment_bytes,
+            import_attachment,
+            fix_imported_links,
             file_exists,
             show_linked_file,
             scan_vault,

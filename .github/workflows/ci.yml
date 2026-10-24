@@ -41,36 +41,48 @@ jobs:
         run: pnpm test
 
   # The slowest job, so its tests are split across two runners.
+  # A matrix job skipped as a whole reports one check with the matrix left
+  # unexpanded, so the required "(1/2)" and "(2/2)" checks would never report.
+  # A docs-only run still starts both shards and skips their steps instead.
   browser-shard:
     name: Browser tests (${{ matrix.shard }}/2)
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      TEST: ${{ needs.changes.result != 'success' || needs.changes.outputs.code == 'true' }}
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2]
     steps:
-      - uses: actions/checkout@v7
+      - if: env.TEST == 'true'
+        uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
+      - if: env.TEST == 'true'
+        uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v7
+      - if: env.TEST == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - if: env.TEST == 'true'
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm exec playwright install --with-deps chromium
+      - if: env.TEST == 'true'
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Build
+        if: env.TEST == 'true'
         run: pnpm exec vite build
 
       # Editor tests in a real Chromium against the built app, with the
       # desktop bridge mocked (see e2e/vault.ts).
       - name: Test
+        if: env.TEST == 'true'
         run: pnpm test:e2e --shard=${{ matrix.shard }}/2
 
       - uses: actions/upload-artifact@v4

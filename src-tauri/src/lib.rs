@@ -455,6 +455,25 @@ async fn sync_now(vault_path: String) -> Result<sync::SyncReport, String> {
     sync::sync_now(sync::sync_root()?, vault_path.into()).await
 }
 
+/// Old versions of the open vault's attachments still in its history.
+#[tauri::command(async)]
+fn history_old_attachments(
+    vault_path: String,
+) -> Result<Vec<sync::space::OldAttachment>, String> {
+    open_vault_only(&vault_path)?;
+    sync::space::old_attachments(&sync::sync_root()?, Path::new(&vault_path))
+}
+
+/// Removes the picked old attachment versions from the vault's history.
+#[tauri::command]
+async fn history_free_up_space(
+    vault_path: String,
+    blobs: Vec<String>,
+) -> Result<sync::space::Freed, String> {
+    open_vault_only(&vault_path)?;
+    sync::free_up_space(sync::sync_root()?, vault_path.into(), blobs).await
+}
+
 #[tauri::command]
 async fn sync_list_backups() -> Result<Vec<github::repos::BackupSummary>, String> {
     sync::list_backups().await
@@ -1703,6 +1722,8 @@ pub fn run() {
             history_list_versions,
             history_read_version,
             history_restore,
+            history_old_attachments,
+            history_free_up_space,
             sync_turn_on_backup,
             sync_now,
             sync_list_backups,

@@ -155,16 +155,18 @@ fn append(path: &Path, entries: &[Arc<VersionChanges>]) {
     }
 }
 
-/// The versions from `head` back to the first one, following first parents,
-/// newest first, each with what it changed, stopping at the first one `keep`
-/// turns down. Versions not in the index yet are worked out and added to it.
-pub fn first_parent_line(
-    repository: &Repository,
-    head: Oid,
-    keep: impl Fn(&VersionChanges) -> bool,
-) -> Result<Vec<Arc<VersionChanges>>, String> {
-    let path = index_path(repository);
-    let mut known = {
+/// Reads entries from the index, working out the ones it doesn't have yet
+/// and adding them to it when done.
+struct Reader<'r> {
+    repository: &'r Repository,
+    path: PathBuf,
+    known: HashMap<Oid, Arc<VersionChanges>>,
+    added: Vec<Arc<VersionChanges>>,
+}
+
+impl<'r> Reader<'r> {
+    fn new(repository: &'r Repository) -> Self {
+        let path = index_path(repository);
         let mut indexes = INDEXES.lock().unwrap_or_else(|e| e.into_inner());
         let loaded = indexes
             .get_or_insert_with(HashMap::new)
@@ -174,52 +176,93 @@ pub fn first_parent_line(
                 read_up_to: 0,
             });
         catch_up(&path, loaded);
-        loaded.entries.clone()
-    };
+        Reader {
+            repository,
+            known: loaded.entries.clone(),
+            path,
+            added: Vec::new(),
+        }
+    }
 
+    fn get(&mut self, id: Oid) -> Result<Arc<VersionChanges>, String> {
+        if let Some(entry) = self.known.get(&id) {
+            return Ok(entry.clone());
+        }
+        let commit = self
+            .repository
+            .find_commit(id)
+            .map_err(|e| git_error("Failed to read history", e))?;
+        let entry = Arc::new(changes_of(self.repository, &commit)?);
+        self.known.insert(id, entry.clone());
+        self.added.push(entry.clone());
+        Ok(entry)
+    }
+
+    fn finish(mut self) {
+        if self.added.is_empty() {
+            return;
+        }
+        let mut indexes = INDEXES.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(loaded) = indexes
+            .get_or_insert_with(HashMap::new)
+            .get_mut(self.repository.path())
+        {
+            // Another listing may have added them meanwhile.
+            catch_up(&self.path, loaded);
+            self.added
+                .retain(|entry| !loaded.entries.contains_key(&entry.id));
+            append(&self.path, &self.added);
+            for entry in &self.added {
+                loaded.entries.insert(entry.id, entry.clone());
+            }
+            // Ours is read already.
+            loaded.read_up_to = std::fs::metadata(&self.path)
+                .map(|m| m.len())
+                .unwrap_or(loaded.read_up_to);
+        }
+    }
+}
+
+/// The versions from `head` back to the first one, following first parents,
+/// newest first, each with what it changed, stopping at the first one `keep`
+/// turns down. Versions not in the index yet are worked out and added to it.
+pub fn first_parent_line(
+    repository: &Repository,
+    head: Oid,
+    keep: impl Fn(&VersionChanges) -> bool,
+) -> Result<Vec<Arc<VersionChanges>>, String> {
+    let mut reader = Reader::new(repository);
     let mut line = Vec::new();
-    let mut added = Vec::new();
     let mut next = Some(head);
     while let Some(id) = next {
-        let entry = match known.get(&id) {
-            Some(entry) => entry.clone(),
-            None => {
-                let commit = repository
-                    .find_commit(id)
-                    .map_err(|e| git_error("Failed to read history", e))?;
-                let entry = Arc::new(changes_of(repository, &commit)?);
-                known.insert(id, entry.clone());
-                added.push(entry.clone());
-                entry
-            }
-        };
+        let entry = reader.get(id)?;
         if !keep(&entry) {
             break;
         }
         next = entry.parent;
         line.push(entry);
     }
-
-    if !added.is_empty() {
-        let mut indexes = INDEXES.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(loaded) = indexes
-            .get_or_insert_with(HashMap::new)
-            .get_mut(repository.path())
-        {
-            // Another listing may have added them meanwhile.
-            catch_up(&path, loaded);
-            added.retain(|entry| !loaded.entries.contains_key(&entry.id));
-            append(&path, &added);
-            for entry in &added {
-                loaded.entries.insert(entry.id, entry.clone());
-            }
-            // Ours is read already.
-            loaded.read_up_to = std::fs::metadata(&path)
-                .map(|m| m.len())
-                .unwrap_or(loaded.read_up_to);
-        }
-    }
+    reader.finish();
     Ok(line)
+}
+
+/// Every version reachable from `heads`, other devices' included, each with
+/// what it changed compared with its first parent.
+pub fn every_version(
+    repository: &Repository,
+    heads: &[Oid],
+) -> Result<Vec<Arc<VersionChanges>>, String> {
+    let read = |e| git_error("Failed to read history", e);
+    let mut walk = repository.revwalk().map_err(read)?;
+    for head in heads {
+        walk.push(*head).map_err(read)?;
+    }
+    let mut reader = Reader::new(repository);
+    let versions = walk
+        .map(|id| reader.get(id.map_err(read)?))
+        .collect::<Result<Vec<_>, String>>()?;
+    reader.finish();
+    Ok(versions)
 }
 
 /// What `commit` changed compared with its first parent.

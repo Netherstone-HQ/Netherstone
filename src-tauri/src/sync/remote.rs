@@ -79,8 +79,18 @@ pub fn fetch(repository: &Repository, token: &str) -> Result<Option<Oid>, String
     let mut options = FetchOptions::new();
     options.remote_callbacks(authenticated_callbacks(token));
     let refspec = format!("+refs/heads/{}:{}", DEFAULT_BRANCH, remote_branch_ref());
+    // What Free up space removed on any device (see `sync::space`).
+    let freed = format!(
+        "+{}*:{}*",
+        super::space::FREED_PREFIX,
+        super::space::REMOTE_FREED_PREFIX
+    );
     remote
-        .fetch(&[refspec.as_str()], Some(&mut options), None)
+        .fetch(
+            &[refspec.as_str(), freed.as_str()],
+            Some(&mut options),
+            None,
+        )
         .map_err(|e| transfer_error_message(&e, "Download from GitHub"))?;
 
     match repository.find_reference(&remote_branch_ref()) {
@@ -100,7 +110,17 @@ pub fn push(repository: &Repository, token: &str) -> Result<(), String> {
     if repository.head().is_err() {
         return Ok(());
     }
+    let refspec = format!("refs/heads/{0}:refs/heads/{0}", DEFAULT_BRANCH);
+    push_refspecs(repository, token, &[refspec.as_str()])
+}
 
+/// Pushes `refspecs` to `origin`. A `+` refspec replaces what's there, even
+/// when it isn't an ancestor: only Free up space does that.
+pub fn push_refspecs(
+    repository: &Repository,
+    token: &str,
+    refspecs: &[&str],
+) -> Result<(), String> {
     let mut remote = repository
         .find_remote(REMOTE_NAME)
         .map_err(|_| "This vault has no backup location yet.".to_string())?;
@@ -117,9 +137,8 @@ pub fn push(repository: &Repository, token: &str) -> Result<(), String> {
     let mut options = PushOptions::new();
     options.remote_callbacks(callbacks);
 
-    let refspec = format!("refs/heads/{0}:refs/heads/{0}", DEFAULT_BRANCH);
     remote
-        .push(&[refspec.as_str()], Some(&mut options))
+        .push(refspecs, Some(&mut options))
         .map_err(|e| transfer_error_message(&e, "Upload to GitHub"))?;
     drop(options);
 

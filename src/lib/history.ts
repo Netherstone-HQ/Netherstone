@@ -266,3 +266,28 @@ export function groupByDay(
   }
   return days;
 }
+
+/** An attachment with old versions in the history. */
+export type OldAttachment = {
+  /** Relative to the vault, as its newest old version was named. */
+  path: string;
+  /** What its old versions take. */
+  sizeBytes: number;
+  /** Its old versions, as blob ids. */
+  blobs: string[];
+};
+
+export function listOldAttachments(vaultPath: string) {
+  return invoke<OldAttachment[]>("history_old_attachments", { vaultPath });
+}
+
+/**
+ * Removes old attachment versions from the history, on GitHub and other
+ * devices too when sync is on. Resolves to the bytes freed.
+ */
+export function freeUpSpace(vaultPath: string, blobs: string[]) {
+  return invoke<{ bytes: number }>("history_free_up_space", {
+    vaultPath,
+    blobs,
+  }).then((freed) => freed.bytes);
+}

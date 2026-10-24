@@ -17,6 +17,7 @@ pub mod pack;
 pub mod planner;
 pub mod remote;
 pub mod repo;
+pub mod space;
 pub mod state;
 
 use serde::Serialize;
@@ -152,6 +153,7 @@ fn sync_cycle(
 ) -> Result<SyncReport, String> {
     let _sync = crate::locks::sync(sync_root)?;
     let mut changed = Vec::new();
+    let mut followed_freed = false;
     let mut conflicts = Vec::new();
 
     // history.lock is only held for the local steps, so saving a version,
@@ -170,6 +172,9 @@ fn sync_cycle(
             let _history = crate::locks::history(sync_root)?;
             // Changes saved while downloading go in first.
             snapshot_locked(sync_root, vault_path)?;
+            // Another device freed up space: the same here first, so this
+            // history and GitHub's match again.
+            followed_freed |= space::follow_freed(&repository)?;
             let mut integration = merge::integrate(&repository, vault_path, remote_head)?;
             changed.append(&mut integration.changed);
             conflicts.append(&mut integration.conflicts);
@@ -191,6 +196,13 @@ fn sync_cycle(
     record.last_commit = head.as_ref().map(|c| c.id().to_string());
     record.last_commit_at = head.as_ref().map(|c| c.time().seconds());
     record.last_sync_at = Some(now_unix_seconds());
+    if followed_freed {
+        // Open handles would keep old packs from being removed on Windows.
+        drop(head);
+        drop(repository);
+        pack::pack_repository(&state::git_dir(sync_root, &record.vault_id), &record)?;
+        record.last_packed_at = Some(now_unix_seconds());
+    }
     let detected_at = now_unix_seconds();
     for conflict in conflicts {
         // A newer GitHub version of the same file replaces the older one.
@@ -319,6 +331,70 @@ pub async fn sync_now(sync_root: PathBuf, vault_path: PathBuf) -> Result<SyncRep
         sync_cycle(&sync_root, &vault_path, &remote_url, &token)
     })
     .await
+}
+
+/// Removes the old attachment versions `blobs` from the vault's history (see
+/// [`space`]). With sync on, GitHub's changes come in first and GitHub's
+/// history is replaced too, so other devices follow on their next sync.
+pub async fn free_up_space(
+    sync_root: PathBuf,
+    vault_path: PathBuf,
+    blobs: Vec<String>,
+) -> Result<space::Freed, String> {
+    let record = {
+        let (root, vault) = (sync_root.clone(), vault_path.clone());
+        run_blocking(move || state::load_or_create_record(&root, &vault)).await?
+    };
+    let remote = match (&record.remote_url, record.sync_enabled) {
+        (Some(url), true) => Some((url.clone(), signed_in_token()?)),
+        _ => None,
+    };
+
+    run_blocking(move || {
+        let remote = remote
+            .as_ref()
+            .map(|(url, token)| (url.as_str(), token.as_str()));
+        free_up_space_now(&sync_root, &vault_path, &blobs, remote)
+    })
+    .await
+}
+
+/// [`free_up_space`], with GitHub's `(url, token)` when sync is on.
+fn free_up_space_now(
+    sync_root: &Path,
+    vault_path: &Path,
+    blobs: &[String],
+    remote: Option<(&str, &str)>,
+) -> Result<space::Freed, String> {
+    if let Some((url, token)) = remote {
+        sync_cycle(sync_root, vault_path, url, token)?;
+    }
+    let _sync = crate::locks::sync(sync_root)?;
+    let _history = crate::locks::history(sync_root)?;
+    let snapshot = snapshot_locked(sync_root, vault_path)?;
+    let Some((_, token)) = remote else {
+        return space::free_locked(sync_root, vault_path, blobs, None);
+    };
+
+    // Anything another device uploaded since the sync would be lost.
+    let git_dir = state::git_dir(sync_root, &snapshot.vault_id);
+    let repository = repo::open_or_init(&git_dir, vault_path)?;
+    if let Some(remote_head) = remote::fetch(&repository, token)? {
+        let head = repo::head_commit(&repository)?.map(|commit| commit.id());
+        let has_it = head.is_some_and(|head| {
+            head == remote_head
+                || repository
+                    .graph_descendant_of(head, remote_head)
+                    .unwrap_or(false)
+        });
+        if !has_it {
+            return Err("Another device just synced. Try again.".to_string());
+        }
+    }
+    let upload = |repository: &git2::Repository, refspecs: &[&str]| {
+        remote::push_refspecs(repository, token, refspecs)
+    };
+    space::free_locked(sync_root, vault_path, blobs, Some(&upload))
 }
 
 /// Stops backing up a vault. The GitHub repository and the local history are

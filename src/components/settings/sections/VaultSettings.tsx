@@ -3,6 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { LoaderCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { FreeUpSpaceRow } from "@/components/settings/FreeUpSpaceRow";
 import {
   PreferenceSegments,
   SettingRow,
@@ -67,6 +68,12 @@ export function VaultSettings() {
       {vaultPath ? (
         <SettingsGroup title="Search">
           <RefreshIndexRow vaultPath={vaultPath} />
+        </SettingsGroup>
+      ) : null}
+
+      {vaultPath ? (
+        <SettingsGroup title="History">
+          <FreeUpSpaceRow vaultPath={vaultPath} />
         </SettingsGroup>
       ) : null}
     </>

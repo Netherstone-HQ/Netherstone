@@ -72,6 +72,12 @@ comes from a line in its commit message: `Changed outside the app: <path>` or
 writes the old content, then saves that as a version, so a restore can always
 be undone.
 
+The panel and the Overview calendar read the history through the
+changed-paths index (`src-tauri/src/sync/changes.rs`): one line per version
+in the repository's folder, with the files it changed. A version's entry is
+worked out the first time it's read and never changes, so a long history
+doesn't mean opening every version again.
+
 ## Locks
 
 `src-tauri/src/locks.rs` holds three locks shared by every Netherstone

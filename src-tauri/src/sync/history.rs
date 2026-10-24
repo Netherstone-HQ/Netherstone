@@ -2,7 +2,7 @@
 //! listing them, reading one, and restoring one.
 
 use super::{planner, repo, state};
-use git2::{Commit, DiffFindOptions, ObjectType, Oid, Repository, Tree};
+use git2::{ObjectType, Oid, Repository, Tree};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
@@ -113,38 +113,9 @@ fn blob_at(tree: &Tree, path: &str) -> Option<Oid> {
         .map(|entry| entry.id())
 }
 
-/// The path `path` had in `parent`, when `commit` renamed it.
-fn renamed_from(
-    repository: &Repository,
-    parent: &Tree,
-    tree: &Tree,
-    path: &str,
-) -> Result<Option<String>, String> {
-    let mut diff = repository
-        .diff_tree_to_tree(Some(parent), Some(tree), None)
-        .map_err(|e| git_error("Failed to read history", e))?;
-    diff.find_similar(Some(DiffFindOptions::new().renames(true)))
-        .map_err(|e| git_error("Failed to read history", e))?;
-    Ok(diff.deltas().find_map(|delta| {
-        let renamed = delta.status() == git2::Delta::Renamed
-            && delta.new_file().path().and_then(Path::to_str) == Some(path);
-        renamed
-            .then(|| {
-                delta
-                    .old_file()
-                    .path()
-                    .and_then(Path::to_str)
-                    .map(String::from)
-            })
-            .flatten()
-    }))
-}
-
-fn note_for(commit: &Commit, path: &str) -> Option<Note> {
-    commit
-        .message()
-        .unwrap_or_default()
-        .lines()
+/// The note a version's commit message body has about `path`.
+fn note_in(body: &str, path: &str) -> Option<Note> {
+    body.lines()
         .filter_map(Note::parse)
         .find(|note| note.path() == path)
 }
@@ -190,80 +161,58 @@ pub fn list_versions(
     };
 
     let mut path = super::vault_relative(vault_path, file_path)?;
-    let mut commit = head;
+    let head_tree = head
+        .tree()
+        .map_err(|e| git_error("Failed to read history", e))?;
     // A deleted file: its versions end with the last one that had it.
-    while blob_at(
-        &commit
-            .tree()
-            .map_err(|e| git_error("Failed to read history", e))?,
-        &path,
-    )
-    .is_none()
-    {
-        match commit.parent(0) {
-            Ok(parent) => commit = parent,
-            Err(_) => return Ok(FileHistory::default()),
-        }
-    }
+    let mut has_it = blob_at(&head_tree, &path).is_some();
     let mut changes = Vec::new();
-    loop {
-        let tree = commit
-            .tree()
-            .map_err(|e| git_error("Failed to read history", e))?;
-        let Some(blob) = blob_at(&tree, &path) else {
-            break;
-        };
-        // Only the first parent: the device's own line of versions, with
-        // changes from other devices arriving in the syncs that merged them.
-        let parent = commit.parent(0).ok();
-        let parent_tree = parent
-            .as_ref()
-            .map(Commit::tree)
-            .transpose()
-            .map_err(|e| git_error("Failed to read history", e))?;
-        let mut previous = parent_tree.as_ref().and_then(|t| blob_at(t, &path));
-        let mut renamed = None;
-        if previous.is_none()
-            && let Some(parent_tree) = &parent_tree
-        {
-            renamed = renamed_from(&repository, parent_tree, &tree, &path)?;
-            previous = renamed.as_deref().and_then(|old| blob_at(parent_tree, old));
-        }
-
-        if previous != Some(blob) || renamed.is_some() {
-            let note = note_for(&commit, &path);
-            let kind = match (&note, previous) {
-                (_, None) => VersionKind::Created,
-                (_, Some(previous)) if previous == blob => VersionKind::Renamed,
-                (Some(Note::Restored { .. }), _) => VersionKind::Restored,
-                (Some(Note::OutsideChange { .. }), _) => VersionKind::OutsideChange,
-                _ if commit.parent_count() > 1 => VersionKind::Synced,
-                _ => VersionKind::Edited,
-            };
-            changes.push(Change {
-                id: commit.id(),
-                time: commit.time().seconds(),
-                blob,
-                previous,
-                kind,
-                restored_from: match note {
-                    Some(Note::Restored { from, .. }) => Some(from),
-                    _ => None,
-                },
-                path: path.clone(),
-                renamed_from: renamed.clone(),
+    // Only first parents: the device's own line of versions, with changes
+    // from other devices arriving in the syncs that merged them.
+    for version in super::changes::first_parent_line(&repository, head.id(), |_| true)? {
+        if !has_it {
+            has_it = version.changes.iter().any(|change| {
+                (change.path == path && change.after.is_none())
+                    || change.renamed_from.as_deref() == Some(path.as_str())
             });
+            continue;
         }
+        let Some((change, blob)) = version.changes.iter().find_map(|change| {
+            let blob = change.after.filter(|_| change.path == path)?;
+            Some((change, blob))
+        }) else {
+            continue;
+        };
+        let previous = change.before;
+        let renamed = change.renamed_from.clone();
+        let note = note_in(&version.body, &path);
+        let kind = match (&note, previous) {
+            (_, None) => VersionKind::Created,
+            (_, Some(previous)) if previous == blob => VersionKind::Renamed,
+            (Some(Note::Restored { .. }), _) => VersionKind::Restored,
+            (Some(Note::OutsideChange { .. }), _) => VersionKind::OutsideChange,
+            _ if version.merge => VersionKind::Synced,
+            _ => VersionKind::Edited,
+        };
+        changes.push(Change {
+            id: version.id,
+            time: version.time,
+            blob,
+            previous,
+            kind,
+            restored_from: match note {
+                Some(Note::Restored { from, .. }) => Some(from),
+                _ => None,
+            },
+            path: path.clone(),
+            renamed_from: renamed.clone(),
+        });
 
         if previous.is_none() {
             break;
         }
         if let Some(old) = renamed {
             path = old;
-        }
-        match parent {
-            Some(parent) => commit = parent,
-            None => break,
         }
     }
 

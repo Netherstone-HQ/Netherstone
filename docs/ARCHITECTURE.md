@@ -19,6 +19,12 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
 - `src-tauri/src/vault.rs` reads the folder tree, skipping hidden files.
 - `watcher.rs` uses `notify` to pick up changes made outside the app, update
   the index and refresh the UI.
+- When the open shard changes outside the app, only the blocks that changed
+  are replaced, keeping the cursor and any unsaved edits elsewhere
+  (`src/lib/outside-changes.ts`). If the same blocks changed on both sides,
+  a dialog asks which version to keep. Both versions go into local history
+  first. An open drawing does the same shape by shape
+  (`src/components/ExcalidrawCanvas.tsx`).
 
 ## Editor and saving
 
@@ -48,6 +54,24 @@ and links into their own tables for the outline, tag view and link checks.
 Links to other shards are `@` mentions, saved as ordinary Markdown links to
 the shard's path relative to the linking file, `[label](../Projects/Plan.md)`.
 Renaming or moving a shard rewrites the links to it (`shard_links.rs`).
+
+## Overview
+
+The Overview page (`src/components/data/`) shows the words written each
+day, vault health and every chart. Words come from local history, so edits
+from other devices and other apps count (`src-tauri/src/db/data.rs`). A
+chart is drawn from the table right above a
+`<!-- netherstone chart: … -->` comment (`src/lib/chart.ts`), so the shard
+stays plain Markdown.
+
+## Import
+
+The import window (`src/components/import/`) turns Word, PDF, HTML,
+Markdown, CSV and text files into shards. Each format in
+`src/lib/import/formats/` converts its file to a Plate value, which is
+saved like any shard, and images go to `_attachments/`. Rust
+(`src-tauri/src/import.rs`) lists and reads the picked files and finds free
+names, so an import never overwrites anything already in the vault.
 
 ## Exports
 

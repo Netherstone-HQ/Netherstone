@@ -10,6 +10,9 @@ In Settings › Appearance:
 
 - **Theme:** Light, Dark or Match system, plus the darker Tyrant, Bloodline
   and Citadel themes.
+
+In Settings › Editor:
+
 - **Shard font:** Newsreader, Geist or your system font.
 - **Text size:** Small, Default or Large.
 - **Line width:** Narrow, Default, Wide or Full.

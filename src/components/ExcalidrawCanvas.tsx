@@ -271,10 +271,10 @@ function useDrawingPersistence(
 
     if (merged.conflicted) {
       toast.info(
-        `${getVaultFileDisplayName(getShardName(path))} also changed outside Netherstone`,
+        `${getVaultFileDisplayName(getShardName(path))} changed in two places`,
         {
           description:
-            "Where you both changed a shape, your version was kept. The other one is in History.",
+            "Current version was kept. The other version is in History.",
         },
       );
     }

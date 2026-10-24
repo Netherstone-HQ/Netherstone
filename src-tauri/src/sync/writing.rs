@@ -2,11 +2,11 @@
 //! history, so the Overview calendar counts other devices and changes made
 //! outside the app too.
 
-use super::{history, repo};
-use git2::{Commit, Delta, DiffFindOptions, Oid, Repository};
+use super::{changes, history, repo};
+use git2::{Oid, Repository};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WrittenDay {
@@ -29,18 +29,8 @@ pub struct WritingHistory {
     pub seen_paths: HashSet<String>,
 }
 
-/// A shard one commit changed, compared with the commit before it.
-#[derive(Debug)]
-struct ShardChange {
-    path: String,
-    renamed_from: Option<String>,
-    before: Option<Oid>,
-    after: Option<Oid>,
-}
-
-/// What each commit changed and each version's word count. Neither changes
-/// once written, so the page only works them out once.
-static CHANGES: Mutex<Option<HashMap<Oid, Arc<Vec<ShardChange>>>>> = Mutex::new(None);
+/// Each version's word count. It never changes once saved, so the page only
+/// works it out once.
 static WORDS: Mutex<Option<HashMap<Oid, i64>>> = Mutex::new(None);
 const MAX_CACHED: usize = 50_000;
 
@@ -58,10 +48,6 @@ fn remember<T>(cache: &Mutex<Option<HashMap<Oid, T>>>, id: Oid, value: T) {
     }
 }
 
-fn git_error(context: &str, e: git2::Error) -> String {
-    format!("{}: {}", context, e.message())
-}
-
 /// The local date of a commit made at `seconds`.
 fn local_day(seconds: i64) -> String {
     chrono::DateTime::from_timestamp(seconds, 0)
@@ -73,74 +59,8 @@ fn local_day(seconds: i64) -> String {
         .unwrap_or_default()
 }
 
-fn is_shard(path: Option<&Path>) -> Option<String> {
-    let path = path?;
-    crate::vault::is_markdown_path(path)
-        .then(|| path.to_str().map(|path| path.replace('\\', "/")))
-        .flatten()
-}
-
-/// The shards `commit` changed compared with `parent`.
-fn commit_changes(
-    repository: &Repository,
-    commit: &Commit,
-    parent: &Commit,
-) -> Result<Arc<Vec<ShardChange>>, String> {
-    if let Some(changes) = cached(&CHANGES, commit.id()) {
-        return Ok(changes);
-    }
-
-    // A sync that joined two unrelated histories, such as a vault with its
-    // own history first linked to GitHub, brings in a whole vault at once:
-    // that's not writing.
-    let joins_unrelated = commit.parent_count() > 1
-        && commit
-            .parent_id(1)
-            .is_ok_and(|other| repository.merge_base(parent.id(), other).is_err());
-
-    let mut changes = Vec::new();
-    if !joins_unrelated {
-        let read = |e| git_error("Failed to read history", e);
-        let (old, new) = (parent.tree().map_err(read)?, commit.tree().map_err(read)?);
-        let mut diff = repository
-            .diff_tree_to_tree(Some(&old), Some(&new), None)
-            .map_err(read)?;
-        diff.find_similar(Some(DiffFindOptions::new().renames(true)))
-            .map_err(read)?;
-        for delta in diff.deltas() {
-            let old_path = is_shard(delta.old_file().path());
-            let new_path = is_shard(delta.new_file().path());
-            let (old_id, new_id) = (delta.old_file().id(), delta.new_file().id());
-            let change = match delta.status() {
-                Delta::Added => new_path.map(|path| ShardChange {
-                    path,
-                    renamed_from: None,
-                    before: None,
-                    after: Some(new_id),
-                }),
-                Delta::Deleted => old_path.map(|path| ShardChange {
-                    path,
-                    renamed_from: None,
-                    before: Some(old_id),
-                    after: None,
-                }),
-                Delta::Modified | Delta::Renamed | Delta::Typechange => {
-                    new_path.map(|path| ShardChange {
-                        renamed_from: old_path.filter(|old| *old != path),
-                        path,
-                        before: Some(old_id),
-                        after: Some(new_id),
-                    })
-                }
-                _ => None,
-            };
-            changes.extend(change);
-        }
-    }
-
-    let changes = Arc::new(changes);
-    remember(&CHANGES, commit.id(), changes.clone());
-    Ok(changes)
+fn is_shard(path: &str) -> Option<String> {
+    crate::vault::is_markdown_path(Path::new(path)).then(|| path.to_string())
 }
 
 fn word_count(repository: &Repository, id: Oid) -> i64 {
@@ -184,34 +104,37 @@ pub fn writing_history(
     let mut names: HashMap<String, String> = HashMap::new();
     let mut seen_paths = HashSet::new();
     let mut began_on = None;
-    let mut commit = head;
-    loop {
-        let day = local_day(commit.time().seconds());
-        if day.as_str() < since {
-            break;
-        }
-        let Ok(parent) = commit.parent(0) else {
+    let line = changes::first_parent_line(&repository, head.id(), |version| {
+        local_day(version.time).as_str() >= since
+    })?;
+    for version in &line {
+        let day = local_day(version.time);
+        if version.parent.is_none() {
             began_on = Some(day);
             break;
-        };
+        }
+        // A sync that joined two unrelated histories brings in a whole vault
+        // at once: that's not writing.
+        if version.joins_unrelated {
+            continue;
+        }
         // Newest first: the first change seen sets where the day ended, the
         // last where it started.
-        for change in commit_changes(&repository, &commit, &parent)?.iter() {
-            let current = names
-                .get(&change.path)
-                .cloned()
-                .unwrap_or_else(|| change.path.clone());
-            seen_paths.insert(change.path.to_lowercase());
-            if let Some(old) = &change.renamed_from {
+        for change in &version.changes {
+            let Some(path) = is_shard(&change.path) else {
+                continue;
+            };
+            let current = names.get(&path).cloned().unwrap_or_else(|| path.clone());
+            seen_paths.insert(path.to_lowercase());
+            if let Some(old) = change.renamed_from.as_deref().and_then(is_shard) {
                 seen_paths.insert(old.to_lowercase());
-                names.insert(old.clone(), current.clone());
+                names.insert(old, current.clone());
             }
             spans
                 .entry((day.clone(), current))
                 .or_insert((None, change.after))
                 .0 = change.before;
         }
-        commit = parent;
     }
 
     let mut days: Vec<WrittenDay> = spans

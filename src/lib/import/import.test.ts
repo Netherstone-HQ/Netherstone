@@ -22,7 +22,38 @@ describe("import engine", () => {
     expect(vault.shards.get("/vault/Notes/Home.md")).toContain("![](_attachments/cat.png)");
     expect(vault.shards.get("/vault/Notes/Sub/Plans.md")).toContain("[home](../Home.md)");
     expect([...vault.attachments.keys()]).toEqual(["_attachments/cat.png"]);
+    expect(vault.copied).toEqual(["/in/Notes/cat.png"]);
     expect(report.created[0].warnings).toEqual(["1 link points to a note that wasn't imported; it's plain text now."]);
+  });
+
+  it("moves a shard whose name was taken since it was reserved, and fixes links to it", async () => {
+    const vault = memoryImport(
+      {
+        "Notes/Home.md": "# Home\n\nSee [[Plans]].\n",
+        "Notes/Sub/Plans.md": "# Plans\n\nBack to [home](../Home.md).\n",
+        "Notes/Sub/Later.md": "# Later\n\nAfter [[Plans]].\n",
+      },
+      { takenOnSave: ["/vault/Notes/Sub/Plans.md"] },
+    );
+    const report = await vault.run();
+
+    expect(report.created.map((shard) => shard.path)).toEqual([
+      "/vault/Notes/Home.md",
+      "/vault/Notes/Sub/Plans_1.md",
+      "/vault/Notes/Sub/Later.md",
+    ]);
+    expect(vault.shards.get("/vault/Notes/Home.md")).toContain("See [Plans](Sub/Plans_1.md).");
+    expect(vault.shards.get("/vault/Notes/Sub/Plans_1.md")).toContain("[home](../Home.md)");
+    expect(vault.shards.get("/vault/Notes/Sub/Later.md")).toContain("After [Plans](Plans_1.md).");
+  });
+
+  it("stores the pictures of dropped files from their bytes", async () => {
+    const vault = memoryImport({ "Trip.md": "![](cat.png)\n", "cat.png": PNG }, { dropped: true });
+    await vault.run();
+
+    expect(vault.shards.get("/vault/Trip.md")).toContain("![](_attachments/cat.png)");
+    expect(vault.attachments.get("_attachments/cat.png")).toEqual(PNG);
+    expect(vault.copied).toEqual([]);
   });
 
   it("brings attachments from where the shard is on disk, as another vault wrote them", async () => {

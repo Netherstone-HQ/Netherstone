@@ -58,8 +58,9 @@ when the connection comes back. Network failures show "Offline".
 ## Local history
 
 Every vault has this history, with or without sync: the same repository,
-committed by the same planner. A version is saved a minute after changes stop
-and a minute after the vault opens (`src/hooks/useLocalHistory.ts`). When the
+committed by the same planner. A version is saved a minute after changes stop,
+every ten minutes while they keep coming, and a minute after the vault opens
+(`src/hooks/useLocalHistory.ts`). When the
 open shard changes outside the app, the text the app last saved and the new
 text are both saved first (`snapshot_outside_change`), so neither is lost
 whatever the user keeps. Unchanged vaults make no version.
@@ -71,6 +72,12 @@ comes from a line in its commit message: `Changed outside the app: <path>` or
 `Restored <path> from <time>`. Restoring saves a version of the vault first,
 writes the old content, then saves that as a version, so a restore can always
 be undone.
+
+The panel and the Overview calendar read the history through the
+changed-paths index (`src-tauri/src/sync/changes.rs`): one line per version
+in the repository's folder, with the files it changed. A version's entry is
+worked out the first time it's read and never changes, so a long history
+doesn't mean opening every version again.
 
 Once a day, after a version is saved, the app packs the repository in the
 background (`src-tauri/src/sync/pack.rs`, under `sync.lock` and

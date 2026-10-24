@@ -98,14 +98,28 @@ impl FolderTracker {
     }
 }
 
+/// True for a file in the vault's attachment folder, so the Gallery can
+/// follow it. Hidden files and leftovers from a write in progress are not.
+fn is_attachment_path(root: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root.join(crate::db::attachments::ATTACHMENTS_DIR_NAME))
+    else {
+        return false;
+    };
+    let Some(name) = relative.file_name().map(|name| name.to_string_lossy()) else {
+        return false;
+    };
+    !name.starts_with('.') && !name.ends_with(".tmp") && !path.is_dir()
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Starts a debounced watcher on `vault_path`.
 ///
 /// Events are debounced for 500ms to avoid flooding the frontend with events
 /// during bulk file operations. Events involving `.md` shards, `.excalidraw`
-/// drawings, or folders that appeared or disappeared trigger a
-/// `vault:changed` emission with the changed paths; other files are ignored.
+/// drawings, files in `_attachments`, or folders that appeared or
+/// disappeared trigger a `vault:changed` emission with the changed paths;
+/// other files are ignored.
 /// If the OS drops events (its buffer overflowed during a large change), an
 /// emission with no paths asks the app to rescan everything.
 pub fn watch_vault(app: &AppHandle, vault_path: &str) -> Result<(), String> {
@@ -121,6 +135,7 @@ pub fn watch_vault(app: &AppHandle, vault_path: &str) -> Result<(), String> {
                         .iter()
                         .filter(|event: &&DebouncedEvent| {
                             crate::vault::is_vault_document_path(&event.path)
+                                || is_attachment_path(&folders.root, &event.path)
                                 || folders.observe(&event.path)
                         })
                         .map(|event| event.path.to_string_lossy().replace('\\', "/"))
@@ -211,6 +226,32 @@ mod tests {
         assert!(!folders.observe(&vault.join(".git/refs")));
         std::fs::remove_dir_all(vault.join(".git")).unwrap();
         assert!(!folders.observe(&vault.join(".git")));
+    }
+
+    #[test]
+    fn reports_attachment_files_but_not_their_folder_or_leftovers() {
+        let vault = temp_vault("attachments");
+        std::fs::create_dir_all(vault.join("_attachments/ab")).unwrap();
+
+        assert!(is_attachment_path(
+            &vault,
+            &vault.join("_attachments/Photo.png")
+        ));
+        assert!(is_attachment_path(
+            &vault,
+            &vault.join("_attachments/ab/old.pdf")
+        ));
+        assert!(!is_attachment_path(&vault, &vault.join("_attachments")));
+        assert!(!is_attachment_path(&vault, &vault.join("_attachments/ab")));
+        assert!(!is_attachment_path(
+            &vault,
+            &vault.join("_attachments/Photo.png.tmp")
+        ));
+        assert!(!is_attachment_path(
+            &vault,
+            &vault.join("_attachments/.Photo.png.netherstone-tmp")
+        ));
+        assert!(!is_attachment_path(&vault, &vault.join("Notes/Photo.png")));
     }
 
     #[test]

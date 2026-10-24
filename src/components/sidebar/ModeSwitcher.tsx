@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import {
   FileTextIcon,
+  ImagesIcon,
   LayoutDashboardIcon,
   SettingsIcon,
   TagIcon,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 const MODES: { mode: RailMode; label: string; icon: React.ElementType }[] = [
   { mode: "editor", label: "Editor", icon: FileTextIcon },
   { mode: "tags", label: "Tags", icon: TagIcon },
+  { mode: "gallery", label: "Gallery", icon: ImagesIcon },
   { mode: "canvas", label: "Canvas", icon: DrawingIcon },
 ];
 

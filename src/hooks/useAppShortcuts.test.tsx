@@ -37,3 +37,29 @@ describe("useAppShortcuts zoom", () => {
     expect(zoom()).toBe(100);
   });
 });
+
+describe("useAppShortcuts modes", () => {
+  beforeEach(() => {
+    useUIStore.setState({ appMode: "notes", activeNavItem: null });
+    renderHook(() => useAppShortcuts({ onNewShard: () => {} }));
+  });
+  afterEach(cleanup);
+
+  it("opens the rail's modes in order by physical key", () => {
+    const pressDigit = (digit: number) =>
+      fireEvent.keyDown(window, {
+        key: "&",
+        code: `Digit${digit}`,
+        ctrlKey: true,
+      });
+
+    pressDigit(3);
+    expect(useUIStore.getState().appMode).toBe("gallery");
+    pressDigit(4);
+    expect(useUIStore.getState().appMode).toBe("canvas");
+    pressDigit(5);
+    expect(useUIStore.getState().appMode).toBe("data");
+    pressDigit(1);
+    expect(useUIStore.getState().appMode).toBe("notes");
+  });
+});

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TagIcon } from "lucide-react";
 
 import { Highlight, HighlightedText } from "@/components/HighlightedText";
+import { NextPageTrigger } from "@/components/NextPageTrigger";
 import { LeftSidebarToggle } from "@/components/PanelToggles";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -96,32 +97,6 @@ function NoTagsYet() {
 
 /** Results drawn at a time; more appear as you scroll. */
 const PAGE_SIZE = 50;
-
-/** Asks for the next page once it comes within a screen of view. */
-function NextPageTrigger({
-  scrollRoot,
-  onReach,
-}: {
-  scrollRoot: React.RefObject<HTMLDivElement | null>;
-  onReach: () => void;
-}) {
-  const ref = useRef<HTMLLIElement>(null);
-
-  useEffect(() => {
-    const target = ref.current;
-    if (!target) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) onReach();
-      },
-      { root: scrollRoot.current, rootMargin: "100% 0px" },
-    );
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [scrollRoot, onReach]);
-
-  return <li ref={ref} aria-hidden="true" className="h-px" />;
-}
 
 /** Tags mode's main area: the shards with the selected tag, or every tagged one. */
 export function TagsView() {

@@ -13,9 +13,11 @@ import {
 } from "@/lib/drawing-files";
 import { deleteAstCache } from "@/lib/editor-ast-cache";
 import { invalidateAstWarmPaths } from "@/lib/editor-ast-warm-state";
+import { isAttachmentOnlyChange, isAttachmentPath } from "@/lib/gallery";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import { useGalleryStore } from "@/store/gallery";
 
 type VaultChangedPayload = {
   paths?: string[];
@@ -29,7 +31,7 @@ type VaultChangedPayload = {
  * If the open shard was deleted or moved outside the app, it is closed, so
  * the next edit doesn't write it back to its old path. If it or the open
  * drawing was changed, the new text shows, so the next save doesn't write
- * over it.
+ * over it. Changed attachment files only reload the Gallery.
  *
  * Cleans up the watcher and the event listener when the vault changes or
  * the component unmounts.
@@ -65,6 +67,14 @@ export function useVaultWatcher() {
               typeof filePath === "string" && filePath.trim().length > 0,
           )
         : [];
+
+      if (
+        changedPaths.length === 0 ||
+        changedPaths.some((filePath) => isAttachmentPath(filePath, path))
+      ) {
+        useGalleryStore.getState().invalidate();
+      }
+      if (isAttachmentOnlyChange(changedPaths, path)) return;
 
       if (changedPaths.length > 0) {
         const { suppressedPaths, unsuppressedPaths } =

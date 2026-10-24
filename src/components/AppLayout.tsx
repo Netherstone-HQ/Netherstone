@@ -10,6 +10,7 @@ import { RightSidebar } from "./sidebar/RightSidebar";
 import { LeftSidebar } from "./sidebar/LeftSidebar";
 import { TagsView } from "./tags/TagsView";
 import { DataView } from "./data/DataView";
+import { GalleryView } from "./gallery/GalleryView";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
 import { ImportDialogHost } from "./import/ImportDialogHost";
@@ -118,6 +119,18 @@ const ModeAwareTags = React.memo(function ModeAwareTags() {
   );
 });
 
+// Mounted only while the Gallery is open, so its thumbnails cost nothing elsewhere.
+const ModeAwareGallery = React.memo(function ModeAwareGallery() {
+  const appMode = useUIStore((s) => s.appMode);
+  if (appMode !== "gallery") return null;
+
+  return (
+    <main className="min-h-0 flex-1">
+      <GalleryView />
+    </main>
+  );
+});
+
 // Mounted only while Overview is open, so it loads fresh figures on each visit.
 const ModeAwareData = React.memo(function ModeAwareData() {
   const appMode = useUIStore((s) => s.appMode);
@@ -214,6 +227,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="relative isolate flex h-full min-w-0 flex-1 flex-col">
               <ModeAwareCanvas />
               <ModeAwareTags />
+              <ModeAwareGallery />
               <ModeAwareData />
               <ModeAwareNotes children={children} />
             </div>

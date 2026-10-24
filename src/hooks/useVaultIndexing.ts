@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { isMarkdownPath } from "@/lib/drawing-files";
+import { isAttachmentOnlyChange } from "@/lib/gallery";
 import {
   beginAstWarmAttempt,
   cancelAstWarmAttempt,
@@ -157,6 +158,8 @@ export function useVaultIndexing() {
 
     listen<VaultChangedPayload>("vault:changed", (event) => {
       const changedPaths = getChangedVaultPaths(event.payload);
+      // Attachment files aren't indexed.
+      if (isAttachmentOnlyChange(changedPaths, currentVaultPath)) return;
 
       if (changedPaths.length > 0) {
         const { suppressedPaths, unsuppressedPaths } =

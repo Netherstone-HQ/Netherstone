@@ -31,6 +31,7 @@ import { BackupPanel } from "@/components/sync/BackupPanel";
 import { ConflictDialog } from "@/components/sync/ConflictDialog";
 import { cn } from "@/lib/utils";
 import { useSyncStore } from "@/store/sync";
+import { GalleryFilterField, GalleryList } from "../gallery/GalleryList";
 import { PinnedSection } from "../recent/PinnedSection";
 import { RecentFilesSection } from "../recent/RecentFilesSection";
 import { TagFilterField, TagList } from "../tags/TagList";
@@ -57,6 +58,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
 
   const setSearchModalOpen = useUIStore((s) => s.setSearchModalOpen);
   const isTagsMode = useUIStore((s) => s.appMode === "tags");
+  const isGalleryMode = useUIStore((s) => s.appMode === "gallery");
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
   const openSettings = useUIStore((s) => s.openSettings);
@@ -245,7 +247,9 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
 
         {/* Sized and placed like the editor toolbar's buttons beside it. */}
         <div className="flex h-10 shrink-0 items-center px-2">
-          {isTagsMode ? (
+          {isGalleryMode ? (
+            <GalleryFilterField />
+          ) : isTagsMode ? (
             <TagFilterField />
           ) : (
             <button
@@ -260,7 +264,9 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
-          {isTagsMode ? (
+          {isGalleryMode ? (
+            <GalleryList />
+          ) : isTagsMode ? (
             <TagList />
           ) : (
             <>

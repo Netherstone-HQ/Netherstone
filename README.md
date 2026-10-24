@@ -4,8 +4,6 @@
 knowledge. Every shard is a plain Markdown file in a folder you choose, and it
 all works offline.
 
-![Netherstone with a shard open in the editor](docs/screenshot.png)
-
 ## Download
 
 Get the latest version for Windows, macOS or Linux from
@@ -25,6 +23,8 @@ isn't code-signed yet. We plan to sign it in a future version.
 - Import from Word, PDF, HTML and more, and export to PDF, Word or HTML
 - Free sync through your own GitHub account
 - Light, Dark and three more themes
+
+![Netherstone with a shard open in the editor](docs/screenshot.png)
 
 ## Building from source
 

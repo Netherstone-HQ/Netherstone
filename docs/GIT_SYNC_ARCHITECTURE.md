@@ -72,6 +72,12 @@ comes from a line in its commit message: `Changed outside the app: <path>` or
 writes the old content, then saves that as a version, so a restore can always
 be undone.
 
+Once a day, after a version is saved, the app packs the repository in the
+background (`src-tauri/src/sync/pack.rs`, under `sync.lock` and
+`history.lock`): everything still in the history, the index and unsettled
+conflicts goes into one pack with similar versions stored as differences,
+and the loose files, older packs and anything unused are removed.
+
 ## Locks
 
 `src-tauri/src/locks.rs` holds three locks shared by every Netherstone

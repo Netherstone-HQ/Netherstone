@@ -30,6 +30,9 @@ pub struct VaultSyncRecord {
     pub last_commit: Option<String>,
     pub last_commit_at: Option<i64>,
     pub last_sync_at: Option<i64>,
+    /// When the repository was last packed (see `sync::pack`).
+    #[serde(default)]
+    pub last_packed_at: Option<i64>,
     /// Files that changed both here and on GitHub, waiting for the user to
     /// choose a version. The vault holds this device's version meanwhile.
     #[serde(default)]
@@ -58,6 +61,7 @@ impl VaultSyncRecord {
             last_commit: None,
             last_commit_at: None,
             last_sync_at: None,
+            last_packed_at: None,
             conflicts: Vec::new(),
         }
     }

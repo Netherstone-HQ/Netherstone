@@ -12,6 +12,7 @@ pub mod drawing_merge;
 pub mod history;
 pub mod writing;
 pub mod merge;
+pub mod pack;
 pub mod planner;
 pub mod remote;
 pub mod repo;
@@ -118,7 +119,7 @@ fn commit_snapshot(
     })
 }
 
-fn now_unix_seconds() -> i64 {
+pub(crate) fn now_unix_seconds() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

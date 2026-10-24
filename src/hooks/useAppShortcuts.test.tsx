@@ -53,10 +53,12 @@ describe("useAppShortcuts modes", () => {
         ctrlKey: true,
       });
 
-    pressDigit(3);
-    expect(useUIStore.getState().appMode).toBe("gallery");
-    pressDigit(4);
+    pressDigit(2);
     expect(useUIStore.getState().appMode).toBe("canvas");
+    pressDigit(3);
+    expect(useUIStore.getState().appMode).toBe("tags");
+    pressDigit(4);
+    expect(useUIStore.getState().appMode).toBe("gallery");
     pressDigit(5);
     expect(useUIStore.getState().appMode).toBe("data");
     pressDigit(1);

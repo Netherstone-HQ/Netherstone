@@ -14,9 +14,9 @@ import { cn } from "@/lib/utils";
 /** The modes you work in, at the top of the rail. */
 const MODES: { mode: RailMode; label: string; icon: React.ElementType }[] = [
   { mode: "editor", label: "Editor", icon: FileTextIcon },
+  { mode: "canvas", label: "Canvas", icon: DrawingIcon },
   { mode: "tags", label: "Tags", icon: TagIcon },
   { mode: "gallery", label: "Gallery", icon: ImagesIcon },
-  { mode: "canvas", label: "Canvas", icon: DrawingIcon },
 ];
 
 function RailButton({
@@ -64,8 +64,9 @@ export function ModeSwitcher() {
     <div className="relative z-32 flex h-full w-12 shrink-0 flex-col items-center gap-1.5 border-r bg-sidebar pb-2.5 pt-1">
       {MODES.map(({ mode, label, icon: Icon }) => (
         <Fragment key={mode}>
-          {/* A divider sets Canvas apart from the modes for shards. */}
-          {mode === "canvas" ? (
+          {/* A divider sets the ways to browse the vault apart from the
+              places you make things. */}
+          {mode === "tags" ? (
             <div aria-hidden="true" className="my-0.5 h-px w-5 bg-input" />
           ) : null}
           <RailButton

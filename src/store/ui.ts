@@ -21,7 +21,7 @@ export type SettingsCategory =
 /** The editor is "notes"; the rail calls it Editor. */
 export type AppMode = "notes" | "tags" | "gallery" | "canvas" | "data";
 /** The modes on the rail, in order. */
-export const RAIL_MODES = ["editor", "tags", "gallery", "canvas", "data"] as const;
+export const RAIL_MODES = ["editor", "canvas", "tags", "gallery", "data"] as const;
 export type RailMode = (typeof RAIL_MODES)[number];
 /**
  * Sidebar sections that collapse: Pinned and Recent on the left,

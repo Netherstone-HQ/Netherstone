@@ -13,8 +13,8 @@ devices. Git is the transport and the history; the user never sees Git terms.
   up, using the attachment policy.
 - **Never lose work.** Sync never writes conflict markers, and a file is only
   overwritten if it still matches the last snapshot.
-- **Plain language.** The UI says "Synced", "Working offline" and "Choose
-  which version to keep", not commit, push or merge.
+- **Plain language.** The UI says "Synced", "Offline" and "Choose which
+  version to keep", not commit, push or merge.
 
 ## Sign-in
 
@@ -52,7 +52,7 @@ overwritten.
 
 Triggers (`src/hooks/useBackgroundSync.ts`): a few seconds after a vault
 opens, five minutes after edits stop, every five minutes, on "Sync now", and
-when the connection comes back. Network failures show "Working offline".
+when the connection comes back. Network failures show "Offline".
 
 ## Local history
 
@@ -75,8 +75,8 @@ be undone.
 
 `src-tauri/src/locks.rs` holds two locks shared by every Netherstone process
 on the device: one around shard and drawing saves, one around Git work. Each
-is an OS file lock in the app data folder, so a second process (like the MCP
-server) waits instead of writing at the same time.
+is an OS file lock in the app data folder, so a second Netherstone process
+waits instead of writing at the same time.
 
 ## Conflicts
 
@@ -86,9 +86,12 @@ When a file changed on both sides (`sync/merge.rs`, `sync/conflicts.rs`):
   version is recorded in the sync record, and its content stays in history.
 - The user picks **Keep GitHub version**, **Keep this device's version** or
   **Keep both** (this device's copy is saved as `Name (This device).md`).
+- Drawings are merged shape by shape (`sync/drawing_merge.rs`). Only a
+  shape changed on both sides is a conflict, and this device's shape is kept.
 - An edit always wins over a deletion.
 
 ## Another device
 
-"Use that backup" in the Sync panel lists the account's backups and syncs one
-into the open vault, merging with anything already there.
+"Use a vault you synced on another device" in the Sync panel lists the
+account's backups and syncs one into the open vault, merging with anything
+already there.

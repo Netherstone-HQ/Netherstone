@@ -13,8 +13,12 @@ permissions:
   contents: read
 
 jobs:
+  # The front-end and browser jobs skip a run that only changes docs, like the
+  # Rust job below.
   frontend:
     name: Typecheck and test
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -39,6 +43,8 @@ jobs:
   # The slowest job, so its tests are split across two runners.
   browser-shard:
     name: Browser tests (${{ matrix.shard }}/2)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -78,15 +84,17 @@ jobs:
   # name however many shards there are.
   browser:
     name: Browser tests
-    needs: browser-shard
-    if: ${{ !cancelled() }}
+    needs: [changes, browser-shard]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     steps:
       - if: needs.browser-shard.result != 'success'
         run: exit 1
 
-  # Whether this run needs the Rust tests: always on main, and on a pull
-  # request only when it changes src-tauri/ or this file.
+  # What this run needs to test. A run that only changes docs (Markdown at the
+  # root or in .github/, or docs/) tests nothing. Otherwise a push to main tests
+  # everything, and a pull request runs the Rust tests only when it changes
+  # src-tauri/ or this file.
   changes:
     name: Changed files
     runs-on: ubuntu-24.04
@@ -95,26 +103,38 @@ jobs:
       pull-requests: read
     outputs:
       rust: ${{ steps.check.outputs.rust }}
+      code: ${{ steps.check.outputs.code }}
     steps:
       - id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
-          if grep -qE '^(src-tauri/|\.github/workflows/ci\.yml$)' <<< "$files"; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename')
           else
-            echo "rust=false" >> "$GITHUB_OUTPUT"
+            files=everything
           fi
+          if grep -qvE '^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)' <<< "$files"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            grep -qvE '^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)' <<< "$files" && rust=true || rust=false
+          elif grep -qE '^(src-tauri/|\.github/workflows/ci\.yml$)' <<< "$files"; then
+            rust=true
+          else
+            rust=false
+          fi
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
 
-  # A skipped job counts as passed, so the required check doesn't hold up a
-  # pull request that leaves the Rust code alone. If the file check fails, the
-  # tests run anyway.
+  # A skipped job counts as passed, so a required check doesn't hold up a
+  # pull request it has nothing to test. If the file check fails, every job
+  # runs anyway.
   rust:
     name: Rust tests
     needs: changes

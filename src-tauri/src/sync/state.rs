@@ -92,6 +92,11 @@ fn generate_vault_id(vault_path: &Path) -> String {
     blake3::hash(seed.as_bytes()).to_hex()[..20].to_string()
 }
 
+/// True when `folder` holds a vault's marker, so it is a vault.
+pub fn has_vault_marker(folder: &Path) -> bool {
+    read_vault_id(folder).is_some()
+}
+
 fn read_vault_id(vault_path: &Path) -> Option<String> {
     let id = std::fs::read_to_string(vault_id_path(vault_path)).ok()?;
     let id = id.trim();

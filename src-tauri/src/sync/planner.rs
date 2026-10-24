@@ -8,6 +8,7 @@
 use crate::db::attachments::{
     ATTACHMENTS_DIR_NAME, AttachmentSyncStatus, extension_for_path, sync_status_for_attachment,
 };
+use crate::sync::state::has_vault_marker;
 use crate::vault::{is_drawing_path, is_markdown_path};
 use serde::Serialize;
 use std::path::Path;
@@ -147,7 +148,8 @@ fn walk(dir: &Path, relative_dir: &str, plan: &mut SyncPlan) -> Result<(), Strin
         };
 
         if file_type.is_dir() {
-            if !IGNORED_DIRS.contains(&name.as_str()) {
+            // Another vault inside this one keeps its own history.
+            if !IGNORED_DIRS.contains(&name.as_str()) && !has_vault_marker(&entry.path()) {
                 walk(&entry.path(), &relative, plan)?;
             }
         } else if file_type.is_file() {
@@ -279,5 +281,18 @@ mod tests {
         assert!(plan.included.is_empty());
         let reasons: Vec<_> = plan.skipped.iter().map(|f| f.reason).collect();
         assert_eq!(reasons, vec![SkipReason::TooLarge, SkipReason::LocalOnly]);
+    }
+
+    #[test]
+    fn a_vault_inside_the_vault_is_left_out() {
+        let vault = temp_dir("plan-nested");
+        write(&vault, "Note.md", b"# Note");
+        write(&vault, "Inner/.netherstone/vault-id", b"inner1\n");
+        write(&vault, "Inner/Theirs.md", b"# Inner");
+        write(&vault, "Folder/Mine.md", b"# Mine");
+
+        let plan = plan_vault(&vault).unwrap();
+        let included: Vec<_> = plan.included.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(included, vec!["Folder/Mine.md", "Note.md"]);
     }
 }

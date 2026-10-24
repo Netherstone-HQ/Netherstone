@@ -38,6 +38,7 @@ fn hold(thread_lock: &'static Mutex<()>, path: &Path) -> Result<LockGuard, Strin
 
 static VAULT_WRITES: Mutex<()> = Mutex::new(());
 static HISTORY: Mutex<()> = Mutex::new(());
+static SYNC: Mutex<()> = Mutex::new(());
 
 fn app_dir() -> Result<PathBuf, String> {
     crate::db::get_db_path()?
@@ -46,16 +47,29 @@ fn app_dir() -> Result<PathBuf, String> {
         .ok_or_else(|| "Failed to determine AppData directory".to_string())
 }
 
-/// Held while saving a shard or drawing. Kept short: never held across Git
-/// or network work.
-pub fn vault_writes() -> Result<LockGuard, String> {
-    hold(&VAULT_WRITES, &app_dir()?.join("writes.lock"))
+/// Proof that `writes.lock` is held, which every write into a vault needs.
+pub struct VaultWrites {
+    _held: LockGuard,
+}
+
+/// Held while changing a vault's files: saving, creating, renaming, moving or
+/// deleting them. Kept short: never held across Git or network work. Taken
+/// after `history` when both are needed, never the other way round.
+pub fn vault_writes() -> Result<VaultWrites, String> {
+    hold(&VAULT_WRITES, &app_dir()?.join("writes.lock")).map(|held| VaultWrites { _held: held })
 }
 
 /// Held while using the vaults' Git repositories in `sync_root`: saving a
-/// version, syncing, settling a conflict.
+/// version, bringing a sync's changes in, settling a conflict. Never held
+/// across network work.
 pub fn history(sync_root: &Path) -> Result<LockGuard, String> {
     hold(&HISTORY, &sync_root.join("history.lock"))
+}
+
+/// Held for a whole sync, network included, so only one runs at a time.
+/// Taken before `history`.
+pub fn sync(sync_root: &Path) -> Result<LockGuard, String> {
+    hold(&SYNC, &sync_root.join("sync.lock"))
 }
 
 #[cfg(test)]

@@ -148,17 +148,26 @@ fn sync_cycle(
     remote_url: &str,
     token: &str,
 ) -> Result<SyncReport, String> {
-    let _guard = crate::locks::history(sync_root)?;
+    let _sync = crate::locks::sync(sync_root)?;
     let mut changed = Vec::new();
     let mut conflicts = Vec::new();
 
+    // history.lock is only held for the local steps, so saving a version,
+    // restoring or settling a conflict never waits on GitHub.
     for attempt in 1..=SYNC_ATTEMPTS {
-        let snapshot = snapshot_locked(sync_root, vault_path)?;
-        let git_dir = state::git_dir(sync_root, &snapshot.vault_id);
-        let repository = repo::open_or_init(&git_dir, vault_path)?;
-        remote::set_remote(&repository, remote_url)?;
+        let repository = {
+            let _history = crate::locks::history(sync_root)?;
+            let snapshot = snapshot_locked(sync_root, vault_path)?;
+            let git_dir = state::git_dir(sync_root, &snapshot.vault_id);
+            let repository = repo::open_or_init(&git_dir, vault_path)?;
+            remote::set_remote(&repository, remote_url)?;
+            repository
+        };
 
         if let Some(remote_head) = remote::fetch(&repository, token)? {
+            let _history = crate::locks::history(sync_root)?;
+            // Changes saved while downloading go in first.
+            snapshot_locked(sync_root, vault_path)?;
             let mut integration = merge::integrate(&repository, vault_path, remote_head)?;
             changed.append(&mut integration.changed);
             conflicts.append(&mut integration.conflicts);
@@ -173,6 +182,7 @@ fn sync_cycle(
         }
     }
 
+    let _history = crate::locks::history(sync_root)?;
     let mut record = state::load_or_create_record(sync_root, vault_path)?;
     let repository = repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault_path)?;
     let head = repository.head().ok().and_then(|h| h.peel_to_commit().ok());

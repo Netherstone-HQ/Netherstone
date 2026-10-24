@@ -9,6 +9,7 @@ mod pdf_platform;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -37,6 +38,19 @@ impl ExportFormat {
     }
 }
 
+/// Paths picked in the save dialog this session: exports are only written
+/// there.
+static CHOSEN_PATHS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+fn check_chosen(path: &Path) -> Result<(), String> {
+    let chosen = CHOSEN_PATHS.lock().unwrap_or_else(|e| e.into_inner());
+    if chosen.iter().any(|chosen| chosen == path) {
+        Ok(())
+    } else {
+        Err("Choose where to save the export first.".to_string())
+    }
+}
+
 /// Asks where to save an export. Returns the chosen path, with the format's
 /// extension added if the name was typed without it.
 #[tauri::command(async)]
@@ -61,8 +75,12 @@ pub fn choose_export_path(
         dialog = dialog.set_directory(directory);
     }
 
-    let path = dialog.blocking_save_file()?.into_path().ok()?;
-    Some(with_extension(path, extension).to_string_lossy().into_owned())
+    let path = with_extension(dialog.blocking_save_file()?.into_path().ok()?, extension);
+    CHOSEN_PATHS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(path.clone());
+    Some(path.to_string_lossy().into_owned())
 }
 
 /// A header of a raw IPC request, URI-decoded.
@@ -87,12 +105,17 @@ fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String> {
 #[tauri::command(async)]
 pub fn write_export_file(request: Request<'_>) -> Result<(), String> {
     let path = header(&request, "x-export-path").ok_or("The export is missing its destination.")?;
+    check_chosen(Path::new(&path))?;
     write_atomically(Path::new(&path), raw_body(&request)?)
 }
 
-/// Reads an image on this computer for an export.
+/// Reads an image on this computer for an export. Only pictures, the same
+/// files a shard may show from anywhere.
 #[tauri::command(async)]
 pub fn read_export_asset(path: String) -> Result<Response, String> {
+    if !crate::asset_scope::is_showable(Path::new(&path)) {
+        return Err(format!("{path} isn't a picture"));
+    }
     fs::read(&path)
         .map(Response::new)
         .map_err(|error| format!("Could not read {path}: {error}"))
@@ -134,6 +157,7 @@ pub async fn fetch_export_asset(url: String) -> Result<Response, String> {
 #[tauri::command]
 pub async fn export_pdf(app: tauri::AppHandle, request: Request<'_>) -> Result<(), String> {
     let output = PathBuf::from(header(&request, "x-export-path").ok_or("The export is missing its destination.")?);
+    check_chosen(&output)?;
     let page: pdf::PageSetup =
         serde_json::from_str(&header(&request, "x-export-page").ok_or("The export is missing its paper size.")?)
             .map_err(|error| format!("The export's paper size is malformed: {error}"))?;
@@ -263,5 +287,14 @@ mod tests {
         assert_eq!(fs::read(&target).unwrap(), b"second");
         assert!(!directory.join(".out.html.part").exists());
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn exports_are_only_written_where_the_user_chose() {
+        let chosen = std::env::temp_dir().join("netherstone-chosen-export.html");
+        assert!(check_chosen(&chosen).is_err());
+        CHOSEN_PATHS.lock().unwrap().push(chosen.clone());
+        assert!(check_chosen(&chosen).is_ok());
+        assert!(check_chosen(&chosen.with_file_name(".bashrc")).is_err());
     }
 }

@@ -239,23 +239,6 @@ fn disk_blob_id(path: &Path) -> Result<Option<Oid>, String> {
     }
 }
 
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-    }
-    let temp = path.with_file_name(format!(
-        ".{}.netherstone-sync",
-        path.file_name().unwrap_or_default().to_string_lossy()
-    ));
-    std::fs::write(&temp, bytes)
-        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
-    std::fs::rename(&temp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&temp);
-        format!("Failed to write {}: {}", path.display(), e)
-    })
-}
-
 /// Removes now-empty folders between `path` and the vault root.
 fn prune_empty_parents(vault_path: &Path, path: &Path) {
     let mut dir = path.parent();
@@ -294,6 +277,8 @@ fn apply_to_vault(
         let path = vault_path.join(relative);
         let (old_id, new_id) = (delta.old_file().id(), delta.new_file().id());
 
+        // Checked and written under one lock, so a save can't land in between.
+        let writes = crate::locks::vault_writes()?;
         let on_disk = disk_blob_id(&path)?;
         let expected = (!old_id.is_zero()).then_some(old_id);
         let incoming = (!new_id.is_zero()).then_some(new_id);
@@ -316,7 +301,7 @@ fn apply_to_vault(
                 let blob = repository
                     .find_blob(id)
                     .map_err(|e| git_error("Couldn't read a file from GitHub", e))?;
-                write_atomically(&path, blob.content())?;
+                crate::vault::write_with_folders(&writes, &path, blob.content())?;
             }
             None => {
                 std::fs::remove_file(&path)

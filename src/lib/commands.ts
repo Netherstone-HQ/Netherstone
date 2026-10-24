@@ -93,6 +93,16 @@ export async function openVaultDialog(): Promise<string | null> {
 }
 
 /**
+ * Makes `vaultPath` the open vault on the Rust side, which refuses to touch
+ * files anywhere else. It must be a vault already, or a folder just picked
+ * or created.
+ */
+export async function setOpenVault(vaultPath: string): Promise<void> {
+  assertTauri();
+  return invoke("open_vault", { vaultPath });
+}
+
+/**
  * Recursively scans a vault directory for .md and .excalidraw files and returns the
  * file tree sorted with directories first, then files, both alphabetically.
  */

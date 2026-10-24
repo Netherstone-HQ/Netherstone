@@ -110,7 +110,7 @@ fn is_same(a: &Path, b: &Path) -> bool {
 }
 
 /// True when `path` is `folder` or inside it. A path with `..` in it never is.
-fn is_within(folder: &Path, path: &Path) -> bool {
+pub(crate) fn is_within(folder: &Path, path: &Path) -> bool {
     if path.components().any(|c| c == Component::ParentDir) {
         return false;
     }

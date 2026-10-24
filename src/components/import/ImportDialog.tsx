@@ -72,6 +72,7 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
     await start(vaultPath, async () => (await dropped).sources, {
       ...appImportIO(vaultPath),
       readFile: async (path) => (await dropped).read(path),
+      copyAttachment: undefined,
       exists: undefined,
     });
   };

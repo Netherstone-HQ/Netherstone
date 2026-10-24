@@ -72,13 +72,32 @@ pub fn write_atomically(
 ) -> Result<(), String> {
     use std::io::Write;
 
+    replace_atomically(path, |file| file.write_all(bytes))
+}
+
+/// Like [`write_atomically`], with the content of the file at `source`,
+/// read a piece at a time so a big file never sits in memory whole.
+pub fn copy_atomically(
+    _writes: &crate::locks::VaultWrites,
+    source: &Path,
+    path: &Path,
+) -> Result<(), String> {
+    replace_atomically(path, |file| {
+        std::io::copy(&mut std::fs::File::open(source)?, file).map(drop)
+    })
+}
+
+fn replace_atomically(
+    path: &Path,
+    fill: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> Result<(), String> {
     let name = path
         .file_name()
         .ok_or_else(|| format!("Not a file: {}", path.display()))?;
     let temp = path.with_file_name(format!(".{}.netherstone-tmp", name.to_string_lossy()));
     let written = std::fs::File::create(&temp)
         .and_then(|mut file| {
-            file.write_all(bytes)?;
+            fill(&mut file)?;
             file.sync_all()
         })
         .and_then(|()| std::fs::rename(&temp, path));

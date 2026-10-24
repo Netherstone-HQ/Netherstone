@@ -2,6 +2,8 @@ import { createSlateEditor } from "platejs";
 
 import {
   fileExists,
+  fixImportedLinks,
+  importAttachment,
   persistAttachmentBytes,
   readImportFile,
   reserveImportPaths,
@@ -19,6 +21,8 @@ export function appImportIO(vaultPath: string): ImportIO {
     saveShard: (path, markdown) => saveImportedShard(vaultPath, path, markdown),
     saveAttachment: async (name, bytes) =>
       (await persistAttachmentBytes(name, bytes, vaultPath)).assetPath,
+    copyAttachment: async (path) => (await importAttachment(path, vaultPath)).assetPath,
+    fixLinks: fixImportedLinks,
     exists: fileExists,
     serialize: (nodes, filePath) =>
       serializeMarkdownInWorker(nodes, {

@@ -84,7 +84,7 @@ pub fn choose_export_path(
 }
 
 /// A header of a raw IPC request, URI-decoded.
-fn header(request: &Request<'_>, name: &str) -> Option<String> {
+pub(crate) fn header(request: &Request<'_>, name: &str) -> Option<String> {
     request
         .headers()
         .get(name)
@@ -93,10 +93,10 @@ fn header(request: &Request<'_>, name: &str) -> Option<String> {
         .map(|value| value.into_owned())
 }
 
-fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String> {
+pub(crate) fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String> {
     match request.body() {
         tauri::ipc::InvokeBody::Raw(bytes) => Ok(bytes),
-        _ => Err("The export arrived in an unexpected format.".to_string()),
+        _ => Err("The file arrived in an unexpected format.".to_string()),
     }
 }
 

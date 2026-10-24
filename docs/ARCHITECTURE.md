@@ -75,7 +75,10 @@ Markdown, CSV and text files into shards. Each format in
 `src/lib/import/formats/` converts its file to a Plate value, which is
 saved like any shard, and images go to `_attachments/`. Rust
 (`src-tauri/src/import.rs`) lists and reads the picked files and finds free
-names, so an import never overwrites anything already in the vault.
+names, so an import never overwrites anything already in the vault. It reads
+only the picked files and folders, and the `_attachments/` folders above
+them. A name taken between reserving and saving moves the shard to the next
+free name, and links to it from the same import are fixed.
 
 ## Exports
 

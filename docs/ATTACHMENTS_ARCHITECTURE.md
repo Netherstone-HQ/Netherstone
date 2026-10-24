@@ -16,6 +16,8 @@ How Netherstone stores the images, files, audio and video that shards link to.
 
 - Every attachment sits in one flat `_attachments/` folder at the vault root,
   under its original name made portable. A clash adds `-1`, `-2` and so on.
+  Each name is claimed as a new file, so a file another program put there is
+  never replaced.
 - A file whose BLAKE3 hash matches an existing attachment reuses that file.
 - Shards link with vault-relative paths, for example
   `![](<_attachments/Screenshot 2026-10-03.png>)`.
@@ -32,7 +34,9 @@ How Netherstone stores the images, files, audio and video that shards link to.
 `attachments` and `attachment_references` in `db/schema.rs`.
 
 1. **Insert:** dropping, pasting or picking a file writes it to
-   `_attachments/` and records it.
+   `_attachments/` and records it, under `writes.lock` with an atomic write.
+   A file on disk is copied by Rust from its path; a file the app holds
+   (pasted, dropped, a drawing export) arrives as raw bytes.
 2. **Save:** saving a shard refreshes its references.
 3. **Check:** when a vault opens, on the Overview page, and from Settings,
    `reconcile_attachments` reports missing files and unused files (both

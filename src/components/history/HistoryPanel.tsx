@@ -11,6 +11,7 @@ import {
   formatTime,
   groupByDay,
   listVersions,
+  namesDevices,
   type FileHistory,
 } from "@/lib/history";
 import { cn } from "@/lib/utils";
@@ -91,12 +92,14 @@ function useFileHistory(filePath: string) {
 
 function VersionRow({
   time,
+  device,
   detail,
   isCurrent,
   isPicked,
   onPick,
 }: {
   time: string;
+  device?: string | null;
   detail?: string;
   isCurrent?: boolean;
   isPicked: boolean;
@@ -113,11 +116,16 @@ function VersionRow({
         isPicked && "bg-sidebar-accent hover:bg-sidebar-accent",
       )}
     >
-      <span className="flex items-center gap-2">
-        <span className="font-medium">{time}</span>
+      <span className="flex w-full min-w-0 items-center gap-2">
+        <span className="shrink-0 font-medium">{time}</span>
         {isCurrent ? (
-          <span className="rounded-sm bg-muted-foreground/15 px-1.5 text-xs leading-4 text-muted-foreground">
+          <span className="shrink-0 rounded-sm bg-muted-foreground/15 px-1.5 text-xs leading-4 text-muted-foreground">
             Current
+          </span>
+        ) : null}
+        {device ? (
+          <span className="min-w-0 truncate text-ui-sm text-muted-foreground">
+            {device}
           </span>
         ) : null}
       </span>
@@ -200,6 +208,7 @@ export function HistoryPanel({
   const current = history?.current ?? null;
   const currentDay = current === null ? "Today" : formatDay(current.time);
   const sharesDay = !isDeleted && days[0]?.label === currentDay;
+  const showsDevices = history !== null && namesDevices(history);
 
   return (
     <aside
@@ -240,6 +249,7 @@ export function HistoryPanel({
               <DayLabel>{currentDay}</DayLabel>
               <VersionRow
                 time={current === null ? "Now" : formatTime(current.time)}
+                device={showsDevices ? current?.device : null}
                 detail={
                   current === null
                     ? undefined
@@ -260,6 +270,7 @@ export function HistoryPanel({
                 <VersionRow
                   key={version.id}
                   time={formatTime(version.time)}
+                  device={showsDevices ? version.device : null}
                   detail={describeVersion(version, isDrawing)}
                   isPicked={picked?.id === version.id}
                   onPick={() => pickVersion(version)}

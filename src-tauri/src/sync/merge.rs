@@ -8,11 +8,8 @@
 
 use super::drawing_merge;
 use super::state::DEFAULT_BRANCH;
-use git2::{Commit, ErrorCode, IndexEntry, ObjectType, Oid, Repository, Signature, Tree};
+use git2::{Commit, ErrorCode, IndexEntry, ObjectType, Oid, Repository, Tree};
 use std::path::{Component, Path};
-
-const COMMITTER_NAME: &str = "Netherstone";
-const COMMITTER_EMAIL: &str = "backup@netherstone.app";
 
 /// Stage bits of an index entry's flags (`GIT_INDEX_ENTRY_STAGEMASK`).
 const INDEX_STAGE_MASK: u16 = 0x3000;
@@ -173,13 +170,12 @@ fn merge_diverged(
     let tree = repository
         .find_tree(tree_id)
         .map_err(|e| git_error("Failed to write merged backup", e))?;
-    let signature = Signature::now(COMMITTER_NAME, COMMITTER_EMAIL)
-        .map_err(|e| git_error("Failed to create backup signature", e))?;
+    let (author, committer) = super::repo::signatures()?;
     let id = repository
         .commit(
             None,
-            &signature,
-            &signature,
+            &author,
+            &committer,
             "Sync: merge changes from another device",
             &tree,
             &[local, remote],

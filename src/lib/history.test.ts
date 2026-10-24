@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { describeVersion, groupByDay, type FileVersion } from "./history";
+import {
+  describeVersion,
+  groupByDay,
+  namesDevices,
+  type FileVersion,
+} from "./history";
 
 const now = new Date(2026, 9, 20, 18, 0);
 const at = (days: number, hour = 10) =>
@@ -13,6 +18,7 @@ const version = (overrides: Partial<FileVersion>): FileVersion => ({
   restoredFrom: null,
   path: "Notes/Plan.md",
   renamedFrom: null,
+  device: null,
   added: 0,
   removed: 0,
   changed: 0,
@@ -23,7 +29,11 @@ const version = (overrides: Partial<FileVersion>): FileVersion => ({
 describe("describeVersion", () => {
   it("names a rename or move", () => {
     const renamed = (renamedFrom: string, path = "Notes/Plan.md") =>
-      describeVersion(version({ kind: "renamed", renamedFrom, path }), false, now);
+      describeVersion(
+        version({ kind: "renamed", renamedFrom, path }),
+        false,
+        now,
+      );
     expect(renamed("Notes/Draft.md")).toBe("Renamed from Draft");
     expect(renamed("Work/Plan.md")).toBe("Moved from Work");
     expect(renamed("Plan.md")).toBe("Moved into Notes");
@@ -73,6 +83,22 @@ describe("describeVersion", () => {
         now,
       ),
     ).toMatch(/^Restored from .*12.*, /);
+  });
+});
+
+describe("namesDevices", () => {
+  it("names devices once versions come from more than one", () => {
+    const on = (device: string | null) => version({ device });
+    expect(namesDevices({ current: on("Desk"), versions: [on("Desk")] })).toBe(
+      false,
+    );
+    // Versions saved before devices were named don't count as another one.
+    expect(
+      namesDevices({ current: null, versions: [on("Desk"), on(null)] }),
+    ).toBe(false);
+    expect(
+      namesDevices({ current: on("Laptop"), versions: [on("Desk")] }),
+    ).toBe(true);
   });
 });
 

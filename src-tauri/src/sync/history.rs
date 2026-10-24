@@ -80,6 +80,8 @@ pub struct FileVersion {
     pub path: String,
     /// The path it had before, when this version renamed or moved it.
     pub renamed_from: Option<String>,
+    /// The device it was made on, when known: for a sync, the other device.
+    pub device: Option<String>,
     /// Words (shards) or shapes (drawings) compared with the version before.
     pub added: usize,
     pub removed: usize,
@@ -141,6 +143,7 @@ struct Change {
     restored_from: Option<i64>,
     path: String,
     renamed_from: Option<String>,
+    device: Option<String>,
 }
 
 /// The versions of `file_path`, newest first, following renames, which are
@@ -206,6 +209,11 @@ pub fn list_versions(
             },
             path: path.clone(),
             renamed_from: renamed.clone(),
+            device: if kind == VersionKind::Synced {
+                version.merged_from.clone()
+            } else {
+                version.device.clone()
+            },
         });
 
         if previous.is_none() {
@@ -243,6 +251,7 @@ pub fn list_versions(
                 restored_from: change.restored_from,
                 path: change.path,
                 renamed_from: change.renamed_from,
+                device: change.device,
                 added,
                 removed,
                 changed,
@@ -642,6 +651,45 @@ mod tests {
                 VersionKind::Edited,
                 VersionKind::Created
             ]
+        );
+    }
+
+    #[test]
+    fn names_the_device_each_version_was_made_on() {
+        let (vault, sync_root) = setup("history-devices");
+        save(&sync_root, &vault, "Note.md", "One");
+        let repository = open_existing(&sync_root, &vault).unwrap().unwrap();
+        let mine = repo::head_commit(&repository).unwrap().unwrap();
+
+        // Another device's version, brought in by a sync's merge.
+        let laptop = git2::Signature::now("Laptop", "backup@netherstone.app").unwrap();
+        let mut index = git2::Index::new().unwrap();
+        index.read_tree(&mine.tree().unwrap()).unwrap();
+        let blob = repository.blob(b"One, from the laptop").unwrap();
+        let mut entry = index.get_path(Path::new("Note.md"), 0).unwrap();
+        entry.id = blob;
+        entry.file_size = 20;
+        index.add(&entry).unwrap();
+        let tree = repository
+            .find_tree(index.write_tree_to(&repository).unwrap())
+            .unwrap();
+        let theirs = repository
+            .commit(None, &laptop, &laptop, "Backup: 1 changed", &tree, &[&mine])
+            .unwrap();
+        let theirs = repository.find_commit(theirs).unwrap();
+        let (author, committer) = repo::signatures().unwrap();
+        repository
+            .commit(Some("HEAD"), &author, &committer, "Sync", &tree, &[&mine, &theirs])
+            .unwrap();
+        fs::write(vault.join("Note.md"), "One, from the laptop").unwrap();
+
+        let history = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap();
+        let synced = history.current.unwrap();
+        assert_eq!(synced.kind, VersionKind::Synced);
+        assert_eq!(synced.device.as_deref(), Some("Laptop"));
+        assert_eq!(
+            history.versions[0].device.as_deref(),
+            Some(repo::device_name()).filter(|name| *name != "Netherstone")
         );
     }
 

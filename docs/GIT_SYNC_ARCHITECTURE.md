@@ -69,7 +69,9 @@ The history panel (`src/components/history/`) lists one file's versions from
 this history (`src-tauri/src/sync/history.rs`): the commits where its content
 changed, following renames, newest first. What a version is, beyond an edit,
 comes from a line in its commit message: `Changed outside the app: <path>` or
-`Restored <path> from <time>`. Restoring saves a version of the vault first,
+`Restored <path> from <time>`. Each version's commit is authored by the
+device that saved it (its system name), so the panel can name it once a file
+has versions from more than one device. Restoring saves a version of the vault first,
 writes the old content, then saves that as a version, so a restore can always
 be undone.
 

@@ -25,6 +25,8 @@ export type FileVersion = {
   path: string;
   /** The path it had before, when this version renamed or moved it. */
   renamedFrom: string | null;
+  /** The device it was made on, when known: for a sync, the other device. */
+  device: string | null;
   /** Words (shards) or shapes (drawings) compared with the version before. */
   added: number;
   removed: number;
@@ -233,6 +235,19 @@ function describeChange(version: FileVersion, isDrawing: boolean, now: Date) {
         "words",
       );
   return line || (isDrawing ? "Changed the canvas" : "Changed formatting");
+}
+
+/**
+ * Whether the history panel names each version's device: only once the
+ * file has versions from more than one.
+ */
+export function namesDevices(history: FileHistory) {
+  const versions = history.current
+    ? [history.current, ...history.versions]
+    : history.versions;
+  const devices = new Set(versions.map((version) => version.device));
+  devices.delete(null);
+  return devices.size > 1;
 }
 
 export type VersionDay = { label: string; versions: FileVersion[] };

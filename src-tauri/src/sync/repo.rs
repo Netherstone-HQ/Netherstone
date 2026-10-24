@@ -8,9 +8,68 @@ use git2::{
 };
 use serde::Serialize;
 use std::path::Path;
+use std::sync::OnceLock;
 
 const COMMITTER_NAME: &str = "Netherstone";
 const COMMITTER_EMAIL: &str = "backup@netherstone.app";
+
+/// This device's name, as its system calls it: the author of the versions
+/// saved here, so the history can say where each was made.
+pub fn device_name() -> &'static str {
+    static NAME: OnceLock<String> = OnceLock::new();
+    NAME.get_or_init(|| {
+        read_device_name()
+            .map(|name| name.trim().to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| COMMITTER_NAME.to_string())
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn read_device_name() -> Option<String> {
+    std::env::var("COMPUTERNAME").ok()
+}
+
+#[cfg(target_os = "macos")]
+fn read_device_name() -> Option<String> {
+    // The name people gave their Mac, not its network name.
+    let output = std::process::Command::new("scutil")
+        .args(["--get", "ComputerName"])
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn read_device_name() -> Option<String> {
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .or_else(|_| std::fs::read_to_string("/etc/hostname"))
+        .ok()
+}
+
+/// The device a version was saved on, from its commit's author. Versions
+/// saved before devices were named have none.
+pub fn device_of(commit: &Commit) -> Option<String> {
+    commit
+        .author()
+        .name()
+        .ok()
+        .filter(|name| *name != COMMITTER_NAME)
+        .map(String::from)
+}
+
+/// Versions are authored by the device that saved them and committed by
+/// Netherstone.
+pub(super) fn signatures() -> Result<(Signature<'static>, Signature<'static>), String> {
+    let signature = |name: &str| {
+        Signature::now(name, COMMITTER_EMAIL)
+            .map_err(|e| git_error("Failed to create backup signature", e))
+    };
+    Ok((signature(device_name())?, signature(COMMITTER_NAME)?))
+}
 
 fn git_error(context: &str, e: git2::Error) -> String {
     format!("{}: {}", context, e.message())
@@ -224,8 +283,7 @@ fn commit_tree(
     (added, modified, removed): (usize, usize, usize),
     note: Option<&str>,
 ) -> Result<SnapshotCommit, String> {
-    let signature = Signature::now(COMMITTER_NAME, COMMITTER_EMAIL)
-        .map_err(|e| git_error("Failed to create backup signature", e))?;
+    let (author, committer) = signatures()?;
     let mut message = commit_message(added, modified, removed);
     if let Some(note) = note {
         message.push_str("\n\n");
@@ -233,19 +291,12 @@ fn commit_tree(
     }
     let parents: Vec<_> = parent.into_iter().collect();
     let id = repository
-        .commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            &message,
-            tree,
-            &parents,
-        )
+        .commit(Some("HEAD"), &author, &committer, &message, tree, &parents)
         .map_err(|e| git_error("Failed to save backup", e))?;
 
     Ok(SnapshotCommit {
         id: id.to_string(),
-        time: signature.when().seconds(),
+        time: committer.when().seconds(),
         added,
         modified,
         removed,

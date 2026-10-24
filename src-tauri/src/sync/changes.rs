@@ -50,6 +50,12 @@ pub struct VersionChanges {
     /// vault with its own history first linked to an existing backup.
     #[serde(default)]
     pub joins_unrelated: bool,
+    /// The device it was saved on, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// For a merge, the device whose versions it brought in, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_from: Option<String>,
     /// The commit message's lines after the first: the version's notes.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub body: String,
@@ -282,6 +288,11 @@ fn changes_of(repository: &Repository, commit: &Commit) -> Result<VersionChanges
         time: commit.time().seconds(),
         merge: commit.parent_count() > 1,
         joins_unrelated,
+        device: super::repo::device_of(commit),
+        merged_from: commit
+            .parent(1)
+            .ok()
+            .and_then(|other| super::repo::device_of(&other)),
         body,
         changes,
     })

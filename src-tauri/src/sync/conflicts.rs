@@ -105,14 +105,6 @@ fn this_device_copy_path(path: &Path) -> PathBuf {
         .expect("an unused name exists")
 }
 
-fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-    }
-    std::fs::write(path, bytes).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
-}
-
 /// Applies the user's choice for one conflicted file. The next sync uploads
 /// the result.
 pub fn resolve_conflict(
@@ -129,12 +121,13 @@ pub fn resolve_conflict(
     if choice != ConflictChoice::ThisDevice {
         let repository = open_repository(sync_root, vault_path, &record)?;
         let github = github_bytes(&repository, &conflict)?;
+        let writes = crate::locks::vault_writes()?;
         if choice == ConflictChoice::Both && target.exists() {
             let copy = this_device_copy_path(&target);
             std::fs::rename(&target, &copy)
                 .map_err(|e| format!("Failed to keep this device's version: {}", e))?;
         }
-        write_file(&target, &github)?;
+        crate::vault::write_with_folders(&writes, &target, &github)?;
     }
 
     record

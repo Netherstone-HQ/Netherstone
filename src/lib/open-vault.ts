@@ -1,5 +1,5 @@
 import { flushPendingAutosave } from "@/hooks/useAutosave";
-import { scanVault } from "@/lib/commands";
+import { scanVault, setOpenVault } from "@/lib/commands";
 import { isPathWithin } from "@/lib/drawing-files";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 
@@ -12,6 +12,7 @@ export async function openVault(vaultPath: string) {
   const { setCurrentVaultPath, setFileTree, setVaultLoading } =
     useVaultStore.getState();
   await closeFilesOutside(vaultPath);
+  await setOpenVault(vaultPath);
   setCurrentVaultPath(vaultPath);
   setVaultLoading(true);
   try {
@@ -19,6 +20,18 @@ export async function openVault(vaultPath: string) {
   } finally {
     setVaultLoading(false);
   }
+}
+
+/**
+ * Opens the vault the app was last on in Rust, before anything asks for its
+ * files. One that can't open any more is cleared when the app scans it.
+ */
+export async function reopenLastVault() {
+  const { currentVaultPath } = useVaultStore.getState();
+  if (!currentVaultPath) return;
+  await setOpenVault(currentVaultPath).catch((error) =>
+    console.warn("[Netherstone] Couldn't reopen the vault:", error),
+  );
 }
 
 async function closeFilesOutside(vaultPath: string) {

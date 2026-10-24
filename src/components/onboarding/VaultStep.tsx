@@ -188,8 +188,8 @@ export function CreateVaultForm({
         return;
       }
       const path = await createVault(location, name);
-      const startHerePath = await addStartHere(path);
       await openVault(path);
+      const startHerePath = await addStartHere(path);
       onCreated({ path, kind: "created", startHerePath });
     } catch (e) {
       setError(vaultErrorText(e));

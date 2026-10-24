@@ -59,6 +59,61 @@ pub fn is_vault_document_path(path: &Path) -> bool {
     is_markdown_path(path) || is_drawing_path(path)
 }
 
+// ── Writing ──────────────────────────────────────────────────────────────────
+
+/// Writes `bytes` to `path` so that a crash or power loss leaves the old file
+/// or the new one, never half of one: written to a hidden file beside it,
+/// flushed to disk, then renamed over it. `_writes` shows `writes.lock` is
+/// held, so no other write lands in between.
+pub fn write_atomically(
+    _writes: &crate::locks::VaultWrites,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), String> {
+    use std::io::Write;
+
+    let name = path
+        .file_name()
+        .ok_or_else(|| format!("Not a file: {}", path.display()))?;
+    let temp = path.with_file_name(format!(".{}.netherstone-tmp", name.to_string_lossy()));
+    let written = std::fs::File::create(&temp)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&temp, path));
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&temp);
+        return Err(format!("Failed to save {}: {}", path.display(), error));
+    }
+    sync_folder(path);
+    Ok(())
+}
+
+/// Like [`write_atomically`], creating the folders `path` needs first.
+pub fn write_with_folders(
+    writes: &crate::locks::VaultWrites,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
+    }
+    write_atomically(writes, path, bytes)
+}
+
+/// Flushes the rename itself to disk. Only Unix-like systems need it; a
+/// failure leaves the file saved, if not yet durable.
+fn sync_folder(path: &Path) {
+    #[cfg(unix)]
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::File::open(parent).and_then(|folder| folder.sync_all());
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
 // ── Scanner ──────────────────────────────────────────────────────────────────
 
 /// Recursively scans `dir` and returns a sorted list of [`FileNode`]s.
@@ -134,12 +189,19 @@ fn is_empty_dir(path: &Path) -> bool {
 
 // ── Importer ─────────────────────────────────────────────────────────────────
 
-/// Copies `source` into `vault_root`, returning the path of the new file.
+/// Copies the shard `source` into `vault_root`, returning the path of the new
+/// file.
 ///
 /// If a file with the same name already exists at the destination, a numeric
 /// suffix is appended before the extension until a free name is found:
 /// `shard.md` → `shard_1.md` → `shard_2.md` → …
 pub fn import_shard_to_vault(source: &Path, vault_root: &Path) -> Result<String, String> {
+    if !is_markdown_path(source) {
+        return Err(format!("Not a shard: {}", source.display()));
+    }
+    let content =
+        std::fs::read(source).map_err(|e| format!("Failed to copy shard: {}", e))?;
+    let writes = crate::locks::vault_writes()?;
     let file_name = source
         .file_name()
         .ok_or_else(|| format!("Invalid source path: {}", source.display()))?;
@@ -163,7 +225,7 @@ pub fn import_shard_to_vault(source: &Path, vault_root: &Path) -> Result<String,
         }
     }
 
-    std::fs::copy(source, &dest).map_err(|e| format!("Failed to copy shard: {}", e))?;
+    write_atomically(&writes, &dest, &content)?;
 
     Ok(dest.to_string_lossy().to_string())
 }
@@ -387,6 +449,31 @@ mod tests {
 
         assert!(unique_drawing_path(&vault, "  ").is_err());
         assert!(unique_drawing_path(&vault, "a/b").is_err());
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn write_atomically_replaces_the_file_and_leaves_nothing_behind() {
+        let vault = temp_vault("atomic");
+        let note = vault.join("Note.md");
+        std::fs::write(&note, "old").unwrap();
+
+        let writes = crate::locks::vault_writes().unwrap();
+        write_atomically(&writes, &note, b"new").unwrap();
+        write_with_folders(&writes, &vault.join("Deep/Folder/Other.md"), b"other").unwrap();
+        drop(writes);
+
+        let mut names: Vec<_> = std::fs::read_dir(&vault)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(std::fs::read_to_string(&note).unwrap(), "new");
+        assert_eq!(
+            std::fs::read_to_string(vault.join("Deep/Folder/Other.md")).unwrap(),
+            "other"
+        );
+        assert_eq!(names, ["Deep", "Note.md"]);
         std::fs::remove_dir_all(&vault).unwrap();
     }
 }

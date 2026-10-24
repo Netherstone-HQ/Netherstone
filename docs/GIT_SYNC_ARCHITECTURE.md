@@ -39,7 +39,8 @@ available (`github/token_store.rs`).
 
 `sync/planner.rs` includes `.md` shards, `.excalidraw` drawings and files in
 `_attachments/` that the attachment policy marks `syncable`, under GitHub's
-100 MB file cap. Everything else is listed in the Sync panel as staying on
+100 MB file cap. A folder that is another vault keeps its own history and is
+left out. Everything else is listed in the Sync panel as staying on
 this device. See [ATTACHMENTS_ARCHITECTURE.md](ATTACHMENTS_ARCHITECTURE.md)
 for the policy.
 
@@ -73,10 +74,19 @@ be undone.
 
 ## Locks
 
-`src-tauri/src/locks.rs` holds two locks shared by every Netherstone process
-on the device: one around shard and drawing saves, one around Git work. Each
-is an OS file lock in the app data folder, so a second Netherstone process
-waits instead of writing at the same time.
+`src-tauri/src/locks.rs` holds three locks shared by every Netherstone
+process on the device. Each is an OS file lock in the app data folder, so a
+second Netherstone process waits instead of writing at the same time.
+
+- `writes.lock`: around every change to a vault's shards, drawings and
+  folders (saves, new files, rename, move, delete, sync writing incoming
+  changes, conflict choices).
+- `history.lock`: around local Git work (saving a version, merging, restoring,
+  settling a conflict), never around fetch or push.
+- `sync.lock`: around a whole sync, so only one runs at a time.
+
+When more than one is needed, they are taken as `sync`, then `history`,
+then `writes`.
 
 ## Conflicts
 

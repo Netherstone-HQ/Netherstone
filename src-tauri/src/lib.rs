@@ -11,6 +11,7 @@ mod splash;
 mod sync;
 mod updater;
 mod vault;
+mod vault_access;
 mod watcher;
 mod window_icon;
 
@@ -48,6 +49,24 @@ fn read_markdown_from_disk(file_path: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to read file {}: {}", file_path, e))
 }
 
+/// Refuses `vault_path` unless it is the open vault.
+fn open_vault_only(vault_path: &str) -> Result<(), String> {
+    vault_access::get().check_vault(Path::new(vault_path))
+}
+
+/// Refuses `path` unless it is the open vault or inside it.
+fn in_open_vault(path: &str) -> Result<(), String> {
+    vault_access::get().check_path(Path::new(path))
+}
+
+fn ensure_markdown_path(path: &Path) -> Result<(), String> {
+    if vault::is_markdown_path(path) {
+        Ok(())
+    } else {
+        Err(format!("Not a shard: {}", path.display()))
+    }
+}
+
 fn collect_markdown_file_paths(path: &Path) -> Result<Vec<String>, String> {
     let mut markdown_paths = Vec::new();
 
@@ -81,10 +100,16 @@ fn collect_markdown_file_paths(path: &Path) -> Result<Vec<String>, String> {
 
 #[tauri::command(async)]
 fn open_vault_dialog(app: tauri::AppHandle) -> Option<String> {
-    app.dialog()
-        .file()
-        .blocking_pick_folder()
-        .map(|p| p.to_string())
+    let picked = app.dialog().file().blocking_pick_folder()?.into_path().ok()?;
+    vault_access::get().allow(&picked);
+    Some(picked.to_string_lossy().into_owned())
+}
+
+/// Makes `vault_path` the open vault, the only folder the other commands
+/// touch. It must be a vault already, or a folder just picked or created.
+#[tauri::command(async)]
+fn open_vault(vault_path: String) -> Result<(), String> {
+    vault_access::get().open(&sync::sync_root()?, Path::new(&vault_path))
 }
 
 /// Where new vaults go unless the user picks somewhere else: their
@@ -100,8 +125,9 @@ fn default_vault_location(app: tauri::AppHandle) -> Option<String> {
 
 #[tauri::command(async)]
 fn create_vault(parent: String, name: String) -> Result<String, String> {
-    vault::create_vault_folder(Path::new(&parent), &name)
-        .map(|p| p.to_string_lossy().into_owned())
+    let folder = vault::create_vault_folder(Path::new(&parent), &name)?;
+    vault_access::get().allow(&folder);
+    Ok(folder.to_string_lossy().into_owned())
 }
 
 #[tauri::command(async)]
@@ -157,6 +183,7 @@ fn import_shard(source_path: String, vault_path: String) -> Result<String, Strin
     if !source.exists() {
         return Err(format!("Source shard does not exist: {}", source_path));
     }
+    open_vault_only(&vault_path)?;
     if !vault.is_dir() {
         return Err(format!("Vault path is not a directory: {}", vault_path));
     }
@@ -207,12 +234,13 @@ fn undo_import(
     asset_paths: Vec<String>,
     since: i64,
 ) -> Result<(), String> {
+    open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
     let shards: Vec<std::path::PathBuf> = shard_paths.iter().map(std::path::PathBuf::from).collect();
     for shard in &shards {
         let inside = shard.starts_with(vault) && !shard.components().any(|c| matches!(c, std::path::Component::ParentDir));
         if inside && vault::is_markdown_path(shard) && shard.exists() {
-            delete_vault_path(shard.to_string_lossy().into_owned())?;
+            delete_path(shard)?;
         }
     }
     if Path::new(&target_dir).starts_with(vault) {
@@ -229,14 +257,17 @@ fn undo_import(
 /// Finds a free shard path in `target_dir` for each imported file.
 #[tauri::command(async)]
 fn reserve_import_paths(target_dir: String, relative_paths: Vec<String>) -> Result<Vec<String>, String> {
+    in_open_vault(&target_dir)?;
     import::reserve_shard_paths(Path::new(&target_dir), &relative_paths)
 }
 
 /// Writes an imported shard to a path `reserve_import_paths` gave out.
 #[tauri::command(async)]
 fn save_imported_shard(vault_path: String, file_path: String, content: String) -> Result<(), String> {
+    open_vault_only(&vault_path)?;
+    let writes = locks::vault_writes()?;
     import::prepare_new_shard(Path::new(&vault_path), Path::new(&file_path))?;
-    write_markdown_file_and_sync_references(&file_path, &content)
+    write_shard(&writes, &file_path, &content)
 }
 
 #[tauri::command(async)]
@@ -245,6 +276,7 @@ fn persist_attachment_file(
     source_path: String,
     vault_path: String,
 ) -> Result<db::attachments::PersistedAttachment, String> {
+    open_vault_only(&vault_path)?;
     let source = std::path::Path::new(&source_path);
     let vault = std::path::Path::new(&vault_path);
     asset_scope::allow_vault(&app, vault);
@@ -260,6 +292,7 @@ fn persist_attachment_bytes(
     bytes: Vec<u8>,
     vault_path: String,
 ) -> Result<db::attachments::PersistedAttachment, String> {
+    open_vault_only(&vault_path)?;
     let vault = std::path::Path::new(&vault_path);
     asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
@@ -271,6 +304,7 @@ fn persist_attachment_bytes(
 /// folder, repairs the database, and reports missing and unused files.
 #[tauri::command(async)]
 fn reconcile_attachments(vault_path: String) -> Result<db::attachments::AttachmentReport, String> {
+    open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
     if !vault.is_dir() {
         return Err(format!("Vault path is not a directory: {}", vault_path));
@@ -292,6 +326,7 @@ fn clean_up_attachments(
     vault_path: String,
     asset_paths: Vec<String>,
 ) -> Result<db::attachments::CleanupResult, String> {
+    open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
     if !vault.is_dir() {
         return Err(format!("Vault path is not a directory: {}", vault_path));
@@ -324,6 +359,7 @@ fn describe_missing_attachment(
     vault_path: String,
     asset_path: String,
 ) -> Result<db::attachments::MissingAttachmentInfo, String> {
+    open_vault_only(&vault_path)?;
     let conn = db::open_connection()?;
     db::attachments::describe_missing_attachment(&conn, Path::new(&vault_path), &asset_path)
 }
@@ -344,6 +380,7 @@ fn show_linked_file(app: tauri::AppHandle, file_path: String) -> bool {
 fn sync_get_vault_record(
     vault_path: String,
 ) -> Result<Option<sync::state::VaultSyncRecord>, String> {
+    open_vault_only(&vault_path)?;
     sync::state::find_record(&sync::sync_root()?, Path::new(&vault_path))
 }
 
@@ -354,16 +391,19 @@ fn find_nested_vault(folder: String) -> Result<Option<sync::state::NestedVault>,
 
 #[tauri::command(async)]
 fn sync_plan_vault(vault_path: String) -> Result<sync::planner::SyncPlanSummary, String> {
+    open_vault_only(&vault_path)?;
     Ok(sync::planner::plan_vault(Path::new(&vault_path))?.summary())
 }
 
 #[tauri::command]
 async fn sync_turn_on_backup(vault_path: String) -> Result<sync::SyncReport, String> {
+    open_vault_only(&vault_path)?;
     sync::turn_on_backup(sync::sync_root()?, vault_path.into()).await
 }
 
 #[tauri::command]
 async fn sync_now(vault_path: String) -> Result<sync::SyncReport, String> {
+    open_vault_only(&vault_path)?;
     sync::sync_now(sync::sync_root()?, vault_path.into()).await
 }
 
@@ -378,6 +418,7 @@ async fn sync_connect_backup(
     full_name: String,
     clone_url: String,
 ) -> Result<sync::SyncReport, String> {
+    open_vault_only(&vault_path)?;
     sync::connect_backup(sync::sync_root()?, vault_path.into(), full_name, clone_url).await
 }
 
@@ -386,6 +427,7 @@ fn sync_get_conflict_versions(
     vault_path: String,
     path: String,
 ) -> Result<sync::conflicts::ConflictVersions, String> {
+    open_vault_only(&vault_path)?;
     sync::conflicts::conflict_versions(&sync::sync_root()?, Path::new(&vault_path), &path)
 }
 
@@ -395,16 +437,21 @@ fn sync_resolve_conflict(
     path: String,
     choice: sync::conflicts::ConflictChoice,
 ) -> Result<sync::state::VaultSyncRecord, String> {
+    open_vault_only(&vault_path)?;
     sync::conflicts::resolve_conflict(&sync::sync_root()?, Path::new(&vault_path), &path, choice)
 }
 
 #[tauri::command(async)]
 fn sync_turn_off_backup(vault_path: String) -> Result<sync::state::VaultSyncRecord, String> {
+    open_vault_only(&vault_path)?;
     sync::turn_off_backup(&sync::sync_root()?, Path::new(&vault_path))
 }
 
+/// Saves a version of the vault. The vault the app is leaving saves its last
+/// one after the next vault opens, so any vault may, not only the open one.
 #[tauri::command(async)]
 fn sync_snapshot_vault(vault_path: String) -> Result<sync::VaultSnapshotResult, String> {
+    vault_access::get().check_known_vault(Path::new(&vault_path))?;
     sync::snapshot_vault(&sync::sync_root()?, Path::new(&vault_path))
 }
 
@@ -416,6 +463,8 @@ fn sync_snapshot_outside_change(
     file_path: String,
     previous: String,
 ) -> Result<sync::VaultSnapshotResult, String> {
+    open_vault_only(&vault_path)?;
+    in_open_vault(&file_path)?;
     sync::snapshot_outside_change(
         &sync::sync_root()?,
         Path::new(&vault_path),
@@ -431,11 +480,13 @@ fn history_list_versions(
     vault_path: String,
     file_path: String,
 ) -> Result<sync::history::FileHistory, String> {
+    open_vault_only(&vault_path)?;
     sync::history::list_versions(&sync::sync_root()?, Path::new(&vault_path), Path::new(&file_path))
 }
 
 #[tauri::command(async)]
 fn history_read_version(vault_path: String, blob: String) -> Result<String, String> {
+    open_vault_only(&vault_path)?;
     sync::history::read_version(&sync::sync_root()?, Path::new(&vault_path), &blob)
 }
 
@@ -450,6 +501,8 @@ fn history_restore(
     version_time: i64,
     expected_content: Option<String>,
 ) -> Result<sync::history::RestoreResult, String> {
+    open_vault_only(&vault_path)?;
+    vault_access::get().check_inside(Path::new(&file_path))?;
     let path = Path::new(&file_path);
     let is_drawing = vault::is_drawing_path(path);
     if !is_drawing && !vault::is_markdown_path(path) {
@@ -471,6 +524,7 @@ fn history_restore(
                 write_drawing_file(path, content, None)
             } else {
                 write_markdown_file_if_unchanged(&file_path, content, expected_content.as_deref())
+                    .map(|_| ())
             }
         },
     )
@@ -517,6 +571,7 @@ fn github_sign_out() -> Result<(), String> {
 
 #[tauri::command(async)]
 fn scan_vault(app: tauri::AppHandle, vault_path: String) -> Result<Vec<vault::FileNode>, String> {
+    open_vault_only(&vault_path)?;
     let path = std::path::Path::new(&vault_path);
 
     if !path.exists() {
@@ -532,6 +587,7 @@ fn scan_vault(app: tauri::AppHandle, vault_path: String) -> Result<Vec<vault::Fi
 
 #[tauri::command(async)]
 fn start_vault_watcher(app: tauri::AppHandle, vault_path: String) -> Result<(), String> {
+    open_vault_only(&vault_path)?;
     asset_scope::allow_vault(&app, Path::new(&vault_path));
     watcher::watch_vault(&app, &vault_path)
 }
@@ -543,6 +599,8 @@ fn stop_vault_watcher(app: tauri::AppHandle) {
 
 #[tauri::command(async)]
 fn read_markdown_file(file_path: String) -> Result<String, String> {
+    in_open_vault(&file_path)?;
+    ensure_markdown_path(Path::new(&file_path))?;
     read_markdown_from_disk(&file_path)
 }
 
@@ -551,6 +609,8 @@ fn open_markdown_file(
     file_path: String,
     cache_version: Option<i64>,
 ) -> Result<OpenMarkdownFileResult, String> {
+    in_open_vault(&file_path)?;
+    ensure_markdown_path(Path::new(&file_path))?;
     let markdown = read_markdown_from_disk(&file_path)?;
     let content_hash = hash_markdown_content(&markdown);
     let expected_cache_version = resolve_ast_cache_version(cache_version);
@@ -699,34 +759,10 @@ fn rename_ast_cache(old_path: String, new_path: String) -> Result<bool, String> 
     }
 }
 
-/// Writes a shard. Saves are serialized across threads and processes:
-/// overlapping saves of one file would race on the shared `.md.tmp` path.
-fn write_markdown_file_and_sync_references(file_path: &str, content: &str) -> Result<(), String> {
-    write_markdown_file_if_unchanged(file_path, content, None)
-}
-
-/// Like `write_markdown_file_and_sync_references`, but refuses when
-/// `expected` is given and the file now holds something else. The check and
-/// the write happen under one lock, so no other save lands in between.
-fn write_markdown_file_if_unchanged(
-    file_path: &str,
-    content: &str,
-    expected: Option<&str>,
-) -> Result<(), String> {
-    let _write_guard = locks::vault_writes()?;
-    if expected.is_some_and(|expected| changed_on_disk(file_path, expected)) {
-        return Err(CHANGED_ON_DISK.to_string());
-    }
-    let path = std::path::Path::new(file_path);
-    let tmp_path = path.with_extension("md.tmp");
-
-    // Write to temporary file first
-    std::fs::write(&tmp_path, content)
-        .map_err(|e| format!("Failed to write temporary file: {}", e))?;
-
-    // Atomically rename to target path
-    std::fs::rename(&tmp_path, path)
-        .map_err(|e| format!("Failed to save file {}: {}", file_path, e))?;
+/// Writes a shard while `writes.lock` is held, then points its attachment
+/// references at what it now links to.
+fn write_shard(writes: &locks::VaultWrites, file_path: &str, content: &str) -> Result<(), String> {
+    vault::write_atomically(writes, Path::new(file_path), content.as_bytes())?;
 
     match db::open_connection() {
         Ok(conn) => {
@@ -750,8 +786,30 @@ fn write_markdown_file_if_unchanged(
     Ok(())
 }
 
+/// Writes a shard, but refuses when `expected` is given and the file now
+/// holds something else. The check and the write happen under one lock, so
+/// no other write lands in between. Returns the text the shard held before.
+fn write_markdown_file_if_unchanged(
+    file_path: &str,
+    content: &str,
+    expected: Option<&str>,
+) -> Result<Option<String>, String> {
+    let writes = locks::vault_writes()?;
+    let previous = std::fs::read(file_path).ok();
+    if is_changed(previous.as_deref(), expected) {
+        return Err(CHANGED_ON_DISK.to_string());
+    }
+    write_shard(&writes, file_path, content)?;
+    Ok(previous.and_then(|bytes| String::from_utf8(bytes).ok()))
+}
+
 /// What a save returns when the shard or drawing changed outside the app.
 const CHANGED_ON_DISK: &str = "The shard changed on disk";
+
+/// True when the file was there (`on_disk`) and doesn't hold `expected`.
+fn is_changed(on_disk: Option<&[u8]>, expected: Option<&str>) -> bool {
+    matches!((on_disk, expected), (Some(bytes), Some(expected)) if bytes != expected.as_bytes())
+}
 
 /// Saves a shard. `record_writing` is set by saves of what you type in the
 /// editor, which the Data page counts as writing on this device.
@@ -765,31 +823,30 @@ fn save_markdown_file(
     record_writing: Option<bool>,
     expected_content: Option<String>,
 ) -> Result<(), String> {
-    if let Some(expected) = expected_content.as_deref() {
-        // Checked again under the write lock; this skips logging a refused save.
-        if changed_on_disk(&file_path, expected) {
-            return Err(CHANGED_ON_DISK.to_string());
-        }
-    }
-    if record_writing == Some(true) {
-        record_writing_before_save(&file_path, &content);
-    }
-    write_markdown_file_if_unchanged(&file_path, &content, expected_content.as_deref())
+    in_open_vault(&file_path)?;
+    save_shard(&file_path, &content, record_writing == Some(true), expected_content.as_deref())
 }
 
-/// True when the file exists and doesn't hold `expected`.
-fn changed_on_disk(path: impl AsRef<Path>, expected: &str) -> bool {
-    std::fs::read(path).is_ok_and(|bytes| bytes != expected.as_bytes())
+fn save_shard(
+    file_path: &str,
+    content: &str,
+    record_writing: bool,
+    expected: Option<&str>,
+) -> Result<(), String> {
+    ensure_markdown_path(Path::new(file_path))?;
+    let previous = write_markdown_file_if_unchanged(file_path, content, expected)?;
+    if record_writing {
+        record_writing_after_save(file_path, content, previous);
+    }
+    Ok(())
 }
 
-/// Logs the words written today, before the save replaces the words the shard
-/// started the day with. A failure only costs the count.
-fn record_writing_before_save(file_path: &str, content: &str) {
+/// Logs the words written today. The first save of the day also keeps the
+/// words the shard started with, `previous`. A failure only costs the count.
+fn record_writing_after_save(file_path: &str, content: &str, previous: Option<String>) {
     let result = db::open_connection().and_then(|conn| {
-        db::data::record_writing(&conn, &db::data::local_today(), file_path, content, || {
-            std::fs::read_to_string(file_path).ok()
-        })
-        .map_err(|e| e.to_string())
+        db::data::record_writing(&conn, &db::data::local_today(), file_path, content, || previous)
+            .map_err(|e| e.to_string())
     });
     if let Err(error) = result {
         eprintln!(
@@ -801,6 +858,10 @@ fn record_writing_before_save(file_path: &str, content: &str) {
 
 #[tauri::command(async)]
 fn append_markdown_to_file(file_path: String, markdown: String) -> Result<(), String> {
+    in_open_vault(&file_path)?;
+    ensure_markdown_path(Path::new(&file_path))?;
+    // Read and written under one lock, so an edit in between isn't lost.
+    let writes = locks::vault_writes()?;
     let mut content = read_markdown_from_disk(&file_path)?;
 
     if !content.is_empty() && !content.ends_with('\n') {
@@ -817,7 +878,7 @@ fn append_markdown_to_file(file_path: String, markdown: String) -> Result<(), St
         content.push('\n');
     }
 
-    write_markdown_file_and_sync_references(&file_path, &content)
+    write_shard(&writes, &file_path, &content)
 }
 
 fn ensure_drawing_path(path: &Path) -> Result<(), String> {
@@ -830,6 +891,7 @@ fn ensure_drawing_path(path: &Path) -> Result<(), String> {
 
 #[tauri::command(async)]
 fn read_drawing_file(file_path: String) -> Result<String, String> {
+    in_open_vault(&file_path)?;
     let path = Path::new(&file_path);
     ensure_drawing_path(path)?;
 
@@ -846,6 +908,7 @@ fn save_drawing_file(
     content: String,
     expected_content: Option<String>,
 ) -> Result<(), String> {
+    in_open_vault(&file_path)?;
     write_drawing_file(Path::new(&file_path), &content, expected_content.as_deref())
 }
 
@@ -863,27 +926,22 @@ fn merge_drawings(
 fn write_drawing_file(path: &Path, content: &str, expected: Option<&str>) -> Result<(), String> {
     ensure_drawing_path(path)?;
 
-    let _write_guard = locks::vault_writes()?;
-    if expected.is_some_and(|expected| changed_on_disk(path, expected)) {
+    let writes = locks::vault_writes()?;
+    if is_changed(std::fs::read(path).ok().as_deref(), expected) {
         return Err(CHANGED_ON_DISK.to_string());
     }
-    let tmp_path = path.with_extension("excalidraw.tmp");
-
-    std::fs::write(&tmp_path, content)
-        .map_err(|e| format!("Failed to write temporary drawing file: {}", e))?;
-    std::fs::rename(&tmp_path, path)
-        .map_err(|e| format!("Failed to save drawing {}: {}", path.display(), e))
+    vault::write_atomically(&writes, path, content.as_bytes())
 }
 
 /// Returns the shards in `vault_path` whose text contains any of `needles`.
 /// Used to find the notes that embed an exported drawing.
 #[tauri::command(async)]
 fn find_shards_containing(vault_path: String, needles: Vec<String>) -> Result<Vec<String>, String> {
-    let vault = Path::new(&vault_path);
-    if !vault.is_dir() {
-        return Err(format!("Vault path is not a directory: {}", vault_path));
-    }
+    open_vault_only(&vault_path)?;
+    Ok(shards_containing(Path::new(&vault_path), &needles))
+}
 
+fn shards_containing(vault: &Path, needles: &[String]) -> Vec<String> {
     let needles: Vec<&str> = needles
         .iter()
         .map(String::as_str)
@@ -894,34 +952,37 @@ fn find_shards_containing(vault_path: String, needles: Vec<String>) -> Result<Ve
         collect_file_paths(node, &mut paths);
     }
 
-    Ok(paths
+    paths
         .into_iter()
         .filter(|path| {
             std::fs::read_to_string(path)
                 .map(|content| needles.iter().any(|needle| content.contains(needle)))
                 .unwrap_or(false)
         })
-        .collect())
+        .collect()
 }
 
 /// Creates the folder `name` inside `parent` and returns its path.
 #[tauri::command(async)]
 fn create_folder(parent: String, name: String) -> Result<String, String> {
+    in_open_vault(&parent)?;
+    let _writes = locks::vault_writes()?;
     vault::create_folder(Path::new(&parent), &name).map(|p| p.to_string_lossy().into_owned())
 }
 
 /// Creates an empty drawing named `name` in `directory` and returns its path.
 #[tauri::command(async)]
 fn create_drawing_file(directory: String, name: String) -> Result<String, String> {
+    in_open_vault(&directory)?;
     let dir = Path::new(&directory);
 
     if !dir.is_dir() {
         return Err(format!("Not a directory: {}", directory));
     }
 
+    let writes = locks::vault_writes()?;
     let path = vault::unique_drawing_path(dir, &name)?;
-    std::fs::write(&path, vault::EMPTY_DRAWING)
-        .map_err(|e| format!("Failed to create drawing {}: {}", path.display(), e))?;
+    vault::write_atomically(&writes, &path, vault::EMPTY_DRAWING.as_bytes())?;
 
     Ok(path.to_string_lossy().to_string())
 }
@@ -1081,6 +1142,17 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
     }
 
     for (file_old, file_new) in files {
+        // Read and written under one lock, so an edit in between isn't lost.
+        let writes = match locks::vault_writes() {
+            Ok(writes) => writes,
+            Err(error) => {
+                eprintln!(
+                    "[Netherstone] Failed to rewrite links in {} after {}: {}",
+                    file_new, action, error
+                );
+                continue;
+            }
+        };
         let content = match std::fs::read_to_string(&file_new) {
             Ok(content) => content,
             Err(error) => {
@@ -1096,7 +1168,7 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
         else {
             continue;
         };
-        if let Err(error) = write_markdown_file_and_sync_references(&file_new, &rewritten) {
+        if let Err(error) = write_shard(&writes, &file_new, &rewritten) {
             eprintln!(
                 "[Netherstone] Failed to rewrite links in {} after {}: {}",
                 file_new, action, error
@@ -1127,8 +1199,14 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
 
 #[tauri::command(async)]
 fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
-    let old_file = std::path::Path::new(&old_path);
+    vault_access::get().check_inside(Path::new(&old_path))?;
+    rename_path(&old_path, new_name)
+}
 
+fn rename_path(old_path: &str, new_name: String) -> Result<String, String> {
+    let old_file = std::path::Path::new(old_path);
+
+    let writes = locks::vault_writes()?;
     if !old_file.exists() {
         return Err(format!("File does not exist: {}", old_path));
     }
@@ -1156,6 +1234,10 @@ fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
     // Build new path in same directory
     let parent = old_file.parent().ok_or("Cannot get parent directory")?;
     let new_path = parent.join(&resolved_new_name);
+    let mut parts = Path::new(&resolved_new_name).components();
+    if !matches!((parts.next(), parts.next()), (Some(std::path::Component::Normal(_)), None)) {
+        return Err(format!("'{}' can't be used as a name", resolved_new_name));
+    }
     let old_path_normalized = old_file.to_string_lossy();
     let new_path_normalized = new_path.to_string_lossy();
     let is_case_only_rename = old_path_normalized.eq_ignore_ascii_case(&new_path_normalized)
@@ -1171,19 +1253,28 @@ fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
 
     // Rename the file or directory
     std::fs::rename(&old_file, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
+    // Released first: rewriting links takes the lock for each shard.
+    drop(writes);
 
     let new_path_string = new_path.to_string_lossy().to_string();
-    sync_caches_after_path_change(&old_path, &new_path, "rename");
-    rewrite_links_after_path_change(&old_path, &new_path, "rename");
+    sync_caches_after_path_change(old_path, &new_path, "rename");
+    rewrite_links_after_path_change(old_path, &new_path, "rename");
 
     Ok(new_path_string)
 }
 
 #[tauri::command(async)]
 fn move_file(source_path: String, destination_dir: String) -> Result<String, String> {
-    let source = std::path::Path::new(&source_path);
-    let dest_dir = std::path::Path::new(&destination_dir);
+    vault_access::get().check_inside(Path::new(&source_path))?;
+    in_open_vault(&destination_dir)?;
+    move_path(&source_path, &destination_dir)
+}
 
+fn move_path(source_path: &str, destination_dir: &str) -> Result<String, String> {
+    let source = std::path::Path::new(source_path);
+    let dest_dir = std::path::Path::new(destination_dir);
+
+    let writes = locks::vault_writes()?;
     if !source.exists() {
         return Err(format!("Source file does not exist: {}", source_path));
     }
@@ -1214,18 +1305,27 @@ fn move_file(source_path: String, destination_dir: String) -> Result<String, Str
     }
 
     std::fs::rename(&source, &new_path).map_err(|e| format!("Failed to move {}: {}", kind, e))?;
+    // Released first: rewriting links takes the lock for each shard.
+    drop(writes);
 
     let new_path_string = new_path.to_string_lossy().to_string();
-    sync_caches_after_path_change(&source_path, &new_path, "move");
-    rewrite_links_after_path_change(&source_path, &new_path, "move");
+    sync_caches_after_path_change(source_path, &new_path, "move");
+    rewrite_links_after_path_change(source_path, &new_path, "move");
 
     Ok(new_path_string)
 }
 
 #[tauri::command(async)]
 fn delete_vault_path(target_path: String) -> Result<(), String> {
-    let target = Path::new(&target_path);
+    vault_access::get().check_inside(Path::new(&target_path))?;
+    delete_path(Path::new(&target_path))
+}
 
+/// Moves a shard, drawing or folder to the OS trash and forgets the shards'
+/// cached state.
+fn delete_path(target: &Path) -> Result<(), String> {
+    let target_path = target.to_string_lossy();
+    let writes = locks::vault_writes()?;
     if !target.exists() {
         return Err(format!("Path does not exist: {}", target_path));
     }
@@ -1234,6 +1334,7 @@ fn delete_vault_path(target_path: String) -> Result<(), String> {
 
     trash::delete(target)
         .map_err(|e| format!("Failed to move {} to the OS trash: {}", target_path, e))?;
+    drop(writes);
 
     match db::open_connection() {
         Ok(conn) => {
@@ -1286,6 +1387,7 @@ fn get_tagged_files() -> Result<Vec<db::queries::TaggedFile>, String> {
 
 #[tauri::command(async)]
 fn get_writing_log(vault_path: String) -> Result<db::data::WritingLog, String> {
+    open_vault_only(&vault_path)?;
     let today = db::data::local_today();
     // Without its history, the page still shows what this device counted.
     let history = sync::sync_root()
@@ -1335,6 +1437,7 @@ fn get_backlinks(file_path: String) -> Result<Vec<db::queries::Backlink>, String
 
 #[tauri::command(async)]
 fn get_file_metadata(file_path: String) -> Result<Option<db::queries::FileMetadata>, String> {
+    in_open_vault(&file_path)?;
     let path = std::path::Path::new(&file_path);
 
     if !path.exists() {
@@ -1355,6 +1458,7 @@ fn get_file_metadata(file_path: String) -> Result<Option<db::queries::FileMetada
 
 #[tauri::command(async)]
 fn index_vault(vault_path: String) -> Result<String, String> {
+    open_vault_only(&vault_path)?;
     let vault = std::path::Path::new(&vault_path);
 
     if !vault.is_dir() {
@@ -1510,6 +1614,7 @@ pub fn run() {
             browser::browser_set_bounds,
             browser::browser_set_visible,
             open_vault_dialog,
+            open_vault,
             default_vault_location,
             create_vault,
             open_media_files_dialog,
@@ -1598,25 +1703,20 @@ mod tests {
         let path = shard.to_string_lossy().into_owned();
         std::fs::write(&shard, "opened").unwrap();
 
-        save_markdown_file(path.clone(), "typed".into(), None, Some("opened".into())).unwrap();
+        save_shard(&path, "typed", false, Some("opened")).unwrap();
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "typed");
 
         std::fs::write(&shard, "outside").unwrap();
         assert_eq!(
-            save_markdown_file(
-                path.clone(),
-                "typed more".into(),
-                None,
-                Some("typed".into())
-            ),
+            save_shard(&path, "typed more", false, Some("typed")),
             Err(CHANGED_ON_DISK.to_string())
         );
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "outside");
 
         // Other saves, and a shard that was deleted, are written as before.
-        save_markdown_file(path.clone(), "renamed".into(), None, None).unwrap();
+        save_shard(&path, "renamed", false, None).unwrap();
         std::fs::remove_file(&shard).unwrap();
-        save_markdown_file(path, "again".into(), None, Some("renamed".into())).unwrap();
+        save_shard(&path, "again", false, Some("renamed")).unwrap();
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "again");
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1626,18 +1726,17 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("netherstone-drawing-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let drawing = dir.join("Plan.excalidraw");
-        let path = drawing.to_string_lossy().into_owned();
         std::fs::write(&drawing, "opened").unwrap();
 
-        save_drawing_file(path.clone(), "drawn".into(), Some("opened".into())).unwrap();
+        write_drawing_file(&drawing, "drawn", Some("opened")).unwrap();
         std::fs::write(&drawing, "outside").unwrap();
         assert_eq!(
-            save_drawing_file(path.clone(), "drawn more".into(), Some("drawn".into())),
+            write_drawing_file(&drawing, "drawn more", Some("drawn")),
             Err(CHANGED_ON_DISK.to_string())
         );
         assert_eq!(std::fs::read_to_string(&drawing).unwrap(), "outside");
 
-        save_drawing_file(path, "merged".into(), Some("outside".into())).unwrap();
+        write_drawing_file(&drawing, "merged", Some("outside")).unwrap();
         assert_eq!(std::fs::read_to_string(&drawing).unwrap(), "merged");
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1664,8 +1763,7 @@ mod tests {
             r#"data-excalidraw="d/F &amp; co"#.to_string(),
             String::new(),
         ];
-        let mut found =
-            find_shards_containing(dir.to_string_lossy().into_owned(), needles).unwrap();
+        let mut found = shards_containing(&dir, &needles);
         found.sort();
         std::fs::remove_dir_all(&dir).unwrap();
 
@@ -1711,14 +1809,57 @@ mod tests {
         let inner = dir.join("Work").join("Inner");
         std::fs::create_dir_all(&inner).unwrap();
 
-        let result = move_file(
-            dir.join("Work").to_string_lossy().into_owned(),
-            inner.to_string_lossy().into_owned(),
+        let result = move_path(
+            &dir.join("Work").to_string_lossy(),
+            &inner.to_string_lossy(),
         );
         let still_there = inner.is_dir();
         std::fs::remove_dir_all(&dir).unwrap();
 
         assert!(result.is_err());
         assert!(still_there);
+    }
+
+    #[test]
+    fn a_save_returns_the_text_it_replaced_and_only_writes_shards() {
+        let dir = std::env::temp_dir().join(format!("netherstone-previous-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shard = dir.join("Note.md").to_string_lossy().into_owned();
+
+        assert_eq!(write_markdown_file_if_unchanged(&shard, "first", None), Ok(None));
+        assert_eq!(
+            write_markdown_file_if_unchanged(&shard, "second", Some("first")),
+            Ok(Some("first".to_string()))
+        );
+        let script = dir.join("run.sh").to_string_lossy().into_owned();
+        let refused = save_shard(&script, "echo hi", false, None);
+        let script_written = Path::new(&script).exists();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(refused.is_err());
+        assert!(!script_written);
+    }
+
+    #[test]
+    fn rename_keeps_the_new_name_in_the_same_folder() {
+        let dir = std::env::temp_dir().join(format!("netherstone-rename-{}", std::process::id()));
+        let folder = dir.join("Work");
+        std::fs::create_dir_all(&folder).unwrap();
+        let shard = folder.join("Plan.md");
+        std::fs::write(&shard, "plan").unwrap();
+        let shard_path = shard.to_string_lossy().into_owned();
+
+        let escapes = [
+            rename_path(&shard_path, "../Plan".into()),
+            rename_path(&shard_path, "Sub/Plan".into()),
+            rename_path(&folder.to_string_lossy(), "..".into()),
+        ];
+        let renamed = rename_path(&shard_path, "Roadmap".into()).unwrap();
+        let moved_out = dir.join("Plan.md").exists();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(escapes.iter().all(Result::is_err));
+        assert!(!moved_out);
+        assert_eq!(Path::new(&renamed), folder.join("Roadmap.md"));
     }
 }

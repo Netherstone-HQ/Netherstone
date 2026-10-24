@@ -17,6 +17,9 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
 ## Vault and file watching
 
 - `src-tauri/src/vault.rs` reads the folder tree, skipping hidden files.
+- Rust knows which vault is open (`vault_access.rs`), and file commands
+  refuse paths outside it. A folder opens as the vault when it already has
+  the `.netherstone` marker or was just picked or created in a native dialog.
 - `watcher.rs` uses `notify` to pick up changes made outside the app, update
   the index and refresh the UI.
 - When the open shard changes outside the app, only the blocks that changed
@@ -40,10 +43,11 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
 - Opening a shard can skip parsing: the last parsed tree is cached in SQLite,
   keyed by path and content hash (`src-tauri/src/db/ast_cache.rs`,
   `src/lib/editor-ast-cache.ts`). A changed file is parsed again.
-- Autosave runs 1.8 s after typing stops (`src/hooks/useAutosave.ts`). Rust
-  writes to `<name>.md.tmp` and renames it over the shard, so a crash never
-  leaves a half-written file. Pending saves are flushed before the window
-  closes.
+- Autosave runs 1.8 s after typing stops (`src/hooks/useAutosave.ts`). Every
+  write into a vault goes through `vault::write_atomically`: a hidden file
+  beside the target, flushed to disk, then renamed over it, so a crash or
+  power loss never leaves a half-written file. Pending saves are flushed
+  before the window closes.
 
 ## Index and search
 
@@ -89,6 +93,8 @@ window (`src/components/export/`), which loads only when it first opens.
   checkboxes, equations as Office Math. Fonts are named, not embedded.
 - The preview loads once and restyles itself in place when options change.
   Pages are laid out as CSS columns, so they break the way the PDF prints.
+- Rust only writes an export to a path picked in its save dialog, and only
+  reads pictures for one.
 
 ## Subsystems with their own docs
 

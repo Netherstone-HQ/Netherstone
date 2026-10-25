@@ -439,8 +439,8 @@ export async function findShardsContaining(
 
 /**
  * Starts a debounced file watcher on the given vault directory.
- * Fires a `vault:changed` event whenever .md or .excalidraw files are added,
- * removed, or renamed.
+ * Fires a `vault:changed` event whenever .md or .excalidraw files, folders,
+ * or files in `_attachments` are added, removed, or renamed.
  */
 export async function startVaultWatcher(vaultPath: string): Promise<void> {
   assertTauri();

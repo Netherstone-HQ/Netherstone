@@ -129,7 +129,7 @@ pub(crate) fn extension_for_path(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
-fn extension_for_name(name: &str) -> String {
+pub(super) fn extension_for_name(name: &str) -> String {
     Path::new(name)
         .extension()
         .and_then(|ext| ext.to_str())
@@ -177,7 +177,7 @@ fn mime_type_for_extension(extension: &str) -> String {
     .to_string()
 }
 
-fn reference_kind_for_path(
+pub(super) fn reference_kind_for_path(
     path: &str,
     default_kind: AttachmentReferenceKind,
 ) -> AttachmentReferenceKind {
@@ -467,6 +467,46 @@ fn parse_attachment_references(content: &str) -> Vec<ParsedAttachmentReference> 
     }
 
     references
+}
+
+/// A drawing export a shard embeds: its image and, when it has one, the
+/// same drawing exported dark.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct DrawingExport {
+    pub asset_path: String,
+    pub dark_asset_path: Option<String>,
+}
+
+/// The drawing exports embedded in `content`: images that name their
+/// drawing (`data-excalidraw`) or carry a dark export (`data-dark-src`).
+pub(super) fn parse_drawing_exports(content: &str) -> Vec<DrawingExport> {
+    let mut exports = Vec::new();
+
+    for event in Parser::new(content) {
+        let (Event::Html(html) | Event::InlineHtml(html)) = event else {
+            continue;
+        };
+        if html_reference_kind(&html) != AttachmentReferenceKind::Image {
+            continue;
+        }
+        let dark_asset_path = extract_html_attr_value(&html, "data-dark-src")
+            .and_then(|value| normalize_attachment_path(&value));
+        if dark_asset_path.is_none() && extract_html_attr_value(&html, "data-excalidraw").is_none()
+        {
+            continue;
+        }
+        let Some(asset_path) = extract_html_attr_value(&html, "src")
+            .and_then(|value| normalize_attachment_path(&value))
+        else {
+            continue;
+        };
+        exports.push(DrawingExport {
+            asset_path,
+            dark_asset_path,
+        });
+    }
+
+    exports
 }
 
 fn refresh_attachment_counts(
@@ -1178,7 +1218,7 @@ fn prune_empty_attachment_folders(vault_path: &Path) {
 
 /// Lists the files under the vault's attachment folder as asset paths, with
 /// their sizes.
-fn scan_attachment_files(vault_path: &Path) -> Vec<(String, u64)> {
+pub(super) fn scan_attachment_files(vault_path: &Path) -> Vec<(String, u64)> {
     let mut files = Vec::new();
     let mut pending = vec![vault_path.join(ATTACHMENTS_DIR_NAME)];
 

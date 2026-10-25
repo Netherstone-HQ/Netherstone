@@ -49,6 +49,15 @@ A missing file shows its original name in the editor. If a file with the same
 content exists, one click (in the editor or in Health) relinks every shard
 that used it.
 
+## Gallery
+
+The Gallery (`src/components/gallery/`) shows every file in `_attachments/`,
+newest added first, with the shards that use it. `list_attachments`
+(`src-tauri/src/db/gallery.rs`) reads the folder and this vault's
+references. A drawing export and its dark twin are one file. The watcher
+reports files in `_attachments/`, so the Gallery follows changes made
+outside the app; the file tree and index ignore them.
+
 ## Sync eligibility
 
 Each attachment gets a `sync_status` when stored, and Git sync only uploads

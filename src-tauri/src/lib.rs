@@ -367,6 +367,14 @@ fn reconcile_attachments(vault_path: String) -> Result<db::attachments::Attachme
     db::attachments::reconcile_vault_attachments(&conn, vault, &shard_paths)
 }
 
+/// The open vault's attachments for the Gallery, newest added first.
+#[tauri::command(async)]
+fn list_attachments(vault_path: String) -> Result<Vec<db::gallery::GalleryFile>, String> {
+    open_vault_only(&vault_path)?;
+    let conn = db::open_connection()?;
+    db::gallery::list_vault_attachments(&conn, Path::new(&vault_path))
+}
+
 /// Moves the requested unused attachments to the OS trash, after
 /// re-checking that each is still unused and past the grace period.
 #[tauri::command(async)]
@@ -1722,6 +1730,7 @@ pub fn run() {
             create_drawing_file,
             create_folder,
             reconcile_attachments,
+            list_attachments,
             describe_missing_attachment,
             clean_up_attachments,
             find_shards_containing,

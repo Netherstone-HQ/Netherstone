@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { isAttachmentOnlyChange } from "@/lib/gallery";
 import { useEditorStore, useVaultStore } from "@/store";
 import {
   areDocumentLinksEqual,
@@ -114,7 +115,10 @@ export function useIndexedShard(isEnabled: boolean): IndexedShard | null {
       ignoreChangesUntil = performance.now() + SAVE_ECHO_MS;
       reload();
     });
-    const unlisten = listen("vault:changed", () => {
+    const unlisten = listen<{ paths?: string[] }>("vault:changed", (event) => {
+      const vaultPath = useVaultStore.getState().currentVaultPath;
+      const paths = event.payload?.paths ?? [];
+      if (vaultPath && isAttachmentOnlyChange(paths, vaultPath)) return;
       if (performance.now() >= ignoreChangesUntil) reload();
     });
 

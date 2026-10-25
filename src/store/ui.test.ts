@@ -69,6 +69,9 @@ describe("rail modes", () => {
     openMode("tags");
     expect(selectRailMode(useUIStore.getState())).toBe("tags");
 
+    openMode("gallery");
+    expect(selectRailMode(useUIStore.getState())).toBe("gallery");
+
     openMode("canvas");
     expect(selectRailMode(useUIStore.getState())).toBe("canvas");
 

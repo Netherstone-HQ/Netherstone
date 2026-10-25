@@ -136,7 +136,7 @@ test("a vault with no writing yet starts its calendar today", async ({
   await mockData(page, { startedOn: today(), entries: [], brokenLinks: [] });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   await expect(page.getByText("Your calendar starts today")).toBeVisible();
   await expect(page.getByText("Nothing needs attention.")).toBeVisible();
   // No charts, no Charts section.
@@ -158,7 +158,7 @@ test("a busy day lists six shards until you show all of them", async ({
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   await expect(page.getByText("+100 words")).toBeVisible();
   await expect(page.getByText("+95 words")).toBeVisible();
   await expect(page.getByText("+94 words")).toHaveCount(0);
@@ -181,7 +181,7 @@ test("the calendar shows the last year across the card's width", async ({
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   const calendar = page.getByRole("group", { name: "Days written" });
   await expect(calendar).toBeVisible();
   await expect(page.getByRole("button", { name: /^Show the/ })).toHaveCount(0);
@@ -222,7 +222,7 @@ test("charts are drawn small and open their shard at the chart", async ({
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   const charts = page.getByRole("region", { name: "Charts" });
   // The four last edited, each drawn, until you show all of them.
   await expect(charts.getByRole("img")).toHaveCount(4);
@@ -245,7 +245,7 @@ test("the sidebar lists the vault's shards, as in the Editor", async ({
   await mockData(page, { startedOn: today(), entries: [], brokenLinks: [] });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   await expect(page.getByRole("region", { name: "On this page" })).toHaveCount(0);
   await page
     .getByRole("region", { name: "Files" })
@@ -282,7 +282,7 @@ test("Health groups what needs fixing, each with its count", async ({
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   const health = page.getByRole("region", { name: "Health" });
   await expect(health.getByRole("list", { name: "Broken links" }).getByRole("button")).toHaveCount(2);
   await expect(health.getByRole("list", { name: "Missing files" }).getByRole("button", { name: "Relink" })).toBeVisible();
@@ -303,7 +303,7 @@ test("the picked day sits beside the calendar when wide, under it when narrow", 
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   const writing = page.getByRole("region", { name: "Writing" });
   const day = page.getByRole("region", { name: /^\w+, / });
   await expect(day.getByText("+10 words")).toBeVisible();
@@ -331,7 +331,7 @@ test("unused files are cleaned up from Health", async ({ page }) => {
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   await expect(
     page.getByRole("list", { name: "Unused files" }).getByText("old.png"),
   ).toBeVisible();
@@ -357,7 +357,7 @@ test("a missing file opens its shard at the embed", async ({ page }) => {
   });
   await mockVault(page, { files: FILES, open: "Note.md" });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   const row = page.getByRole("button", { name: /^photo\.png in Trip/ });
   await expect(row).toBeVisible();
   await row.click();
@@ -386,7 +386,7 @@ test("a deleted shard opens its last version, and restoring brings it back", asy
     },
   });
 
-  await page.keyboard.press("Control+4");
+  await page.keyboard.press("Control+5");
   await page.getByRole("button", { name: /^Old idea/ }).click();
   const history = page.getByRole("complementary", { name: "History" });
   await expect(history).toBeVisible();

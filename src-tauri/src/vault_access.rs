@@ -20,7 +20,7 @@ pub fn get() -> &'static OpenVault {
 }
 
 impl OpenVault {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             open: Mutex::new(None),
             picked: Mutex::new(Vec::new()),
@@ -105,7 +105,7 @@ fn part(component: Component<'_>) -> String {
     }
 }
 
-fn is_same(a: &Path, b: &Path) -> bool {
+pub(crate) fn is_same(a: &Path, b: &Path) -> bool {
     is_within(a, b) && is_within(b, a)
 }
 

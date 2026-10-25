@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
 import {
+  confirmAttachmentCopies,
   openMediaFilesDialog,
   persistAttachmentFile,
   type MediaDialogKind,
@@ -330,6 +331,12 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
       }
 
       const existingLocalPath = getAbsoluteLocalSourceCandidate(element);
+      if (
+        existingLocalPath &&
+        !(await confirmAttachmentCopies([existingLocalPath]))
+      ) {
+        return;
+      }
       const sourcePath =
         existingLocalPath ?? (await pickSingleMediaPath(effectiveMediaKind));
 

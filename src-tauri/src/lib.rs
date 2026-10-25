@@ -7,6 +7,7 @@ mod github;
 mod import;
 mod locks;
 mod markdown_text;
+mod open_access;
 mod shard_links;
 mod splash;
 mod sync;
@@ -485,6 +486,15 @@ fn describe_missing_attachment(
 #[tauri::command(async)]
 fn file_exists(file_path: String) -> Result<bool, String> {
     Ok(std::path::Path::new(&file_path).exists())
+}
+
+/// Opens a file a shard links to in the app the computer uses for it.
+/// Programs, scripts and shortcuts are refused (see `open_access`).
+#[tauri::command(async)]
+fn open_file(path: String) -> Result<(), String> {
+    open_access::check(Path::new(&path))?;
+    tauri_plugin_opener::open_path(&path, None::<&str>)
+        .map_err(|e| format!("Couldn't open {}: {}", path, e))
 }
 
 #[tauri::command(async)]
@@ -1782,6 +1792,7 @@ pub fn run() {
             fix_imported_links,
             file_exists,
             show_linked_file,
+            open_file,
             scan_vault,
             github_get_account,
             github_token_storage,

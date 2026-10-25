@@ -16,10 +16,6 @@
     "core:webview:allow-webview-close",
     "core:webview:allow-set-webview-zoom",
     "opener:default",
-    "dialog:default",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [{ "path": "**" }]
-    }
+    "dialog:default"
   ]
 }

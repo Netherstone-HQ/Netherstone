@@ -401,7 +401,7 @@ test("sound, video and other files outside the vault show and open", async ({ pa
       page.evaluate(() =>
         window.__commands.some(
           ({ command, args }) =>
-            command.startsWith("plugin:opener|open_path") &&
+            command === "open_file" &&
             JSON.stringify(args).includes("Report.pdf"),
         ),
       ),

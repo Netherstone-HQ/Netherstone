@@ -37,7 +37,9 @@ How Netherstone stores the images, files, audio and video that shards link to.
    `_attachments/` and records it. The file is written and flushed under a
    hidden name first, then named under `writes.lock`, so copying a big file
    in doesn't hold up saves.
-   A file on disk is copied by Rust from its path; a file the app holds
+   A file on disk is copied by Rust from its path, only when it's inside
+   the vault, a picture, sound or video, picked in the media dialog, or
+   agreed to in a native dialog (`copy_access.rs`). A file the app holds
    (pasted, dropped, a drawing export) arrives as raw bytes.
 2. **Save:** saving a shard refreshes its references.
 3. **Check:** when a vault opens, on the Overview page, and from Settings,

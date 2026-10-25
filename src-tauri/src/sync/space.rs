@@ -8,7 +8,8 @@
 //! every device. That's how other devices follow: the ids removed are kept
 //! under `refs/netherstone/freed` and uploaded with the new history, and a
 //! device whose sync finds ids it hasn't removed yet removes them from its
-//! own history first, which then matches GitHub's again.
+//! own history first, which then matches GitHub's again. It only removes
+//! content its history held as attachments, whatever the list says.
 
 use super::{changes, pack, repo, state};
 use git2::{ObjectType, Oid, Repository, Signature, Sort, Tree};
@@ -164,6 +165,24 @@ pub fn old_attachments(sync_root: &Path, vault_path: &Path) -> Result<Vec<OldAtt
         return Ok(Vec::new());
     };
     find_old_attachments(&repository, &record)
+}
+
+/// Content the history only ever held as attachments, never as a shard,
+/// drawing or other file.
+fn attachment_only_blobs(repository: &Repository) -> Result<HashSet<Oid>, String> {
+    let mut attachments = HashSet::new();
+    let mut elsewhere = HashSet::new();
+    for version in changes::every_version(repository, &heads(repository))? {
+        for change in &version.changes {
+            let Some(blob) = change.after else { continue };
+            if is_attachment(&change.path) {
+                attachments.insert(blob);
+            } else {
+                elsewhere.insert(blob);
+            }
+        }
+    }
+    Ok(&attachments - &elsewhere)
 }
 
 /// The ids in the list `reference` points at.
@@ -431,8 +450,12 @@ pub(super) fn follow_freed(repository: &Repository) -> Result<bool, String> {
         return Ok(false);
     }
     let ours = freed_list(repository, FREED_REF)?;
+    // Only attachments are ever freed, so anything else on the list is
+    // ignored: shards and drawings keep every version.
+    let attachments = attachment_only_blobs(repository)?;
     let drop: HashSet<Oid> = freed_list(repository, REMOTE_FREED_REF)?
         .difference(&ours)
+        .filter(|id| attachments.contains(id))
         .copied()
         .collect();
     if !drop.is_empty() {
@@ -634,6 +657,51 @@ mod tests {
         )
         .unwrap();
         assert!(device.repository().find_blob(current).is_ok());
+    }
+
+    #[test]
+    fn a_list_naming_shard_versions_is_ignored() {
+        let dir = temp_dir("space-shards");
+        let remote = dir.join("remote.git");
+        Repository::init_bare(&remote).unwrap();
+        let laptop = Device::new(&dir, "laptop");
+        laptop.write("Note.md", b"First");
+        laptop.save();
+        laptop.sync(&remote);
+        laptop.write("Note.md", b"Second");
+        laptop.save();
+        laptop.sync(&remote);
+        let texts = laptop.shard_texts();
+        assert_eq!(texts.len(), 1);
+
+        // GitHub's list names the shard's versions, with a history that
+        // no longer has them.
+        let github = Repository::open_bare(&remote).unwrap();
+        let list: BTreeSet<Oid> = ["First", "Second"]
+            .iter()
+            .map(|text| Oid::hash_object(ObjectType::Blob, text.as_bytes()).unwrap())
+            .collect();
+        let freed = commit_freed_list(&github, &list, None).unwrap();
+        github.reference(FREED_REF, freed, true, "Freed up space").unwrap();
+        let mut builder = github.treebuilder(None).unwrap();
+        builder
+            .insert("Note.md", github.blob(b"Second").unwrap(), 0o100644)
+            .unwrap();
+        let tree = github.find_tree(builder.write().unwrap()).unwrap();
+        let signature = Signature::now("Other", "other@example.com").unwrap();
+        let fresh = github
+            .commit(None, &signature, &signature, "Backup", &tree, &[])
+            .unwrap();
+        github
+            .reference("refs/heads/main", fresh, true, "Backup")
+            .unwrap();
+        laptop.sync(&remote);
+
+        assert_eq!(laptop.shard_texts(), texts);
+        let repository = laptop.repository();
+        for id in list {
+            assert!(repository.find_blob(id).is_ok());
+        }
     }
 
     #[test]

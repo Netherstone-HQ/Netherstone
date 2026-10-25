@@ -1,6 +1,6 @@
 [package]
 name = "Netherstone"
-version = "0.4.0-beta.2"
+version = "0.5.0-beta.1"
 description = "Your favorite Knowledge Base"
 authors = ["wsoltani"]
 license = "GPL-3.0-only"

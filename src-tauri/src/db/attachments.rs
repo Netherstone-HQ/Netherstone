@@ -8,6 +8,7 @@ use urlencoding::decode;
 
 use crate::locks::VaultWrites;
 use crate::vault;
+use std::io::Write;
 
 pub const ATTACHMENTS_DIR_NAME: &str = "_attachments";
 pub const SYNC_SOFT_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
@@ -606,26 +607,17 @@ enum AttachmentSource<'a> {
     File(&'a Path),
 }
 
-/// Writes a new attachment under the first free name for `original_name`.
-/// Each name is claimed by creating it as a new, empty file, so a name taken
-/// by anything, even another program a moment ago, is never replaced: the
-/// attachment moves on to the next one.
-fn write_new_attachment(
+/// Puts `staged` in the attachment folder under the first free name for
+/// `original_name`. Each name is claimed by creating it as a new, empty
+/// file, so a name taken by anything, even another program a moment ago, is
+/// never replaced: the attachment moves on to the next one.
+fn put_new_attachment(
     writes: &VaultWrites,
     vault_path: &Path,
     original_name: &str,
     extension: &str,
-    source: AttachmentSource<'_>,
+    staged: vault::StagedFile,
 ) -> Result<(String, PathBuf), String> {
-    let folder = vault_path.join(ATTACHMENTS_DIR_NAME);
-    std::fs::create_dir_all(&folder).map_err(|e| {
-        format!(
-            "Failed to create attachment directory {}: {}",
-            folder.display(),
-            e
-        )
-    })?;
-
     for asset_path in readable_asset_paths(original_name, extension) {
         let destination = path_from_asset_path(vault_path, &asset_path)?;
         match std::fs::OpenOptions::new()
@@ -637,11 +629,7 @@ fn write_new_attachment(
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(format!("Failed to write attachment: {}", e)),
         }
-        let written = match source {
-            AttachmentSource::Bytes(bytes) => vault::write_atomically(writes, &destination, bytes),
-            AttachmentSource::File(path) => vault::copy_atomically(writes, path, &destination),
-        };
-        if let Err(error) = written {
+        if let Err(error) = staged.put(writes, &destination) {
             let _ = std::fs::remove_file(&destination);
             return Err(error);
         }
@@ -697,7 +685,6 @@ fn find_identical_attachment(
 /// the attachment already in the vault with the same content.
 pub fn persist_attachment_bytes(
     conn: &Connection,
-    writes: &VaultWrites,
     vault_path: &Path,
     original_name: &str,
     bytes: &[u8],
@@ -705,7 +692,6 @@ pub fn persist_attachment_bytes(
     let hash = blake3::hash(bytes).to_hex().to_string();
     persist_attachment(
         conn,
-        writes,
         vault_path,
         original_name,
         &hash,
@@ -714,9 +700,10 @@ pub fn persist_attachment_bytes(
     )
 }
 
+/// Writes the new attachment before taking `writes.lock`, so a big file
+/// doesn't hold up saves; the lock is only held to name it.
 fn persist_attachment(
     conn: &Connection,
-    writes: &VaultWrites,
     vault_path: &Path,
     original_name: &str,
     hash: &str,
@@ -744,8 +731,30 @@ fn persist_attachment(
         return register_existing_attachment(conn, vault_path, &asset_path);
     }
 
+    let folder = vault_path.join(ATTACHMENTS_DIR_NAME);
+    std::fs::create_dir_all(&folder).map_err(|e| {
+        format!(
+            "Failed to create attachment directory {}: {}",
+            folder.display(),
+            e
+        )
+    })?;
+    let staged = match source {
+        AttachmentSource::Bytes(bytes) => vault::stage_file(&folder, |file| file.write_all(bytes)),
+        AttachmentSource::File(path) => vault::stage_file(&folder, |file| {
+            std::io::copy(&mut std::fs::File::open(path)?, file).map(drop)
+        }),
+    }?;
+
+    let writes = crate::locks::vault_writes()?;
+    // The same file may have been stored while this copy was written.
+    if let Some(asset_path) =
+        find_identical_attachment(conn, vault_path, hash, &extension, size_bytes, None)?
+    {
+        return register_existing_attachment(conn, vault_path, &asset_path);
+    }
     let (asset_path, destination) =
-        write_new_attachment(writes, vault_path, &original_name, &extension, source)?;
+        put_new_attachment(&writes, vault_path, &original_name, &extension, staged)?;
 
     let sync_status = sync_status_for_attachment(&extension, size_bytes);
     let attachment = PersistedAttachment {
@@ -823,7 +832,6 @@ fn register_existing_attachment(
 /// the attachment folder is tracked where it is.
 pub fn persist_attachment_file(
     conn: &Connection,
-    writes: &VaultWrites,
     vault_path: &Path,
     source_path: &Path,
 ) -> Result<PersistedAttachment, String> {
@@ -846,7 +854,6 @@ pub fn persist_attachment_file(
 
     persist_attachment(
         conn,
-        writes,
         vault_path,
         original_name,
         &hash,
@@ -1646,10 +1653,6 @@ mod tests {
 
     const USED_HASH: &str = "ab00000000000000000000000000000000000000000000000000000000000000";
 
-    fn writes() -> VaultWrites {
-        crate::locks::vault_writes().unwrap()
-    }
-
     fn temp_vault(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "netherstone-attachments-{}-{}",
@@ -1793,7 +1796,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         super::super::init_schema(&conn).unwrap();
 
-        let attachment = persist_attachment_file(&conn, &writes(), &vault, &renamed).unwrap();
+        let attachment = persist_attachment_file(&conn, &vault, &renamed).unwrap();
         assert_eq!(attachment.asset_path, "_attachments/ab/My diagram.png");
 
         let files: Vec<_> = scan_attachment_files(&vault)
@@ -1810,17 +1813,17 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         super::super::init_schema(&conn).unwrap();
 
-        let first = persist_attachment_bytes(&conn, &writes(), &vault, "Screen: shot.png", b"one").unwrap();
+        let first = persist_attachment_bytes(&conn, &vault, "Screen: shot.png", b"one").unwrap();
         assert_eq!(first.asset_path, "_attachments/Screen- shot.png");
 
-        let same = persist_attachment_bytes(&conn, &writes(), &vault, "copy.png", b"one").unwrap();
+        let same = persist_attachment_bytes(&conn, &vault, "copy.png", b"one").unwrap();
         assert_eq!(same.asset_path, first.asset_path);
         assert_eq!(same.original_name, "Screen: shot.png");
 
-        let other = persist_attachment_bytes(&conn, &writes(), &vault, "Screen: shot.png", b"two").unwrap();
+        let other = persist_attachment_bytes(&conn, &vault, "Screen: shot.png", b"two").unwrap();
         assert_eq!(other.asset_path, "_attachments/Screen- shot-1.png");
 
-        let reserved = persist_attachment_bytes(&conn, &writes(), &vault, "CON.txt", b"three").unwrap();
+        let reserved = persist_attachment_bytes(&conn, &vault, "CON.txt", b"three").unwrap();
         assert_eq!(reserved.asset_path, "_attachments/CON-file.txt");
 
         // A file stored under its hash before names were readable is reused.
@@ -1828,7 +1831,7 @@ mod tests {
         let legacy = attachment_asset_path(&legacy_hash, "png");
         std::fs::create_dir_all(vault.join(&legacy).parent().unwrap()).unwrap();
         std::fs::write(vault.join(&legacy), b"legacy").unwrap();
-        let reused = persist_attachment_bytes(&conn, &writes(), &vault, "legacy.png", b"legacy").unwrap();
+        let reused = persist_attachment_bytes(&conn, &vault, "legacy.png", b"legacy").unwrap();
         assert_eq!(reused.asset_path, legacy);
 
         std::fs::remove_dir_all(&vault).unwrap();
@@ -1844,7 +1847,7 @@ mod tests {
         std::fs::write(vault.join("_attachments/photo.png"), b"theirs").unwrap();
         std::fs::write(vault.join("_attachments/photo-1.png"), b"theirs too").unwrap();
 
-        let ours = persist_attachment_bytes(&conn, &writes(), &vault, "photo.png", b"ours").unwrap();
+        let ours = persist_attachment_bytes(&conn, &vault, "photo.png", b"ours").unwrap();
 
         assert_eq!(ours.asset_path, "_attachments/photo-2.png");
         assert_eq!(std::fs::read(vault.join("_attachments/photo.png")).unwrap(), b"theirs");
@@ -1863,7 +1866,7 @@ mod tests {
         let source = outside.join("Recording.mp3");
         std::fs::write(&source, &content).unwrap();
 
-        let copied = persist_attachment_file(&conn, &writes(), &vault, &source).unwrap();
+        let copied = persist_attachment_file(&conn, &vault, &source).unwrap();
 
         assert_eq!(copied.asset_path, "_attachments/Recording.mp3");
         assert_eq!(copied.size_bytes, content.len() as u64);
@@ -1877,7 +1880,7 @@ mod tests {
         assert_eq!(names, ["Recording.mp3", "ab", "cd"]);
 
         // The same file again links the copy already there.
-        let again = persist_attachment_file(&conn, &writes(), &vault, &source).unwrap();
+        let again = persist_attachment_file(&conn, &vault, &source).unwrap();
         assert_eq!(again.asset_path, copied.asset_path);
         std::fs::remove_dir_all(&vault).unwrap();
         std::fs::remove_dir_all(&outside).unwrap();
@@ -1889,7 +1892,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         super::super::init_schema(&conn).unwrap();
 
-        let attachment = persist_attachment_bytes(&conn, &writes(), &vault, "Diagram.png", b"png").unwrap();
+        let attachment = persist_attachment_bytes(&conn, &vault, "Diagram.png", b"png").unwrap();
         let note = path_string(vault.join("note.md"));
         std::fs::write(&note, format!("![d](<{}>)\n", attachment.asset_path)).unwrap();
         std::fs::rename(
@@ -1923,9 +1926,9 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         super::super::init_schema(&conn).unwrap();
 
-        let kept = persist_attachment_bytes(&conn, &writes(), &vault, "kept.png", b"kept").unwrap();
-        let old = persist_attachment_bytes(&conn, &writes(), &vault, "old.png", b"old!").unwrap();
-        let recent = persist_attachment_bytes(&conn, &writes(), &vault, "recent.png", b"new").unwrap();
+        let kept = persist_attachment_bytes(&conn, &vault, "kept.png", b"kept").unwrap();
+        let old = persist_attachment_bytes(&conn, &vault, "old.png", b"old!").unwrap();
+        let recent = persist_attachment_bytes(&conn, &vault, "recent.png", b"new").unwrap();
         std::fs::write(vault.join("_attachments/cd/leftover.png.tmp"), b"x").unwrap();
         std::fs::write(vault.join("_attachments/.cut.png.netherstone-tmp"), b"y").unwrap();
         let note = path_string(vault.join("note.md"));

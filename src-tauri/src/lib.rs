@@ -500,7 +500,15 @@ fn sync_turn_off_backup(vault_path: String) -> Result<sync::state::VaultSyncReco
 #[tauri::command(async)]
 fn sync_snapshot_vault(vault_path: String) -> Result<sync::VaultSnapshotResult, String> {
     vault_access::get().check_known_vault(Path::new(&vault_path))?;
-    sync::snapshot_vault(&sync::sync_root()?, Path::new(&vault_path))
+    let sync_root = sync::sync_root()?;
+    let snapshot = sync::snapshot_vault(&sync_root, Path::new(&vault_path))?;
+    // Once a day, in the background: it waits for a sync to finish.
+    std::thread::spawn(move || {
+        if let Err(e) = sync::pack::pack_if_due(&sync_root, Path::new(&vault_path)) {
+            eprintln!("[Netherstone] Couldn't pack the history: {}", e);
+        }
+    });
+    Ok(snapshot)
 }
 
 /// Saves a version of the vault that keeps `previous`, the text the app last

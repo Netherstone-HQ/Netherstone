@@ -81,6 +81,12 @@ in the repository's folder, with the files it changed. A version's entry is
 worked out the first time it's read and never changes, so a long history
 doesn't mean opening every version again.
 
+Once a day, after a version is saved, the app packs the repository in the
+background (`src-tauri/src/sync/pack.rs`, under `sync.lock` and
+`history.lock`): everything still in the history, the index and unsettled
+conflicts goes into one pack with similar versions stored as differences,
+and the loose files, older packs and anything unused are removed.
+
 ## Locks
 
 `src-tauri/src/locks.rs` holds three locks shared by every Netherstone

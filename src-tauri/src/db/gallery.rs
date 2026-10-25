@@ -1,12 +1,12 @@
 use rusqlite::Connection;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use super::attachments::{
-    AttachmentReferenceKind, extension_for_name, parse_drawing_exports, reference_kind_for_path,
-    scan_attachment_files,
+    ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, parse_drawing_exports,
+    path_from_asset_path, reference_kind_for_path, scan_attachment_files,
 };
 
 /// A file in the vault's attachment folder, as the Gallery shows it.
@@ -172,6 +172,128 @@ pub fn list_vault_attachments(
     Ok(files)
 }
 
+/// The longest side of a Gallery thumbnail: a tile's width at twice the
+/// screen's pixel density.
+const THUMBNAIL_SIZE: u32 = 400;
+/// Pictures this small are shown as they are.
+const SMALL_PICTURE_BYTES: u64 = 256 * 1024;
+/// Pictures the Gallery shows a thumbnail of. An SVG is drawn as it is.
+const THUMBNAIL_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"];
+
+/// Where the thumbnails of `vault_path`'s attachments are kept, in the app's
+/// own folder.
+pub fn thumbnail_folder(vault_path: &Path) -> Result<PathBuf, String> {
+    let app_dir = super::get_db_path()?
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Failed to determine AppData directory".to_string())?;
+    let vault = blake3::hash(vault_path.to_string_lossy().as_bytes()).to_hex();
+    Ok(app_dir.join("thumbnails").join(&vault[..16]))
+}
+
+/// A thumbnail's name: it changes with the picture's path, size and time
+/// it was last changed, so a changed picture gets a new one.
+fn thumbnail_key(asset_path: &str, metadata: &std::fs::Metadata) -> String {
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let key = format!("{}\n{}\n{}", asset_path, metadata.len(), modified);
+    blake3::hash(key.as_bytes()).to_hex()[..32].to_string()
+}
+
+/// The picture to show on `asset_path`'s Gallery tile: a small copy in
+/// `folder`, made the first time and kept until the picture changes, or the
+/// picture itself when it's small already or can't be read.
+pub fn thumbnail(folder: &Path, vault_path: &Path, asset_path: &str) -> Result<PathBuf, String> {
+    if !asset_path.starts_with(&format!("{}/", ATTACHMENTS_DIR_NAME)) {
+        return Err(format!("Not an attachment: {}", asset_path));
+    }
+    let picture = path_from_asset_path(vault_path, asset_path)?;
+    let metadata = std::fs::metadata(&picture)
+        .map_err(|e| format!("Failed to read {}: {}", picture.display(), e))?;
+    let extension = extension_for_name(asset_path);
+    if metadata.len() <= SMALL_PICTURE_BYTES || !THUMBNAIL_EXTENSIONS.contains(&extension.as_str())
+    {
+        return Ok(picture);
+    }
+
+    let key = thumbnail_key(asset_path, &metadata);
+    for extension in ["jpg", "png"] {
+        let made = folder.join(format!("{}.{}", key, extension));
+        if made.is_file() {
+            return Ok(made);
+        }
+    }
+
+    let Ok(image) = image::ImageReader::open(&picture)
+        .and_then(|reader| reader.with_guessed_format())
+        .map_err(image::ImageError::IoError)
+        .and_then(|reader| reader.decode())
+    else {
+        return Ok(picture);
+    };
+    if image.width().max(image.height()) <= THUMBNAIL_SIZE {
+        return Ok(picture);
+    }
+    let small = image.thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+    // A see-through picture, like a drawing export, stays see-through.
+    let (made, encoded) =
+        if small.color().has_alpha() {
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            let encoded = small.write_to(&mut bytes, image::ImageFormat::Png);
+            (
+                folder.join(format!("{}.png", key)),
+                encoded.map(|()| bytes.into_inner()),
+            )
+        } else {
+            let mut bytes = Vec::new();
+            let encoded = small.to_rgb8().write_with_encoder(
+                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 82),
+            );
+            (folder.join(format!("{}.jpg", key)), encoded.map(|()| bytes))
+        };
+    let Ok(bytes) = encoded else {
+        return Ok(picture);
+    };
+
+    std::fs::create_dir_all(folder)
+        .map_err(|e| format!("Failed to create {}: {}", folder.display(), e))?;
+    // Written beside it and renamed, so a tile never shows half of one.
+    let temp = folder.join(format!(".{}-{}.tmp", key, std::process::id()));
+    std::fs::write(&temp, bytes)
+        .and_then(|()| std::fs::rename(&temp, &made))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            format!("Failed to save a thumbnail of {}: {}", asset_path, e)
+        })?;
+    Ok(made)
+}
+
+/// Removes the thumbnails in `folder` of pictures no longer in the vault's
+/// attachments, or changed since.
+pub fn prune_thumbnails(folder: &Path, vault_path: &Path) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    let current: HashSet<String> = scan_attachment_files(vault_path)
+        .into_iter()
+        .filter_map(|(asset_path, _)| {
+            let metadata =
+                std::fs::metadata(path_from_asset_path(vault_path, &asset_path).ok()?).ok()?;
+            Some(thumbnail_key(&asset_path, &metadata))
+        })
+        .collect();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let key = name.split('.').next().unwrap_or_default();
+        if !current.contains(key) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,5 +426,68 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].name, "Pic.png");
         assert!(files[0].shard_paths.is_empty());
+    }
+
+    /// A noisy picture, too big to show as it is.
+    fn picture(width: u32, height: u32, alpha: bool) -> image::DynamicImage {
+        let mut seed: u32 = 7;
+        let mut noise = move || {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            (seed >> 16) as u8
+        };
+        if alpha {
+            image::RgbaImage::from_fn(width, height, |_, _| {
+                image::Rgba([noise(), noise(), noise(), noise()])
+            })
+            .into()
+        } else {
+            image::RgbImage::from_fn(width, height, |_, _| {
+                image::Rgb([noise(), noise(), noise()])
+            })
+            .into()
+        }
+    }
+
+    #[test]
+    fn makes_small_thumbnails_once_and_drops_old_ones() {
+        let vault = temp_vault("thumbnails");
+        let folder = vault.join("thumbnails");
+        picture(1600, 1200, false)
+            .save(vault.join("_attachments/Trip.jpg"))
+            .unwrap();
+        picture(1200, 1600, true)
+            .save(vault.join("_attachments/Drawing.png"))
+            .unwrap();
+        std::fs::write(vault.join("_attachments/Icon.png"), b"small").unwrap();
+
+        let trip = thumbnail(&folder, &vault, "_attachments/Trip.jpg").unwrap();
+        assert!(trip.starts_with(&folder));
+        assert_eq!(trip.extension().unwrap(), "jpg");
+        let small = image::open(&trip).unwrap();
+        assert_eq!((small.width(), small.height()), (400, 300));
+        assert_eq!(
+            thumbnail(&folder, &vault, "_attachments/Trip.jpg").unwrap(),
+            trip
+        );
+
+        // See-through stays see-through.
+        let drawing = thumbnail(&folder, &vault, "_attachments/Drawing.png").unwrap();
+        assert_eq!(drawing.extension().unwrap(), "png");
+        assert!(image::open(&drawing).unwrap().color().has_alpha());
+
+        // Small files and files outside the attachments are not made smaller.
+        assert_eq!(
+            thumbnail(&folder, &vault, "_attachments/Icon.png").unwrap(),
+            vault.join("_attachments/Icon.png")
+        );
+        assert!(thumbnail(&folder, &vault, "Notes/Secret.png").is_err());
+        assert!(thumbnail(&folder, &vault, "_attachments/../Secret.png").is_err());
+
+        // A changed or removed picture's thumbnail goes.
+        std::fs::remove_file(vault.join("_attachments/Trip.jpg")).unwrap();
+        prune_thumbnails(&folder, &vault);
+        assert!(!trip.exists());
+        assert!(drawing.exists());
+        std::fs::remove_dir_all(&vault).unwrap();
     }
 }

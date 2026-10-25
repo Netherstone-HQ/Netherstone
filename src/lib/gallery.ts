@@ -43,6 +43,14 @@ export function listAttachments(vaultPath: string) {
   return invoke<GalleryFile[]>("list_attachments", { vaultPath });
 }
 
+/**
+ * The picture a tile shows for `assetPath`: a small copy the app makes the
+ * first time, or the picture itself when it's small already.
+ */
+export function galleryThumbnail(vaultPath: string, assetPath: string) {
+  return invoke<string>("gallery_thumbnail", { vaultPath, assetPath });
+}
+
 export function isUnused(file: GalleryFile) {
   return file.shardPaths.length === 0;
 }

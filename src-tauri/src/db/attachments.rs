@@ -238,7 +238,7 @@ fn attachment_asset_path(hash: &str, extension: &str) -> String {
     format!("{}/{}/{}", ATTACHMENTS_DIR_NAME, aa, file_name)
 }
 
-fn path_from_asset_path(vault_path: &Path, asset_path: &str) -> Result<PathBuf, String> {
+pub(super) fn path_from_asset_path(vault_path: &Path, asset_path: &str) -> Result<PathBuf, String> {
     let mut path = vault_path.to_path_buf();
 
     for component in Path::new(asset_path).components() {

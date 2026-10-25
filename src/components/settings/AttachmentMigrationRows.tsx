@@ -19,7 +19,11 @@ import {
   getFileName,
   plural,
 } from "@/components/settings/attachment-format";
-import { persistAttachmentFile, type ExternalFile } from "@/lib/commands";
+import {
+  confirmAttachmentCopies,
+  persistAttachmentFile,
+  type ExternalFile,
+} from "@/lib/commands";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { importLinkedFile, rewriteShards } from "@/lib/shard-rewrite";
 import { useAttachmentReportStore } from "@/store";
@@ -70,6 +74,9 @@ export function ExternalFilesRow({
   const importFiles = async () => {
     setIsWorking(true);
     try {
+      const paths = chosen.map((file) => file.absolutePath);
+      if (!(await confirmAttachmentCopies(paths))) return;
+
       // Copy each file first, then rewrite every shard once.
       const replacements = new Map<string, { link: string; asset: string }[]>();
       let failed = 0;

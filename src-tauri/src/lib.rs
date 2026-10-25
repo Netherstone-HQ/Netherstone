@@ -1,5 +1,6 @@
 mod asset_scope;
 mod browser;
+mod copy_access;
 mod db;
 mod export;
 mod github;
@@ -17,7 +18,7 @@ mod window_icon;
 
 use serde::Serialize;
 use std::path::Path;
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 const AST_CACHE_VERSION: i64 = 2;
 
@@ -165,6 +166,7 @@ fn open_media_files_dialog(
 
     // A picked file can stay where it is (relinking a moved file), so the
     // shard shows it from there.
+    copy_access::get().allow(&selected_files);
     for path in &selected_files {
         asset_scope::show_linked_file(&app, path);
     }
@@ -239,7 +241,7 @@ fn import_attachment(
     vault_path: String,
 ) -> Result<db::attachments::PersistedAttachment, String> {
     import::picked().check(Path::new(&path))?;
-    persist_attachment_file(app, path, vault_path)
+    copy_into_attachments(&app, &path, &vault_path)
 }
 
 /// Takes an import back: moves the shards it made to the trash, like
@@ -312,17 +314,53 @@ fn fix_imported_links(shard_paths: Vec<String>, old_path: String, new_path: Stri
     Ok(())
 }
 
-/// Copies a file on this computer into the vault's attachments.
+/// Copies a file on this computer into the vault's attachments: one in the
+/// vault, a picture, sound or video file, or one the user picked or agreed to
+/// copy (see `copy_access`).
 #[tauri::command(async)]
 fn persist_attachment_file(
     app: tauri::AppHandle,
     source_path: String,
     vault_path: String,
 ) -> Result<db::attachments::PersistedAttachment, String> {
-    open_vault_only(&vault_path)?;
-    let source = std::path::Path::new(&source_path);
-    let vault = std::path::Path::new(&vault_path);
-    asset_scope::allow_vault(&app, vault);
+    copy_access::get().check(vault_access::get(), Path::new(&source_path))?;
+    copy_into_attachments(&app, &source_path, &vault_path)
+}
+
+/// Asks the user, in a native dialog, before files outside the vault that
+/// `persist_attachment_file` would refuse are copied in. Returns whether all
+/// of `paths` may be copied now.
+#[tauri::command(async)]
+fn confirm_attachment_copies(app: tauri::AppHandle, paths: Vec<String>) -> bool {
+    let asking: Vec<std::path::PathBuf> = paths
+        .iter()
+        .map(std::path::PathBuf::from)
+        .filter(|path| copy_access::get().needs_asking(vault_access::get(), path))
+        .collect();
+    if asking.is_empty() {
+        return true;
+    }
+    let yes = app
+        .dialog()
+        .message(copy_access::question(&asking))
+        .title("Copy into the vault")
+        .buttons(MessageDialogButtons::OkCancelCustom("Copy".into(), "Cancel".into()))
+        .blocking_show();
+    if yes {
+        copy_access::get().allow(&asking);
+    }
+    yes
+}
+
+fn copy_into_attachments(
+    app: &tauri::AppHandle,
+    source_path: &str,
+    vault_path: &str,
+) -> Result<db::attachments::PersistedAttachment, String> {
+    open_vault_only(vault_path)?;
+    let source = std::path::Path::new(source_path);
+    let vault = std::path::Path::new(vault_path);
+    asset_scope::allow_vault(app, vault);
     let conn = db::open_connection()?;
     let writes = locks::vault_writes()?;
 
@@ -1690,6 +1728,7 @@ pub fn run() {
             reserve_import_paths,
             save_imported_shard,
             persist_attachment_file,
+            confirm_attachment_copies,
             persist_attachment_bytes,
             import_attachment,
             fix_imported_links,

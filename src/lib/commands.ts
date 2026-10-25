@@ -273,6 +273,18 @@ export async function persistAttachmentFile(
   });
 }
 
+/**
+ * Asks the user, in a native dialog, before files outside the vault that
+ * aren't pictures, sound or video are copied into it. Resolves whether all
+ * of them may be copied now; nothing is asked when none need it.
+ */
+export async function confirmAttachmentCopies(
+  paths: string[],
+): Promise<boolean> {
+  assertTauri();
+  return invoke<boolean>("confirm_attachment_copies", { paths });
+}
+
 export async function persistAttachmentBytes(
   fileName: string,
   bytes: Uint8Array,

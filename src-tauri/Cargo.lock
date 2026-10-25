@@ -9,6 +9,7 @@ dependencies = [
  "blake3",
  "chrono",
  "dirs 5.0.1",
+ "flate2",
  "git2",
  "gtk",
  "keyring",

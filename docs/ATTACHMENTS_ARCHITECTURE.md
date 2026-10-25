@@ -58,6 +58,14 @@ references. A drawing export and its dark twin are one file. The watcher
 reports files in `_attachments/`, so the Gallery follows changes made
 outside the app; the file tree and index ignore them.
 
+Tiles show pictures as thumbnails at most 400 px on their longest side.
+`gallery_thumbnail` makes one the first time a tile comes near view and
+keeps it in the app's own folder (`thumbnails/`, one folder per vault)
+until the picture changes; pictures of 256 KB or less, and SVGs, are shown
+as they are. Listing the Gallery removes thumbnails of pictures since
+removed or changed. Tiles more than a screen away let go of their pictures,
+so a long scroll doesn't keep every one in memory.
+
 ## Sync eligibility
 
 Each attachment gets a `sync_status` when stored, and Git sync only uploads

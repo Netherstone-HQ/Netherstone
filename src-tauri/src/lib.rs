@@ -410,7 +410,33 @@ fn reconcile_attachments(vault_path: String) -> Result<db::attachments::Attachme
 fn list_attachments(vault_path: String) -> Result<Vec<db::gallery::GalleryFile>, String> {
     open_vault_only(&vault_path)?;
     let conn = db::open_connection()?;
-    db::gallery::list_vault_attachments(&conn, Path::new(&vault_path))
+    let files = db::gallery::list_vault_attachments(&conn, Path::new(&vault_path))?;
+    // Thumbnails of pictures since removed or changed go, in the background.
+    std::thread::spawn(move || {
+        let vault = Path::new(&vault_path);
+        if let Ok(folder) = db::gallery::thumbnail_folder(vault) {
+            db::gallery::prune_thumbnails(&folder, vault);
+        }
+    });
+    Ok(files)
+}
+
+/// The picture a Gallery tile shows for `asset_path`: a small copy, made the
+/// first time it's asked for, or the picture itself when it's small already.
+#[tauri::command(async)]
+fn gallery_thumbnail(
+    app: tauri::AppHandle,
+    vault_path: String,
+    asset_path: String,
+) -> Result<String, String> {
+    open_vault_only(&vault_path)?;
+    let vault = Path::new(&vault_path);
+    let folder = db::gallery::thumbnail_folder(vault)?;
+    let shown = db::gallery::thumbnail(&folder, vault, &asset_path)?;
+    if shown.starts_with(&folder) {
+        asset_scope::allow_thumbnail(&app, &shown);
+    }
+    Ok(shown.to_string_lossy().into_owned())
 }
 
 /// Moves the requested unused attachments to the OS trash, after
@@ -1791,6 +1817,7 @@ pub fn run() {
             create_folder,
             reconcile_attachments,
             list_attachments,
+            gallery_thumbnail,
             describe_missing_attachment,
             clean_up_attachments,
             find_shards_containing,

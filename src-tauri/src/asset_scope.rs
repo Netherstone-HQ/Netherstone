@@ -1,7 +1,8 @@
 //! The files the webview may load through the asset protocol (pictures,
 //! sound and video shown in shards). Nothing is allowed at start; the vault
 //! is added when it opens, and a picture, sound or video file outside it is
-//! added when a shard shows it, however it got into the shard.
+//! added when a shard shows it, however it got into the shard. The Gallery's
+//! thumbnails are added as they're made.
 
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
@@ -41,6 +42,17 @@ pub fn allow_vault<R: Runtime>(app: &AppHandle<R>, vault_path: &Path) {
                 error
             );
         }
+    }
+}
+
+/// Lets the webview show a Gallery thumbnail the app made.
+pub fn allow_thumbnail<R: Runtime>(app: &AppHandle<R>, path: &Path) {
+    if let Err(error) = app.asset_protocol_scope().allow_file(path) {
+        eprintln!(
+            "[Netherstone] Couldn't allow the thumbnail {}: {}",
+            path.display(),
+            error
+        );
     }
 }
 

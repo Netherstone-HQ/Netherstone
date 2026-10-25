@@ -21,6 +21,7 @@ import {
 } from "@/lib/drawing-files";
 import {
   filesInRow,
+  galleryThumbnail,
   getRowTitle,
   matchesFileFilter,
   type GalleryFile,
@@ -58,23 +59,64 @@ function Dot() {
   );
 }
 
+/**
+ * Whether `ref` is within a screen of view. Tiles further away let go of
+ * their pictures, so a long scroll doesn't keep every picture in memory.
+ */
+function useNearView(
+  ref: React.RefObject<HTMLElement | null>,
+  scrollRoot: React.RefObject<HTMLDivElement | null>,
+) {
+  const [isNear, setIsNear] = useState(false);
+  useEffect(() => {
+    const target = ref.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsNear(entry?.isIntersecting ?? false),
+      { root: scrollRoot.current, rootMargin: "100% 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [ref, scrollRoot]);
+  return isNear;
+}
+
 function Thumbnail({
   file,
   vaultPath,
+  isNear,
 }: {
   file: GalleryFile;
   vaultPath: string;
+  isNear: boolean;
 }) {
   const isDark = useThemeMode() === "dark";
+  const isPicture = file.kind === "image" || file.kind === "drawing";
+  const assetPath =
+    isDark && file.darkAssetPath ? file.darkAssetPath : file.assetPath;
+  // A new size means the file changed, and so does its thumbnail.
+  const version = `${assetPath}:${file.sizeBytes}`;
+  const [shown, setShown] = useState<{ version: string; src: string }>();
 
-  if (file.kind === "image" || file.kind === "drawing") {
-    const assetPath =
-      isDark && file.darkAssetPath ? file.darkAssetPath : file.assetPath;
+  useEffect(() => {
+    if (!isPicture || !isNear || shown?.version === version) return;
+    let isCurrent = true;
+    galleryThumbnail(vaultPath, assetPath)
+      .catch(() => resolveVaultRelativePath(assetPath, vaultPath))
+      .then((path) => {
+        if (isCurrent) setShown({ version, src: convertFileSrc(path) });
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [isPicture, isNear, shown, version, vaultPath, assetPath]);
+
+  if (isPicture) {
+    if (!isNear || shown?.version !== version) return null;
     return (
       <img
-        src={convertFileSrc(resolveVaultRelativePath(assetPath, vaultPath))}
+        src={shown.src}
         alt=""
-        loading="lazy"
         decoding="async"
         className={cn(
           "size-full",
@@ -99,14 +141,21 @@ function Thumbnail({
 function TileBody({
   file,
   vaultPath,
+  scrollRoot,
 }: {
   file: GalleryFile;
   vaultPath: string;
+  scrollRoot: React.RefObject<HTMLDivElement | null>;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isNear = useNearView(ref, scrollRoot);
   return (
     <>
-      <div className="aspect-[4/3] w-full overflow-hidden border-b bg-muted/40">
-        <Thumbnail file={file} vaultPath={vaultPath} />
+      <div
+        ref={ref}
+        className="aspect-[4/3] w-full overflow-hidden border-b bg-muted/40"
+      >
+        <Thumbnail file={file} vaultPath={vaultPath} isNear={isNear} />
       </div>
       <div className="flex w-full min-w-0 flex-col gap-0.5 px-3 py-2">
         <span className="truncate font-medium text-ui">{file.name}</span>
@@ -122,9 +171,19 @@ function TileBody({
  * One file. A file one shard uses opens that shard at it; several shards
  * are listed to pick from.
  */
-function Tile({ file, vaultPath }: { file: GalleryFile; vaultPath: string }) {
+function Tile({
+  file,
+  vaultPath,
+  scrollRoot,
+}: {
+  file: GalleryFile;
+  vaultPath: string;
+  scrollRoot: React.RefObject<HTMLDivElement | null>;
+}) {
   const { assetPath, shardPaths } = file;
-  const body = <TileBody file={file} vaultPath={vaultPath} />;
+  const body = (
+    <TileBody file={file} vaultPath={vaultPath} scrollRoot={scrollRoot} />
+  );
 
   if (shardPaths.length === 0) {
     return (
@@ -252,7 +311,12 @@ export function GalleryView() {
           </p>
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-3">
             {shown.map((file) => (
-              <Tile key={file.assetPath} file={file} vaultPath={vaultPath} />
+              <Tile
+                key={file.assetPath}
+                file={file}
+                vaultPath={vaultPath}
+                scrollRoot={scrollRef}
+              />
             ))}
             {shown.length < results.length ? (
               // Keyed by the count so each page observes afresh, in case the

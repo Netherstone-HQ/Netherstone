@@ -165,6 +165,14 @@ pub async fn export_pdf(app: tauri::AppHandle, request: Request<'_>) -> Result<(
 
     // Printed beside the target, then renamed over it, like other exports.
     let temp_path = temp_path_for(&output)?;
+    // Whatever a cut short export left there goes first, so the printer
+    // never writes through a link to somewhere else.
+    match fs::remove_file(&temp_path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            return Err(describe_write_error(&output, error));
+        }
+        _ => {}
+    }
     if let Err(error) = pdf::render(&app, html, page, temp_path.clone()).await {
         let _ = fs::remove_file(&temp_path);
         return Err(error);
@@ -188,7 +196,9 @@ fn temp_path_for(path: &Path) -> Result<PathBuf, String> {
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let temp_path = temp_path_for(path)?;
 
-    fs::write(&temp_path, bytes).map_err(|error| describe_write_error(path, error))?;
+    crate::vault::create_temp(&temp_path)
+        .and_then(|mut file| std::io::Write::write_all(&mut file, bytes))
+        .map_err(|error| describe_write_error(path, error))?;
 
     fs::rename(&temp_path, path).map_err(|error| {
         let _ = fs::remove_file(&temp_path);

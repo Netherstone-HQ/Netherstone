@@ -342,6 +342,7 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
 
     const context: ImportContext = {
       file,
+      shardPath: destination,
       addAttachment: async (attachmentName, bytes) => {
         const link = await io.saveAttachment(attachmentName, bytes);
         linked.add(link);

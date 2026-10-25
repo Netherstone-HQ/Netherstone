@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fixtureDocument, fixtureImages } from "@/lib/export/__fixtures__/fixture";
 import { renderDocx } from "@/lib/export/docx";
 import { memoryImport } from "@/test/import";
+import { DocxWorker, useDocxWorker } from "@/test/docx-worker";
+
+useDocxWorker();
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 /** A Word file with just a body, styles and numbering, as Word itself would write them. */
-async function wordFile(body: string, extra: { numbering?: string; rels?: string } = {}) {
+async function wordFile(body: string, extra: { numbering?: string; rels?: string; media?: Record<string, Uint8Array> } = {}) {
   const zip = new JSZip();
   zip.file(
     "[Content_Types].xml",
@@ -32,11 +35,22 @@ async function wordFile(body: string, extra: { numbering?: string; rels?: string
   );
   zip.file("word/numbering.xml", `<?xml version="1.0"?><w:numbering ${W}>${extra.numbering ?? ""}</w:numbering>`);
   zip.file("word/document.xml", `<?xml version="1.0"?><w:document ${W}><w:body>${body}</w:body></w:document>`);
+  for (const [name, bytes] of Object.entries(extra.media ?? {})) zip.file(`word/media/${name}`, bytes);
   return zip.generateAsync({ type: "uint8array" });
 }
 
 const run = (text: string, props = "") => `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${text}</w:t></w:r>`;
 const para = (content: string, props = "") => `<w:p>${props ? `<w:pPr>${props}</w:pPr>` : ""}${content}</w:p>`;
+const picture = (id: string) =>
+  `<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="1905000" cy="952500"/><wp:docPr id="1" name="Picture" descr="A chart"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><a:blip r:embed="${id}"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+const pictureRel = (id: string, target: string) =>
+  `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}"/>`;
+/** Bytes that don't compress, to make a Word file as big as they are. */
+function noise(size: number) {
+  const bytes = new Uint8Array(size);
+  for (let at = 0; at < size; at += 65_536) crypto.getRandomValues(bytes.subarray(at, at + 65_536));
+  return bytes;
+}
 const cell = (content: string, props = "") => `<w:tc>${props ? `<w:tcPr>${props}</w:tcPr>` : ""}${para(content)}</w:tc>`;
 
 async function importWord(bytes: Uint8Array) {
@@ -111,5 +125,135 @@ describe("Word import", () => {
     const vault = memoryImport({ "Fake.docx": "not a zip" });
     const report = await vault.run();
     expect(report.failed[0].error).toMatch(/Word/);
+  });
+});
+
+describe("Word import in its worker", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("asks the window for links, pictures and warnings, in document order", async () => {
+    const linkRel = '<Relationship Id="rOther" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="Other.docx" TargetMode="External"/>';
+    const bytes = await wordFile(
+      [
+        para(`${run("See ")}<w:hyperlink r:id="rOther">${run("the other file")}</w:hyperlink>${run(".")}`),
+        para(picture("rPic")),
+        para(picture("rPic")),
+        para(picture("rOld")),
+        para(picture("rSecond")),
+      ].join(""),
+      {
+        rels: linkRel + pictureRel("rPic", "media/image1.png") + pictureRel("rOld", "media/image2.emf") + pictureRel("rSecond", "media/image3.png"),
+        media: { "image1.png": new Uint8Array([1, 2, 3]), "image2.emf": new Uint8Array([4]), "image3.png": new Uint8Array([5, 6]) },
+      },
+    );
+    const other = await wordFile(para(run("Other")));
+    const vault = memoryImport({ "Doc.docx": bytes, "Other.docx": other });
+    const report = await vault.run();
+
+    expect(report.failed).toEqual([]);
+    const markdown = vault.shards.get("/vault/Doc.md")!;
+    expect(markdown).toContain("See [the other file](Other.md).");
+    // One picture stored once, however often it's shown.
+    expect(markdown.match(/_attachments\/Doc 1\.png/g)).toHaveLength(2);
+    expect(markdown).toContain("_attachments/Doc 2.png");
+    expect([...vault.attachments.values()].map((stored) => [...stored])).toEqual([[1, 2, 3], [5, 6]]);
+    expect(report.created.find((shard) => shard.source === "Doc.docx")!.warnings).toEqual([
+      "1 picture is in an old Windows format (EMF or WMF) and was left out.",
+    ]);
+  });
+
+  it("reads many small files one after another in as many workers as it reads at once", async () => {
+    const readers = new Set<DocxWorker>();
+    const send = DocxWorker.prototype.postMessage;
+    vi.spyOn(DocxWorker.prototype, "postMessage").mockImplementation(function (this: DocxWorker, message) {
+      if (message.type === "read") readers.add(this);
+      send.call(this, message);
+    });
+    const files: Record<string, Uint8Array> = {};
+    for (let n = 1; n <= 25; n += 1) files[`Doc ${n}.docx`] = await wordFile(para(run(`File ${n}`), '<w:pStyle w:val="Heading1"/>'));
+    const vault = memoryImport(files);
+    const report = await vault.run();
+
+    expect(report.failed).toEqual([]);
+    expect(report.created).toHaveLength(25);
+    for (let n = 1; n <= 25; n += 1) expect(vault.shards.get(`/vault/Doc ${n}.md`)).toBe(`# File ${n}\n`);
+    expect(readers.size).toBe(2);
+    // They wait a moment for more files.
+    expect(DocxWorker.running.size).toBe(2);
+  });
+
+  it("gives each big file a fresh worker", async () => {
+    const readers = new Set<DocxWorker>();
+    const send = DocxWorker.prototype.postMessage;
+    vi.spyOn(DocxWorker.prototype, "postMessage").mockImplementation(function (this: DocxWorker, message) {
+      if (message.type === "read") readers.add(this);
+      send.call(this, message);
+    });
+    const big = () => wordFile(para(run("Big")), { media: { "unused.png": noise(1_100_000) } });
+    const vault = memoryImport({ "One.docx": await big(), "Two.docx": await big(), "Three.docx": await wordFile(para(run("Small"))) });
+    const report = await vault.run();
+
+    expect(report.failed).toEqual([]);
+    // One for each big file, and one more for the file after them.
+    expect(readers.size).toBe(3);
+  });
+
+  it("stops the worker as soon as the import is cancelled", async () => {
+    // Every link is a round trip to the window, so reading takes a while.
+    const links = Array.from({ length: 400 }, (_, n) => `<Relationship Id="r${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="Other.docx" TargetMode="External"/>`);
+    const body = links.map((_, n) => para(`<w:hyperlink r:id="r${n}">${run(`Link ${n}`)}</w:hyperlink>`)).join("");
+    const long = () => wordFile(body, { rels: links.join("") });
+    const vault = memoryImport({ "Long.docx": await long(), "Long 2.docx": await long(), "Other.docx": await wordFile(para(run("Other"))) });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 150);
+    const report = await vault.run({ signal: controller.signal });
+
+    expect(report.cancelled).toBe(true);
+    expect(report.created).toEqual([]);
+    expect(vault.shards.size).toBe(0);
+    expect(DocxWorker.running.size).toBe(0);
+  });
+
+  it("explains damaged XML", async () => {
+    const vault = memoryImport({ "Doc.docx": await wordFile("<w:p><w:r><w:t>Unclosed</w:r></w:p>") });
+    const report = await vault.run();
+    expect(report.failed).toEqual([{ source: "Doc.docx", error: "The document's XML is damaged." }]);
+  });
+
+  it("explains a document without a body", async () => {
+    const zip = new JSZip();
+    zip.file("word/document.xml", `<?xml version="1.0"?><w:document ${W}/>`);
+    const vault = memoryImport({ "Doc.docx": await zip.generateAsync({ type: "uint8array" }) });
+    const report = await vault.run();
+    expect(report.failed).toEqual([{ source: "Doc.docx", error: "This Word document has no text in it." }]);
+  });
+
+  it("fails the file when a picture can't be stored, and carries on with the rest", async () => {
+    const vault = memoryImport({
+      "Doc.docx": await wordFile(para(picture("rPic")), { rels: pictureRel("rPic", "media/image1.png"), media: { "image1.png": new Uint8Array([1]) } }),
+      "Next.docx": await wordFile(para(run("Next"))),
+    });
+    vault.io.saveAttachment = async () => {
+      throw new Error("The disk is full.");
+    };
+    const report = await vault.run();
+    expect(report.failed).toEqual([{ source: "Doc.docx", error: "The disk is full." }]);
+    expect(vault.shards.get("/vault/Next.md")).toBe("Next\n");
+  });
+
+  it("reports a worker that stops on its own", async () => {
+    vi.spyOn(DocxWorker.prototype, "postMessage").mockImplementation(function (this: DocxWorker) {
+      setTimeout(() => this.onerror?.({ message: "" } as ErrorEvent));
+    });
+    const vault = memoryImport({ "Doc.docx": await wordFile(para(run("Text"))), "Next.docx": await wordFile(para(run("Next"))) });
+    const report = await vault.run();
+    expect(report.failed.map((failure) => failure.error)).toEqual([
+      "Something went wrong reading this file.",
+      "Something went wrong reading this file.",
+    ]);
+    // A worker that stopped isn't given the next file.
+    expect(DocxWorker.running.size).toBe(0);
   });
 });

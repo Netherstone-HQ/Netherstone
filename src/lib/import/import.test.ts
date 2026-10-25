@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
+import { useImportDialogStore } from "@/lib/import";
 import { memoryImport } from "@/test/import";
 
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
@@ -193,5 +194,30 @@ describe("formats", () => {
     await vault.run();
 
     expect(vault.shards.get("/vault/plain.md")).toBe("First line\\\nsecond line\n\nNew paragraph\n");
+  });
+});
+
+describe("import window", () => {
+  const report = { created: [], attachments: [], skipped: [], failed: [], cancelled: false };
+
+  it("keeps an import running when it's closed, and shows that import when opened again", () => {
+    const store = useImportDialogStore.getState();
+    store.open("/vault/Inbox");
+    store.setJob({ targetDir: "/vault/Inbox", step: { kind: "importing", progress: null }, cancel: () => {} });
+    store.close();
+    expect(useImportDialogStore.getState().job?.step.kind).toBe("importing");
+
+    store.open("/vault/Other");
+    expect(useImportDialogStore.getState().targetDir).toBe("/vault/Inbox");
+  });
+
+  it("is done with the import once its summary is closed", () => {
+    const store = useImportDialogStore.getState();
+    store.setJob({ targetDir: "/vault/Inbox", step: { kind: "done", report, vaultPath: "/vault", since: 0 }, cancel: () => {} });
+    store.close();
+    expect(useImportDialogStore.getState().job).toBeNull();
+
+    store.open("/vault/Other");
+    expect(useImportDialogStore.getState().targetDir).toBe("/vault/Other");
   });
 });

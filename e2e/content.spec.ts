@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import JSZip from "jszip";
 import { caretAfter, editor, expect, mockVault, paste, test } from "./vault";
 
 /**
@@ -57,6 +58,25 @@ function pdf() {
   out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}`;
   out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(out, "latin1");
+}
+
+/** A Word file with two paragraphs and a picture, as Word lays them out. */
+async function word() {
+  const rels = (items: string) =>
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items}</Relationships>`;
+  const zip = new JSZip();
+  zip.file("_rels/.rels", rels('<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'));
+  zip.file("word/_rels/document.xml.rels", rels('<Relationship Id="rPic" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>'));
+  zip.file("word/media/image1.png", PNG);
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><w:body>
+      <w:p><w:r><w:t>Trip report</w:t></w:r></w:p>
+      <w:p><w:r><w:t>The river was high after the rain.</w:t></w:r></w:p>
+      <w:p><w:r><w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><a:blip r:embed="rPic"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+    </w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: "nodebuffer" });
 }
 
 const hostOf = (url: string) => {
@@ -269,6 +289,32 @@ test("a PDF imports into a shard", async ({ page }) => {
     () => window.__saves.find((save) => save.filePath.endsWith("Inbox/Field notes.md"))!.content,
   );
   expect(saved).toContain("The river was high after the rain.");
+});
+
+test("a Word file imports into a shard, with its picture", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Notes.md": "# Notes\n" },
+    assets: { "Trip report.docx": await word() },
+    folders: ["Inbox"],
+    open: "Notes.md",
+  });
+
+  await page.getByText("Inbox", { exact: true }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Import here" }).click();
+  await page.getByRole("button", { name: /Files/ }).click();
+
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          window.__saves.find((save) => save.filePath.endsWith("Inbox/Trip report.md")),
+        ),
+      { timeout: 30_000 },
+    )
+    .toMatchObject({
+      content: 'Trip report\n\nThe river was high after the rain.\n\n<img src="_attachments/Trip report 1.png" width="100" />\n',
+    });
+  expect(await page.evaluate(() => "_attachments/Trip report 1.png" in window.__binaries)).toBe(true);
 });
 
 /** Runs the shard as the app does, so files are shown through the asset protocol. */

@@ -1,4 +1,5 @@
 import { attr, child, children, is } from "./xml";
+import type { XmlElement } from "./xml-tree";
 
 /**
  * Word equations (Office Math, OMML) as LaTeX, the way the editor stores
@@ -6,7 +7,7 @@ import { attr, child, children, is } from "./xml";
  * roots, big operators, brackets, functions, accents, matrices and
  * equation arrays.
  */
-export function ommlToLatex(math: Element): string {
+export function ommlToLatex(math: XmlElement): string {
   return clean(convertChildren(math));
 }
 
@@ -65,13 +66,13 @@ function escapeText(text: string) {
 }
 
 /** `chr` of a properties element, with Word's default when it's missing. */
-function chr(props: Element | null, name: string, fallback: string) {
+function chr(props: XmlElement | null, name: string, fallback: string) {
   const element = child(props, "m", name);
   if (!element) return fallback;
   return attr(element, "m", "val") ?? "";
 }
 
-function arg(parent: Element, name: string) {
+function arg(parent: XmlElement, name: string) {
   return clean(convertChildren(child(parent, "m", name)));
 }
 
@@ -79,18 +80,18 @@ function group(value: string) {
   return value.length === 1 ? value : `{${value}}`;
 }
 
-function convertChildren(parent: Element | null): string {
+function convertChildren(parent: XmlElement | null): string {
   if (!parent) return "";
   let out = "";
   for (let node = parent.firstChild; node; node = node.nextSibling) {
     // Stray text outside a run isn't valid OMML, but some writers leave it.
     if (node.nodeType === 3) out += escapeText(node.textContent ?? "");
-    else if (node.nodeType === 1) out += convert(node as Element);
+    else if (node.nodeType === 1) out += convert(node as XmlElement);
   }
   return out;
 }
 
-function convert(element: Element): string {
+function convert(element: XmlElement): string {
   if (is(element, "m", "r") || is(element, "w", "r")) {
     const textElement = child(element, "m", "t") ?? child(element, "w", "t");
     const value = textElement?.textContent ?? "";

@@ -118,16 +118,21 @@ fn open_vault(vault_path: String) -> Result<(), String> {
 /// Documents folder.
 #[tauri::command]
 fn default_vault_location(app: tauri::AppHandle) -> Option<String> {
-    use tauri::Manager;
-    app.path()
-        .document_dir()
-        .ok()
-        .map(|p| p.to_string_lossy().into_owned())
+    documents_folder(&app).map(|p| p.to_string_lossy().into_owned())
 }
 
+fn documents_folder(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    use tauri::Manager;
+    app.path().document_dir().ok()
+}
+
+/// Makes the folder `name` in `parent` for a new vault. `parent` must be the
+/// default location or a folder the user picked.
 #[tauri::command(async)]
-fn create_vault(parent: String, name: String) -> Result<String, String> {
-    let folder = vault::create_vault_folder(Path::new(&parent), &name)?;
+fn create_vault(app: tauri::AppHandle, parent: String, name: String) -> Result<String, String> {
+    let parent = Path::new(&parent);
+    vault_access::get().check_new_vault_parent(parent, documents_folder(&app).as_deref())?;
+    let folder = vault::create_vault_folder(parent, &name)?;
     vault_access::get().allow(&folder);
     Ok(folder.to_string_lossy().into_owned())
 }

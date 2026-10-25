@@ -3,7 +3,8 @@
 //!
 //! A folder can become the open vault when it is a vault already (it has the
 //! marker Netherstone writes into every vault it opens) or the user just
-//! picked or created it in a native dialog this session.
+//! picked or created it in a native dialog this session. New vaults are only
+//! made in the Documents folder or a folder picked in that dialog.
 
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -30,6 +31,17 @@ impl OpenVault {
     /// Notes a folder the user picked or created in a native dialog.
     pub fn allow(&self, folder: &Path) {
         lock(&self.picked).push(folder.to_path_buf());
+    }
+
+    /// Checks that a new vault may be made in `parent`: `default` (the
+    /// Documents folder) or a folder the user picked this session.
+    pub fn check_new_vault_parent(&self, parent: &Path, default: Option<&Path>) -> Result<(), String> {
+        let picked = lock(&self.picked).iter().any(|folder| is_same(folder, parent));
+        if picked || default.is_some_and(|default| is_same(default, parent)) {
+            Ok(())
+        } else {
+            Err(format!("{} wasn't picked for a new vault", parent.display()))
+        }
     }
 
     /// Makes `vault_path` the open vault and marks it as a vault, so it opens
@@ -166,6 +178,23 @@ mod tests {
         assert!(vaults.check_path(&dir.join("Vault2/Note.md")).is_err());
         assert!(vaults.check_path(&dir.join("secret.txt")).is_err());
         assert!(vaults.check_vault(&dir).is_err());
+    }
+
+    #[test]
+    fn new_vaults_go_in_documents_or_a_picked_folder() {
+        let dir = temp_dir("new-vault-parent");
+        let (documents, picked) = (dir.join("Documents"), dir.join("Picked"));
+        let vaults = OpenVault::new();
+        let check = |parent: &Path| vaults.check_new_vault_parent(parent, Some(&documents));
+
+        assert!(check(&documents).is_ok());
+        assert!(check(&picked).is_err());
+        assert!(check(&dir.join(".config")).is_err());
+        assert!(check(&documents.join("Sub")).is_err());
+
+        vaults.allow(&picked);
+        assert!(check(&picked).is_ok());
+        assert!(vaults.check_new_vault_parent(&documents, None).is_err());
     }
 
     #[test]

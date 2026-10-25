@@ -8,6 +8,7 @@ pub mod pdf;
 mod pdf_platform;
 
 use std::fs;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -121,27 +122,48 @@ pub fn read_export_asset(path: String) -> Result<Response, String> {
         .map_err(|error| format!("Could not read {path}: {error}"))
 }
 
+/// How many redirects a remote image may take.
+const MAX_REDIRECTS: usize = 5;
+
 /// Downloads an image a shard links to on the web, so exports can carry it.
+/// Only addresses on the internet are fetched, never this computer or its
+/// local network, redirects included.
 #[tauri::command]
 pub async fn fetch_export_asset(url: String) -> Result<Response, String> {
-    let client = reqwest::Client::builder()
-        .timeout(REMOTE_ASSET_TIMEOUT)
-        .build()
-        .map_err(|error| error.to_string())?;
-
-    let mut response = client
-        .get(&url)
-        .send()
-        .await
-        .and_then(|response| response.error_for_status())
-        .map_err(|error| format!("Could not download {url}: {error}"))?;
+    let failed = |error: &dyn std::fmt::Display| format!("Could not download {url}: {error}");
+    let mut target = reqwest::Url::parse(&url).map_err(|error| failed(&error))?;
+    let mut redirects = 0;
+    let mut response = loop {
+        let address = public_address(&target).await.map_err(|error| failed(&error))?;
+        let client = reqwest::Client::builder()
+            .timeout(REMOTE_ASSET_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
+            // Connects to the address just checked, whatever the name
+            // resolves to by then.
+            .resolve(target.host_str().unwrap_or_default(), address)
+            .build()
+            .map_err(|error| failed(&error))?;
+        let response = client
+            .get(target.clone())
+            .send()
+            .await
+            .and_then(|response| response.error_for_status())
+            .map_err(|error| failed(&error))?;
+        if !response.status().is_redirection() {
+            break response;
+        }
+        redirects += 1;
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|location| location.to_str().ok())
+            .filter(|_| redirects <= MAX_REDIRECTS)
+            .ok_or_else(|| failed(&"too many redirects"))?;
+        target = target.join(location).map_err(|error| failed(&error))?;
+    };
 
     let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| format!("Could not download {url}: {error}"))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(|error| failed(&error))? {
         bytes.extend_from_slice(&chunk);
         if bytes.len() > MAX_REMOTE_ASSET_BYTES {
             return Err(format!("{url} is too large to include."));
@@ -149,6 +171,67 @@ pub async fn fetch_export_asset(url: String) -> Result<Response, String> {
     }
 
     Ok(Response::new(bytes))
+}
+
+/// The address to fetch `url` from: an http or https address whose host is
+/// on the internet.
+async fn public_address(url: &reqwest::Url) -> Result<SocketAddr, String> {
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("only web addresses can be downloaded".to_string());
+    }
+    let port = url.port_or_known_default().unwrap_or(443);
+    let host = url.host_str().unwrap_or_default();
+    let literal = host.trim_start_matches('[').trim_end_matches(']').parse::<IpAddr>();
+    let addresses: Vec<SocketAddr> = match literal {
+        Ok(ip) => vec![SocketAddr::new(ip, port)],
+        Err(_) if host.is_empty() => Vec::new(),
+        Err(_) => {
+            let host = host.to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                (host.as_str(), port)
+                    .to_socket_addrs()
+                    .map(|addresses| addresses.collect())
+            })
+            .await
+            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())?
+        }
+    };
+    match addresses.first() {
+        Some(first) if addresses.iter().all(|address| is_public(address.ip())) => Ok(*first),
+        Some(_) => Err("it isn't on the internet".to_string()),
+        None => Err("its address couldn't be found".to_string()),
+    }
+}
+
+/// False for this computer, local networks and other addresses that aren't
+/// on the internet.
+fn is_public(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, ..] = ip.octets();
+            !(ip.is_loopback()
+                || ip.is_private()
+                || ip.is_link_local()
+                || ip.is_unspecified()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_multicast()
+                || a == 0
+                || (a == 100 && (64..128).contains(&b)))
+        }
+        IpAddr::V6(ip) => match ip.to_ipv4_mapped() {
+            Some(v4) => is_public(IpAddr::V4(v4)),
+            None => {
+                let first = ip.segments()[0];
+                !(ip.is_loopback()
+                    || ip.is_unspecified()
+                    || ip.is_multicast()
+                    || (first & 0xfe00) == 0xfc00
+                    || (first & 0xffc0) == 0xfe80)
+            }
+        },
+    }
 }
 
 /// Prints an HTML export to PDF. The body is the HTML; the destination and
@@ -287,6 +370,19 @@ mod tests {
         assert_eq!(fs::read(&target).unwrap(), b"second");
         assert!(!directory.join(".out.html.part").exists());
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn only_addresses_on_the_internet_are_fetched() {
+        for ip in ["93.184.216.34", "1.1.1.1", "2606:4700:4700::1111"] {
+            assert!(is_public(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in [
+            "127.0.0.1", "10.0.0.5", "172.16.0.1", "192.168.1.1", "169.254.169.254", "0.0.0.0",
+            "100.64.0.1", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:192.168.0.1",
+        ] {
+            assert!(!is_public(ip.parse().unwrap()), "{ip}");
+        }
     }
 
     #[test]

@@ -793,6 +793,7 @@ fn upsert_ast_cache(
     cache_version: Option<i64>,
     plate_value: serde_json::Value,
 ) -> Result<(), String> {
+    in_open_vault(&file_path)?;
     let content_hash = hash_markdown_content(&markdown);
     let expected_cache_version = resolve_ast_cache_version(cache_version);
     let conn = db::open_connection()?;
@@ -828,6 +829,7 @@ fn upsert_ast_cache(
 
 #[tauri::command(async)]
 fn delete_ast_cache(file_path: String) -> Result<bool, String> {
+    in_open_vault(&file_path)?;
     let conn = db::open_connection()?;
 
     eprintln!("[Netherstone] AST cache delete start path={}", file_path);
@@ -853,6 +855,8 @@ fn delete_ast_cache(file_path: String) -> Result<bool, String> {
 
 #[tauri::command(async)]
 fn rename_ast_cache(old_path: String, new_path: String) -> Result<bool, String> {
+    in_open_vault(&old_path)?;
+    in_open_vault(&new_path)?;
     let conn = db::open_connection()?;
 
     eprintln!(
@@ -1549,6 +1553,7 @@ fn get_broken_links() -> Result<Vec<db::data::BrokenLink>, String> {
 
 #[tauri::command(async)]
 fn get_backlinks(file_path: String) -> Result<Vec<db::queries::Backlink>, String> {
+    in_open_vault(&file_path)?;
     let db = db::Database::new()?;
 
     db.with_connection(|conn| {

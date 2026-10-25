@@ -1,3 +1,5 @@
+import type { XmlElement, XmlNode } from "./xml-tree";
+
 /**
  * Reading Office Open XML. Elements are matched by local name and by
  * namespace family, so both the usual Transitional namespaces and the Strict
@@ -26,46 +28,38 @@ const NAMESPACES = {
 
 export type Namespace = keyof typeof NAMESPACES;
 
-export function parseXml(source: string): Document {
-  const document = new DOMParser().parseFromString(source, "application/xml");
-  if (document.getElementsByTagName("parsererror").length > 0) {
-    throw new Error("The document's XML is damaged.");
-  }
-  return document;
-}
-
-export function is(node: Node | null | undefined, ns: Namespace, name: string): boolean {
+export function is(node: XmlNode | null | undefined, ns: Namespace, name: string): boolean {
   return (
     !!node &&
     node.nodeType === 1 &&
-    (node as Element).localName === name &&
-    (NAMESPACES[ns] as readonly string[]).includes((node as Element).namespaceURI ?? "")
+    (node as XmlElement).localName === name &&
+    (NAMESPACES[ns] as readonly string[]).includes((node as XmlElement).namespaceURI ?? "")
   );
 }
 
-export function elements(parent: Element | Document | null | undefined): Element[] {
+export function elements(parent: XmlElement | null | undefined): XmlElement[] {
   if (!parent) return [];
-  const out: Element[] = [];
+  const out: XmlElement[] = [];
   for (let node = parent.firstChild; node; node = node.nextSibling) {
-    if (node.nodeType === 1) out.push(node as Element);
+    if (node.nodeType === 1) out.push(node as XmlElement);
   }
   return out;
 }
 
-export function children(parent: Element | null | undefined, ns: Namespace, name: string): Element[] {
+export function children(parent: XmlElement | null | undefined, ns: Namespace, name: string): XmlElement[] {
   return elements(parent).filter((element) => is(element, ns, name));
 }
 
-export function child(parent: Element | null | undefined, ns: Namespace, name: string): Element | null {
+export function child(parent: XmlElement | null | undefined, ns: Namespace, name: string): XmlElement | null {
   if (!parent) return null;
   for (let node = parent.firstChild; node; node = node.nextSibling) {
-    if (is(node, ns, name)) return node as Element;
+    if (is(node, ns, name)) return node as XmlElement;
   }
   return null;
 }
 
 /** The first descendant `ns:name`, depth first. */
-export function descendant(parent: Element | null | undefined, ns: Namespace, name: string): Element | null {
+export function descendant(parent: XmlElement | null | undefined, ns: Namespace, name: string): XmlElement | null {
   if (!parent) return null;
   for (const element of elements(parent)) {
     if (is(element, ns, name)) return element;
@@ -75,7 +69,7 @@ export function descendant(parent: Element | null | undefined, ns: Namespace, na
   return null;
 }
 
-export function descendants(parent: Element | null | undefined, ns: Namespace, name: string, out: Element[] = []): Element[] {
+export function descendants(parent: XmlElement | null | undefined, ns: Namespace, name: string, out: XmlElement[] = []): XmlElement[] {
   for (const element of elements(parent)) {
     if (is(element, ns, name)) out.push(element);
     else descendants(element, ns, name, out);
@@ -83,7 +77,7 @@ export function descendants(parent: Element | null | undefined, ns: Namespace, n
   return out;
 }
 
-export function attr(element: Element | null | undefined, ns: Namespace, name: string): string | null {
+export function attr(element: XmlElement | null | undefined, ns: Namespace, name: string): string | null {
   if (!element) return null;
   for (const uri of NAMESPACES[ns]) {
     const value = element.getAttributeNS(uri, name);
@@ -94,7 +88,7 @@ export function attr(element: Element | null | undefined, ns: Namespace, name: s
 }
 
 /** `w:val` of a child property element, e.g. `val(pPr, "jc")`. */
-export function val(parent: Element | null | undefined, name: string, ns: Namespace = "w"): string | null {
+export function val(parent: XmlElement | null | undefined, name: string, ns: Namespace = "w"): string | null {
   return attr(child(parent, ns, name), ns, "val");
 }
 
@@ -102,14 +96,14 @@ export function val(parent: Element | null | undefined, name: string, ns: Namesp
  * An on/off property: present without a value, or with `true`/`1`/`on`, is
  * on. Absent is `undefined`, so styles can be layered.
  */
-export function flag(parent: Element | null | undefined, name: string): boolean | undefined {
+export function flag(parent: XmlElement | null | undefined, name: string): boolean | undefined {
   const element = child(parent, "w", name);
   if (!element) return undefined;
   const value = attr(element, "w", "val");
   return value === null || !["false", "0", "off", "none"].includes(value.toLowerCase());
 }
 
-export function numberAttr(element: Element | null | undefined, ns: Namespace, name: string): number | null {
+export function numberAttr(element: XmlElement | null | undefined, ns: Namespace, name: string): number | null {
   const value = attr(element, ns, name);
   if (value === null) return null;
   const number = Number(value);

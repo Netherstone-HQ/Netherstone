@@ -27,10 +27,19 @@ import type { ImportContext, PlateNode } from "../../types";
 import { ommlToLatex } from "./math";
 import { isMonospace, readParagraphProps, readRunProps, type Numbering, type RunProps, type Styles } from "./styles";
 import { attr, child, children, descendant, descendants, elements, is, numberAttr, val } from "./xml";
+import type { XmlElement } from "./xml-tree";
 
 export interface Relationship {
   target: string;
   external: boolean;
+}
+
+/**
+ * What the reader needs from the import. It runs in a worker, so links to
+ * other imported files come back from the window instead of right away.
+ */
+export interface ReaderContext extends Pick<ImportContext, "addAttachment" | "warn"> {
+  linkTo(target: string): Promise<string | null>;
 }
 
 export interface DocxParts {
@@ -40,7 +49,7 @@ export interface DocxParts {
   styles: Styles;
   numbering: Numbering;
   relationships: Map<string, Relationship>;
-  notes: Map<string, Element>;
+  notes: Map<string, XmlElement>;
   /** File name without extension, used to name stored pictures. */
   name: string;
 }
@@ -98,7 +107,6 @@ export class DocxReader {
   private readonly listCounters = new Map<string, number[]>();
   private tocDone = false;
   private headingOffset = 0;
-  private paragraphs = 0;
   private pictureCount = 0;
   private oldPictures = 0;
   private charts = 0;
@@ -108,10 +116,10 @@ export class DocxReader {
 
   constructor(
     private readonly parts: DocxParts,
-    private readonly context: ImportContext,
+    private readonly context: ReaderContext,
   ) {}
 
-  async read(body: Element): Promise<PlateNode[]> {
+  async read(body: XmlElement): Promise<PlateNode[]> {
     // A document with a Title has it as its one top heading; its Heading 1s
     // sit a level under it.
     this.headingOffset = descendants(body, "w", "pStyle").some(
@@ -139,7 +147,7 @@ export class DocxReader {
 
   // ── Blocks ────────────────────────────────────────────────────────────────
 
-  private async blocks(nodes: Element[], out: PlateNode[], inCell: boolean) {
+  private async blocks(nodes: XmlElement[], out: PlateNode[], inCell: boolean) {
     for (let index = 0; index < nodes.length; index += 1) {
       const node = nodes[index];
       // A run of paragraphs that are each just a link to a heading is a
@@ -172,7 +180,7 @@ export class DocxReader {
   }
 
   /** Children, taking the preferred choice of `mc:AlternateContent`. */
-  private contentOf(node: Element): Element[] {
+  private contentOf(node: XmlElement): XmlElement[] {
     if (is(node, "mc", "AlternateContent")) {
       const choice = child(node, "mc", "Choice") ?? child(node, "mc", "Fallback");
       return elements(choice);
@@ -187,10 +195,7 @@ export class DocxReader {
     out.push(toc());
   }
 
-  private async paragraph(p: Element, out: PlateNode[], inCell: boolean) {
-    this.paragraphs += 1;
-    if (this.paragraphs % 250 === 0) await this.context.checkpoint();
-
+  private async paragraph(p: XmlElement, out: PlateNode[], inCell: boolean) {
     const pPr = child(p, "w", "pPr");
     const style = this.parts.styles.paragraphStyle(val(pPr, "pStyle"));
     const direct = readParagraphProps(pPr);
@@ -347,7 +352,7 @@ export class DocxReader {
     return counters[ilvl];
   }
 
-  private async table(tbl: Element, out: PlateNode[], inCell: boolean) {
+  private async table(tbl: XmlElement, out: PlateNode[], inCell: boolean) {
     const rowsElements = this.rowsOf(tbl);
     const firstRowCells = rowsElements[0] ? this.cellsOf(rowsElements[0]) : [];
 
@@ -426,7 +431,7 @@ export class DocxReader {
     if (rows.length) out.push(table(rows, widths.length ? widths : undefined));
   }
 
-  private async cellBlocks(cell: Element, quiet: boolean) {
+  private async cellBlocks(cell: XmlElement, quiet: boolean) {
     const blocks: PlateNode[] = [];
     const savedCode = this.lastCode;
     await this.blocks(elements(cell), blocks, true);
@@ -434,8 +439,8 @@ export class DocxReader {
     return blocks;
   }
 
-  private rowsOf(tbl: Element): Element[] {
-    const rows: Element[] = [];
+  private rowsOf(tbl: XmlElement): XmlElement[] {
+    const rows: XmlElement[] = [];
     for (const node of elements(tbl)) {
       if (is(node, "w", "tr")) rows.push(node);
       else if (is(node, "w", "sdt") || is(node, "w", "customXml")) rows.push(...this.rowsOf(child(node, "w", "sdtContent") ?? node));
@@ -443,8 +448,8 @@ export class DocxReader {
     return rows;
   }
 
-  private cellsOf(row: Element): Element[] {
-    const cells: Element[] = [];
+  private cellsOf(row: XmlElement): XmlElement[] {
+    const cells: XmlElement[] = [];
     for (const node of elements(row)) {
       if (is(node, "w", "tc")) cells.push(node);
       else if (is(node, "w", "sdt") || is(node, "w", "customXml")) cells.push(...this.cellsOf(child(node, "w", "sdtContent") ?? node));
@@ -454,7 +459,7 @@ export class DocxReader {
 
   // ── Inline content ────────────────────────────────────────────────────────
 
-  private async inlineItems(nodes: Element[], context: RunContext): Promise<Item[]> {
+  private async inlineItems(nodes: XmlElement[], context: RunContext): Promise<Item[]> {
     const items: Item[] = [];
     for (const node of nodes) await this.inline(node, context, items);
     return items;
@@ -471,7 +476,7 @@ export class DocxReader {
     return this.fields.some((field) => field.skip || field.phase === "code");
   }
 
-  private async inline(node: Element, context: RunContext, items: Item[]) {
+  private async inline(node: XmlElement, context: RunContext, items: Item[]) {
     if (is(node, "w", "r")) {
       await this.run(node, context, items);
       return;
@@ -479,13 +484,13 @@ export class DocxReader {
     if (is(node, "w", "hyperlink")) {
       const id = attr(node, "r", "id");
       const relationship = id ? this.parts.relationships.get(id) : undefined;
-      const href = relationship ? this.linkTarget(relationship.target) : null;
+      const href = relationship ? await this.linkTarget(relationship.target) : null;
       for (const inner of elements(node)) await this.inline(inner, { ...context, href: href ?? context.href }, items);
       return;
     }
     if (is(node, "w", "fldSimple")) {
       const instruction = attr(node, "w", "instr") ?? "";
-      const field = this.parseField(instruction);
+      const field = await this.parseField(instruction);
       if (field.toc) return;
       for (const inner of elements(node)) await this.inline(inner, { ...context, href: field.href ?? context.href }, items);
       return;
@@ -525,24 +530,24 @@ export class DocxReader {
     }
   }
 
-  private parseField(instruction: string): { href: string | null; toc: boolean } {
+  private async parseField(instruction: string): Promise<{ href: string | null; toc: boolean }> {
     const trimmed = instruction.trim();
     if (/^TOC\b/i.test(trimmed)) return { href: null, toc: true };
     const hyperlink = /^HYPERLINK\s+(?:\\[a-z]\s+)*"([^"]+)"/i.exec(trimmed);
     if (hyperlink && !/\\l\s/.test(trimmed.slice(0, trimmed.indexOf('"')))) {
-      return { href: this.linkTarget(hyperlink[1]), toc: false };
+      return { href: await this.linkTarget(hyperlink[1]), toc: false };
     }
     return { href: null, toc: false };
   }
 
-  private linkTarget(target: string): string | null {
+  private async linkTarget(target: string): Promise<string | null> {
     const trimmed = target.trim();
     if (/^(https?|mailto|tel):/i.test(trimmed)) return trimmed;
     if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || trimmed.startsWith("#")) return null;
     return this.context.linkTo(trimmed.split("#")[0]);
   }
 
-  private async run(run: Element, context: RunContext, items: Item[]) {
+  private async run(run: XmlElement, context: RunContext, items: Item[]) {
     const rPr = child(run, "w", "rPr");
     const styleId = val(rPr, "rStyle");
     const props: RunProps = {
@@ -554,7 +559,7 @@ export class DocxReader {
     for (const node of elements(run)) await this.runChild(node, props, styleId, context, items);
   }
 
-  private async runChild(node: Element, props: RunProps, styleId: string | null, context: RunContext, items: Item[]) {
+  private async runChild(node: XmlElement, props: RunProps, styleId: string | null, context: RunContext, items: Item[]) {
     if (is(node, "w", "fldChar")) {
       const type = attr(node, "w", "fldCharType");
       if (type === "begin") {
@@ -562,7 +567,7 @@ export class DocxReader {
       } else if (type === "separate") {
         const field = this.fields[this.fields.length - 1];
         if (field) {
-          const parsed = this.parseField(field.instruction);
+          const parsed = await this.parseField(field.instruction);
           field.phase = "result";
           field.href = parsed.href;
           field.skip = parsed.toc || /^\s*(PAGE|NUMPAGES|SECTIONPAGES)\b/i.test(field.instruction);
@@ -648,7 +653,7 @@ export class DocxReader {
 
   // ── Pictures ──────────────────────────────────────────────────────────────
 
-  private async drawing(drawing: Element, items: Item[]) {
+  private async drawing(drawing: XmlElement, items: Item[]) {
     const frame = child(drawing, "wp", "inline") ?? child(drawing, "wp", "anchor");
     if (!frame) return;
 
@@ -684,7 +689,7 @@ export class DocxReader {
     }
   }
 
-  private async vml(pict: Element, items: Item[]) {
+  private async vml(pict: XmlElement, items: Item[]) {
     const textBox = descendant(pict, "w", "txbxContent");
     if (textBox) {
       const inner: PlateNode[] = [];
@@ -837,9 +842,9 @@ export function resolvePart(base: string, target: string): string {
 }
 
 /** A paragraph whose only content is one link to a place in the document. */
-function isContentsEntry(node: Element) {
+function isContentsEntry(node: XmlElement) {
   if (!is(node, "w", "p")) return false;
-  let link: Element | null = null;
+  let link: XmlElement | null = null;
   for (const element of elements(node)) {
     if (is(element, "w", "pPr") || is(element, "w", "bookmarkStart") || is(element, "w", "bookmarkEnd")) continue;
     if (link || !is(element, "w", "hyperlink") || !attr(element, "w", "anchor")) return false;

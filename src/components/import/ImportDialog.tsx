@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { FilesIcon, FolderIcon, LoaderCircleIcon, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { listImportSources, pickImportPaths, undoImport } from "@/lib/commands";
-import { useImportDialogStore } from "@/lib/import";
+import { useImportDialogStore, type ImportStep } from "@/lib/import";
 import { appImportIO } from "@/lib/import/app-io";
 import { carriesFiles, readDrop } from "@/lib/import/dropped";
 import { runImport, type ImportIO, type ImportProgress, type ImportReport, type ImportSource } from "@/lib/import/engine";
@@ -16,13 +16,12 @@ import { folderName } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store";
 
-type Step =
-  | { kind: "pick" }
-  | { kind: "importing"; progress: ImportProgress | null }
-  /** `since`: when the import started, in unix seconds, for Undo. */
-  | { kind: "done"; report: ImportReport; vaultPath: string; since: number; isUndoing?: boolean };
+type Step = { kind: "pick" } | ImportStep;
 
-/** The import window: pick or drop files or a folder, watch them convert, see what came in. */
+/**
+ * The import window: pick or drop files or a folder, watch them convert, see
+ * what came in. Closing it while files convert leaves the import running.
+ */
 export function ImportDialog() {
   const targetDir = useImportDialogStore((s) => s.targetDir);
   const close = useImportDialogStore((s) => s.close);
@@ -35,15 +34,11 @@ export function ImportDialog() {
 }
 
 function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () => void }) {
-  const [step, setStep] = useState<Step>({ kind: "pick" });
+  const job = useImportDialogStore((s) => s.job);
+  const step: Step = job?.step ?? { kind: "pick" };
   const [isPicking, setIsPicking] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [bringAttachments, setBringAttachments] = useState(true);
-  const abortRef = useRef<AbortController | null>(null);
-  const isImporting = step.kind === "importing";
-
-  // Closing the window mid-import stops it.
-  useEffect(() => () => abortRef.current?.abort(), []);
 
   const pick = async (folder: boolean) => {
     const vaultPath = useVaultStore.getState().currentVaultPath;
@@ -87,7 +82,8 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
 
   const start = async (vaultPath: string, listSources: () => Promise<ImportSource[]>, io: ImportIO) => {
     const controller = new AbortController();
-    abortRef.current = controller;
+    const { setJob } = useImportDialogStore.getState();
+    const setStep = (next: ImportStep) => setJob({ targetDir, step: next, cancel: () => controller.abort() });
     setStep({ kind: "importing", progress: null });
     const since = Math.floor(Date.now() / 1000);
 
@@ -111,9 +107,8 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
         cancelled: false,
       };
     }
-    abortRef.current = null;
-
-    if (report.created.length) {
+    // The person may have switched vaults while it ran.
+    if (report.created.length && isCurrentVault(vaultPath)) {
       await refreshVault(vaultPath).catch((error) =>
         console.error("[Netherstone] Couldn't refresh the vault after importing:", error),
       );
@@ -122,9 +117,9 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
   };
 
   const undo = async () => {
-    if (step.kind !== "done") return;
+    if (!job || step.kind !== "done") return;
     const { report, vaultPath, since } = step;
-    setStep({ ...step, isUndoing: true });
+    useImportDialogStore.getState().setJob({ ...job, step: { ...step, isUndoing: true } });
     try {
       await undoImport(
         vaultPath,
@@ -137,9 +132,11 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
       console.error("[Netherstone] Couldn't undo the import:", error);
       alert(error instanceof Error ? error.message : String(error));
     }
-    await refreshVault(vaultPath).catch((error) =>
-      console.error("[Netherstone] Couldn't refresh the vault after undoing an import:", error),
-    );
+    if (isCurrentVault(vaultPath)) {
+      await refreshVault(vaultPath).catch((error) =>
+        console.error("[Netherstone] Couldn't refresh the vault after undoing an import:", error),
+      );
+    }
     onClose();
   };
 
@@ -151,8 +148,6 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
   return (
     <DialogContent
       className="gap-5 sm:max-w-md"
-      showCloseButton={!isImporting}
-      onEscapeKeyDown={(event) => isImporting && event.preventDefault()}
       onPointerDownOutside={(event) => event.preventDefault()}
       onDragOver={dragOver}
       onDragLeave={(event) => {
@@ -198,9 +193,12 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
 
       <div className="flex justify-end gap-2">
         {step.kind === "importing" ? (
-          <Button variant="ghost" onClick={() => abortRef.current?.abort()}>
-            Cancel
-          </Button>
+          <>
+            <Button variant="ghost" onClick={() => job?.cancel()}>
+              Cancel
+            </Button>
+            <Button onClick={onClose}>Hide</Button>
+          </>
         ) : step.kind === "done" ? (
           <>
             {step.report.created.length ? (
@@ -324,6 +322,10 @@ function Row({ name, notes, children }: { name: string; notes: string[]; childre
       {children}
     </li>
   );
+}
+
+function isCurrentVault(vaultPath: string) {
+  return useVaultStore.getState().currentVaultPath === vaultPath;
 }
 
 function fileName(path: string) {

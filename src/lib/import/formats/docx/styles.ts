@@ -1,5 +1,6 @@
 import type { ListType } from "../../nodes";
 import { attr, child, children, elements, flag, is, numberAttr, val } from "./xml";
+import type { XmlDocument, XmlElement } from "./xml-tree";
 
 /** Run formatting as Word layers it: `undefined` means "not set here". */
 export interface RunProps {
@@ -40,7 +41,7 @@ interface Style {
   run: RunProps;
 }
 
-export function readRunProps(rPr: Element | null): RunProps {
+export function readRunProps(rPr: XmlElement | null): RunProps {
   if (!rPr) return {};
   const props: RunProps = {};
   const set = <K extends keyof RunProps>(key: K, value: RunProps[K] | undefined) => {
@@ -72,7 +73,7 @@ export function readRunProps(rPr: Element | null): RunProps {
   return props;
 }
 
-export function readParagraphProps(pPr: Element | null): ParagraphProps {
+export function readParagraphProps(pPr: XmlElement | null): ParagraphProps {
   if (!pPr) return {};
   const props: ParagraphProps = {};
   const align = val(pPr, "jc");
@@ -117,7 +118,7 @@ export class Styles {
   readonly defaultParagraph: ParagraphProps;
   private defaultParagraphStyle: string | null = null;
 
-  constructor(document: Document | null) {
+  constructor(document: XmlDocument | null) {
     const root = document?.documentElement ?? null;
     const defaults = child(root, "w", "docDefaults");
     this.defaultRun = readRunProps(child(child(defaults, "w", "rPrDefault"), "w", "rPr"));
@@ -230,7 +231,7 @@ export class Numbering {
   private readonly singleLevel = new Set<string>();
   private readonly instances = new Map<string, { abstractId: string; startOverrides: Map<number, number> }>();
 
-  constructor(document: Document | null) {
+  constructor(document: XmlDocument | null) {
     const root = document?.documentElement ?? null;
     for (const element of elements(root)) {
       if (is(element, "w", "abstractNum")) {

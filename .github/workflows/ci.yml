@@ -185,13 +185,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The Ubuntu mirror often stalls, so the downloaded packages are cached
+      # for each runner image and only new versions come from the mirror.
+      - name: Prepare package cache
+        id: apt
+        if: env.BUMP != 'true'
+        run: |
+          sudo install -d -o "$USER" /var/cache/tauri-apt
+          echo "key=tauri-apt-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        if: env.BUMP != 'true'
+        with:
+          path: /var/cache/tauri-apt/*.deb
+          key: ${{ steps.apt.outputs.key }}
+          restore-keys: tauri-apt-
+
       # Fails fast when the Ubuntu mirror stalls instead of holding the job.
       - name: Install Tauri system libraries
         if: env.BUMP != 'true'
         timeout-minutes: 5
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+          sudo apt-get install -y -o Dir::Cache::Archives=/var/cache/tauri-apt -o APT::Keep-Downloaded-Packages=true libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
 

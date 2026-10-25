@@ -142,7 +142,7 @@ fn replace_atomically(
         .file_name()
         .ok_or_else(|| format!("Not a file: {}", path.display()))?;
     let temp = path.with_file_name(format!(".{}.netherstone-tmp", name.to_string_lossy()));
-    let written = std::fs::File::create(&temp)
+    let written = create_temp(&temp)
         .and_then(|mut file| {
             fill(&mut file)?;
             file.sync_all()
@@ -154,6 +154,20 @@ fn replace_atomically(
     }
     sync_folder(path);
     Ok(())
+}
+
+/// Creates the temporary file `temp`, removing whatever is there first (left
+/// by a write cut short, or put there), so a write never goes through a link
+/// to somewhere else.
+pub(crate) fn create_temp(temp: &Path) -> std::io::Result<std::fs::File> {
+    match std::fs::remove_file(temp) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+        _ => {}
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temp)
 }
 
 /// Like [`write_atomically`], creating the folders `path` needs first.
@@ -413,6 +427,24 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn saves_never_write_through_a_left_temp_link() {
+        let dir = temp_vault("temp-link");
+        let outside = dir.with_file_name(format!("{}-outside", dir.file_name().unwrap().to_string_lossy()));
+        std::fs::write(&outside, "keep").unwrap();
+        std::fs::write(dir.join("Note.md"), "old").unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join(".Note.md.netherstone-tmp")).unwrap();
+
+        let writes = crate::locks::vault_writes().unwrap();
+        write_atomically(&writes, &dir.join("Note.md"), b"new").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "keep");
+        assert_eq!(std::fs::read_to_string(dir.join("Note.md")).unwrap(), "new");
+        assert!(!dir.join("Note.md").is_symlink());
+        std::fs::remove_file(outside).unwrap();
+    }
 
     fn temp_vault(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(

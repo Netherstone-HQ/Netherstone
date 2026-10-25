@@ -34,7 +34,9 @@ How Netherstone stores the images, files, audio and video that shards link to.
 `attachments` and `attachment_references` in `db/schema.rs`.
 
 1. **Insert:** dropping, pasting or picking a file writes it to
-   `_attachments/` and records it, under `writes.lock` with an atomic write.
+   `_attachments/` and records it. The file is written and flushed under a
+   hidden name first, then named under `writes.lock`, so copying a big file
+   in doesn't hold up saves.
    A file on disk is copied by Rust from its path; a file the app holds
    (pasted, dropped, a drawing export) arrives as raw bytes.
 2. **Save:** saving a shard refreshes its references.

@@ -362,9 +362,8 @@ fn copy_into_attachments(
     let vault = std::path::Path::new(vault_path);
     asset_scope::allow_vault(app, vault);
     let conn = db::open_connection()?;
-    let writes = locks::vault_writes()?;
 
-    db::attachments::persist_attachment_file(&conn, &writes, vault, source)
+    db::attachments::persist_attachment_file(&conn, vault, source)
 }
 
 /// Stores a file the app holds (pasted, dropped or made) as an attachment.
@@ -381,9 +380,8 @@ fn persist_attachment_bytes(
     let vault = std::path::Path::new(&vault_path);
     asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
-    let writes = locks::vault_writes()?;
 
-    db::attachments::persist_attachment_bytes(&conn, &writes, vault, &file_name, export::raw_body(&request)?)
+    db::attachments::persist_attachment_bytes(&conn, vault, &file_name, export::raw_body(&request)?)
 }
 
 /// Re-checks the vault's attachments against its shards and the attachment

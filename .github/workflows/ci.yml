@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  # The front-end and browser jobs skip a run that only changes docs, like the
-  # Rust job below.
+  # The front-end and browser jobs skip a run that only changes docs or bumps
+  # the version, like the Rust job below.
   frontend:
     name: Typecheck and test
     needs: changes
@@ -43,7 +43,8 @@ jobs:
   # The slowest job, so its tests are split across two runners.
   # A matrix job skipped as a whole reports one check with the matrix left
   # unexpanded, so the required "(1/2)" and "(2/2)" checks would never report.
-  # A docs-only run still starts both shards and skips their steps instead.
+  # A docs-only or version bump run still starts both shards and skips their
+  # steps instead.
   browser-shard:
     name: Browser tests (${{ matrix.shard }}/2)
     needs: changes
@@ -104,9 +105,11 @@ jobs:
         run: exit 1
 
   # What this run needs to test. A run that only changes docs (Markdown at the
-  # root or in .github/, or docs/) tests nothing. Otherwise a push to main tests
-  # everything, and a pull request runs the Rust tests only when it changes
-  # src-tauri/ or this file.
+  # root or in .github/, or docs/) tests nothing. A pull request that only
+  # bumps the version (one version line in each of the four version files, all
+  # set to the same value) only checks Cargo.lock. Otherwise a push to main
+  # tests everything, and a pull request runs the Rust tests only when it
+  # changes src-tauri/ or this file.
   changes:
     name: Changed files
     runs-on: ubuntu-24.04
@@ -116,6 +119,7 @@ jobs:
     outputs:
       rust: ${{ steps.check.outputs.rust }}
       code: ${{ steps.check.outputs.code }}
+      bump: ${{ steps.check.outputs.bump }}
     steps:
       - id: check
         env:
@@ -123,14 +127,24 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BEFORE: ${{ github.event.before }}
         run: |
+          bump=false
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+            pr_files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[] | {filename, patch}')
+            files=$(jq -r '.filename' <<< "$pr_files")
+            bump=$(jq -s '
+              def changed: [.patch // "" | split("\n")[] | select(test("^[-+]"))];
+              def version_line: test("^[-+]\\s*(\"version\": \"[^\"]+\",?|version = \"[^\"]+\")$");
+              length > 0
+              and all(.[]; .filename | IN("package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"))
+              and all(.[]; .patch != null and (changed | map(.[:1]) | sort) == ["+", "-"] and all(changed[]; version_line))
+              and ([.[] | changed[] | select(startswith("+")) | sub("^.*\"(?<v>[^\"]+)\",?$"; "\(.v)")] | unique | length) == 1
+            ' <<< "$pr_files")
           elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
             files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename')
           else
             files=everything
           fi
-          if grep -qvE '^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)' <<< "$files"; then
+          if [ "$bump" != "true" ] && grep -qvE '^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)' <<< "$files"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -143,20 +157,25 @@ jobs:
             rust=false
           fi
           echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
 
   # A skipped job counts as passed, so a required check doesn't hold up a
   # pull request it has nothing to test. If the file check fails, every job
-  # runs anyway.
+  # runs anyway. A version bump only checks that Cargo.lock matches Cargo.toml,
+  # which is quick and needs no system libraries.
   rust:
     name: Rust tests
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      BUMP: ${{ needs.changes.outputs.bump }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Tauri system libraries
+        if: env.BUMP != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
@@ -164,12 +183,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+        if: env.BUMP != 'true'
         with:
           workspaces: src-tauri
 
       # tauri::generate_context! needs the frontend output folder to exist.
-      - run: mkdir -p dist
+      - if: env.BUMP != 'true'
+        run: mkdir -p dist
 
       - name: Test
+        if: env.BUMP != 'true'
         working-directory: src-tauri
         run: cargo test
+
+      - name: Check Cargo.lock
+        if: env.BUMP == 'true'
+        working-directory: src-tauri
+        run: cargo metadata --locked --format-version 1 > /dev/null

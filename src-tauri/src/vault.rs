@@ -75,16 +75,63 @@ pub fn write_atomically(
     replace_atomically(path, |file| file.write_all(bytes))
 }
 
-/// Like [`write_atomically`], with the content of the file at `source`,
-/// read a piece at a time so a big file never sits in memory whole.
-pub fn copy_atomically(
-    _writes: &crate::locks::VaultWrites,
-    source: &Path,
-    path: &Path,
-) -> Result<(), String> {
-    replace_atomically(path, |file| {
-        std::io::copy(&mut std::fs::File::open(source)?, file).map(drop)
-    })
+/// A file written and flushed to disk under a hidden name in the folder it
+/// will go in, waiting for [`StagedFile::put`]. Writing it needs no lock, so
+/// copying a big file in doesn't hold up saves. Removed if it's never put.
+pub struct StagedFile {
+    temp: PathBuf,
+    put: bool,
+}
+
+/// Writes a [`StagedFile`] in `folder` with what `fill` writes.
+pub fn stage_file(
+    folder: &Path,
+    fill: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> Result<StagedFile, String> {
+    static STAGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let staged = StagedFile {
+        temp: folder.join(format!(
+            ".{}-{}-{}.netherstone-tmp",
+            std::process::id(),
+            nanos,
+            STAGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        )),
+        put: false,
+    };
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staged.temp)
+        .and_then(|mut file| {
+            fill(&mut file)?;
+            file.sync_all()
+        })
+        .map_err(|e| format!("Failed to write {}: {}", staged.temp.display(), e))?;
+    Ok(staged)
+}
+
+impl StagedFile {
+    /// Moves the file to `path`, in the same folder, replacing what's there.
+    /// `_writes` shows `writes.lock` is held.
+    pub fn put(mut self, _writes: &crate::locks::VaultWrites, path: &Path) -> Result<(), String> {
+        std::fs::rename(&self.temp, path)
+            .map_err(|e| format!("Failed to save {}: {}", path.display(), e))?;
+        self.put = true;
+        sync_folder(path);
+        Ok(())
+    }
+}
+
+impl Drop for StagedFile {
+    fn drop(&mut self) {
+        if !self.put {
+            let _ = std::fs::remove_file(&self.temp);
+        }
+    }
 }
 
 fn replace_atomically(
@@ -468,6 +515,29 @@ mod tests {
 
         assert!(unique_drawing_path(&vault, "  ").is_err());
         assert!(unique_drawing_path(&vault, "a/b").is_err());
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn a_staged_file_is_put_in_place_or_removed() {
+        use std::io::Write;
+        let vault = temp_vault("staged");
+        let photo = vault.join("Photo.png");
+        std::fs::write(&photo, "").unwrap();
+
+        // Written without the lock, which is only taken to put it in place.
+        let staged = stage_file(&vault, |file| file.write_all(b"picture")).unwrap();
+        let unused = stage_file(&vault, |file| file.write_all(b"other")).unwrap();
+        assert_eq!(std::fs::read_dir(&vault).unwrap().count(), 3);
+        staged.put(&crate::locks::vault_writes().unwrap(), &photo).unwrap();
+        drop(unused);
+
+        let names: Vec<_> = std::fs::read_dir(&vault)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["Photo.png"]);
+        assert_eq!(std::fs::read(&photo).unwrap(), b"picture");
         std::fs::remove_dir_all(&vault).unwrap();
     }
 

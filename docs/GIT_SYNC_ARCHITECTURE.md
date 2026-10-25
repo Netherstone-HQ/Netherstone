@@ -87,6 +87,18 @@ background (`src-tauri/src/sync/pack.rs`, under `sync.lock` and
 conflicts goes into one pack with similar versions stored as differences,
 and the loose files, older packs and anything unused are removed.
 
+Free up space (Settings, Vault, History) removes old versions of
+attachments, meaning deleted files and what replaced files held before, from the
+history (`src-tauri/src/sync/space.rs`). Shards and drawings are never
+removed. Every version is written again without the picked files, keeping
+its date, author, notes and every other file, so the same removal gives the
+same versions on every device. With sync on, the app syncs first, replaces
+the GitHub branch with the new history, and uploads the cumulative list of
+removed blob ids as `refs/netherstone/freed`. A device whose sync downloads
+ids it hasn't removed yet removes them from its own history first, so its
+history matches GitHub's again and its own new versions merge on top. The
+history is packed right after, so the space is freed at once.
+
 ## Locks
 
 `src-tauri/src/locks.rs` holds three locks shared by every Netherstone

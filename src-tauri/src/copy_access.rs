@@ -44,9 +44,11 @@ impl CopySources {
     }
 
     /// True when copying `path` needs the user to say yes first.
+    /// A link is judged by where it leads.
     pub fn needs_asking(&self, vaults: &OpenVault, path: &Path) -> bool {
-        let fine = vaults.check_path(path).is_ok()
-            || is_showable(path)
+        let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let fine = vaults.check_real_path(path).is_ok()
+            || is_showable(&target)
             || lock(&self.allowed).iter().any(|allowed| is_same(allowed, path));
         !fine
     }
@@ -84,7 +86,8 @@ mod tests {
     fn only_vault_files_media_and_picked_files_can_be_copied() {
         let dir = temp_dir("copy-sources");
         let vault = dir.join("Vault");
-        std::fs::create_dir_all(&vault).unwrap();
+        std::fs::create_dir_all(vault.join("docs")).unwrap();
+        std::fs::write(vault.join("docs/report.pdf"), b"r").unwrap();
         let vaults = OpenVault::new();
         vaults.allow(&vault);
         vaults.open(&dir.join("sync"), &vault).unwrap();
@@ -103,6 +106,28 @@ mod tests {
         assert!(check(dir.join("report.pdf")).is_ok());
         assert!(check(dir.join("id_rsa")).is_err());
         assert!(check(dir.join("x/../report.pdf")).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn links_are_judged_by_where_they_lead() {
+        let dir = temp_dir("copy-sources-links");
+        let vault = dir.join("Vault");
+        std::fs::create_dir_all(&vault).unwrap();
+        std::fs::create_dir_all(dir.join("Home/.ssh")).unwrap();
+        std::fs::write(dir.join("Home/.ssh/id_rsa"), b"k").unwrap();
+        std::fs::write(dir.join("Home/photo.png"), b"p").unwrap();
+        std::os::unix::fs::symlink(dir.join("Home"), vault.join("Home")).unwrap();
+        std::os::unix::fs::symlink(dir.join("Home/.ssh/id_rsa"), vault.join("pic.png")).unwrap();
+        let vaults = OpenVault::new();
+        vaults.allow(&vault);
+        vaults.open(&dir.join("sync"), &vault).unwrap();
+        let sources = CopySources::new();
+        let check = |path: PathBuf| sources.check(&vaults, &path);
+
+        assert!(check(vault.join("Home/.ssh/id_rsa")).is_err());
+        assert!(check(vault.join("pic.png")).is_err());
+        assert!(check(vault.join("Home/photo.png")).is_ok());
     }
 
     #[test]

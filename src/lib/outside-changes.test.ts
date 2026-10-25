@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SerializationKit } from "@/components/editor/serialization-kit";
 import { fileExists, readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
 import {
-  findChangedBlocks,
   keepVersion,
   mergeOutsideValue,
   reloadOpenShardIfChanged,
@@ -70,38 +69,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("findChangedBlocks", () => {
-  const same = (a: unknown, b: unknown) => a === b;
-
-  it("finds the blocks between the shared start and end", () => {
-    expect(findChangedBlocks([1, 2, 3, 4], [1, 9, 9, 4], same)).toEqual({
-      start: 1,
-      end: 3,
-      nextEnd: 3,
-    });
-    expect(findChangedBlocks([1, 4], [1, 2, 3, 4], same)).toEqual({
-      start: 1,
-      end: 1,
-      nextEnd: 3,
-    });
-    expect(findChangedBlocks([1, 2, 2], [1, 2], same)).toEqual({
-      start: 2,
-      end: 3,
-      nextEnd: 2,
-    });
-    expect(findChangedBlocks([1, 2], [1, 2], same)).toBeNull();
-  });
-
-  it("ignores block ids", () => {
-    expect(
-      findChangedBlocks(
-        [{ type: "p", id: "a", children: [{ text: "x" }] }],
-        [{ type: "p", id: "b", children: [{ text: "x" }] }],
-      ),
-    ).toBeNull();
-  });
-});
-
 describe("showOutsideValue", () => {
   it("replaces only the changed blocks and keeps the rest as they were", () => {
     const editor = createEditor("One\n\nTwo\n\nThree\n");
@@ -137,7 +104,7 @@ describe("mergeOutsideValue", () => {
       loadMarkdown(saved),
       loadMarkdown(outside),
     );
-    return { editor, merged };
+    return { editor, merged: merged !== null };
   }
 
   it("keeps edits and brings in an outside change after them", () => {
@@ -165,7 +132,7 @@ describe("mergeOutsideValue", () => {
         loadMarkdown(saved),
         loadMarkdown("One\n\nTwo\n\nThree\n\nFour, outside\n"),
       ),
-    ).toBe(true);
+    ).not.toBeNull();
     expect(texts(editor)).toEqual(["One!", "Two", "Three", "Four, outside", ""]);
   });
 
@@ -173,6 +140,77 @@ describe("mergeOutsideValue", () => {
     const { editor, merged } = merge(1, "One\n\nTwo, outside\n\nThree\n\nFour\n");
     expect(merged).toBe(false);
     expect(texts(editor)).toEqual(["One", "Two!", "Three", "Four"]);
+  });
+
+  it("brings in outside changes on both sides of an edit", () => {
+    const { editor, merged } = merge(2, "One, outside\n\nTwo\n\nThree\n\nFour, outside\n");
+    expect(merged).toBe(true);
+    expect(texts(editor)).toEqual(["One, outside", "Two", "Three!", "Four, outside"]);
+  });
+
+  it("brings in outside changes between edits", () => {
+    const editor = createEditor(saved);
+    const before = editor.children;
+    edit(editor, 0, "!");
+    edit(editor, 3, "?");
+    editor.tf.insertNodes({ type: "p", children: [{ text: "Mine" }] }, { at: [2] });
+    const next = mergeOutsideValue(
+      editor,
+      before,
+      loadMarkdown(saved),
+      loadMarkdown("One\n\nTwo, outside\n\nNew\n\nThree\n\nFour\n"),
+    );
+    expect(next).not.toBeNull();
+    expect(texts(editor)).toEqual([
+      "One!",
+      "Two, outside",
+      "New",
+      "Mine",
+      "Three",
+      "Four?",
+    ]);
+    // The next merge compares with the saved text with the outside change in.
+    expect(next!.map((node) => NodeApi.string(node))).toEqual([
+      "One",
+      "Two, outside",
+      "New",
+      "Three",
+      "Four",
+    ]);
+  });
+
+  it("brings in a change to the block next to an edit", () => {
+    const { editor, merged } = merge(1, "One\n\nTwo\n\nThree, outside\n\nFour\n");
+    expect(merged).toBe(true);
+    expect(texts(editor)).toEqual(["One", "Two!", "Three, outside", "Four"]);
+  });
+
+  it("changes nothing when both added blocks at the same place", () => {
+    const editor = createEditor(saved);
+    const before = editor.children;
+    editor.tf.insertNodes({ type: "p", children: [{ text: "Mine" }] }, { at: [2] });
+    const next = mergeOutsideValue(
+      editor,
+      before,
+      loadMarkdown(saved),
+      loadMarkdown("One\n\nTwo\n\nTheirs\n\nThree\n\nFour\n"),
+    );
+    expect(next).toBeNull();
+    expect(texts(editor)).toEqual(["One", "Two", "Mine", "Three", "Four"]);
+  });
+
+  it("keeps undo for the edits it kept", () => {
+    const editor = createEditor(saved);
+    const before = editor.children;
+    edit(editor, 0, "!");
+    mergeOutsideValue(
+      editor,
+      before,
+      loadMarkdown(saved),
+      loadMarkdown("One\n\nTwo, outside\n\nThree\n\nFour\n"),
+    );
+    editor.undo();
+    expect(texts(editor)).toEqual(["One", "Two, outside", "Three", "Four"]);
   });
 });
 
@@ -352,6 +390,61 @@ describe("reloadOpenShardIfChanged", () => {
       expect(store().outsideChange).toBeNull();
       expect(texts(editor)).toEqual(["One, outside", "Two, again"]);
     });
+  });
+
+  it("merges outside changes far from unsaved edits on both sides", async () => {
+    const editor = openNote("One\n\nTwo\n\nThree\n");
+    edit(editor, 1, "!");
+    vi.mocked(readMarkdownFile).mockResolvedValue("Zero\n\nOne\n\nTwo\n\nThree, outside\n");
+
+    await reloadOpenShardIfChanged();
+
+    expect(store().outsideChange).toBeNull();
+    expect(texts(editor)).toEqual(["Zero", "One", "Two!", "Three, outside"]);
+    expect(store().isDirty).toBe(true);
+  });
+
+  it("merges a second outside change before the first merge is saved", async () => {
+    const editor = openNote("One\n\nTwo\n\nThree\n");
+    edit(editor, 1, "!");
+    vi.mocked(readMarkdownFile).mockResolvedValue("One, outside\n\nTwo\n\nThree\n");
+    await reloadOpenShardIfChanged();
+    vi.mocked(readMarkdownFile).mockResolvedValue(
+      "One, outside\n\nTwo\n\nThree, outside\n",
+    );
+    await reloadOpenShardIfChanged();
+
+    expect(store().outsideChange).toBeNull();
+    expect(texts(editor)).toEqual(["One, outside", "Two!", "Three, outside"]);
+  });
+
+  it("keeps undo after an outside change to a shard with no unsaved edits", async () => {
+    const editor = openNote("One\n\nTwo\n");
+    edit(editor, 0, "!");
+    rememberSavedValue(editor, editor.children);
+    store().markSaved("One!\n\nTwo\n");
+    vi.mocked(readMarkdownFile).mockResolvedValue("One!\n\nTwo, outside\n");
+
+    await reloadOpenShardIfChanged();
+    editor.undo();
+
+    expect(texts(editor)).toEqual(["One", "Two, outside"]);
+  });
+
+  it("doesn't ask when an outside save keeps edits saved in two places", async () => {
+    const editor = openNote("One\n\nTwo\n\nThree\n\nFour\n");
+    edit(editor, 0, "!");
+    edit(editor, 3, "?");
+    rememberSavedValue(editor, editor.children);
+    store().markSaved("One!\n\nTwo\n\nThree\n\nFour?\n");
+    vi.mocked(readMarkdownFile).mockResolvedValue(
+      "One!\n\nTwo, outside\n\nThree\n\nFour?\n",
+    );
+
+    await reloadOpenShardIfChanged();
+
+    expect(store().outsideChange).toBeNull();
+    expect(texts(editor)).toEqual(["One!", "Two, outside", "Three", "Four?"]);
   });
 
   it("doesn't ask when both sides made the same change", async () => {

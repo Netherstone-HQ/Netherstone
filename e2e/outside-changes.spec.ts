@@ -46,6 +46,57 @@ test("unsaved typing and an outside change elsewhere are both kept", async ({ pa
   );
 });
 
+test("outside changes before and after unsaved typing are all kept", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Note.md": "# Note\n\nFirst.\n\nSecond.\n\nThird.\n" },
+    open: "Note.md",
+  });
+  await caretAfter(page, "Second.");
+  await page.keyboard.type(" Typed.");
+
+  // As an assistant would: a new opening line and a change at the end.
+  await changeOutside(
+    page,
+    "Note.md",
+    "# Note\n\nAdded first.\n\nFirst.\n\nSecond.\n\nThird, from elsewhere.\n",
+  );
+
+  await expect(editor(page)).toContainText("Third, from elsewhere.");
+  await expect(page.getByText("Choose which version to keep")).toHaveCount(0);
+  // The caret stays put, so typing carries on where it was.
+  await page.keyboard.type(" More.");
+  expect(await lastSave(page, "Note.md")).toBe(
+    "# Note\n\nAdded first.\n\nFirst.\n\nSecond. Typed. More.\n\nThird, from elsewhere.\n",
+  );
+});
+
+test("undo after an outside change takes back your typing, not the change", async ({
+  page,
+}) => {
+  await mockVault(page, {
+    files: { "Note.md": "# Note\n\nFirst.\n\nSecond.\n" },
+    open: "Note.md",
+  });
+  await caretAfter(page, "First.");
+  await page.keyboard.type(" Typed.");
+  await changeOutside(page, "Note.md", "# Note\n\nFirst.\n\nSecond, from elsewhere.\n");
+  await expect
+    .poll(() => lastSave(page, "Note.md"))
+    .toBe("# Note\n\nFirst. Typed.\n\nSecond, from elsewhere.\n");
+
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(editor(page)).not.toContainText("Typed.");
+  await expect(editor(page)).toContainText("Second, from elsewhere.");
+  await expect
+    .poll(() => lastSave(page, "Note.md"))
+    .toBe("# Note\n\nFirst.\n\nSecond, from elsewhere.\n");
+
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect
+    .poll(() => lastSave(page, "Note.md"))
+    .toBe("# Note\n\nFirst. Typed.\n\nSecond, from elsewhere.\n");
+});
+
 test("typing and an outside change to the same paragraph asks which to keep", async ({ page }) => {
   await mockVault(page, {
     files: { "Note.md": "# Note\n\nFirst.\n" },

@@ -83,9 +83,13 @@ doesn't mean opening every version again.
 
 Once a day, after a version is saved, the app packs the repository in the
 background (`src-tauri/src/sync/pack.rs`, under `sync.lock` and
-`history.lock`): everything still in the history, the index and unsettled
-conflicts goes into one pack with similar versions stored as differences,
-and the loose files, older packs and anything unused are removed.
+`history.lock`): the versions, folders, shards and drawings still in the
+history, the index and unsettled conflicts go into one pack with similar
+versions stored as differences, and the loose files, older packs and
+anything unused are removed. Attachments stay loose files, one each: they
+are compressed already, so packing them every day would only cost time and
+memory. The pack checks it's due once it holds the locks, so versions saved
+while one runs don't start another.
 
 Free up space (Settings, Vault, History) removes old versions of
 attachments, meaning deleted files and what replaced files held before, from the

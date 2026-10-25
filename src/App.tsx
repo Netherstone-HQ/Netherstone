@@ -18,7 +18,6 @@ import { useWhatsNew } from "./hooks/useWhatsNew";
 import { SearchModal } from "./components/SearchModal";
 import { OutsideChangeDialog } from "@/components/editor/OutsideChangeDialog";
 import { NestedVaultDialog } from "@/components/vault/NestedVaultDialog";
-import { ImportShardDialog } from "@/components/vault/ImportShardDialog";
 import { Toaster } from "@/components/ui/sonner";
 import { CompanionHost } from "@/components/brand/CompanionHost";
 import { preloadEditorMarkdownWorker } from "@/lib/editor-markdown-worker";
@@ -62,7 +61,6 @@ function App() {
           />
           <OutsideChangeDialog />
           <NestedVaultDialog />
-          <ImportShardDialog />
           <CompanionHost />
           <Toaster />
         </TooltipProvider>

@@ -178,22 +178,6 @@ fn open_media_files_dialog(
         .collect())
 }
 
-#[tauri::command(async)]
-fn import_shard(source_path: String, vault_path: String) -> Result<String, String> {
-    let source = std::path::Path::new(&source_path);
-    let vault = std::path::Path::new(&vault_path);
-
-    if !source.exists() {
-        return Err(format!("Source shard does not exist: {}", source_path));
-    }
-    open_vault_only(&vault_path)?;
-    if !vault.is_dir() {
-        return Err(format!("Vault path is not a directory: {}", vault_path));
-    }
-
-    vault::import_shard_to_vault(source, vault)
-}
-
 /// Opens the native picker for files, or one folder, to import.
 #[tauri::command(async)]
 fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
@@ -1789,7 +1773,6 @@ pub fn run() {
             default_vault_location,
             create_vault,
             open_media_files_dialog,
-            import_shard,
             open_import_dialog,
             list_import_sources,
             read_import_file,

@@ -95,7 +95,8 @@ its date, author, notes and every other file, so the same removal gives the
 same versions on every device. With sync on, the app syncs first, replaces
 the GitHub branch with the new history, and uploads the cumulative list of
 removed blob ids as `refs/netherstone/freed`. A device whose sync downloads
-ids it hasn't removed yet removes them from its own history first, so its
+ids it hasn't removed yet removes them from its own history first (only
+content its history ever held as attachments; other ids are ignored), so its
 history matches GitHub's again and its own new versions merge on top. The
 history is packed right after, so the space is freed at once.
 

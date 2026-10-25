@@ -6,6 +6,13 @@ import {
   type SlateEditor,
 } from "platejs";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
+import {
+  diffBlocks,
+  isSameNode,
+  mergeHunks,
+  nextBlocks,
+  rebaseHistory,
+} from "@/lib/block-merge";
 import { fileExists, readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
@@ -170,12 +177,13 @@ async function reloadOpenShard() {
 
   if (useEditorStore.getState().plateEditor !== editor) return;
 
-  if (
-    savedBlocks &&
-    savedFromDisk &&
-    mergeOutsideValue(editor, savedBlocks, savedFromDisk, value)
-  ) {
+  const merged =
+    savedBlocks && savedFromDisk
+      ? mergeOutsideValue(editor, savedBlocks, savedFromDisk, value)
+      : null;
+  if (merged) {
     // The merged text is saved like an edit.
+    rememberSavedValue(editor, merged);
     state.setMarkdownContent(markdown);
     readTexts.set(editor, markdown);
     state.bumpEditTick();
@@ -267,60 +275,6 @@ function waitForSave(): Promise<void> {
   });
 }
 
-type ChangedRange = {
-  /** First block that differs. */
-  start: number;
-  /** End of the differing blocks in the first value. */
-  end: number;
-  /** End of the differing blocks in the second value. */
-  nextEnd: number;
-};
-
-/**
- * The run of top-level blocks that differs between two values, after the
- * blocks they share at the start and end. Null when they're the same.
- */
-export function findChangedBlocks(
-  current: readonly unknown[],
-  next: readonly unknown[],
-  same: (a: unknown, b: unknown) => boolean = isSameNode,
-): ChangedRange | null {
-  let start = 0;
-  const shortest = Math.min(current.length, next.length);
-  while (start < shortest && same(current[start], next[start])) start += 1;
-
-  let end = current.length;
-  let nextEnd = next.length;
-  while (end > start && nextEnd > start && same(current[end - 1], next[nextEnd - 1])) {
-    end -= 1;
-    nextEnd -= 1;
-  }
-
-  if (start === end && start === nextEnd) return null;
-  return { start, end, nextEnd };
-}
-
-/** Deep equality for Plate nodes, ignoring generated block ids. */
-export function isSameNode(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
-
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false;
-    return a.every((item, index) => isSameNode(item, b[index]));
-  }
-  if (Array.isArray(b)) return false;
-
-  const aRecord = a as Record<string, unknown>;
-  const bRecord = b as Record<string, unknown>;
-  const aKeys = Object.keys(aRecord).filter((key) => key !== "id");
-  const bKeys = Object.keys(bRecord).filter((key) => key !== "id");
-  if (aKeys.length !== bKeys.length) return false;
-  return aKeys.every(
-    (key) => key in bRecord && isSameNode(aRecord[key], bRecord[key]),
-  );
-}
-
 /**
  * True when `outside` loses what the app saved since the shard was read
  * (`read` → `saved`): a block written here isn't in it, or a block deleted
@@ -331,15 +285,17 @@ export function dropsWrittenText(
   saved: Descendant[],
   outside: Descendant[],
 ): boolean {
-  const range = findChangedBlocks(read, saved);
-  if (!range) return false;
+  const hunks = diffBlocks(read, saved);
+  if (!hunks.length) return false;
 
   const has = (blocks: Descendant[], node: Descendant) =>
     blocks.some((block) => isSameNode(block, node));
   const counts = (node: Descendant) => !isEmptyLine(node);
 
-  const written = saved.slice(range.start, range.nextEnd).filter(counts);
-  const deleted = read.slice(range.start, range.end).filter(counts);
+  const written = hunks.flatMap((hunk) => nextBlocks(saved, hunk)).filter(counts);
+  const deleted = hunks
+    .flatMap((hunk) => read.slice(hunk.start, hunk.end))
+    .filter(counts);
   return (
     written.some((node) => !has(outside, node)) ||
     deleted.some((node) => has(outside, node) && !has(saved, node))
@@ -357,97 +313,144 @@ function isEmptyLine(node: Descendant) {
 
 /** Replaces the blocks of `editor` that differ from `value`. */
 export function showOutsideValue(editor: SlateEditor, value: Descendant[]) {
-  const range = findChangedBlocks(editor.children, value);
-  if (!range) return;
-  replaceBlocks(editor, range.start, range.end, value.slice(range.start, range.nextEnd));
+  replaceBlocks(
+    editor,
+    diffBlocks(editor.children, value).map((hunk) => ({
+      start: hunk.start,
+      end: hunk.end,
+      blocks: nextBlocks(value, hunk),
+    })),
+  );
 }
 
 /**
  * Applies the outside change (`saved` → `outside`) to `editor` around its
- * unsaved edits (`saved` → `editor.children`). `savedFromDisk` is the saved
- * text read the same way as `outside`, so unchanged blocks compare equal.
- * Returns false, changing nothing, when both changed the same blocks.
+ * unsaved edits (`saved` → `editor.children`), block run by block run.
+ * `savedFromDisk` is the saved text read the same way as `outside`, so
+ * unchanged blocks compare equal. Returns the saved blocks with the outside
+ * change in, to compare the next edits with, or null, changing nothing, when
+ * both changed the same blocks.
  */
 export function mergeOutsideValue(
   editor: SlateEditor,
   saved: Descendant[],
   savedFromDisk: Descendant[],
   outside: Descendant[],
-): boolean {
+): Descendant[] | null {
   // The two reads of the saved text line up block for block, apart from
   // blocks the editor added at the end (an empty last paragraph).
   if (
     saved.length < savedFromDisk.length ||
     !savedFromDisk.every((node, index) => isSameNode(node, saved[index]))
   ) {
-    return false;
+    return null;
   }
 
-  const outsideRange = findChangedBlocks(savedFromDisk, outside);
-  if (!outsideRange) return true;
+  const theirs = diffBlocks(savedFromDisk, outside);
+  if (!theirs.length) return saved;
 
-  // Unchanged blocks keep their objects, so edits show as new objects.
-  const editRange = findChangedBlocks(saved, editor.children, (a, b) => a === b);
-  if (!editRange) {
-    showOutsideValue(editor, outside);
-    return true;
-  }
-
-  const blocks = outside.slice(outsideRange.start, outsideRange.nextEnd);
-  if (outsideRange.end <= editRange.start) {
-    replaceBlocks(editor, outsideRange.start, outsideRange.end, blocks);
-    return true;
-  }
-  if (outsideRange.start >= editRange.end) {
-    // Edits before it moved the blocks after them.
-    const shift = editRange.nextEnd - editRange.end;
-    replaceBlocks(
-      editor,
-      outsideRange.start + shift,
-      outsideRange.end + shift,
-      blocks,
+  const edited = editor.children;
+  const ours = diffBlocks(saved, edited, { byIdentity: true });
+  const placed = mergeHunks(ours, theirs, (mine, hunk) => {
+    const mineBlocks = nextBlocks(edited, mine);
+    const theirBlocks = nextBlocks(outside, hunk);
+    return (
+      mineBlocks.length === theirBlocks.length &&
+      mineBlocks.every((node, index) => isSameNode(node, theirBlocks[index]))
     );
-    return true;
+  });
+  if (!placed) return null;
+
+  replaceBlocks(
+    editor,
+    placed.map(({ hunk, start }) => ({
+      start,
+      end: start + hunk.end - hunk.start,
+      blocks: nextBlocks(outside, hunk),
+    })),
+  );
+
+  // The saved blocks with theirs in, as the editor now holds them, so the
+  // next edits still show as new objects. A change both made alike is
+  // taken as theirs read it.
+  const placedAt = new Map(placed.map(({ hunk, start }) => [hunk, start]));
+  const next: Descendant[] = [];
+  let from = 0;
+  let shift = 0;
+  for (const hunk of theirs) {
+    next.push(...saved.slice(from, hunk.start));
+    const start = placedAt.get(hunk);
+    if (start === undefined) {
+      next.push(...nextBlocks(outside, hunk));
+    } else {
+      const count = hunk.nextEnd - hunk.nextStart;
+      next.push(...editor.children.slice(start + shift, start + shift + count));
+      shift += count - (hunk.end - hunk.start);
+    }
+    from = hunk.end;
   }
-  return false;
+  next.push(...saved.slice(from));
+  return next;
 }
 
-function replaceBlocks(
-  editor: SlateEditor,
-  start: number,
-  end: number,
-  blocks: Descendant[],
-) {
+/**
+ * Replaces blocks of `editor` (`start`–`end`, sorted, in its blocks as they
+ * are) without saving that to history. Undo steps elsewhere keep working.
+ */
+function replaceBlocks(editor: SlateEditor, changes: BlockChange[]) {
+  if (!changes.length) return;
   outsideChangeEditors.add(editor);
   // The cursor's text is going; letting the cursor go keeps the editor from
   // scrolling to wherever it would land.
   const { selection } = editor;
   if (
     selection &&
-    [selection.anchor, selection.focus].some(
-      (point) => point.path[0] >= start && point.path[0] < end,
+    [selection.anchor, selection.focus].some((point) =>
+      changes.some(
+        ({ start, end }) => point.path[0] >= start && point.path[0] < end,
+      ),
     )
   ) {
     editor.tf.deselect();
   }
+
+  const applied = editor.operations.length;
+  let expected = 0;
   editor.tf.withoutSaving(() => {
     editor.tf.withoutNormalizing(() => {
-      for (let index = end - 1; index >= start; index -= 1) {
-        editor.tf.apply({
-          type: "remove_node",
-          path: [index],
-          node: editor.children[index],
+      // From the end, so the blocks before each change stay put.
+      for (const { start, end, blocks } of [...changes].reverse()) {
+        for (let index = end - 1; index >= start; index -= 1) {
+          editor.tf.apply({
+            type: "remove_node",
+            path: [index],
+            node: editor.children[index],
+          });
+        }
+        blocks.forEach((node, offset) => {
+          editor.tf.apply({ type: "insert_node", path: [start + offset], node });
         });
+        expected += end - start + blocks.length;
       }
-      blocks.forEach((node, offset) => {
-        editor.tf.apply({ type: "insert_node", path: [start + offset], node });
-      });
     });
   });
-  // Undo steps from before can't apply to the new text.
-  editor.history.undos = [];
-  editor.history.redos = [];
+
+  const extra = editor.operations
+    .slice(applied)
+    .filter((op) => op.type !== "set_selection").length - expected;
+  if (extra === 0) {
+    rebaseHistory(
+      editor,
+      changes.map(({ start, end, blocks }) => ({ start, end, count: blocks.length })),
+    );
+  } else {
+    // Normalizing changed more than the blocks; old steps can't apply.
+    editor.history.undos = [];
+    editor.history.redos = [];
+  }
 }
+
+type BlockChange = { start: number; end: number; blocks: Descendant[] };
 
 /** `Note.md` → `Note (Changed outside).md`, numbered if that name is taken. */
 export async function freeCopyPath(filePath: string) {

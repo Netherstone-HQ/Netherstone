@@ -80,6 +80,22 @@ impl OpenVault {
         }
     }
 
+    /// Checks that `path` is in the open vault where it leads, too: a link in
+    /// the vault to somewhere else isn't.
+    pub fn check_real_path(&self, path: &Path) -> Result<(), String> {
+        self.check_path(path)?;
+        let open = lock(&self.open).clone();
+        let inside = open
+            .and_then(|open| open.canonicalize().ok())
+            .zip(path.canonicalize().ok())
+            .is_some_and(|(open, real)| is_within(&open, &real));
+        if inside {
+            Ok(())
+        } else {
+            Err(format!("{} leads outside the open vault", path.display()))
+        }
+    }
+
     /// Checks that `path` is inside the open vault, not the vault itself.
     pub fn check_inside(&self, path: &Path) -> Result<(), String> {
         self.check_path(path)?;

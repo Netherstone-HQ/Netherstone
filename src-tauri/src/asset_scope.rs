@@ -17,9 +17,10 @@ const SHOWABLE_EXTENSIONS: &[&str] = &[
     "wmv", "flv", "ogv",
 ];
 
-/// Lets the webview show the vault's files, including folders and files
-/// linked into it from elsewhere (an attachment folder kept in a synced
-/// folder, say), which the scope would otherwise judge by where they lead.
+/// Lets the webview show the vault's files, and the pictures, sound and
+/// video in folders and files linked into it from elsewhere (an attachment
+/// folder kept in a synced folder, say), which the scope would otherwise
+/// judge by where they lead. Other files behind a link aren't served.
 pub fn allow_vault<R: Runtime>(app: &AppHandle<R>, vault_path: &Path) {
     let scope = app.asset_protocol_scope();
     if let Err(error) = scope.allow_directory(vault_path, true) {
@@ -30,12 +31,7 @@ pub fn allow_vault<R: Runtime>(app: &AppHandle<R>, vault_path: &Path) {
         );
     }
     for target in linked_targets(vault_path) {
-        let allowed = if target.is_dir() {
-            scope.allow_directory(&target, true)
-        } else {
-            scope.allow_file(&target)
-        };
-        if let Err(error) = allowed {
+        if let Err(error) = scope.allow_file(&target) {
             eprintln!(
                 "[Netherstone] Couldn't allow linked vault files {}: {}",
                 target.display(),
@@ -56,11 +52,35 @@ pub fn allow_thumbnail<R: Runtime>(app: &AppHandle<R>, path: &Path) {
     }
 }
 
-/// Where the links inside a vault lead. Links aren't followed further, so a
-/// link back into the vault can't loop.
+/// The picture, sound and video files the links inside a vault lead to:
+/// linked files, and the files in linked folders. Links aren't followed
+/// further, so a link back into the vault can't loop.
 fn linked_targets(vault_path: &Path) -> Vec<PathBuf> {
     let mut targets = Vec::new();
-    let mut pending = vec![vault_path.to_path_buf()];
+    let mut linked_folders = Vec::new();
+    walk(vault_path, &mut |link| {
+        if let Ok(target) = link.canonicalize() {
+            if target.is_dir() {
+                linked_folders.push(target);
+            } else if is_showable(&target) {
+                targets.push(target);
+            }
+        }
+    }, &mut |_| {});
+    for folder in linked_folders {
+        walk(&folder, &mut |_| {}, &mut |file| {
+            if is_showable(file) {
+                targets.push(file.to_path_buf());
+            }
+        });
+    }
+    targets
+}
+
+/// Goes through the folders under `dir`, without following links, calling
+/// `on_link` with each link and `on_file` with each file.
+fn walk(dir: &Path, on_link: &mut dyn FnMut(&Path), on_file: &mut dyn FnMut(&Path)) {
+    let mut pending = vec![dir.to_path_buf()];
     while let Some(dir) = pending.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
@@ -71,17 +91,16 @@ fn linked_targets(vault_path: &Path) -> Vec<PathBuf> {
             };
             let path = entry.path();
             if file_type.is_symlink() {
-                if let Ok(target) = path.canonicalize() {
-                    if target.is_dir() || is_showable(&target) {
-                        targets.push(target);
-                    }
+                on_link(&path);
+            } else if file_type.is_dir() {
+                if entry.file_name() != ".git" {
+                    pending.push(path);
                 }
-            } else if file_type.is_dir() && entry.file_name() != ".git" {
-                pending.push(path);
+            } else {
+                on_file(&path);
             }
         }
     }
-    targets
 }
 
 pub fn is_showable(path: &Path) -> bool {
@@ -94,10 +113,13 @@ pub fn show_linked_file<R: Runtime>(app: &AppHandle<R>, path: &Path) -> bool {
     if !path.is_file() {
         return false;
     }
-    if is_showable(path) {
+    // The scope judges a file by where it leads, so that's what is allowed,
+    // and only when that is a picture, sound or video file.
+    let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if is_showable(&target) {
         let scope = app.asset_protocol_scope();
-        if !scope.is_allowed(path) {
-            if let Err(error) = scope.allow_file(path) {
+        if !scope.is_allowed(&target) {
+            if let Err(error) = scope.allow_file(&target) {
                 eprintln!(
                     "[Netherstone] Couldn't allow linked file {}: {}",
                     path.display(),
@@ -115,13 +137,16 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn links_in_the_vault_are_followed_once() {
+    fn only_media_behind_links_in_the_vault_is_served() {
         let root = std::env::temp_dir().join(format!("netherstone-scope-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let vault = root.join("Vault");
         let synced = root.join("Synced");
         std::fs::create_dir_all(vault.join("Notes")).unwrap();
-        std::fs::create_dir_all(&synced).unwrap();
+        std::fs::create_dir_all(synced.join("Clips")).unwrap();
+        std::fs::write(synced.join("pic.png"), b"p").unwrap();
+        std::fs::write(synced.join("Clips/clip.mp4"), b"v").unwrap();
+        std::fs::write(synced.join("id_rsa"), b"k").unwrap();
         std::fs::write(root.join("photo.png"), b"p").unwrap();
         std::fs::write(root.join("secret.txt"), b"s").unwrap();
         std::os::unix::fs::symlink(&synced, vault.join("_attachments")).unwrap();
@@ -133,7 +158,11 @@ mod tests {
         let mut targets = linked_targets(&vault);
         targets.sort();
         let canonical = |path: PathBuf| path.canonicalize().unwrap();
-        let mut expected = vec![canonical(synced.clone()), canonical(root.join("photo.png"))];
+        let mut expected = vec![
+            canonical(synced.join("pic.png")),
+            canonical(synced.join("Clips/clip.mp4")),
+            canonical(root.join("photo.png")),
+        ];
         expected.sort();
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(targets, expected);

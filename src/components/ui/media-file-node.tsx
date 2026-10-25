@@ -7,12 +7,13 @@ import type { PlateElementProps } from "platejs/react";
 
 import { useMediaState } from "@platejs/media/react";
 import { ResizableProvider } from "@platejs/resizable";
-import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { LinkIcon } from "lucide-react";
 import { PlateElement, useReadOnly, withHOC } from "platejs/react";
 import { toast } from "sonner";
 
 import { useVaultStore } from "@/store";
+import { openFile } from "@/lib/commands";
 import {
   resolveMediaSource,
   resolveMediaSourceSync,
@@ -100,7 +101,7 @@ async function openResolvedSource(
   }
 
   if (resolved.kind === "vault" || resolved.kind === "local") {
-    await openPath(target);
+    await openFile(target);
     return;
   }
 
@@ -113,7 +114,7 @@ async function openResolvedSource(
     return;
   }
 
-  await openPath(target);
+  await openFile(target);
 }
 
 async function revealResolvedSource(
@@ -223,7 +224,11 @@ export const FileElement = withHOC(
 
         toast.error(`Couldn't open ${displayName}`, {
           description:
-            error instanceof Error ? error.message : undefined,
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+                ? error
+                : undefined,
         });
       }
     }, [displayName, resolvedSource, source]);

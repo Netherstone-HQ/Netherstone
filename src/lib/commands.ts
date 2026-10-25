@@ -382,6 +382,15 @@ export async function showLinkedFile(filePath: string): Promise<boolean> {
   return invoke<boolean>("show_linked_file", { filePath });
 }
 
+/**
+ * Opens a file a shard links to in the app this device uses for it.
+ * Programs, scripts and shortcuts are refused.
+ */
+export async function openFile(path: string): Promise<void> {
+  assertTauri();
+  return invoke<void>("open_file", { path });
+}
+
 // ── Drawings ──────────────────────────────────────────────────────────────────
 
 /** Reads the raw JSON of a `.excalidraw` drawing in the vault. */

@@ -1,4 +1,4 @@
-import { ImportError, type Importer, type PlateNode } from "../../types";
+import { ImportError, type Importer } from "../../types";
 import type { FromWorker, ToWorker } from "./protocol";
 
 /** How often a cancel is looked for while the worker reads. */
@@ -57,7 +57,7 @@ export const docxImporter: Importer = {
     let finished = false;
 
     try {
-      const nodes = await new Promise<PlateNode[]>((resolve, reject) => {
+      const markdown = await new Promise<string>((resolve, reject) => {
         // Throws once the import is cancelled.
         watch = setInterval(() => context.checkpoint().catch(reject), CANCEL_CHECK_MS);
         worker.onmessage = async ({ data }: MessageEvent<FromWorker>) => {
@@ -77,7 +77,7 @@ export const docxImporter: Importer = {
               break;
             case "done":
               finished = true;
-              resolve(data.nodes);
+              resolve(data.markdown);
               break;
             case "failed":
               finished = true;
@@ -87,9 +87,9 @@ export const docxImporter: Importer = {
         };
         worker.onerror = (event) => reject(new Error(event.message));
         worker.onmessageerror = () => reject(new Error());
-        send({ type: "read", bytes, name: file.name.replace(/\.[^.]+$/, "") });
+        send({ type: "read", bytes, name: file.name.replace(/\.[^.]+$/, ""), filePath: context.shardPath });
       });
-      return { nodes };
+      return { markdown };
     } finally {
       clearInterval(watch);
       if (finished && read + bytes.length < WORKER_BYTES) keepWorker(worker, read + bytes.length);

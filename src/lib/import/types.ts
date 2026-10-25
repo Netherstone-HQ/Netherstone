@@ -33,6 +33,8 @@ export interface ImportFile {
 
 export interface ImportContext {
   readonly file: ImportFile;
+  /** Where the shard will be written, which links in it are relative to. */
+  readonly shardPath: string;
   /**
    * Stores a file (an image, a PDF a page links to) in the vault's
    * attachments and returns the link the shard should use for it.

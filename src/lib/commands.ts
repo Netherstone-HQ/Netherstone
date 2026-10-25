@@ -163,18 +163,6 @@ export async function openMediaFilesDialog(
 
 // ── Shards ────────────────────────────────────────────────────────────────────
 
-/**
- * Copies a shard from outside the vault into the vault root.
- * Returns the path of the newly created file inside the vault.
- */
-export async function importShard(
-  sourcePath: string,
-  vaultPath: string,
-): Promise<string> {
-  assertTauri();
-  return invoke<string>("import_shard", { sourcePath, vaultPath });
-}
-
 /** A file found for importing: its path, and its path under what was picked. */
 export interface ImportSourceFile {
   path: string;

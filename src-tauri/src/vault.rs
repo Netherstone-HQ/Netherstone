@@ -206,49 +206,6 @@ fn is_empty_dir(path: &Path) -> bool {
     std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
 }
 
-// ── Importer ─────────────────────────────────────────────────────────────────
-
-/// Copies the shard `source` into `vault_root`, returning the path of the new
-/// file.
-///
-/// If a file with the same name already exists at the destination, a numeric
-/// suffix is appended before the extension until a free name is found:
-/// `shard.md` → `shard_1.md` → `shard_2.md` → …
-pub fn import_shard_to_vault(source: &Path, vault_root: &Path) -> Result<String, String> {
-    if !is_markdown_path(source) {
-        return Err(format!("Not a shard: {}", source.display()));
-    }
-    let content =
-        std::fs::read(source).map_err(|e| format!("Failed to copy shard: {}", e))?;
-    let writes = crate::locks::vault_writes()?;
-    let file_name = source
-        .file_name()
-        .ok_or_else(|| format!("Invalid source path: {}", source.display()))?;
-
-    let mut dest: PathBuf = vault_root.join(file_name);
-
-    // Collision guard — find a free name before touching the filesystem.
-    if dest.exists() {
-        let stem = source
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("shard");
-
-        let mut counter: u32 = 1;
-        loop {
-            dest = vault_root.join(format!("{}_{}.md", stem, counter));
-            if !dest.exists() {
-                break;
-            }
-            counter += 1;
-        }
-    }
-
-    write_atomically(&writes, &dest, &content)?;
-
-    Ok(dest.to_string_lossy().to_string())
-}
-
 // ── Drawings ─────────────────────────────────────────────────────────────────
 
 /// Contents of a newly created drawing: an empty Excalidraw scene.

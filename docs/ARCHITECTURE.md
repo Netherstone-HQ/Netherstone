@@ -20,6 +20,9 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
 - Rust knows which vault is open (`vault_access.rs`), and file commands
   refuse paths outside it. A folder opens as the vault when it already has
   the `.netherstone` marker or was just picked or created in a native dialog.
+  A new vault goes only in Documents or a folder picked in the folder
+  dialog. Linked files open through `open_file`, which refuses programs,
+  scripts and shortcuts (`open_access.rs`).
 - `watcher.rs` uses `notify` to pick up changes made outside the app to
   shards, drawings, folders and attachments, update the index and refresh
   the UI.

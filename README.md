@@ -18,6 +18,7 @@ isn't code-signed yet. We plan to sign it in a future version.
 - An editor with rich formatting and no syntax in the way
 - Instant search, `@` links and `#tags`
 - Drawings, images, PDFs, audio and video
+- A Gallery of every attachment in your vault
 - Charts from tables, and an Overview of your vault
 - Every version of a shard or drawing in History
 - Import from Word, PDF, HTML and more, and export to PDF, Word or HTML

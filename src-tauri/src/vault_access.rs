@@ -89,6 +89,17 @@ impl OpenVault {
         }
     }
 
+    /// Checks that `path` is inside `vault_path`, the open vault or another
+    /// of the user's vaults.
+    pub fn check_path_in_known_vault(&self, vault_path: &Path, path: &Path) -> Result<(), String> {
+        self.check_known_vault(vault_path)?;
+        if is_within(vault_path, path) {
+            Ok(())
+        } else {
+            Err(format!("{} is outside {}", path.display(), vault_path.display()))
+        }
+    }
+
     /// Checks that `path` is the open vault or inside it.
     pub fn check_path(&self, path: &Path) -> Result<(), String> {
         match &*lock(&self.open) {
@@ -183,6 +194,26 @@ mod tests {
         assert!(vaults.check_path(&dir.join("Vault2/Note.md")).is_err());
         assert!(vaults.check_path(&dir.join("secret.txt")).is_err());
         assert!(vaults.check_vault(&dir).is_err());
+    }
+
+    #[test]
+    fn paths_may_be_in_a_vault_the_app_left() {
+        let dir = temp_dir("known-vault");
+        let (first, second) = (dir.join("First"), dir.join("Second"));
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let vaults = OpenVault::new();
+        vaults.allow(&first);
+        vaults.allow(&second);
+        vaults.open(&dir.join("sync"), &first).unwrap();
+        vaults.open(&dir.join("sync"), &second).unwrap();
+
+        let check = |vault: &Path, path: &Path| vaults.check_path_in_known_vault(vault, path);
+        assert!(check(&first, &first.join("Note.md")).is_ok());
+        assert!(check(&second, &second.join("Note.md")).is_ok());
+        assert!(check(&first, &second.join("Note.md")).is_err());
+        assert!(check(&first, &first.join("../secret.txt")).is_err());
+        assert!(check(&dir, &dir.join("secret.txt")).is_err());
     }
 
     #[test]

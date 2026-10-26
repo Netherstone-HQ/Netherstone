@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Descendant } from "platejs";
+import { useVaultStore } from "@/store/vault";
 
 export type PlateAstValue = Descendant[];
 
@@ -20,6 +21,8 @@ export type OpenMarkdownFileResult = {
 };
 
 export type UpsertAstCacheInput = {
+  /** The vault the shard is in. Defaults to the open vault. */
+  vaultPath?: string;
   filePath: string;
   markdown: string;
   plateValue: unknown;
@@ -86,13 +89,16 @@ export async function openMarkdownFile(
 }
 
 export async function upsertAstCache({
+  vaultPath = useVaultStore.getState().currentVaultPath ?? undefined,
   filePath,
   markdown,
   plateValue,
 }: UpsertAstCacheInput): Promise<void> {
   assertTauri();
   try {
+    if (!vaultPath) throw new Error("No vault is open");
     await invoke("upsert_ast_cache", {
+      vaultPath,
       filePath,
       markdown,
       plateValue,

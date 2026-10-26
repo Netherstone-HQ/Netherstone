@@ -7,7 +7,7 @@ import { SerializationKit } from "@/components/editor/serialization-kit";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { rememberSavedValue } from "@/lib/outside-changes";
-import { useEditorStore } from "@/store";
+import { useEditorStore, useVaultStore } from "@/store";
 import { loadMarkdown } from "@/test/markdown";
 import { useAutosave, writeOpenShardCache } from "./useAutosave";
 
@@ -37,6 +37,7 @@ vi.mock("@/components/editor/lib/session-value", () => ({
 }));
 
 const AUTOSAVE_DELAY_MS = 1800;
+const VAULT = "C:/vault";
 const NOTE_A = "C:/vault/a.md";
 const NOTE_B = "C:/vault/b.md";
 
@@ -92,6 +93,7 @@ beforeEach(() => {
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   closeRequestHandler = null;
+  useVaultStore.setState({ currentVaultPath: VAULT });
   renderHook(() => useAutosave());
 });
 
@@ -160,6 +162,7 @@ describe("autosave", () => {
 
     await writeOpenShardCache();
     expect(upsertAstCache).toHaveBeenCalledWith({
+      vaultPath: VAULT,
       filePath: NOTE_A,
       markdown: "Hello!\n",
       plateValue: editor.children,
@@ -284,6 +287,7 @@ describe("autosave", () => {
     await writeOpenShardCache();
 
     expect(upsertAstCache).toHaveBeenCalledWith({
+      vaultPath: VAULT,
       filePath: NOTE_A,
       markdown: "Hello one\n",
       plateValue: savedValue,
@@ -323,6 +327,29 @@ describe("autosave", () => {
     expect(savedFiles()).toEqual([
       { filePath: NOTE_A, content: "Hello world\n" },
     ]);
+    expect(closeWindow).toHaveBeenCalled();
+  });
+
+  it("waits for a cache write started on leaving before the window closes", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+    type(editor, "!");
+    await wait(AUTOSAVE_DELAY_MS);
+
+    let finishCacheWrite = () => {};
+    vi.mocked(upsertAstCache).mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishCacheWrite = resolve)),
+    );
+    void writeOpenShardCache();
+    await act(async () => {});
+
+    const preventDefault = vi.fn();
+    const closing = act(() => closeRequestHandler!({ preventDefault }));
+    await act(async () => {});
+    expect(preventDefault).toHaveBeenCalled();
+    expect(closeWindow).not.toHaveBeenCalled();
+
+    finishCacheWrite();
+    await closing;
     expect(closeWindow).toHaveBeenCalled();
   });
 

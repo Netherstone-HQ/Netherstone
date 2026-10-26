@@ -814,13 +814,17 @@ fn open_markdown_file(file_path: String) -> Result<OpenMarkdownFileResult, Strin
     })
 }
 
+/// Caches a shard's editor tree. A shard's cache is written after the app
+/// leaves it, maybe on another vault by then, so any vault may, not only the
+/// open one.
 #[tauri::command(async)]
 fn upsert_ast_cache(
+    vault_path: String,
     file_path: String,
     markdown: String,
     plate_value: serde_json::Value,
 ) -> Result<(), String> {
-    in_open_vault(&file_path)?;
+    vault_access::get().check_path_in_known_vault(Path::new(&vault_path), Path::new(&file_path))?;
     let content_hash = hash_markdown_content(&markdown);
     let expected_cache_version = AST_CACHE_VERSION;
     let conn = db::open_connection()?;

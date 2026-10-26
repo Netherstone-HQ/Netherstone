@@ -49,7 +49,7 @@ export async function closeEditorFile() {
  */
 async function saveOpenShard(): Promise<boolean> {
   await flushPendingAutosave();
-  await writeOpenShardCache();
+  void writeOpenShardCache();
 
   const { isDirty, currentFilePath } = useEditorStore.getState();
   if (!isDirty || !currentFilePath) return true;

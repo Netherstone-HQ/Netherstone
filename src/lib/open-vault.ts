@@ -43,7 +43,7 @@ async function closeFilesOutside(vaultPath: string) {
   const openPath = useEditorStore.getState().currentFilePath;
   if (!openPath || isPathWithin(openPath, vaultPath)) return;
   await flushPendingAutosave().catch(() => {});
-  await writeOpenShardCache();
+  void writeOpenShardCache();
   // Edits that couldn't be saved stay open rather than being lost.
   if (!useEditorStore.getState().isDirty) useEditorStore.getState().closeFile();
 }

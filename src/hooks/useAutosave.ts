@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEditorStore } from "@/store";
+import { useEditorStore, useVaultStore } from "@/store";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
@@ -26,28 +26,42 @@ let flushActiveAutosave: (() => Promise<void>) | null = null;
  * The open shard's last saved text and the editor value it was saved from.
  * It goes into the editor cache when the shard is switched or closed, not
  * on every save: the cache only matters the next time the shard opens.
+ * It keeps the vault it was saved in, so the write still lands after the
+ * app moves on to another vault.
  */
 let pendingCacheEntry: {
+  vaultPath: string;
   filePath: string;
   markdown: string;
   plateValue: unknown;
 } | null = null;
 
-/** Writes the open shard's last save to the editor cache. */
-export async function writeOpenShardCache(): Promise<void> {
-  const entry = pendingCacheEntry;
-  if (!entry) return;
-  pendingCacheEntry = null;
+/** The cache writes still running, one after another. */
+let cacheWrites: Promise<void> | null = null;
 
-  try {
-    await upsertAstCache(entry);
-  } catch (error) {
-    console.error(
-      "[Netherstone] AST cache write failed:",
-      entry.filePath,
-      error,
-    );
+/**
+ * Writes the open shard's last save to the editor cache. Leaving a shard
+ * doesn't need to wait for it; quitting does.
+ */
+export function writeOpenShardCache(): Promise<void> {
+  const entry = pendingCacheEntry;
+  if (entry) {
+    pendingCacheEntry = null;
+    const write: Promise<void> = (cacheWrites ?? Promise.resolve())
+      .then(() => upsertAstCache(entry))
+      .catch((error) =>
+        console.error(
+          "[Netherstone] AST cache write failed:",
+          entry.filePath,
+          error,
+        ),
+      )
+      .finally(() => {
+        if (cacheWrites === write) cacheWrites = null;
+      });
+    cacheWrites = write;
   }
+  return cacheWrites ?? Promise.resolve();
 }
 
 /**
@@ -198,8 +212,14 @@ export function useAutosave() {
           expectedContent,
         });
 
-        if (savedValue) {
-          pendingCacheEntry = { filePath, markdown: content, plateValue: savedValue };
+        const vaultPath = useVaultStore.getState().currentVaultPath;
+        if (savedValue && vaultPath) {
+          pendingCacheEntry = {
+            vaultPath,
+            filePath,
+            markdown: content,
+            plateValue: savedValue,
+          };
         }
 
         if (editor && savedValue) rememberSavedValue(editor, savedValue);
@@ -301,6 +321,7 @@ export function useAutosave() {
         inFlightRef.current ||
         !!(latestDirtyRef.current && latestFilePathRef.current) ||
         pendingCacheEntry !== null ||
+        cacheWrites !== null ||
         hasPendingDrawingSave();
 
       if (!hasPendingPersistenceWork) {

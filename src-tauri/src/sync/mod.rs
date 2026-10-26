@@ -80,6 +80,59 @@ pub fn snapshot_outside_change(
     commit_snapshot(sync_root, vault_path, plan, note)
 }
 
+/// A vault file an AI app changed: its path in the vault, with `/`
+/// separators, and its bytes before and after (`None` when it wasn't there).
+pub struct AppChange {
+    pub path: String,
+    pub before: Option<Vec<u8>>,
+    pub after: Option<Vec<u8>>,
+}
+
+/// Saves the versions around an AI app's change to `vault_path`: the files
+/// as they were before, so the change can be undone, then as the app left
+/// them, noted as changed by `app` with its `summary`. Only the changed
+/// files are read and committed. The caller holds `locks::history` from
+/// before the change until this returns, so no other version lands between.
+pub fn save_app_change(
+    sync_root: &Path,
+    vault_path: &Path,
+    changes: &[AppChange],
+    app: &str,
+    summary: Option<&str>,
+) -> Result<(), String> {
+    fn kept<'a>(bytes: &'a Option<Vec<u8>>, path: &str) -> Option<&'a [u8]> {
+        bytes
+            .as_deref()
+            .filter(|bytes| planner::is_backed_up(Path::new(path), path, bytes.len() as u64))
+    }
+    let before: Vec<_> = changes.iter().map(|c| (c.path.as_str(), kept(&c.before, &c.path))).collect();
+    let after: Vec<_> = changes.iter().map(|c| (c.path.as_str(), kept(&c.after, &c.path))).collect();
+    let note = changes
+        .iter()
+        .filter(|change| change.after.is_some())
+        .map(|change| {
+            history::Note::ChangedBy {
+                path: change.path.clone(),
+                app: app.to_string(),
+                summary: summary.map(str::to_string),
+            }
+            .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut record = state::load_or_create_record(sync_root, vault_path)?;
+    let repository = repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault_path)?;
+    repo::commit_files(&repository, &before, None)?;
+    let commit = repo::commit_files(&repository, &after, (!note.is_empty()).then_some(note.as_str()))?;
+    if let Some(commit) = commit {
+        record.last_commit = Some(commit.id);
+        record.last_commit_at = Some(commit.time);
+        state::save_record(sync_root, &record)?;
+    }
+    Ok(())
+}
+
 /// `file_path` relative to the vault, with `/` separators, as the history
 /// stores it.
 pub fn vault_relative(vault_path: &Path, file_path: &Path) -> Result<String, String> {

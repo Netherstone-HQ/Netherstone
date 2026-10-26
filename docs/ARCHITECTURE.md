@@ -103,6 +103,28 @@ window (`src/components/export/`), which loads only when it first opens.
 - Rust only writes an export to a path picked in its save dialog, and only
   reads pictures for one.
 
+## AI apps (MCP)
+
+AI apps reach the vault through an MCP server: the app's own program
+started as `Netherstone mcp` by the AI app, talking over stdin and stdout
+with no window (`src-tauri/src/mcp.rs`, on the official `rmcp` SDK). It
+works on the vault the app opened last and does nothing while AI apps are
+turned off in Settings; both are kept in the `settings` table, which every
+Netherstone process reads.
+
+- The tools live in `src-tauri/src/tools/`, apart from the server: they take
+  a vault and JSON arguments and return JSON, so the in-app assistant can
+  call the same ones. Paths are vault-relative, lists come a page at a
+  time, and nothing is ever deleted.
+- Every change saves versions around it in local history, only of the
+  files it changed: the files as they were, then as the AI app left them,
+  noted "Changed by" the app with its summary (`sync::save_app_change`).
+- The server indexes the vault once when it starts, then only what the
+  file watcher reports (`tools/index.rs`). Writes share the app's locks
+  (`locks.rs`), so the two never write at once.
+- A drawing an AI app embeds has no picture yet; the app makes it when the
+  shard is opened.
+
 ## Subsystems with their own docs
 
 - [Attachments](ATTACHMENTS_ARCHITECTURE.md): the `_attachments/` folder,

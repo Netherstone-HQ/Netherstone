@@ -7,10 +7,12 @@ mod github;
 mod import;
 mod locks;
 mod markdown_text;
+mod mcp;
 mod open_access;
 mod shard_links;
 mod splash;
 mod sync;
+mod tools;
 mod updater;
 mod vault;
 mod vault_access;
@@ -107,9 +109,30 @@ fn open_vault_dialog(app: tauri::AppHandle) -> Option<String> {
 
 /// Makes `vault_path` the open vault, the only folder the other commands
 /// touch. It must be a vault already, or a folder just picked or created.
+/// It's kept as the vault opened last, which the MCP server works on.
 #[tauri::command(async)]
 fn open_vault(vault_path: String) -> Result<(), String> {
-    vault_access::get().open(&sync::sync_root()?, Path::new(&vault_path))
+    let vault = Path::new(&vault_path);
+    vault_access::get().open(&sync::sync_root()?, vault)?;
+    let kept = db::open_connection()
+        .and_then(|conn| db::settings::set_last_vault(&conn, vault).map_err(|e| e.to_string()));
+    if let Err(error) = kept {
+        eprintln!("[Netherstone] Couldn't keep the vault opened last: {}", error);
+    }
+    Ok(())
+}
+
+/// Whether AI apps may use the vault through the MCP server.
+#[tauri::command(async)]
+fn mcp_get_enabled() -> Result<bool, String> {
+    db::settings::mcp_enabled(&db::open_connection()?).map_err(|e| e.to_string())
+}
+
+/// Lets AI apps use the vault through the MCP server, or stops them. A
+/// server already running sees the change on its next call.
+#[tauri::command(async)]
+fn mcp_set_enabled(enabled: bool) -> Result<(), String> {
+    db::settings::set_mcp_enabled(&db::open_connection()?, enabled).map_err(|e| e.to_string())
 }
 
 /// Where new vaults go unless the user picks somewhere else: their
@@ -278,7 +301,7 @@ fn save_imported_shard(vault_path: String, file_path: String, content: String) -
     let writes = locks::vault_writes()?;
     let path = import::prepare_new_shard(Path::new(&vault_path), Path::new(&file_path))?;
     let path = path.to_string_lossy().into_owned();
-    if let Err(error) = write_shard(&writes, &path, &content) {
+    if let Err(error) = write_shard(&writes, Path::new(&vault_path), &path, &content) {
         let _ = std::fs::remove_file(&path);
         return Err(error);
     }
@@ -290,13 +313,14 @@ fn save_imported_shard(vault_path: String, file_path: String, content: String) -
 #[tauri::command(async)]
 fn fix_imported_links(shard_paths: Vec<String>, old_path: String, new_path: String) -> Result<(), String> {
     let moved = [shard_links::MovedShard { old: old_path, new: new_path }];
+    let vault = vault_access::get().open_vault()?;
     let writes = locks::vault_writes()?;
     for shard in &shard_paths {
         in_open_vault(shard)?;
         let markdown = std::fs::read_to_string(shard)
             .map_err(|e| format!("Failed to read {}: {}", shard, e))?;
         if let Some(fixed) = shard_links::rewrite_moved_links(&markdown, shard, shard, &moved) {
-            write_shard(&writes, shard, &fixed)?;
+            write_shard(&writes, &vault, shard, &fixed)?;
         }
     }
     Ok(())
@@ -393,7 +417,7 @@ fn reconcile_attachments(vault_path: String) -> Result<db::attachments::Attachme
 
     let mut shard_paths = Vec::new();
     for node in &vault::scan_dir(vault) {
-        collect_file_paths(node, &mut shard_paths);
+        vault::collect_file_paths(node, &mut shard_paths);
     }
 
     let conn = db::open_connection()?;
@@ -449,7 +473,7 @@ fn clean_up_attachments(
 
     let mut shard_paths = Vec::new();
     for node in &vault::scan_dir(vault) {
-        collect_file_paths(node, &mut shard_paths);
+        vault::collect_file_paths(node, &mut shard_paths);
     }
 
     let now = std::time::SystemTime::now()
@@ -694,7 +718,12 @@ fn history_restore(
             if is_drawing {
                 write_drawing_file(path, content, None)
             } else {
-                write_markdown_file_if_unchanged(&file_path, content, expected_content.as_deref())
+                write_markdown_file_if_unchanged(
+                    Path::new(&vault_path),
+                    &file_path,
+                    content,
+                    expected_content.as_deref(),
+                )
                     .map(|_| ())
             }
         },
@@ -844,14 +873,18 @@ fn upsert_ast_cache(
     })
 }
 
-/// Writes a shard while `writes.lock` is held, then points its attachment
-/// references at what it now links to.
-fn write_shard(writes: &locks::VaultWrites, file_path: &str, content: &str) -> Result<(), String> {
+/// Writes a shard of `vault` while `writes.lock` is held, then points its
+/// attachment references at what it now links to.
+pub(crate) fn write_shard(
+    writes: &locks::VaultWrites,
+    vault: &Path,
+    file_path: &str,
+    content: &str,
+) -> Result<(), String> {
     vault::write_atomically(writes, Path::new(file_path), content.as_bytes())?;
 
-    let synced = vault_access::get().open_vault().and_then(|vault| {
-        let conn = db::open_connection()?;
-        db::attachments::sync_references_for_saved_markdown(&conn, &vault, file_path, content)
+    let synced = db::open_connection().and_then(|conn| {
+        db::attachments::sync_references_for_saved_markdown(&conn, vault, file_path, content)
     });
     if let Err(error) = synced {
         eprintln!(
@@ -867,6 +900,7 @@ fn write_shard(writes: &locks::VaultWrites, file_path: &str, content: &str) -> R
 /// holds something else. The check and the write happen under one lock, so
 /// no other write lands in between. Returns the text the shard held before.
 fn write_markdown_file_if_unchanged(
+    vault: &Path,
     file_path: &str,
     content: &str,
     expected: Option<&str>,
@@ -876,7 +910,7 @@ fn write_markdown_file_if_unchanged(
     if is_changed(previous.as_deref(), expected) {
         return Err(CHANGED_ON_DISK.to_string());
     }
-    write_shard(&writes, file_path, content)?;
+    write_shard(&writes, vault, file_path, content)?;
     Ok(previous.and_then(|bytes| String::from_utf8(bytes).ok()))
 }
 
@@ -901,17 +935,19 @@ fn save_markdown_file(
     expected_content: Option<String>,
 ) -> Result<(), String> {
     in_open_vault(&file_path)?;
-    save_shard(&file_path, &content, record_writing == Some(true), expected_content.as_deref())
+    let vault = vault_access::get().open_vault()?;
+    save_shard(&vault, &file_path, &content, record_writing == Some(true), expected_content.as_deref())
 }
 
 fn save_shard(
+    vault: &Path,
     file_path: &str,
     content: &str,
     record_writing: bool,
     expected: Option<&str>,
 ) -> Result<(), String> {
     ensure_markdown_path(Path::new(file_path))?;
-    let previous = write_markdown_file_if_unchanged(file_path, content, expected)?;
+    let previous = write_markdown_file_if_unchanged(vault, file_path, content, expected)?;
     if record_writing {
         record_writing_after_save(file_path, content, previous);
     }
@@ -937,6 +973,7 @@ fn record_writing_after_save(file_path: &str, content: &str, previous: Option<St
 fn append_markdown_to_file(file_path: String, markdown: String) -> Result<(), String> {
     in_open_vault(&file_path)?;
     ensure_markdown_path(Path::new(&file_path))?;
+    let vault = vault_access::get().open_vault()?;
     // Read and written under one lock, so an edit in between isn't lost.
     let writes = locks::vault_writes()?;
     let mut content = read_markdown_from_disk(&file_path)?;
@@ -955,7 +992,7 @@ fn append_markdown_to_file(file_path: String, markdown: String) -> Result<(), St
         content.push('\n');
     }
 
-    write_shard(&writes, &file_path, &content)
+    write_shard(&writes, &vault, &file_path, &content)
 }
 
 fn ensure_drawing_path(path: &Path) -> Result<(), String> {
@@ -1026,7 +1063,7 @@ fn shards_containing(vault: &Path, needles: &[String]) -> Vec<String> {
         .collect();
     let mut paths = Vec::new();
     for node in &vault::scan_dir(vault) {
-        collect_file_paths(node, &mut paths);
+        vault::collect_file_paths(node, &mut paths);
     }
 
     paths
@@ -1160,7 +1197,7 @@ fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) 
 /// the moved shards' own relative links, and the links to them in the
 /// shards the index knows link there. Rewritten files are re-indexed and
 /// their cached editor state dropped, since it names the old paths.
-fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str) {
+fn rewrite_links_after_path_change(vault: &Path, old_path: &str, new_path: &Path, action: &str) {
     let moved: Vec<shard_links::MovedShard> = moved_markdown_paths(old_path, new_path)
         .into_iter()
         .filter(|(_, new)| vault::is_markdown_path(Path::new(new)))
@@ -1170,11 +1207,8 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
         return;
     }
 
-    let opened = vault_access::get()
-        .open_vault()
-        .and_then(|vault| Ok((vault, db::open_connection()?)));
-    let (vault, conn) = match opened {
-        Ok(opened) => opened,
+    let conn = match db::open_connection() {
+        Ok(conn) => conn,
         Err(error) => {
             eprintln!(
                 "[Netherstone] Failed to open database to rewrite links after {}: {}",
@@ -1192,7 +1226,7 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
         .iter()
         .map(|m| db::queries::LinkedShard::new(&m.old))
         .collect();
-    match db::queries::files_linking_to_any(&conn, &vault, &shards) {
+    match db::queries::files_linking_to_any(&conn, vault, &shards) {
         Ok(linking) => {
             for path in linking {
                 let is_moved = moved.iter().any(|m| {
@@ -1241,7 +1275,7 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
         else {
             continue;
         };
-        if let Err(error) = write_shard(&writes, &file_new, &rewritten) {
+        if let Err(error) = write_shard(&writes, vault, &file_new, &rewritten) {
             eprintln!(
                 "[Netherstone] Failed to rewrite links in {} after {}: {}",
                 file_new, action, error
@@ -1254,7 +1288,7 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
                 file_new, error
             );
         }
-        if let Err(error) = db::indexer::index_file(&conn, &vault, Path::new(&file_new)) {
+        if let Err(error) = db::indexer::index_file(&conn, vault, Path::new(&file_new)) {
             eprintln!(
                 "[Netherstone] Failed to re-index {} after rewriting links: {}",
                 file_new, error
@@ -1273,10 +1307,12 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
 #[tauri::command(async)]
 fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
     vault_access::get().check_inside(Path::new(&old_path))?;
-    rename_path(&old_path, new_name)
+    rename_path(&vault_access::get().open_vault()?, &old_path, new_name)
 }
 
-fn rename_path(old_path: &str, new_name: String) -> Result<String, String> {
+/// Renames the shard, drawing or folder at `old_path` in `vault` and points
+/// the links to the shards it holds at the new name.
+pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Result<String, String> {
     let old_file = std::path::Path::new(old_path);
 
     let writes = locks::vault_writes()?;
@@ -1331,7 +1367,7 @@ fn rename_path(old_path: &str, new_name: String) -> Result<String, String> {
 
     let new_path_string = new_path.to_string_lossy().to_string();
     sync_caches_after_path_change(old_path, &new_path, "rename");
-    rewrite_links_after_path_change(old_path, &new_path, "rename");
+    rewrite_links_after_path_change(vault, old_path, &new_path, "rename");
 
     Ok(new_path_string)
 }
@@ -1340,10 +1376,12 @@ fn rename_path(old_path: &str, new_name: String) -> Result<String, String> {
 fn move_file(source_path: String, destination_dir: String) -> Result<String, String> {
     vault_access::get().check_inside(Path::new(&source_path))?;
     in_open_vault(&destination_dir)?;
-    move_path(&source_path, &destination_dir)
+    move_path(&vault_access::get().open_vault()?, &source_path, &destination_dir)
 }
 
-fn move_path(source_path: &str, destination_dir: &str) -> Result<String, String> {
+/// Moves the shard, drawing or folder at `source_path` in `vault` into
+/// `destination_dir` and points the links to the shards it holds there.
+pub(crate) fn move_path(vault: &Path, source_path: &str, destination_dir: &str) -> Result<String, String> {
     let source = std::path::Path::new(source_path);
     let dest_dir = std::path::Path::new(destination_dir);
 
@@ -1383,7 +1421,7 @@ fn move_path(source_path: &str, destination_dir: &str) -> Result<String, String>
 
     let new_path_string = new_path.to_string_lossy().to_string();
     sync_caches_after_path_change(source_path, &new_path, "move");
-    rewrite_links_after_path_change(source_path, &new_path, "move");
+    rewrite_links_after_path_change(vault, source_path, &new_path, "move");
 
     Ok(new_path_string)
 }
@@ -1539,96 +1577,36 @@ fn get_file_metadata(file_path: String) -> Result<Option<db::queries::FileMetada
 #[tauri::command(async)]
 fn index_vault(vault_path: String) -> Result<String, String> {
     open_vault_only(&vault_path)?;
-    let vault = std::path::Path::new(&vault_path);
+    let vault = Path::new(&vault_path);
+    let conn = db::open_connection()?;
+    let counts = db::indexer::index_vault(&conn, vault)?;
 
-    if !vault.is_dir() {
-        return Err(format!("Vault path is not a directory: {}", vault_path));
+    if let Err(e) = db::data::start_writing_log(&conn, &vault_path, &db::data::local_today()) {
+        eprintln!("[Netherstone] Failed to start the writing log: {}", e);
     }
 
-    // Open database connection
-    let db = db::Database::new()?;
-
-    // Scan all markdown files in the vault
-    let files = vault::scan_dir(vault);
-    let mut indexed_count = 0;
-    let mut skipped_count = 0;
-    let mut error_count = 0;
-
-    // Collect all file paths for pruning
-    let mut all_paths = Vec::new();
-
-    db.with_connection(|conn| {
-        for node in &files {
-            collect_file_paths(node, &mut all_paths);
-        }
-
-        // Index each file
-        for path_str in &all_paths {
-            let path = std::path::Path::new(path_str);
-
-            match db::indexer::needs_indexing(conn, vault, path) {
-                Ok(true) => {
-                    match db::indexer::index_file(conn, vault, path) {
-                        Ok(_) => {
-                            indexed_count += 1;
-                        }
-                        Err(e) => {
-                            eprintln!("[Netherstone] Failed to index {}: {}", path_str, e);
-                            error_count += 1;
-                        }
-                    }
-                }
-                Ok(false) => {
-                    skipped_count += 1;
-                }
-                Err(e) => {
-                    eprintln!("[Netherstone] Failed to check {}: {}", path_str, e);
-                    error_count += 1;
-                }
-            }
-        }
-
-        if let Err(e) = db::data::start_writing_log(conn, &vault_path, &db::data::local_today()) {
-            eprintln!("[Netherstone] Failed to start the writing log: {}", e);
-        }
-
-        // Prune this vault's deleted files only.
-        if let Err(e) = db::indexer::prune_deleted_files(conn, vault, &all_paths) {
-            eprintln!("Failed to prune deleted files: {}", e);
-        }
-
-        // Prune stale AST cache rows for this vault only.
-        if let Err(e) = db::ast_cache::prune_stale_ast_cache_for_vault(conn, &vault_path, &all_paths) {
-            eprintln!(
-                "[Netherstone] Failed to prune stale AST cache rows for vault {}: {}",
-                vault_path, e
-            );
-        }
-
-        Ok(())
-    })?;
+    // Prune stale AST cache rows for this vault only.
+    if let Err(e) =
+        db::ast_cache::prune_stale_ast_cache_for_vault(&conn, &vault_path, &counts.paths)
+    {
+        eprintln!(
+            "[Netherstone] Failed to prune stale AST cache rows for vault {}: {}",
+            vault_path, e
+        );
+    }
 
     Ok(format!(
         "Indexed {} files, skipped {} unchanged, {} errors",
-        indexed_count, skipped_count, error_count
+        counts.indexed, counts.skipped, counts.errors
     ))
 }
 
-fn collect_file_paths(node: &vault::FileNode, paths: &mut Vec<String>) {
-    match node.kind {
-        vault::FileNodeKind::File => {
-            // Drawings appear in the tree but are not indexed as markdown.
-            if vault::is_markdown_path(Path::new(&node.path)) {
-                paths.push(node.path.clone());
-            }
-        }
-        vault::FileNodeKind::Directory => {
-            if let Some(children) = &node.children {
-                for child in children {
-                    collect_file_paths(child, paths);
-                }
-            }
-        }
+/// Runs the MCP server AI apps start (`Netherstone mcp`) instead of the
+/// app: no window, just the vault tools over stdin and stdout.
+pub fn run_mcp_server() {
+    if let Err(error) = mcp::run() {
+        eprintln!("[Netherstone] The MCP server stopped: {}", error);
+        std::process::exit(1);
     }
 }
 
@@ -1670,6 +1648,8 @@ pub fn run() {
             browser::browser_set_visible,
             open_vault_dialog,
             open_vault,
+            mcp_get_enabled,
+            mcp_set_enabled,
             default_vault_location,
             create_vault,
             open_media_files_dialog,
@@ -1764,20 +1744,20 @@ mod tests {
         let path = shard.to_string_lossy().into_owned();
         std::fs::write(&shard, "opened").unwrap();
 
-        save_shard(&path, "typed", false, Some("opened")).unwrap();
+        save_shard(&dir, &path, "typed", false, Some("opened")).unwrap();
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "typed");
 
         std::fs::write(&shard, "outside").unwrap();
         assert_eq!(
-            save_shard(&path, "typed more", false, Some("typed")),
+            save_shard(&dir, &path, "typed more", false, Some("typed")),
             Err(CHANGED_ON_DISK.to_string())
         );
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "outside");
 
         // Other saves, and a shard that was deleted, are written as before.
-        save_shard(&path, "renamed", false, None).unwrap();
+        save_shard(&dir, &path, "renamed", false, None).unwrap();
         std::fs::remove_file(&shard).unwrap();
-        save_shard(&path, "again", false, Some("renamed")).unwrap();
+        save_shard(&dir, &path, "again", false, Some("renamed")).unwrap();
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "again");
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1871,6 +1851,7 @@ mod tests {
         std::fs::create_dir_all(&inner).unwrap();
 
         let result = move_path(
+            &dir,
             &dir.join("Work").to_string_lossy(),
             &inner.to_string_lossy(),
         );
@@ -1887,13 +1868,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let shard = dir.join("Note.md").to_string_lossy().into_owned();
 
-        assert_eq!(write_markdown_file_if_unchanged(&shard, "first", None), Ok(None));
+        assert_eq!(write_markdown_file_if_unchanged(&dir, &shard, "first", None), Ok(None));
         assert_eq!(
-            write_markdown_file_if_unchanged(&shard, "second", Some("first")),
+            write_markdown_file_if_unchanged(&dir, &shard, "second", Some("first")),
             Ok(Some("first".to_string()))
         );
         let script = dir.join("run.sh").to_string_lossy().into_owned();
-        let refused = save_shard(&script, "echo hi", false, None);
+        let refused = save_shard(&dir, &script, "echo hi", false, None);
         let script_written = Path::new(&script).exists();
         std::fs::remove_dir_all(&dir).unwrap();
 
@@ -1911,11 +1892,11 @@ mod tests {
         let shard_path = shard.to_string_lossy().into_owned();
 
         let escapes = [
-            rename_path(&shard_path, "../Plan".into()),
-            rename_path(&shard_path, "Sub/Plan".into()),
-            rename_path(&folder.to_string_lossy(), "..".into()),
+            rename_path(&dir, &shard_path, "../Plan".into()),
+            rename_path(&dir, &shard_path, "Sub/Plan".into()),
+            rename_path(&dir, &folder.to_string_lossy(), "..".into()),
         ];
-        let renamed = rename_path(&shard_path, "Roadmap".into()).unwrap();
+        let renamed = rename_path(&dir, &shard_path, "Roadmap".into()).unwrap();
         let moved_out = dir.join("Plan.md").exists();
         std::fs::remove_dir_all(&dir).unwrap();
 

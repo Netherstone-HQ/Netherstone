@@ -17,22 +17,54 @@ pub enum Note {
     OutsideChange { path: String },
     /// `path` was restored to its version from `from` (Unix seconds).
     Restored { path: String, from: i64 },
+    /// An AI app, `app` as it names itself, changed `path`, and said what it
+    /// did in `summary`.
+    ChangedBy {
+        path: String,
+        app: String,
+        summary: Option<String>,
+    },
 }
 
 const OUTSIDE_CHANGE: &str = "Changed outside the app: ";
 const RESTORED: &str = "Restored ";
+/// Starts a `ChangedBy` line, whose parts are split by tabs: the app, the
+/// summary, then the path, which comes last since only it may hold a tab.
+const CHANGED_BY: &str = "Changed by\t";
+
+/// `text` on one line with no tabs, so it can't break up a note.
+fn one_line(text: &str) -> String {
+    text.split(['\t', '\r', '\n']).filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ")
+}
 
 impl fmt::Display for Note {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Note::OutsideChange { path } => write!(f, "{}{}", OUTSIDE_CHANGE, path),
             Note::Restored { path, from } => write!(f, "{}{} from {}", RESTORED, path, from),
+            Note::ChangedBy { path, app, summary } => write!(
+                f,
+                "{}{}\t{}\t{}",
+                CHANGED_BY,
+                one_line(app),
+                summary.as_deref().map(one_line).unwrap_or_default(),
+                path
+            ),
         }
     }
 }
 
 impl Note {
     fn parse(line: &str) -> Option<Note> {
+        if let Some(rest) = line.strip_prefix(CHANGED_BY) {
+            let mut parts = rest.splitn(3, '\t');
+            let (app, summary, path) = (parts.next()?, parts.next()?, parts.next()?);
+            return Some(Note::ChangedBy {
+                path: path.to_string(),
+                app: app.to_string(),
+                summary: (!summary.is_empty()).then(|| summary.to_string()),
+            });
+        }
         if let Some(path) = line.strip_prefix(OUTSIDE_CHANGE) {
             return Some(Note::OutsideChange {
                 path: path.to_string(),
@@ -47,7 +79,9 @@ impl Note {
 
     fn path(&self) -> &str {
         match self {
-            Note::OutsideChange { path } | Note::Restored { path, .. } => path,
+            Note::OutsideChange { path }
+            | Note::Restored { path, .. }
+            | Note::ChangedBy { path, .. } => path,
         }
     }
 }
@@ -63,6 +97,8 @@ pub enum VersionKind {
     Synced,
     /// Renamed or moved, with the same content.
     Renamed,
+    /// Changed by an AI app, through the MCP server.
+    ChangedByApp,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,6 +112,9 @@ pub struct FileVersion {
     pub kind: VersionKind,
     /// For a restored version, when the version it brought back was saved.
     pub restored_from: Option<i64>,
+    /// For a version an AI app made: the app, and what it said it did.
+    pub changed_by: Option<String>,
+    pub summary: Option<String>,
     /// Its path in this version, vault-relative.
     pub path: String,
     /// The path it had before, when this version renamed or moved it.
@@ -141,6 +180,7 @@ struct Change {
     previous: Option<Oid>,
     kind: VersionKind,
     restored_from: Option<i64>,
+    changed_by: Option<(String, Option<String>)>,
     path: String,
     renamed_from: Option<String>,
     device: Option<String>,
@@ -194,6 +234,7 @@ pub fn list_versions(
             (_, Some(previous)) if previous == blob => VersionKind::Renamed,
             (Some(Note::Restored { .. }), _) => VersionKind::Restored,
             (Some(Note::OutsideChange { .. }), _) => VersionKind::OutsideChange,
+            (Some(Note::ChangedBy { .. }), _) => VersionKind::ChangedByApp,
             _ if version.merge => VersionKind::Synced,
             _ => VersionKind::Edited,
         };
@@ -203,8 +244,12 @@ pub fn list_versions(
             blob,
             previous,
             kind,
-            restored_from: match note {
-                Some(Note::Restored { from, .. }) => Some(from),
+            restored_from: match &note {
+                Some(Note::Restored { from, .. }) => Some(*from),
+                _ => None,
+            },
+            changed_by: match note {
+                Some(Note::ChangedBy { app, summary, .. }) => Some((app, summary)),
                 _ => None,
             },
             path: path.clone(),
@@ -249,6 +294,8 @@ pub fn list_versions(
                 time: change.time,
                 kind: change.kind,
                 restored_from: change.restored_from,
+                changed_by: change.changed_by.as_ref().map(|(app, _)| app.clone()),
+                summary: change.changed_by.and_then(|(_, summary)| summary),
                 path: change.path,
                 renamed_from: change.renamed_from,
                 device: change.device,
@@ -483,6 +530,16 @@ mod tests {
             Note::Restored {
                 path: "Folder/A from B.md".into(),
                 from: 1_760_000_000,
+            },
+            Note::ChangedBy {
+                path: "Folder/Tab\tin name.md".into(),
+                app: "Goose".into(),
+                summary: Some("Fixed 3 broken links".into()),
+            },
+            Note::ChangedBy {
+                path: "Note.md".into(),
+                app: "Goose".into(),
+                summary: None,
             },
         ] {
             assert_eq!(Note::parse(&note.to_string()), Some(note));

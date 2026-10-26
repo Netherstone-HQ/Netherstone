@@ -267,6 +267,25 @@ fn is_empty_dir(path: &Path) -> bool {
     std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
 }
 
+/// Adds the shards in `node` and below to `paths`. Drawings appear in the
+/// tree but are not indexed as Markdown.
+pub fn collect_file_paths(node: &FileNode, paths: &mut Vec<String>) {
+    match node.kind {
+        FileNodeKind::File => {
+            if is_markdown_path(Path::new(&node.path)) {
+                paths.push(node.path.clone());
+            }
+        }
+        FileNodeKind::Directory => {
+            if let Some(children) = &node.children {
+                for child in children {
+                    collect_file_paths(child, paths);
+                }
+            }
+        }
+    }
+}
+
 // ── Drawings ─────────────────────────────────────────────────────────────────
 
 /// Contents of a newly created drawing: an empty Excalidraw scene.

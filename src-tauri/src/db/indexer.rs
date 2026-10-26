@@ -363,3 +363,77 @@ pub fn prune_deleted_files(
 
     prune().map_err(|e| format!("Failed to prune deleted files: {}", e))
 }
+
+/// What indexing a vault did.
+pub struct VaultIndexed {
+    /// Every shard in the vault.
+    pub paths: Vec<String>,
+    pub indexed: usize,
+    pub skipped: usize,
+    pub errors: usize,
+}
+
+/// Indexes the shards of the vault at `vault_path` that changed since they
+/// were last indexed, and forgets the ones that are gone.
+pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed, String> {
+    if !vault_path.is_dir() {
+        return Err(format!("Vault path is not a directory: {}", vault_path.display()));
+    }
+
+    let mut paths = Vec::new();
+    for node in &crate::vault::scan_dir(vault_path) {
+        crate::vault::collect_file_paths(node, &mut paths);
+    }
+
+    let (mut indexed, mut skipped, mut errors) = (0, 0, 0);
+    for path_str in &paths {
+        let path = Path::new(path_str);
+        match needs_indexing(conn, vault_path, path) {
+            Ok(true) => match index_file(conn, vault_path, path) {
+                Ok(()) => indexed += 1,
+                Err(e) => {
+                    eprintln!("[Netherstone] Failed to index {}: {}", path_str, e);
+                    errors += 1;
+                }
+            },
+            Ok(false) => skipped += 1,
+            Err(e) => {
+                eprintln!("[Netherstone] Failed to check {}: {}", path_str, e);
+                errors += 1;
+            }
+        }
+    }
+
+    // Prune this vault's deleted files only.
+    if let Err(e) = prune_deleted_files(conn, vault_path, &paths) {
+        eprintln!("[Netherstone] Failed to prune deleted files: {}", e);
+    }
+
+    Ok(VaultIndexed {
+        paths,
+        indexed,
+        skipped,
+        errors,
+    })
+}
+
+/// Forgets the indexed shards at `path` or inside it, with their search text,
+/// once they're gone from disk: a deleted shard, or a folder moved away.
+pub fn forget_path(conn: &Connection, vault_path: &Path, path: &Path) -> Result<usize, String> {
+    let path_str = path.to_str().ok_or_else(|| "Invalid file path".to_string())?;
+    let inside = format!("{}{}", path_str, std::path::MAIN_SEPARATOR);
+    let vault = super::attachments::vault_key(vault_path);
+    let matching = "vault_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)";
+    let forget = || -> rusqlite::Result<usize> {
+        // The search text isn't tied to its file, so it goes first.
+        conn.execute(
+            &format!("DELETE FROM fts_search WHERE rowid IN (SELECT id FROM files WHERE {matching})"),
+            params![vault, path_str, inside],
+        )?;
+        conn.execute(
+            &format!("DELETE FROM files WHERE {matching}"),
+            params![vault, path_str, inside],
+        )
+    };
+    forget().map_err(|e| format!("Failed to forget {}: {}", path_str, e))
+}

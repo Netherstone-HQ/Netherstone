@@ -267,6 +267,109 @@ pub fn excerpt(
     parts
 }
 
+/// A heading in a shard and the part of the shard it starts, as byte ranges
+/// of the Markdown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Section {
+    pub level: u8,
+    /// The heading's text, without its `#`s or emphasis marks.
+    pub title: String,
+    /// The heading's own line.
+    pub heading: Range<usize>,
+    /// From the heading to the next heading of the same level or higher, or
+    /// the end of the shard.
+    pub range: Range<usize>,
+}
+
+/// The sections of `markdown`, one per heading, in order.
+pub fn sections(markdown: &str) -> Vec<Section> {
+    let mut found: Vec<Section> = Vec::new();
+    let mut open: Option<(u8, usize, String)> = None;
+    for (event, range) in Parser::new_ext(markdown, markdown_options()).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                open = Some((level as u8, range.start, String::new()))
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some((_, _, title)) = open.as_mut() {
+                    title.push_str(&text);
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some((level, start, title)) = open.take() {
+                    found.push(Section {
+                        level,
+                        title: title.trim().to_string(),
+                        heading: start..range.end,
+                        range: start..markdown.len(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    for index in 0..found.len() {
+        let level = found[index].level;
+        if let Some(next) = found[index + 1..].iter().find(|next| next.level <= level) {
+            found[index].range.end = next.heading.start;
+        }
+    }
+    found
+}
+
+/// A table in a shard: where it is in the Markdown, and its cells as text,
+/// header row first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Table {
+    pub range: Range<usize>,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// The tables of `markdown`, in order.
+pub fn tables(markdown: &str) -> Vec<Table> {
+    let mut found = Vec::new();
+    let mut open: Option<Table> = None;
+    for (event, range) in Parser::new_ext(markdown, markdown_options()).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Table(_)) => {
+                open = Some(Table {
+                    range,
+                    rows: Vec::new(),
+                })
+            }
+            Event::Start(Tag::TableHead | Tag::TableRow) => {
+                if let Some(table) = open.as_mut() {
+                    table.rows.push(Vec::new());
+                }
+            }
+            Event::Start(Tag::TableCell) => {
+                if let Some(row) = open.as_mut().and_then(|table| table.rows.last_mut()) {
+                    row.push(String::new());
+                }
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some(cell) = open
+                    .as_mut()
+                    .and_then(|table| table.rows.last_mut())
+                    .and_then(|row| row.last_mut())
+                {
+                    cell.push_str(&text);
+                }
+            }
+            Event::End(TagEnd::Table) => {
+                if let Some(mut table) = open.take() {
+                    for cell in table.rows.iter_mut().flatten() {
+                        *cell = cell.trim().to_string();
+                    }
+                    found.push(table);
+                }
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,5 +488,33 @@ mod tests {
     #[test]
     fn excerpts_from_the_start_without_highlights() {
         assert_eq!(plain(&excerpt("Just text", &[], 60, 200)), "Just text");
+    }
+
+    #[test]
+    fn sections_run_to_the_next_heading_as_high() {
+        let markdown = "Intro\n\n# Plan\n\nText\n\n## Steps\n\nOne\n\n# **Done**\n\nEnd\n";
+        let found = sections(markdown);
+        let shown: Vec<_> = found
+            .iter()
+            .map(|s| (s.level, s.title.as_str(), &markdown[s.range.clone()]))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                (1, "Plan", "# Plan\n\nText\n\n## Steps\n\nOne\n\n"),
+                (2, "Steps", "## Steps\n\nOne\n\n"),
+                (1, "Done", "# **Done**\n\nEnd\n"),
+            ]
+        );
+    }
+
+    #[test]
+    fn tables_give_their_cells_and_place() {
+        let markdown = "Runs\n\n| Week | km |\n| --- | --- |\n| 1 | `5` |\n\nAfter\n";
+        let found = tables(markdown);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].rows, [vec!["Week", "km"], vec!["1", "5"]]);
+        assert!(markdown[found[0].range.clone()].starts_with("| Week"));
+        assert!(markdown[found[0].range.end..].contains("After"));
     }
 }

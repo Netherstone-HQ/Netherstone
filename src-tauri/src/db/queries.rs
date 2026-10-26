@@ -67,45 +67,135 @@ pub fn search_files(
     limit: usize,
 ) -> rusqlite::Result<Vec<SearchResult>> {
     eprintln!("[Netherstone] Searching for: '{}'", query);
-
-    let terms = search_terms(query);
-    if terms.is_empty() {
+    if search_terms(query).is_empty() {
         return Ok(Vec::new());
     }
-
-    // Each term quoted, so nothing typed is read as query syntax, and matched
-    // as a prefix: "auto save" becomes "auto"* "save"*.
-    let fts_query = terms
-        .iter()
-        .map(|term| format!("\"{}\"*", term))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    eprintln!("[Netherstone] FTS5 query: '{}'", fts_query);
-
-    let mut stmt = conn.prepare(
-        "SELECT f.path, f.name, fts_search.content, rank
-         FROM fts_search
-         INNER JOIN files f ON fts_search.rowid = f.id
-         WHERE fts_search MATCH ?1 AND f.vault_path = ?3
-         ORDER BY rank
-         LIMIT ?2",
-    )?;
-
-    let results = stmt
-        .query_map(params![fts_query, limit, vault_key(vault_path)], |row| {
-            let content: String = row.get(2)?;
-            Ok(SearchResult {
-                path: row.get(0)?,
-                name: row.get(1)?,
-                snippet: search_snippet(&content, &terms),
-                rank: row.get(3)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
+    let filter = FileFilter {
+        query,
+        ..FileFilter::default()
+    };
+    let results: Vec<SearchResult> = find_files(conn, vault_path, &filter, 0, limit)?
+        .into_iter()
+        .map(|file| SearchResult {
+            path: file.path,
+            name: file.name,
+            snippet: file.snippet,
+            rank: file.rank,
+        })
+        .collect();
     eprintln!("[Netherstone] Found {} search results", results.len());
     Ok(results)
+}
+
+/// Which files of a vault to find. Everything left out matches any file.
+#[derive(Debug, Default)]
+pub struct FileFilter<'a> {
+    /// Words the text must have, matched as prefixes. Empty finds files by
+    /// the rest of the filter, newest first.
+    pub query: &'a str,
+    /// A folder the files must be in, at any depth.
+    pub folder: Option<&'a Path>,
+    pub tag: Option<&'a str>,
+    /// Unix seconds the file was last changed at or after, and before.
+    pub modified_after: Option<i64>,
+    pub modified_before: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FoundFile {
+    pub path: String,
+    pub name: String,
+    /// The text around the words searched for, which are highlighted, or
+    /// around the tag, or the start of the text.
+    pub snippet: Vec<TextPart>,
+    /// Lower is better; 0 when nothing was searched for.
+    pub rank: f64,
+    pub last_modified: i64,
+    pub word_count: i64,
+}
+
+/// The files of the vault at `vault_path` that `filter` finds: by relevance
+/// when it has words, otherwise newest first. `offset` and `limit` page
+/// through them.
+pub fn find_files(
+    conn: &Connection,
+    vault_path: &Path,
+    filter: &FileFilter,
+    offset: usize,
+    limit: usize,
+) -> rusqlite::Result<Vec<FoundFile>> {
+    let terms = search_terms(filter.query);
+    let mut conditions = vec!["f.vault_path = ?".to_string()];
+    let mut values: Vec<rusqlite::types::Value> = vec![vault_key(vault_path).into()];
+
+    if !terms.is_empty() {
+        // Each term quoted, so nothing typed is read as query syntax, and
+        // matched as a prefix: "auto save" becomes "auto"* "save"*.
+        let fts_query = terms
+            .iter()
+            .map(|term| format!("\"{}\"*", term))
+            .collect::<Vec<_>>()
+            .join(" ");
+        conditions.push("fts_search MATCH ?".to_string());
+        values.push(fts_query.into());
+    }
+    if let Some(folder) = filter.folder {
+        let inside = format!("{}{}", folder.to_string_lossy(), std::path::MAIN_SEPARATOR);
+        conditions.push("substr(f.path, 1, length(?)) = ?".to_string());
+        values.push(inside.clone().into());
+        values.push(inside.into());
+    }
+    if let Some(tag) = filter.tag {
+        conditions.push(
+            "f.id IN (SELECT file_id FROM tags WHERE tag = ? COLLATE NOCASE)".to_string(),
+        );
+        values.push(tag.trim_start_matches('#').to_string().into());
+    }
+    if let Some(after) = filter.modified_after {
+        conditions.push("f.last_modified >= ?".to_string());
+        values.push(after.into());
+    }
+    if let Some(before) = filter.modified_before {
+        conditions.push("f.last_modified < ?".to_string());
+        values.push(before.into());
+    }
+    values.push((limit as i64).into());
+    values.push((offset as i64).into());
+
+    let (rank, order) = if terms.is_empty() {
+        ("0.0", "f.last_modified DESC, f.path")
+    } else {
+        ("rank", "rank")
+    };
+    let sql = format!(
+        "SELECT f.path, f.name, fts_search.content, {rank}, f.last_modified, f.word_count
+         FROM files f
+         INNER JOIN fts_search ON fts_search.rowid = f.id
+         WHERE {}
+         ORDER BY {order}
+         LIMIT ? OFFSET ?",
+        conditions.join(" AND ")
+    );
+
+    let highlighted: Vec<String> = match (&terms, filter.tag) {
+        (terms, Some(tag)) if terms.is_empty() => vec![tag.trim_start_matches('#').to_lowercase()],
+        _ => terms.clone(),
+    };
+    let mut stmt = conn.prepare(&sql)?;
+    let found = stmt
+        .query_map(rusqlite::params_from_iter(values), |row| {
+            let content: String = row.get(2)?;
+            Ok(FoundFile {
+                path: row.get(0)?,
+                name: row.get(1)?,
+                snippet: search_snippet(&content, &highlighted),
+                rank: row.get(3)?,
+                last_modified: row.get(4)?,
+                word_count: row.get(5)?,
+            })
+        })?
+        .collect();
+    found
 }
 
 /// The words of a search, lowercase, split as the index splits text: at

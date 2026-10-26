@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const files = new Map<string, string>();
 
 const exportToBlob = vi.fn(async (_options: unknown) => ({
   arrayBuffer: async () => new ArrayBuffer(3),
 }));
+const darkSvg = { dark: true };
+const exportToSvg = vi.fn(async (_options: unknown) => darkSvg);
 vi.mock("@excalidraw/excalidraw", () => ({
   exportToBlob,
+  exportToSvg,
   restore: (data: unknown) => data,
 }));
+const svgToPng = vi.fn(async (_svg: unknown) => ({
+  arrayBuffer: async () => new ArrayBuffer(3),
+}));
+vi.mock("@/lib/svg-png", () => ({ svgToPng }));
 vi.mock("@/hooks/useAutosave", () => ({ flushPendingAutosave: vi.fn() }));
 vi.mock("@/lib/open-editor-file", () => ({ openEditorFile: vi.fn() }));
 vi.mock("@/lib/commands", () => ({
@@ -39,12 +46,25 @@ const DRAWING = `${VAULT}/Sketches/Plan.excalidraw`;
 const SHARD = `${VAULT}/Ideas.md`;
 const scene = { elements: [], appState: {}, files: {} };
 
+// jsdom has no canvas; behave like an engine whose canvas has filters.
+beforeEach(() => {
+  vi.stubGlobal("CanvasRenderingContext2D", { prototype: { filter: "none" } });
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("addDrawingToShard", () => {
   beforeEach(() => {
     files.clear();
     exportToBlob.mockClear();
+    exportToSvg.mockClear();
     vi.mocked(openEditorFile).mockClear();
   });
+
+  const darkMode = ([options]: unknown[]) =>
+    (options as { appState: { exportWithDarkMode: boolean } }).appState
+      .exportWithDarkMode;
 
   it("adds the drawing to the end of the shard, linked to the drawing", async () => {
     files.set(SHARD, "# Ideas");
@@ -52,15 +72,24 @@ describe("addDrawingToShard", () => {
     const result = await addDrawingToShard(scene, DRAWING, SHARD, VAULT);
 
     expect(result).toBe("added");
-    expect(
-      exportToBlob.mock.calls.map(
-        ([options]) =>
-          (options as { appState: { exportWithDarkMode: boolean } }).appState
-            .exportWithDarkMode,
-      ),
-    ).toEqual([false, true]);
+    expect(exportToBlob.mock.calls.map(darkMode)).toEqual([false, true]);
+    expect(exportToSvg).not.toHaveBeenCalled();
     expect(files.get(SHARD)).toBe(
       '# Ideas\n\n<img src="_attachments/Plan.png" data-dark-src="_attachments/Plan-dark.png" alt="Plan" width="480" data-excalidraw="Sketches/Plan.excalidraw" />\n',
+    );
+  });
+
+  it("exports the dark picture through SVG where canvas has no filters", async () => {
+    vi.stubGlobal("CanvasRenderingContext2D", { prototype: {} });
+    files.set(SHARD, "# Ideas");
+
+    await addDrawingToShard(scene, DRAWING, SHARD, VAULT);
+
+    expect(exportToBlob.mock.calls.map(darkMode)).toEqual([false]);
+    expect(exportToSvg.mock.calls.map(darkMode)).toEqual([true]);
+    expect(svgToPng).toHaveBeenCalledWith(darkSvg);
+    expect(files.get(SHARD)).toContain(
+      'data-dark-src="_attachments/Plan-dark.png"',
     );
   });
 
@@ -87,6 +116,7 @@ describe("fillDrawingPictures", () => {
   beforeEach(() => {
     files.clear();
     exportToBlob.mockClear();
+    exportToSvg.mockClear();
   });
 
   it("exports only the stale drawings the shard shows, into this shard", async () => {
@@ -128,6 +158,7 @@ describe("fillDrawingPictures", () => {
     await fillDrawingPictures(SHARD, markdown, VAULT);
 
     expect(exportToBlob).not.toHaveBeenCalled();
+    expect(exportToSvg).not.toHaveBeenCalled();
     expect(files.get(SHARD)).toBe(markdown);
   });
 });

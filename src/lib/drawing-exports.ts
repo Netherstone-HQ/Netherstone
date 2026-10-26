@@ -27,6 +27,7 @@ import {
 import { getFilesystemPathFromMediaSource } from "@/lib/media-source";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { rewriteShards } from "@/lib/shard-rewrite";
+import { svgToPng } from "@/lib/svg-png";
 import { useEditorStore } from "@/store/editor";
 
 type ExportElements = Parameters<NonNullable<ExcalidrawProps["onChange"]>>[0];
@@ -70,22 +71,31 @@ export async function readDrawingScene(
 }
 
 /**
- * Renders `scene` to a PNG with its export options, at least at 2x, and
- * stores it as an attachment in `vaultPath`.
+ * Renders `scene` to a PNG with its export options, at least at 2x.
  */
-async function persistScenePng(
+async function renderScenePng(
   { elements, appState, files }: ExportableScene,
-  vaultPath: string,
-  name: string,
   dark: boolean,
 ) {
   const exportScale = Math.max(Number(appState.exportScale) || 1, 2);
-  // Excalidraw is large; load it only when there is a drawing to export.
-  const { exportToBlob } = await import("@excalidraw/excalidraw");
-  const blob = await exportToBlob({
+  const options = {
     appState: { ...appState, exportScale, exportWithDarkMode: dark },
     elements: elements.filter((element) => !element.isDeleted),
     files,
+  };
+  // Excalidraw is large; load it only when there is a drawing to export.
+  const { exportToBlob, exportToSvg } = await import("@excalidraw/excalidraw");
+
+  // Excalidraw's PNG export darkens the picture with a canvas filter. Where
+  // canvas has none (WebKit on Linux and macOS) its dark picture comes out
+  // light, so it goes through the SVG export, which darkens with an SVG
+  // filter that every engine draws.
+  if (dark && !("filter" in CanvasRenderingContext2D.prototype)) {
+    return svgToPng(await exportToSvg(options));
+  }
+
+  return exportToBlob({
+    ...options,
     getDimensions: (width: number, height: number) => ({
       height: height * exportScale,
       scale: exportScale,
@@ -93,7 +103,16 @@ async function persistScenePng(
     }),
     mimeType: "image/png",
   });
+}
 
+/** Renders `scene` to a PNG and stores it as an attachment in `vaultPath`. */
+async function persistScenePng(
+  scene: ExportableScene,
+  vaultPath: string,
+  name: string,
+  dark: boolean,
+) {
+  const blob = await renderScenePng(scene, dark);
   return persistAttachmentBytes(
     `${name}.png`,
     new Uint8Array(await blob.arrayBuffer()),

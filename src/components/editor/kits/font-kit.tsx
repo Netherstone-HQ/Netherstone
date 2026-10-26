@@ -13,6 +13,13 @@ const options = {
   inject: { targetPlugins: [KEYS.p] },
 } satisfies PlatePluginConfig;
 
+// Text copied from a web page carries that page's own text colour, font and
+// size, which fight the app's theme and save as HTML in the Markdown file.
+// Styles picked in Netherstone paste through Plate's own fragment, not HTML.
+const ignorePastedHtml = {
+  parsers: { html: { deserializer: { query: () => false } } },
+} satisfies PlatePluginConfig;
+
 export const FontKit = [
   FontColorPlugin.configure({
     inject: {
@@ -21,12 +28,9 @@ export const FontKit = [
         defaultNodeValue: 'black',
       },
     },
-    // Text copied from a web page carries that page's own text colour, which
-    // can be unreadable on the app's theme. Colours picked in Netherstone
-    // paste through Plate's own fragment, not HTML.
-    parsers: { html: { deserializer: { query: () => false } } },
+    ...ignorePastedHtml,
   }),
   FontBackgroundColorPlugin.configure(options),
-  FontSizePlugin.configure(options),
-  FontFamilyPlugin.configure(options),
+  FontSizePlugin.configure({ ...options, ...ignorePastedHtml }),
+  FontFamilyPlugin.configure({ ...options, ...ignorePastedHtml }),
 ];

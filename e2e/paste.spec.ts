@@ -64,22 +64,23 @@ test("pasted Markdown text keeps its formatting", async ({ page }) => {
   expect(saved).toContain("**bold**");
 });
 
-test("text pasted from a web page drops the page's text colour", async ({ page }) => {
+test("text pasted from a web page drops the page's colour, font and size", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
   await caretAfter(page, "Paste below:");
   await page.keyboard.press("Enter");
 
+  const style = 'style="color: rgb(31, 31, 31); font-family: &quot;Google Sans Text&quot;, sans-serif; font-size: 18px;"';
   await paste(page, {
     html:
-      '<meta charset="utf-8"><ul style="color: rgb(31, 31, 31);"><li><span style="color: rgb(31, 31, 31);">' +
-      '<b style="color: rgb(31, 31, 31);">The Alchemist</b> represents your drive for transformation.</span></li></ul>',
+      `<meta charset="utf-8"><ul ${style}><li><span ${style}>` +
+      `<b ${style}>The Alchemist</b> represents your drive for transformation.</span></li></ul>`,
     text: "The Alchemist represents your drive for transformation.",
   });
 
   await expect(editor(page).locator("strong")).toContainText("The Alchemist");
-  await expect(editor(page).locator("[style*='color']")).toHaveCount(0);
+  await expect(editor(page).locator("[style*='color'], [style*='font']")).toHaveCount(0);
 
   const saved = await lastSave(page, "Note.md");
   expect(saved).toContain("**The Alchemist** represents your drive for transformation.");
-  expect(saved).not.toContain("color");
+  expect(saved).not.toContain("<span");
 });

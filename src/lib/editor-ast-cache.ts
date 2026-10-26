@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Descendant } from "platejs";
 
 // Bump whenever the persisted Plate value shape changes (v2: Plate 53 blockquotes hold block children).
-export const AST_CACHE_VERSION = 2;
+export const AST_CACHE_VERSION = 3;
 
 export type PlateAstValue = Descendant[];
 

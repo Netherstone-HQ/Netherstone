@@ -12,7 +12,6 @@ import {
   reloadOpenDrawingIfChanged,
 } from "@/lib/drawing-files";
 import { deleteAstCache } from "@/lib/editor-ast-cache";
-import { invalidateAstWarmPaths } from "@/lib/editor-ast-warm-state";
 import { isAttachmentOnlyChange, isAttachmentPath } from "@/lib/gallery";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
@@ -89,7 +88,6 @@ export function useVaultWatcher() {
 
         if (unsuppressedPaths.length > 0) {
           await closeOpenFileIfRemoved(unsuppressedPaths);
-          invalidateAstWarmPaths(unsuppressedPaths);
 
           await Promise.allSettled(
             unsuppressedPaths.map(async (filePath) => {

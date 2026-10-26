@@ -50,6 +50,7 @@ type PendingRequest = {
   requestId: number;
   requestKey: string;
   filePath: string | null;
+  payload: MarkdownWorkerRequest;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   cleanup: () => void;
@@ -267,6 +268,32 @@ function resetWorkerInstance() {
   latestRequestIdByKey.clear();
 }
 
+/**
+ * A timed-out request may still be running, so the worker is replaced to stop
+ * it. The other requests it held are sent again to the new worker.
+ */
+function timeOutRequest(requestId: number, error: Error) {
+  rejectRequest(requestId, error);
+
+  cancelIdleShutdown();
+  workerInstance?.terminate();
+  workerInstance = null;
+  if (pendingRequests.size === 0) return;
+
+  try {
+    const worker = getWorker();
+    for (const pending of pendingRequests.values()) {
+      worker.postMessage(pending.payload);
+    }
+  } catch (restartError) {
+    handleWorkerFailure(
+      restartError instanceof Error
+        ? restartError
+        : new Error("Editor markdown worker could not restart."),
+    );
+  }
+}
+
 function handleWorkerMessage(event: MessageEvent<unknown>) {
   const data = event.data;
 
@@ -413,14 +440,12 @@ export async function deserializeMarkdownInWorker(
       const timeoutId =
         timeoutMs > 0
           ? window.setTimeout(() => {
-              finish(() => {
-                cleanupRequest(requestId);
-                reject(
-                  new Error(
-                    `Markdown deserialization worker timed out after ${timeoutMs}ms.`,
-                  ),
-                );
-              });
+              timeOutRequest(
+                requestId,
+                new Error(
+                  `Markdown deserialization worker timed out after ${timeoutMs}ms.`,
+                ),
+              );
             }, timeoutMs)
           : null;
 
@@ -453,10 +478,18 @@ export async function deserializeMarkdownInWorker(
         options.signal.addEventListener("abort", abortHandler, { once: true });
       }
 
+      const payload: DeserializeMarkdownWorkerRequest = {
+        type: "deserialize",
+        requestId,
+        filePath,
+        markdown,
+      };
+
       pendingRequests.set(requestId, {
         requestId,
         requestKey,
         filePath,
+        payload,
         resolve: (value) =>
           finish(() =>
             resolve(Array.isArray(value) ? (value as unknown[]) : []),
@@ -468,15 +501,8 @@ export async function deserializeMarkdownInWorker(
       latestRequestIdByKey.set(requestKey, requestId);
       rejectSupersededRequestsForKey(requestKey, requestId);
 
-      const payload: DeserializeMarkdownWorkerRequest = {
-        type: "deserialize",
-        requestId,
-        filePath,
-        markdown,
-      };
-
       try {
-        worker.postMessage(payload as MarkdownWorkerRequest);
+        worker.postMessage(payload);
       } catch (error) {
         finish(() => {
           cleanup();
@@ -535,14 +561,12 @@ export async function serializeMarkdownInWorker(
       const timeoutId =
         timeoutMs > 0
           ? window.setTimeout(() => {
-              finish(() => {
-                cleanupRequest(requestId);
-                reject(
-                  new Error(
-                    `Editor markdown worker timed out after ${timeoutMs}ms.`,
-                  ),
-                );
-              });
+              timeOutRequest(
+                requestId,
+                new Error(
+                  `Editor markdown worker timed out after ${timeoutMs}ms.`,
+                ),
+              );
             }, timeoutMs)
           : null;
 
@@ -575,10 +599,18 @@ export async function serializeMarkdownInWorker(
         options.signal.addEventListener("abort", abortHandler, { once: true });
       }
 
+      const payload: SerializeMarkdownWorkerRequest = {
+        type: "serialize",
+        requestId,
+        filePath,
+        children,
+      };
+
       pendingRequests.set(requestId, {
         requestId,
         requestKey,
         filePath,
+        payload,
         resolve: (value) =>
           finish(() => resolve(typeof value === "string" ? value : "")),
         reject: (error) => finish(() => reject(error)),
@@ -588,13 +620,6 @@ export async function serializeMarkdownInWorker(
       latestRequestIdByKey.set(requestKey, requestId);
       rejectSupersededRequestsForKey(requestKey, requestId);
       lastLegacyRequestId = requestId;
-
-      const payload: SerializeMarkdownWorkerRequest = {
-        type: "serialize",
-        requestId,
-        filePath,
-        children,
-      };
 
       try {
         worker.postMessage(payload);

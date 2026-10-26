@@ -69,3 +69,44 @@ it("stays up while a request is in flight and restarts on demand", async () => {
   FakeWorker.instances[1].reply("# Again");
   await expect(second).resolves.toBe("# Again");
 });
+
+it("stops the worker on a timeout and sends a queued save to a new one", async () => {
+  const { deserializeMarkdownInWorker, serializeMarkdownInWorker } =
+    await import("./editor-markdown-worker");
+  const stuck = deserializeMarkdownInWorker("# Big", {
+    timeoutMs: 1_000,
+    filePath: "big.md",
+  });
+  const waiting = serializeMarkdownInWorker([], {
+    timeoutMs: 0,
+    filePath: "small.md",
+  });
+  const [worker] = FakeWorker.instances;
+
+  vi.advanceTimersByTime(1_000);
+  await expect(stuck).rejects.toThrow("timed out after 1000ms");
+  expect(worker.terminated).toBe(true);
+  expect(FakeWorker.instances).toHaveLength(2);
+
+  const next = FakeWorker.instances[1];
+  expect(next.posted.map((message) => message.filePath)).toEqual(["small.md"]);
+  next.reply("# Small");
+  await expect(waiting).resolves.toBe("# Small");
+});
+
+it("starts no new worker after a timeout until it is needed", async () => {
+  const { deserializeMarkdownInWorker } =
+    await import("./editor-markdown-worker");
+  const stuck = deserializeMarkdownInWorker("# Big", {
+    timeoutMs: 1_000,
+    fallback: () => [{ type: "p", children: [{ text: "Big" }] }],
+  });
+  const [worker] = FakeWorker.instances;
+
+  vi.advanceTimersByTime(1_000);
+  await expect(stuck).resolves.toEqual([
+    { type: "p", children: [{ text: "Big" }] },
+  ]);
+  expect(worker.terminated).toBe(true);
+  expect(FakeWorker.instances).toHaveLength(1);
+});

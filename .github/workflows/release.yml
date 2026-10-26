@@ -88,6 +88,7 @@ jobs:
     needs: check-version
     strategy:
       fail-fast: false
+      # Keep in step with the matrix in release-cache.yml.
       matrix:
         include:
           - name: macOS Apple Silicon
@@ -130,10 +131,14 @@ jobs:
         with:
           targets: ${{ matrix.rust-targets }}
 
+      # Restores the cache the Release cache workflow saves on main. A tag's
+      # own cache could never be restored by the next tag, so it isn't saved.
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: release-${{ matrix.platform }}
           key: ${{ matrix.rust-targets }}
+          save-if: false
 
       - run: pnpm install --frozen-lockfile
 

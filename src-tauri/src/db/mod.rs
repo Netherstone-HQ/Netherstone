@@ -14,6 +14,21 @@ use std::time::Duration;
 
 pub use schema::init_schema;
 
+/// Fills the connection's `kept_paths` table with `paths`, so a prune can
+/// keep them with `NOT IN (SELECT path FROM kept_paths)`. One parameter per
+/// path would hit SQLite's limit in a big vault.
+pub fn fill_kept_paths(conn: &Connection, paths: &[String]) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TEMP TABLE IF NOT EXISTS kept_paths (path TEXT PRIMARY KEY);
+         DELETE FROM kept_paths;",
+    )?;
+    let mut insert = conn.prepare_cached("INSERT OR IGNORE INTO kept_paths (path) VALUES (?1)")?;
+    for path in paths {
+        insert.execute([path])?;
+    }
+    Ok(())
+}
+
 /// Returns the path to the Netherstone database file in the OS's data directory.
 ///
 /// Platform-specific locations:

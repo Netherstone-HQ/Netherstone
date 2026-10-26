@@ -377,25 +377,13 @@ pub fn needs_indexing(conn: &Connection, file_path: &Path) -> Result<bool, Strin
 
 /// Remove files from the database that no longer exist on disk.
 pub fn prune_deleted_files(conn: &Connection, existing_paths: &[String]) -> Result<usize, String> {
-    if existing_paths.is_empty() {
-        return Ok(0);
-    }
+    let prune = || -> rusqlite::Result<usize> {
+        super::fill_kept_paths(conn, existing_paths)?;
+        conn.execute(
+            "DELETE FROM files WHERE path NOT IN (SELECT path FROM kept_paths)",
+            [],
+        )
+    };
 
-    let placeholders = existing_paths
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(",");
-    let query = format!("DELETE FROM files WHERE path NOT IN ({})", placeholders);
-
-    let params: Vec<&dyn rusqlite::ToSql> = existing_paths
-        .iter()
-        .map(|p| p as &dyn rusqlite::ToSql)
-        .collect();
-
-    let deleted = conn
-        .execute(&query, params.as_slice())
-        .map_err(|e| format!("Failed to prune deleted files: {}", e))?;
-
-    Ok(deleted)
+    prune().map_err(|e| format!("Failed to prune deleted files: {}", e))
 }

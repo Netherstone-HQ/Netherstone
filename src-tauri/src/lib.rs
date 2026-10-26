@@ -774,11 +774,6 @@ fn open_markdown_file(file_path: String) -> Result<OpenMarkdownFileResult, Strin
     let expected_cache_version = AST_CACHE_VERSION;
     let conn = db::open_connection()?;
 
-    eprintln!(
-        "[Netherstone] AST cache lookup start path={} version={}",
-        file_path, expected_cache_version
-    );
-
     let plate_value = match db::ast_cache::get_valid_ast_cache(
         &conn,
         &file_path,
@@ -800,21 +795,11 @@ fn open_markdown_file(file_path: String) -> Result<OpenMarkdownFileResult, Strin
         let _ = db::ast_cache::delete_ast_cache(&conn, &file_path);
     }
 
-    let cache_hit = plate_value.is_some();
-
-    eprintln!(
-        "[Netherstone] AST cache {} path={} hash={} version={}",
-        if cache_hit { "hit" } else { "miss" },
-        file_path,
-        content_hash,
-        expected_cache_version
-    );
-
     Ok(OpenMarkdownFileResult {
         file_path,
         markdown,
         content_hash,
-        cache_hit,
+        cache_hit: plate_value.is_some(),
         plate_value,
     })
 }
@@ -830,33 +815,19 @@ fn upsert_ast_cache(
     let expected_cache_version = AST_CACHE_VERSION;
     let conn = db::open_connection()?;
 
-    eprintln!(
-        "[Netherstone] AST cache upsert start path={} hash={} version={}",
-        file_path, content_hash, expected_cache_version
-    );
-
-    match db::ast_cache::upsert_ast_cache(
+    db::ast_cache::upsert_ast_cache(
         &conn,
         &file_path,
         &content_hash,
         expected_cache_version,
         &plate_value,
-    ) {
-        Ok(()) => {
-            eprintln!(
-                "[Netherstone] AST cache upsert success path={} hash={} version={}",
-                file_path, content_hash, expected_cache_version
-            );
-            Ok(())
-        }
-        Err(error) => {
-            eprintln!(
-                "[Netherstone] AST cache upsert failed path={} hash={} version={} error={}",
-                file_path, content_hash, expected_cache_version, error
-            );
-            Err(error)
-        }
-    }
+    )
+    .inspect_err(|error| {
+        eprintln!(
+            "[Netherstone] AST cache write failed path={} error={}",
+            file_path, error
+        )
+    })
 }
 
 /// Writes a shard while `writes.lock` is held, then points its attachment
@@ -1144,22 +1115,11 @@ fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) 
     };
 
     for (previous, next) in moved_markdown_paths(old_path, new_path) {
-        match db::ast_cache::rename_ast_cache(&conn, &previous, &next) {
-            Ok(renamed) => {
-                eprintln!(
-                    "[Netherstone] AST cache sync after file {} {} old_path={} new_path={}",
-                    action,
-                    if renamed { "success" } else { "noop" },
-                    previous,
-                    next
-                );
-            }
-            Err(error) => {
-                eprintln!(
-                    "[Netherstone] Failed to update AST cache {} -> {}: {}",
-                    previous, next, error
-                );
-            }
+        if let Err(error) = db::ast_cache::rename_ast_cache(&conn, &previous, &next) {
+            eprintln!(
+                "[Netherstone] Failed to update AST cache {} -> {}: {}",
+                previous, next, error
+            );
         }
 
         if let Err(error) = db::attachments::rename_reference_file_path(&conn, &previous, &next) {
@@ -1571,8 +1531,6 @@ fn index_vault(vault_path: String) -> Result<String, String> {
     let mut skipped_count = 0;
     let mut error_count = 0;
 
-    eprintln!("[Netherstone] Starting vault indexing for: {}", vault_path);
-
     // Collect all file paths for pruning
     let mut all_paths = Vec::new();
 
@@ -1582,21 +1540,14 @@ fn index_vault(vault_path: String) -> Result<String, String> {
         }
 
         // Index each file
-        eprintln!(
-            "[Netherstone] Found {} markdown files to process",
-            all_paths.len()
-        );
-
         for path_str in &all_paths {
             let path = std::path::Path::new(path_str);
 
             match db::indexer::needs_indexing(conn, path) {
                 Ok(true) => {
-                    eprintln!("[Netherstone] Indexing: {}", path_str);
                     match db::indexer::index_file(conn, vault, path) {
                         Ok(_) => {
                             indexed_count += 1;
-                            eprintln!("[Netherstone] Successfully indexed: {}", path_str);
                         }
                         Err(e) => {
                             eprintln!("[Netherstone] Failed to index {}: {}", path_str, e);
@@ -1605,7 +1556,6 @@ fn index_vault(vault_path: String) -> Result<String, String> {
                     }
                 }
                 Ok(false) => {
-                    eprintln!("[Netherstone] Skipping (already indexed): {}", path_str);
                     skipped_count += 1;
                 }
                 Err(e) => {
@@ -1620,40 +1570,25 @@ fn index_vault(vault_path: String) -> Result<String, String> {
         }
 
         // Prune deleted files
-        match db::indexer::prune_deleted_files(conn, &all_paths) {
-            Ok(deleted) => {
-                if deleted > 0 {
-                    eprintln!("Pruned {} deleted files from index", deleted);
-                }
-            }
-            Err(e) => eprintln!("Failed to prune deleted files: {}", e),
+        if let Err(e) = db::indexer::prune_deleted_files(conn, &all_paths) {
+            eprintln!("Failed to prune deleted files: {}", e);
         }
 
         // Prune stale AST cache rows for this vault only.
-        match db::ast_cache::prune_stale_ast_cache_for_vault(conn, &vault_path, &all_paths) {
-            Ok(deleted) => {
-                if deleted > 0 {
-                    eprintln!(
-                        "[Netherstone] Pruned {} stale AST cache rows for vault {}",
-                        deleted, vault_path
-                    );
-                }
-            }
-            Err(e) => eprintln!(
+        if let Err(e) = db::ast_cache::prune_stale_ast_cache_for_vault(conn, &vault_path, &all_paths) {
+            eprintln!(
                 "[Netherstone] Failed to prune stale AST cache rows for vault {}: {}",
                 vault_path, e
-            ),
+            );
         }
 
         Ok(())
     })?;
 
-    let result = format!(
+    Ok(format!(
         "Indexed {} files, skipped {} unchanged, {} errors",
         indexed_count, skipped_count, error_count
-    );
-    eprintln!("[Netherstone] Indexing complete: {}", result);
-    Ok(result)
+    ))
 }
 
 fn collect_file_paths(node: &vault::FileNode, paths: &mut Vec<String>) {

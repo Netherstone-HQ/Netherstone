@@ -75,15 +75,8 @@ export function useVaultWatcher() {
       if (isAttachmentOnlyChange(changedPaths, path)) return;
 
       if (changedPaths.length > 0) {
-        const { suppressedPaths, unsuppressedPaths } =
+        const { unsuppressedPaths } =
           partitionSuppressedVaultChangePaths(changedPaths);
-
-        if (suppressedPaths.length > 0) {
-          console.info(
-            "[Netherstone] Ignoring suppressed app-initiated watcher event(s):",
-            suppressedPaths,
-          );
-        }
 
         // A changed shard's cached tree no longer matches its text, so the
         // next open misses it and drops it.

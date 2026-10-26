@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
-import { logEditorLifecycle } from "./lib/editor-lifecycle";
 import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
 
@@ -190,12 +189,6 @@ export function Editor() {
 
     let cancelled = false;
     const tick = editorSessionTick;
-
-    logEditorLifecycle("session:resolve:start", {
-      filePath,
-      markdownChars: content.length,
-      cacheHit: initialValue !== null,
-    });
 
     void resolveSessionValue(filePath, content, initialValue).then((value) => {
       if (cancelled) return;

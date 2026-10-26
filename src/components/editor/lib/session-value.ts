@@ -7,12 +7,6 @@ import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { resolveShardLinkKeys } from "@/lib/shard-link-keys";
 import { useVaultStore } from "@/store";
 import { EditorKit } from "../editor-kit";
-import {
-  formatEditorLifecycleDurationMs,
-  getEditorLifecycleNowMs,
-  getPlateValueNodeCount,
-  logEditorLifecycle,
-} from "./editor-lifecycle";
 
 /**
  * Resolves the initial Plate value for a newly opened file: the cached AST
@@ -27,7 +21,6 @@ export async function resolveSessionValue(
   // stores the editor's value.
   if (cachedValue) return withCurrentShardLinks(filePath, stripDeviceMediaProps(cachedValue));
 
-  const startMs = getEditorLifecycleNowMs();
   const deserializeInMainThread = () =>
     normalizeStaticValue(
       deserializeEditorMarkdown(createSlateEditor({ plugins: EditorKit }), content, {
@@ -38,12 +31,6 @@ export async function resolveSessionValue(
   const value = await deserializeMarkdownInWorker(content, {
     filePath,
     fallback: deserializeInMainThread,
-  });
-
-  logEditorLifecycle("deserialize:complete", {
-    filePath,
-    nodeCount: getPlateValueNodeCount(value),
-    duration: formatEditorLifecycleDurationMs(startMs),
   });
 
   return withCurrentShardLinks(filePath, value);

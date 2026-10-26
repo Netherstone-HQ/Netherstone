@@ -33,13 +33,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function logAstCacheInfo(
-  event: string,
-  details: AstCacheLogDetails = {},
-): void {
-  console.info(AST_CACHE_LOG_PREFIX, event, details);
-}
-
 function logAstCacheError(
   event: string,
   error: unknown,
@@ -69,11 +62,6 @@ export async function openMarkdownFile(
   filePath: string,
 ): Promise<OpenMarkdownFileResult> {
   assertTauri();
-
-  logAstCacheInfo("open:start", {
-    filePath,
-  });
-
   try {
     const result = await invoke<OpenMarkdownFileCommandResult>(
       "open_markdown_file",
@@ -81,13 +69,6 @@ export async function openMarkdownFile(
     );
 
     const plateValue = normalizePlateValue(result.plate_value);
-
-    logAstCacheInfo(result.cache_hit ? "open:hit" : "open:miss", {
-      filePath: result.file_path,
-      contentHash: result.content_hash,
-      markdownChars: result.markdown.length,
-      hasPlateValue: plateValue !== null,
-    });
 
     return {
       filePath: result.file_path,
@@ -110,24 +91,11 @@ export async function upsertAstCache({
   plateValue,
 }: UpsertAstCacheInput): Promise<void> {
   assertTauri();
-
-  logAstCacheInfo("write:start", {
-    filePath,
-    markdownChars: markdown.length,
-    hasPlateValue: Array.isArray(plateValue),
-  });
-
   try {
     await invoke("upsert_ast_cache", {
       filePath,
       markdown,
       plateValue,
-    });
-
-    logAstCacheInfo("write:success", {
-      filePath,
-      markdownChars: markdown.length,
-      hasPlateValue: Array.isArray(plateValue),
     });
   } catch (error) {
     logAstCacheError("write:error", error, {

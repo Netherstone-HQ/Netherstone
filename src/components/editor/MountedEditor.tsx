@@ -23,12 +23,6 @@ import {
 } from "./lib/link-reveal";
 import { insertManagedMediaFiles } from "./lib/media-insert";
 import { getShardScrollPosition, useShardScroll } from "./lib/shard-scroll";
-import {
-  formatEditorLifecycleDurationMs,
-  getEditorLifecycleDurationMs,
-  getEditorLifecycleNowMs,
-  logEditorLifecycle,
-} from "./lib/editor-lifecycle";
 
 /**
  * Top-level blocks per Slate chunk. Each chunk renders with
@@ -56,13 +50,8 @@ export const MountedEditor = memo(function MountedEditor({
   cacheHit,
 }: MountedEditorProps) {
   const didWriteColdOpenCacheRef = useRef(false);
-  const mountStartMsRef = useRef(getEditorLifecycleNowMs());
-  const mountRenderLoggedRef = useRef(false);
   const suppressInitialChangeRef = useRef(true);
 
-  const nodeCount = initialValue.length;
-
-  const usePlateEditorStartMs = getEditorLifecycleNowMs();
   const editor = usePlateEditor({
     plugins: EditorKit,
     value: initialValue,
@@ -73,9 +62,6 @@ export const MountedEditor = memo(function MountedEditor({
     // keypress and the screen.
     navigationFeedback: false,
   });
-  const usePlateEditorDurationMs = getEditorLifecycleDurationMs(
-    usePlateEditorStartMs,
-  );
 
   // Where the shard was left, and its blocks up to there drawn right away so
   // it can open at that place.
@@ -93,17 +79,6 @@ export const MountedEditor = memo(function MountedEditor({
     );
   });
   useShardScroll(editor, currentFilePath, savedPosition, !opensAtLink);
-
-  if (!mountRenderLoggedRef.current) {
-    mountRenderLoggedRef.current = true;
-
-    logEditorLifecycle("mount:render:usePlateEditor", {
-      filePath: currentFilePath,
-      cacheHit,
-      nodeCount,
-      usePlateEditorDurationMs,
-    });
-  }
 
   const setPlateEditor = useEditorStore((s) => s.setPlateEditor);
   const setTocHeadings = useEditorStore((s) => s.setTocHeadings);
@@ -177,29 +152,10 @@ export const MountedEditor = memo(function MountedEditor({
       suppressInitialChangeRef.current = false;
     });
 
-    logEditorLifecycle("mount:commit", {
-      filePath: currentFilePath,
-      cacheHit,
-      nodeCount,
-      commitDuration: formatEditorLifecycleDurationMs(mountStartMsRef.current),
-    });
-
-    const firstPaintRafId = window.requestAnimationFrame(() => {
-      logEditorLifecycle("mount:first-paint", {
-        filePath: currentFilePath,
-        cacheHit,
-        nodeCount,
-        firstPaintDuration: formatEditorLifecycleDurationMs(
-          mountStartMsRef.current,
-        ),
-      });
-    });
-
     return () => {
       window.cancelAnimationFrame(allowDirtyTrackingId);
-      window.cancelAnimationFrame(firstPaintRafId);
     };
-  }, [cacheHit, currentFilePath, nodeCount]);
+  }, [cacheHit, currentFilePath]);
 
   useLayoutEffect(() => {
     registerChunkDrawer(editor, drawer);
@@ -220,29 +176,9 @@ export const MountedEditor = memo(function MountedEditor({
     rememberSavedValue(editor, editor.children);
     setPlateEditor(editor);
 
-    const tocStartMs = getEditorLifecycleNowMs();
-    const tocHeadings = getPlateHeadingList(editor);
-
-    setTocHeadings(tocHeadings);
-
-    logEditorLifecycle("mount:ready", {
-      filePath: currentFilePath,
-      cacheHit,
-      nodeCount,
-      tocHeadingCount: tocHeadings.length,
-      tocDuration: formatEditorLifecycleDurationMs(tocStartMs),
-      totalMountDuration: formatEditorLifecycleDurationMs(
-        mountStartMsRef.current,
-      ),
-    });
+    setTocHeadings(getPlateHeadingList(editor));
 
     return () => {
-      logEditorLifecycle("mount:cleanup", {
-        filePath: currentFilePath,
-        cacheHit,
-        lifetime: formatEditorLifecycleDurationMs(mountStartMsRef.current),
-      });
-
       // The next shard may already be on screen (this one is removed after
       // it's shown); only clear what's still this one's.
       if (useEditorStore.getState().plateEditor === editor) {
@@ -254,7 +190,6 @@ export const MountedEditor = memo(function MountedEditor({
     cacheHit,
     currentFilePath,
     editor,
-    nodeCount,
     setPlateEditor,
     setTocHeadings,
   ]);
@@ -302,26 +237,16 @@ export const MountedEditor = memo(function MountedEditor({
     if (cacheHit || didWriteColdOpenCacheRef.current) return;
 
     didWriteColdOpenCacheRef.current = true;
-    const coldOpenCacheWriteStartMs = getEditorLifecycleNowMs();
-
     void upsertAstCache({
       filePath: currentFilePath,
       markdown: content,
       plateValue: initialValue,
-    })
-      .then(() => {
-        logEditorLifecycle("cold-open-cache-write:success", {
-          filePath: currentFilePath,
-          duration: formatEditorLifecycleDurationMs(coldOpenCacheWriteStartMs),
-        });
-      })
-      .catch((error) => {
-        console.error("Failed to write cold-open AST cache:", {
-          filePath: currentFilePath,
-          duration: formatEditorLifecycleDurationMs(coldOpenCacheWriteStartMs),
-          error,
-        });
+    }).catch((error) => {
+      console.error("Failed to write cold-open AST cache:", {
+        filePath: currentFilePath,
+        error,
       });
+    });
   }, [cacheHit, content, currentFilePath, initialValue]);
 
   return (
@@ -335,16 +260,7 @@ export const MountedEditor = memo(function MountedEditor({
         // Text that changed outside the app is already on disk.
         const isOutsideChange = takeOutsideChange(editor);
 
-        if (suppressInitialChangeRef.current) {
-          if (hasDocumentChange) {
-            logEditorLifecycle("mount:initial-change-suppressed", {
-              filePath: currentFilePath,
-              operationTypes: editor.operations.map((op: any) => op.type),
-            });
-          }
-
-          return;
-        }
+        if (suppressInitialChangeRef.current) return;
 
         if (!hasDocumentChange) return;
 

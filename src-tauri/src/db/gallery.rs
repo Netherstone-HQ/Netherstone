@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -7,6 +7,7 @@ use std::time::UNIX_EPOCH;
 use super::attachments::{
     ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, is_interrupted_write,
     parse_drawing_exports, path_from_asset_path, reference_kind_for_path, scan_attachment_files,
+    vault_key,
 };
 
 /// A file in the vault's attachment folder, as the Gallery shows it.
@@ -62,12 +63,13 @@ pub fn list_vault_attachments(
     conn: &Connection,
     vault_path: &Path,
 ) -> Result<Vec<GalleryFile>, String> {
+    let vault = vault_key(vault_path);
     let added_at: HashMap<String, i64> = {
         let mut stmt = conn
-            .prepare("SELECT asset_path, created_at FROM attachments")
+            .prepare("SELECT asset_path, created_at FROM attachments WHERE vault_path = ?1")
             .map_err(|e| format!("Failed to prepare attachment query: {}", e))?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map(params![vault], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(|e| format!("Failed to query attachments: {}", e))?;
         rows.filter_map(Result::ok).collect()
     };
@@ -75,18 +77,16 @@ pub fn list_vault_attachments(
     let mut shards_by_asset: HashMap<String, Vec<String>> = HashMap::new();
     {
         let mut stmt = conn
-            .prepare("SELECT file_path, asset_path FROM attachment_references")
+            .prepare("SELECT file_path, asset_path FROM attachment_references WHERE vault_path = ?1")
             .map_err(|e| format!("Failed to prepare attachment reference query: {}", e))?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))
+            .query_map(params![vault], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))
             .map_err(|e| format!("Failed to query attachment references: {}", e))?;
         for (file_path, asset_path) in rows.filter_map(Result::ok) {
-            if Path::new(&file_path).starts_with(vault_path) {
-                shards_by_asset
-                    .entry(asset_path)
-                    .or_default()
-                    .push(file_path);
-            }
+            shards_by_asset
+                .entry(asset_path)
+                .or_default()
+                .push(file_path);
         }
     }
 
@@ -325,11 +325,11 @@ mod tests {
         path.to_string_lossy().to_string()
     }
 
-    fn register(conn: &Connection, asset_path: &str, created_at: i64) {
+    fn register(conn: &Connection, vault: &Path, asset_path: &str, created_at: i64) {
         conn.execute(
-            "INSERT INTO attachments (asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, sync_status)
-             VALUES (?1, ?1, ?1, '', '', 0, ?2, 'syncable')",
-            params![asset_path, created_at],
+            "INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, sync_status)
+             VALUES (?3, ?1, ?1, ?1, '', '', 0, ?2, 'syncable')",
+            params![asset_path, created_at, vault_key(vault)],
         )
         .unwrap();
     }
@@ -352,7 +352,7 @@ mod tests {
             ("Notes.zip", 50),
         ] {
             write(&vault, &format!("_attachments/{name}"), "bytes");
-            register(&conn, &format!("_attachments/{name}"), created_at);
+            register(&conn, &vault, &format!("_attachments/{name}"), created_at);
         }
         let plan = save_shard(&conn, &vault, "Plan.md", "![](_attachments/Trip.jpg)\n");
         let trip = save_shard(

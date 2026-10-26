@@ -71,8 +71,10 @@ CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
 
 -- ── Attachments ──────────────────────────────────────────────────────────────
 
+-- One database serves every vault, so rows are keyed by vault and path.
 CREATE TABLE IF NOT EXISTS attachments (
-    asset_path TEXT PRIMARY KEY,
+    vault_path TEXT NOT NULL,
+    asset_path TEXT NOT NULL,
     hash TEXT NOT NULL,
     original_name TEXT NOT NULL,
     extension TEXT NOT NULL,
@@ -83,27 +85,29 @@ CREATE TABLE IF NOT EXISTS attachments (
     sync_status TEXT NOT NULL CHECK(sync_status IN ('syncable', 'local_only', 'blocked', 'pending_review')),
     ref_count INTEGER NOT NULL DEFAULT 0,
     last_referenced_at INTEGER,
-    gc_candidate_at INTEGER
+    gc_candidate_at INTEGER,
+    PRIMARY KEY (vault_path, asset_path)
 );
 
-CREATE INDEX IF NOT EXISTS idx_attachments_hash ON attachments(hash);
+CREATE INDEX IF NOT EXISTS idx_attachments_hash ON attachments(vault_path, hash);
 CREATE INDEX IF NOT EXISTS idx_attachments_sync_status ON attachments(sync_status);
 CREATE INDEX IF NOT EXISTS idx_attachments_ref_count ON attachments(ref_count);
 CREATE INDEX IF NOT EXISTS idx_attachments_gc_candidate_at ON attachments(gc_candidate_at);
 
 CREATE TABLE IF NOT EXISTS attachment_references (
     file_path TEXT NOT NULL,
+    vault_path TEXT NOT NULL,
     asset_path TEXT NOT NULL,
     reference_kind TEXT NOT NULL CHECK(reference_kind IN ('image', 'file', 'audio', 'video')),
     detected_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     PRIMARY KEY (file_path, asset_path),
-    FOREIGN KEY (asset_path) REFERENCES attachments(asset_path) ON DELETE CASCADE
+    FOREIGN KEY (vault_path, asset_path) REFERENCES attachments(vault_path, asset_path) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_attachment_references_file_path
     ON attachment_references(file_path);
 CREATE INDEX IF NOT EXISTS idx_attachment_references_asset_path
-    ON attachment_references(asset_path);
+    ON attachment_references(vault_path, asset_path);
 
 -- ── AST Cache ───────────────────────────────────────────────────────────────
 -- The first path-keyed table was never written by a release.
@@ -264,11 +268,30 @@ fn migrate_links_table(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
+/// Drops attachment tables from before rows named their vault. Those keyed
+/// rows by `_attachments/<name>` alone, so two vaults with a file of the
+/// same name shared one. The tables only mirror what is on disk and in the
+/// shards, and the attachment check on opening a vault fills them again.
+fn drop_attachment_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let has_table: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'attachments')",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_table && !column_exists(conn, "attachments", "vault_path")? {
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS attachment_references; DROP TABLE attachments;",
+        )?;
+    }
+    Ok(())
+}
+
 /// Initialize the database schema.
 ///
 /// Creates all tables and indexes if they don't exist, and brings older
 /// databases up to date.
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
+    drop_attachment_tables_without_vault(conn)?;
     conn.execute_batch(SCHEMA)?;
     migrate_links_table(conn)?;
 
@@ -285,4 +308,41 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
     super::indexer::remove_tags_without_letters(conn)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attachment_tables_without_a_vault_are_rebuilt() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE attachments (asset_path TEXT PRIMARY KEY, hash TEXT NOT NULL);
+             CREATE TABLE attachment_references (file_path TEXT NOT NULL, asset_path TEXT NOT NULL);
+             INSERT INTO attachments VALUES ('_attachments/a.png', 'h');",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        assert!(column_exists(&conn, "attachments", "vault_path").unwrap());
+        assert!(column_exists(&conn, "attachment_references", "vault_path").unwrap());
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM attachments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+        // Opening again keeps what the new tables hold.
+        conn.execute(
+            "INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, sync_status)
+             VALUES ('/v', '_attachments/a.png', 'h', 'a.png', 'png', 'image/png', 1, 'syncable')",
+            [],
+        )
+        .unwrap();
+        init_schema(&conn).unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM attachments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 1);
+    }
 }

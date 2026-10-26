@@ -252,16 +252,23 @@ pub(super) fn path_from_asset_path(vault_path: &Path, asset_path: &str) -> Resul
     Ok(path)
 }
 
+/// How rows name their vault: the database is shared by every vault.
+pub(crate) fn vault_key(vault_path: &Path) -> String {
+    vault_path.to_string_lossy().into_owned()
+}
+
 fn upsert_attachment_record(
     conn: &Connection,
+    vault_path: &Path,
     attachment: &PersistedAttachment,
 ) -> Result<(), String> {
     let now = now_unix_seconds();
 
     conn.execute(
-        "INSERT INTO attachments (asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count, last_referenced_at, gc_candidate_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, 0, NULL, NULL)
-         ON CONFLICT(asset_path) DO UPDATE SET
+        "INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count, last_referenced_at, gc_candidate_at)
+         VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, 0, NULL, NULL)
+         ON CONFLICT(vault_path, asset_path) DO UPDATE SET
+             hash = excluded.hash,
              extension = excluded.extension,
              mime_type = excluded.mime_type,
              size_bytes = excluded.size_bytes,
@@ -276,11 +283,22 @@ fn upsert_attachment_record(
             attachment.size_bytes as i64,
             now,
             attachment.sync_status,
+            vault_key(vault_path),
         ],
     )
     .map_err(|e| format!("Failed to upsert attachment metadata: {}", e))?;
 
     Ok(())
+}
+
+/// Whether the database has a row for `asset_path` in the vault.
+fn is_tracked(conn: &Connection, vault_path: &Path, asset_path: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM attachments WHERE vault_path = ?1 AND asset_path = ?2)",
+        params![vault_key(vault_path), asset_path],
+        |row| row.get(0),
+    )
+    .map_err(|e| format!("Failed to query attachment metadata: {}", e))
 }
 
 /// Makes sure `asset_path` has a database row, creating it from the file on
@@ -291,16 +309,7 @@ fn ensure_attachment_record_for_existing_asset(
     vault_path: &Path,
     asset_path: &str,
 ) -> Result<bool, String> {
-    let exists: Option<String> = conn
-        .query_row(
-            "SELECT asset_path FROM attachments WHERE asset_path = ?1",
-            params![asset_path],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| format!("Failed to query attachment metadata: {}", e))?;
-
-    if exists.is_some() {
+    if is_tracked(conn, vault_path, asset_path)? {
         return Ok(true);
     }
 
@@ -481,31 +490,32 @@ pub(super) fn parse_drawing_exports(content: &str) -> Vec<DrawingExport> {
     exports
 }
 
+/// Recounts the references to each `(vault key, asset path)` in `attachments`.
 fn refresh_attachment_counts(
     conn: &Connection,
-    asset_paths: &HashSet<String>,
+    attachments: &HashSet<(String, String)>,
 ) -> Result<(), String> {
     let now = now_unix_seconds();
 
-    for asset_path in asset_paths {
+    for (vault, asset_path) in attachments {
         let ref_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM attachment_references WHERE asset_path = ?1",
-                params![asset_path],
+                "SELECT COUNT(*) FROM attachment_references WHERE vault_path = ?1 AND asset_path = ?2",
+                params![vault, asset_path],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count attachment references: {}", e))?;
 
         if ref_count > 0 {
             conn.execute(
-                "UPDATE attachments SET ref_count = ?1, last_referenced_at = ?2, gc_candidate_at = NULL, updated_at = ?2 WHERE asset_path = ?3",
-                params![ref_count, now, asset_path],
+                "UPDATE attachments SET ref_count = ?1, last_referenced_at = ?2, gc_candidate_at = NULL, updated_at = ?2 WHERE vault_path = ?3 AND asset_path = ?4",
+                params![ref_count, now, vault, asset_path],
             )
             .map_err(|e| format!("Failed to mark attachment as referenced: {}", e))?;
         } else {
             conn.execute(
-                "UPDATE attachments SET ref_count = 0, gc_candidate_at = COALESCE(gc_candidate_at, ?1), updated_at = ?1 WHERE asset_path = ?2",
-                params![now, asset_path],
+                "UPDATE attachments SET ref_count = 0, gc_candidate_at = COALESCE(gc_candidate_at, ?1), updated_at = ?1 WHERE vault_path = ?2 AND asset_path = ?3",
+                params![now, vault, asset_path],
             )
             .map_err(|e| format!("Failed to mark attachment as GC candidate: {}", e))?;
         }
@@ -632,10 +642,12 @@ fn find_identical_attachment(
 ) -> Result<Option<String>, String> {
     let mut candidates: Vec<String> = {
         let mut stmt = conn
-            .prepare("SELECT asset_path FROM attachments WHERE hash = ?1 ORDER BY asset_path")
+            .prepare(
+                "SELECT asset_path FROM attachments WHERE vault_path = ?1 AND hash = ?2 ORDER BY asset_path",
+            )
             .map_err(|e| format!("Failed to prepare attachment hash query: {}", e))?;
         let rows = stmt
-            .query_map(params![hash], |row| row.get::<_, String>(0))
+            .query_map(params![vault_key(vault_path), hash], |row| row.get::<_, String>(0))
             .map_err(|e| format!("Failed to query attachments by hash: {}", e))?;
         rows.filter_map(Result::ok).collect()
     };
@@ -739,7 +751,7 @@ fn persist_attachment(
         sync_status: sync_status.as_str().to_string(),
     };
 
-    upsert_attachment_record(conn, &attachment)?;
+    upsert_attachment_record(conn, vault_path, &attachment)?;
 
     Ok(attachment)
 }
@@ -786,12 +798,12 @@ fn register_existing_attachment(
     };
 
     let mut attachment = attachment;
-    upsert_attachment_record(conn, &attachment)?;
+    upsert_attachment_record(conn, vault_path, &attachment)?;
     // Keep the name it was first imported under.
     attachment.original_name = conn
         .query_row(
-            "SELECT original_name FROM attachments WHERE asset_path = ?1",
-            params![asset_path],
+            "SELECT original_name FROM attachments WHERE vault_path = ?1 AND asset_path = ?2",
+            params![vault_key(vault_path), asset_path],
             |row| row.get(0),
         )
         .map_err(|e| format!("Failed to query attachment metadata: {}", e))?;
@@ -844,16 +856,7 @@ pub fn sync_references_for_saved_markdown(
     let references = parse_attachment_references(content);
     let now = now_unix_seconds();
 
-    let previous_paths: HashSet<String> = {
-        let mut stmt = conn
-            .prepare("SELECT asset_path FROM attachment_references WHERE file_path = ?1")
-            .map_err(|e| format!("Failed to prepare attachment reference query: {}", e))?;
-        let rows = stmt
-            .query_map(params![file_path], |row| row.get::<_, String>(0))
-            .map_err(|e| format!("Failed to query attachment references: {}", e))?;
-
-        rows.filter_map(Result::ok).collect()
-    };
+    let previous = referenced_attachments(conn, file_path)?;
 
     conn.execute(
         "DELETE FROM attachment_references WHERE file_path = ?1",
@@ -875,15 +878,31 @@ pub fn sync_references_for_saved_markdown(
             continue;
         }
         conn.execute(
-            "INSERT OR REPLACE INTO attachment_references (file_path, asset_path, reference_kind, detected_at) VALUES (?1, ?2, ?3, ?4)",
-            params![file_path, asset_path, reference_kind.as_str(), now],
+            "INSERT OR REPLACE INTO attachment_references (file_path, vault_path, asset_path, reference_kind, detected_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![file_path, vault_key(vault_path), asset_path, reference_kind.as_str(), now],
         )
         .map_err(|e| format!("Failed to insert attachment reference: {}", e))?;
     }
 
-    let mut touched_paths = previous_paths;
-    touched_paths.extend(current_by_path.keys().cloned());
-    refresh_attachment_counts(conn, &touched_paths)
+    let vault = vault_key(vault_path);
+    let mut touched = previous;
+    touched.extend(current_by_path.into_keys().map(|asset_path| (vault.clone(), asset_path)));
+    refresh_attachment_counts(conn, &touched)
+}
+
+/// The `(vault key, asset path)` of every attachment `file_path` links to.
+fn referenced_attachments(
+    conn: &Connection,
+    file_path: &str,
+) -> Result<HashSet<(String, String)>, String> {
+    let mut stmt = conn
+        .prepare("SELECT vault_path, asset_path FROM attachment_references WHERE file_path = ?1")
+        .map_err(|e| format!("Failed to prepare attachment reference query: {}", e))?;
+    let rows = stmt
+        .query_map(params![file_path], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| format!("Failed to query attachment references: {}", e))?;
+
+    Ok(rows.filter_map(Result::ok).collect())
 }
 
 pub fn rename_reference_file_path(
@@ -904,16 +923,7 @@ pub fn remove_references_for_markdown_file(
     conn: &Connection,
     file_path: &str,
 ) -> Result<(), String> {
-    let previous_paths: HashSet<String> = {
-        let mut stmt = conn
-            .prepare("SELECT asset_path FROM attachment_references WHERE file_path = ?1")
-            .map_err(|e| format!("Failed to prepare attachment reference query: {}", e))?;
-        let rows = stmt
-            .query_map(params![file_path], |row| row.get::<_, String>(0))
-            .map_err(|e| format!("Failed to query attachment references: {}", e))?;
-
-        rows.filter_map(Result::ok).collect()
-    };
+    let previous = referenced_attachments(conn, file_path)?;
 
     conn.execute(
         "DELETE FROM attachment_references WHERE file_path = ?1",
@@ -921,7 +931,7 @@ pub fn remove_references_for_markdown_file(
     )
     .map_err(|e| format!("Failed to delete attachment references: {}", e))?;
 
-    refresh_attachment_counts(conn, &previous_paths)
+    refresh_attachment_counts(conn, &previous)
 }
 
 /// An attachment that shards in the vault link to but is not on disk.
@@ -1243,6 +1253,7 @@ fn register_untracked_attachment(
 
     upsert_attachment_record(
         conn,
+        vault_path,
         &PersistedAttachment {
             asset_path: asset_path.to_string(),
             absolute_path: absolute_path.to_string_lossy().to_string(),
@@ -1272,16 +1283,7 @@ fn register_untracked_attachments(
             continue;
         }
 
-        let known: Option<String> = conn
-            .query_row(
-                "SELECT asset_path FROM attachments WHERE asset_path = ?1",
-                params![asset_path],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| format!("Failed to query attachment metadata: {}", e))?;
-
-        if known.is_none() {
+        if !is_tracked(conn, vault_path, asset_path)? {
             register_untracked_attachment(conn, vault_path, asset_path, *size_bytes)?;
             registered.insert(asset_path.clone());
         }
@@ -1299,8 +1301,8 @@ fn describe_missing(
 ) -> Result<(Option<String>, Option<String>), String> {
     let row: Option<(String, String, String, i64)> = conn
         .query_row(
-            "SELECT hash, original_name, extension, size_bytes FROM attachments WHERE asset_path = ?1",
-            params![asset_path],
+            "SELECT hash, original_name, extension, size_bytes FROM attachments WHERE vault_path = ?1 AND asset_path = ?2",
+            params![vault_key(vault_path), asset_path],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()
@@ -1376,19 +1378,18 @@ pub fn reconcile_vault_attachments(
     let shard_paths: HashSet<&str> = markdown_paths.iter().map(String::as_str).collect();
 
     // Shards deleted or moved outside the app.
+    let vault = vault_key(vault_path);
     let referencing_paths: Vec<String> = {
         let mut stmt = tx
-            .prepare("SELECT DISTINCT file_path FROM attachment_references")
+            .prepare("SELECT DISTINCT file_path FROM attachment_references WHERE vault_path = ?1")
             .map_err(|e| format!("Failed to prepare attachment reference query: {}", e))?;
         let rows = stmt
-            .query_map([], |row| row.get::<_, String>(0))
+            .query_map(params![vault], |row| row.get::<_, String>(0))
             .map_err(|e| format!("Failed to query attachment references: {}", e))?;
         rows.filter_map(Result::ok).collect()
     };
     for file_path in referencing_paths {
-        if Path::new(&file_path).starts_with(vault_path)
-            && !shard_paths.contains(file_path.as_str())
-        {
+        if !shard_paths.contains(file_path.as_str()) {
             remove_references_for_markdown_file(&tx, &file_path)?;
             report.removed_shard_count += 1;
         }
@@ -1399,7 +1400,11 @@ pub fn reconcile_vault_attachments(
     let disk_files = scan_attachment_files(vault_path);
     let registered = register_untracked_attachments(&tx, vault_path, &disk_files)?;
     report.registered_count = registered.len();
-    refresh_attachment_counts(&tx, &registered)?;
+    let registered_here: HashSet<(String, String)> = registered
+        .into_iter()
+        .map(|asset_path| (vault.clone(), asset_path))
+        .collect();
+    refresh_attachment_counts(&tx, &registered_here)?;
 
     // Current links from every shard.
     let mut shards_by_asset: HashMap<String, Vec<String>> = HashMap::new();
@@ -1434,8 +1439,8 @@ pub fn reconcile_vault_attachments(
 
         let unused_since: Option<i64> = tx
             .query_row(
-                "SELECT gc_candidate_at FROM attachments WHERE asset_path = ?1",
-                params![asset_path],
+                "SELECT gc_candidate_at FROM attachments WHERE vault_path = ?1 AND asset_path = ?2",
+                params![vault, asset_path],
                 |row| row.get(0),
             )
             .optional()
@@ -1557,8 +1562,8 @@ pub fn clean_up_vault_attachments(
         }
 
         conn.execute(
-            "DELETE FROM attachments WHERE asset_path = ?1 AND ref_count = 0",
-            params![asset_path],
+            "DELETE FROM attachments WHERE vault_path = ?1 AND asset_path = ?2 AND ref_count = 0",
+            params![vault_key(vault_path), asset_path],
         )
         .map_err(|e| format!("Failed to forget removed attachment: {}", e))?;
         result.freed_bytes += file.size_bytes;
@@ -1633,10 +1638,10 @@ mod tests {
         path.to_string_lossy().into_owned()
     }
 
-    fn ref_count(conn: &Connection, asset_path: &str) -> i64 {
+    fn ref_count(conn: &Connection, vault: &Path, asset_path: &str) -> i64 {
         conn.query_row(
-            "SELECT ref_count FROM attachments WHERE asset_path = ?1",
-            params![asset_path],
+            "SELECT ref_count FROM attachments WHERE vault_path = ?1 AND asset_path = ?2",
+            params![vault_key(vault), asset_path],
             |row| row.get(0),
         )
         .unwrap()
@@ -1667,18 +1672,10 @@ mod tests {
         let deleted = path_string(vault.join("deleted.md"));
         let other_vault = std::env::temp_dir().join("netherstone-other-vault");
         let other = path_string(other_vault.join("other.md"));
-        for (vault_path, file_path) in [(&vault, &deleted), (&other_vault, &other)] {
-            sync_references_for_saved_markdown(
-                &conn,
-                vault_path,
-                file_path,
-                "![x](_attachments/cd/old.png)\n",
-            )
-            .unwrap();
-        }
         // The other vault's file is not on this disk, so nothing registered it.
         upsert_attachment_record(
             &conn,
+            &other_vault,
             &PersistedAttachment {
                 asset_path: "_attachments/cd/old.png".into(),
                 absolute_path: String::new(),
@@ -1691,6 +1688,15 @@ mod tests {
             },
         )
         .unwrap();
+        for (vault_path, file_path) in [(&vault, &deleted), (&other_vault, &other)] {
+            sync_references_for_saved_markdown(
+                &conn,
+                vault_path,
+                file_path,
+                "![x](_attachments/cd/old.png)\n",
+            )
+            .unwrap();
+        }
 
         let report =
             reconcile_vault_attachments(&conn, &vault, &[note.clone(), nested.clone()]).unwrap();
@@ -1713,12 +1719,15 @@ mod tests {
         assert_eq!(report.unused[0].asset_path, "_attachments/cd/old.png");
         assert_eq!(report.unused[0].size_bytes, 4);
 
-        assert_eq!(ref_count(&conn, &used), 1);
-        assert_eq!(ref_count(&conn, "_attachments/cd/old.png"), 1);
+        assert_eq!(ref_count(&conn, &vault, &used), 1);
+        // Each vault counts its own links to a file of the same name.
+        assert_eq!(ref_count(&conn, &vault, "_attachments/cd/old.png"), 0);
+        assert_eq!(ref_count(&conn, &other_vault, "_attachments/cd/old.png"), 1);
+        assert!(report.unused[0].unused_since.is_some());
         let hash: String = conn
             .query_row(
-                "SELECT hash FROM attachments WHERE asset_path = ?1",
-                params![used],
+                "SELECT hash FROM attachments WHERE vault_path = ?1 AND asset_path = ?2",
+                params![vault_key(&vault), used],
                 |row| row.get(0),
             )
             .unwrap();
@@ -1752,7 +1761,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(ref_count(&conn, &used), 1);
+        assert_eq!(ref_count(&conn, &vault, &used), 1);
         std::fs::remove_dir_all(&vault).unwrap();
     }
 
@@ -1911,8 +1920,8 @@ mod tests {
         reconcile_vault_attachments(&conn, &vault, &shards).unwrap();
         let now = now_unix_seconds();
         conn.execute(
-            "UPDATE attachments SET gc_candidate_at = ?1 WHERE asset_path = ?2",
-            params![now - CLEANUP_GRACE_SECONDS - 1, old.asset_path],
+            "UPDATE attachments SET gc_candidate_at = ?1 WHERE vault_path = ?3 AND asset_path = ?2",
+            params![now - CLEANUP_GRACE_SECONDS - 1, old.asset_path, vault_key(&vault)],
         )
         .unwrap();
 
@@ -1976,6 +1985,7 @@ mod tests {
         std::fs::write(vault.join(&legacy), b"legacy").unwrap();
         upsert_attachment_record(
             &conn,
+            &vault,
             &PersistedAttachment {
                 asset_path: legacy.clone(),
                 absolute_path: String::new(),

@@ -23,8 +23,8 @@ export async function resolveSessionValue(
   content: string,
   cachedValue: any[] | null,
 ): Promise<any[]> {
-  // Values cached before device-specific media props stopped being saved
-  // may still carry them.
+  // Inserted media carry device-specific props in the editor, and the cache
+  // stores the editor's value.
   if (cachedValue) return withCurrentShardLinks(filePath, stripDeviceMediaProps(cachedValue));
 
   const startMs = getEditorLifecycleNowMs();

@@ -9,7 +9,6 @@ use rusqlite::Connection;
 ///   its first appearance
 /// - `attachments`: Managed vault asset metadata for `_attachments` files
 /// - `attachment_references`: Saved markdown references to managed attachments
-/// - `ast_cache`: Legacy path-keyed AST cache rows retained for migration/backfill
 /// - `ast_cache_index`: Path-to-content index for the content-addressed AST cache
 /// - `ast_cache_blobs`: Content-addressed AST payload store keyed by hash + version
 /// - `charts`: The charts drawn from tables in each file
@@ -107,18 +106,9 @@ CREATE INDEX IF NOT EXISTS idx_attachment_references_asset_path
     ON attachment_references(asset_path);
 
 -- ── AST Cache ───────────────────────────────────────────────────────────────
--- Legacy path-keyed table retained during migration to content-addressed cache.
+-- The first path-keyed table was never written by a release.
 
-CREATE TABLE IF NOT EXISTS ast_cache (
-    file_path TEXT PRIMARY KEY,
-    content_hash TEXT NOT NULL,
-    cache_version INTEGER NOT NULL,
-    ast_json TEXT NOT NULL,
-    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_ast_cache_content_hash ON ast_cache(content_hash);
-CREATE INDEX IF NOT EXISTS idx_ast_cache_updated_at ON ast_cache(updated_at);
+DROP TABLE IF EXISTS ast_cache;
 
 -- Content-addressed path index.
 

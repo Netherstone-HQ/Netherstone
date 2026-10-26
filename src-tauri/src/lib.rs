@@ -21,6 +21,8 @@ use serde::Serialize;
 use std::path::Path;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
+// Bump whenever the persisted Plate value shape changes, so older cached
+// trees are dropped.
 const AST_CACHE_VERSION: i64 = 3;
 
 // Commands here are marked `async` so Tauri runs them on its async runtime.
@@ -36,10 +38,6 @@ struct OpenMarkdownFileResult {
     content_hash: String,
     cache_hit: bool,
     plate_value: Option<serde_json::Value>,
-}
-
-fn resolve_ast_cache_version(cache_version: Option<i64>) -> i64 {
-    cache_version.unwrap_or(AST_CACHE_VERSION)
 }
 
 fn hash_markdown_content(content: &str) -> String {
@@ -758,15 +756,12 @@ fn read_markdown_file(file_path: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
-fn open_markdown_file(
-    file_path: String,
-    cache_version: Option<i64>,
-) -> Result<OpenMarkdownFileResult, String> {
+fn open_markdown_file(file_path: String) -> Result<OpenMarkdownFileResult, String> {
     in_open_vault(&file_path)?;
     ensure_markdown_path(Path::new(&file_path))?;
     let markdown = read_markdown_from_disk(&file_path)?;
     let content_hash = hash_markdown_content(&markdown);
-    let expected_cache_version = resolve_ast_cache_version(cache_version);
+    let expected_cache_version = AST_CACHE_VERSION;
     let conn = db::open_connection()?;
 
     eprintln!(
@@ -786,17 +781,13 @@ fn open_markdown_file(
                 "[Netherstone] AST cache read failed for {}: {}",
                 file_path, error
             );
-            let _ = db::ast_cache::delete_ast_cache(&conn, &file_path);
             None
         }
     };
 
+    // A miss means the cached tree is for older text or an older version.
     if plate_value.is_none() {
-        let _ = db::ast_cache::delete_ast_cache_for_version_mismatch(
-            &conn,
-            &file_path,
-            expected_cache_version,
-        );
+        let _ = db::ast_cache::delete_ast_cache(&conn, &file_path);
     }
 
     let cache_hit = plate_value.is_some();
@@ -822,12 +813,11 @@ fn open_markdown_file(
 fn upsert_ast_cache(
     file_path: String,
     markdown: String,
-    cache_version: Option<i64>,
     plate_value: serde_json::Value,
 ) -> Result<(), String> {
     in_open_vault(&file_path)?;
     let content_hash = hash_markdown_content(&markdown);
-    let expected_cache_version = resolve_ast_cache_version(cache_version);
+    let expected_cache_version = AST_CACHE_VERSION;
     let conn = db::open_connection()?;
 
     eprintln!(
@@ -853,63 +843,6 @@ fn upsert_ast_cache(
             eprintln!(
                 "[Netherstone] AST cache upsert failed path={} hash={} version={} error={}",
                 file_path, content_hash, expected_cache_version, error
-            );
-            Err(error)
-        }
-    }
-}
-
-#[tauri::command(async)]
-fn delete_ast_cache(file_path: String) -> Result<bool, String> {
-    in_open_vault(&file_path)?;
-    let conn = db::open_connection()?;
-
-    eprintln!("[Netherstone] AST cache delete start path={}", file_path);
-
-    match db::ast_cache::delete_ast_cache(&conn, &file_path) {
-        Ok(deleted) => {
-            eprintln!(
-                "[Netherstone] AST cache delete {} path={}",
-                if deleted { "deleted" } else { "noop" },
-                file_path
-            );
-            Ok(deleted)
-        }
-        Err(error) => {
-            eprintln!(
-                "[Netherstone] AST cache delete failed path={} error={}",
-                file_path, error
-            );
-            Err(error)
-        }
-    }
-}
-
-#[tauri::command(async)]
-fn rename_ast_cache(old_path: String, new_path: String) -> Result<bool, String> {
-    in_open_vault(&old_path)?;
-    in_open_vault(&new_path)?;
-    let conn = db::open_connection()?;
-
-    eprintln!(
-        "[Netherstone] AST cache rename start old_path={} new_path={}",
-        old_path, new_path
-    );
-
-    match db::ast_cache::rename_ast_cache(&conn, &old_path, &new_path) {
-        Ok(renamed) => {
-            eprintln!(
-                "[Netherstone] AST cache rename {} old_path={} new_path={}",
-                if renamed { "success" } else { "noop" },
-                old_path,
-                new_path
-            );
-            Ok(renamed)
-        }
-        Err(error) => {
-            eprintln!(
-                "[Netherstone] AST cache rename failed old_path={} new_path={} error={}",
-                old_path, new_path, error
             );
             Err(error)
         }
@@ -1829,8 +1762,6 @@ pub fn run() {
             clean_up_attachments,
             find_shards_containing,
             upsert_ast_cache,
-            delete_ast_cache,
-            rename_ast_cache,
             index_vault,
             search_files,
             get_tagged_files,

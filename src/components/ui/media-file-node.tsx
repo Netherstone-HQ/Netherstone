@@ -321,7 +321,7 @@ export const FileElement = withHOC(
         <MediaFileRow
           name={displayName}
           nameHint={attachmentPath}
-          details={<LinkedFileDetails metadata={props.element} />}
+          details={<LinkedFileDetails />}
           onOpen={() => void handleOpen()}
           action={{ label: "Open", onSelect: () => void handleOpen() }}
           onReveal={() => void handleReveal()}

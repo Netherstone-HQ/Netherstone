@@ -21,6 +21,7 @@ import {
   openMediaFilesDialog,
   persistAttachmentFile,
   type MediaDialogKind,
+  type PersistedAttachment,
 } from "@/lib/commands";
 import { useEditorStore, useSettingsStore, useVaultStore } from "@/store";
 import type { MediaInsertionPreference } from "@/store/settings";
@@ -182,7 +183,7 @@ export async function buildTaggedNativePathNode({
   mediaInsertionPreference: MediaInsertionPreference;
   currentVaultPath: string | null;
   currentFilePath: string | null;
-}): Promise<TaggedMediaNode> {
+}): Promise<{ node: TaggedMediaNode; attachment?: PersistedAttachment }> {
   if (mediaInsertionPreference === "vault-import") {
     if (!currentVaultPath) {
       throw new Error("Open a vault before importing attachments.");
@@ -196,7 +197,7 @@ export async function buildTaggedNativePathNode({
     const attachmentReference = persisted.assetPath;
     const renderUrl = toRenderableLocalUrl(importedPath);
 
-    return {
+    const node: TaggedMediaNode = {
       children: [{ text: "" }],
       name: getFileNodeName(nodeType, sourcePath),
       type: nodeType,
@@ -206,23 +207,23 @@ export async function buildTaggedNativePathNode({
       netherstoneOriginalPath: sourcePath,
       netherstoneImportedPath: importedPath,
       netherstoneRenderUrl: renderUrl,
-      netherstoneExtension: persisted.extension,
-      netherstoneSizeBytes: persisted.sizeBytes,
-      netherstoneSyncStatus: persisted.syncStatus,
     };
+    return { node, attachment: persisted };
   }
 
   const renderUrl = toRenderableLocalUrl(sourcePath);
 
   return {
-    children: [{ text: "" }],
-    name: getFileNodeName(nodeType, sourcePath),
-    type: nodeType,
-    url: sourcePath,
-    netherstoneSourceKind: "local",
-    netherstoneStoredSource: sourcePath,
-    netherstoneOriginalPath: sourcePath,
-    netherstoneRenderUrl: renderUrl,
+    node: {
+      children: [{ text: "" }],
+      name: getFileNodeName(nodeType, sourcePath),
+      type: nodeType,
+      url: sourcePath,
+      netherstoneSourceKind: "local",
+      netherstoneStoredSource: sourcePath,
+      netherstoneOriginalPath: sourcePath,
+      netherstoneRenderUrl: renderUrl,
+    },
   };
 }
 
@@ -274,7 +275,7 @@ export function MediaToolbarButton({
         vaultPath: currentVaultPath,
       });
 
-      const nodes = await Promise.all(
+      const built = await Promise.all(
         selectedPaths.map((sourcePath) =>
           buildTaggedNativePathNode({
             sourcePath,
@@ -286,8 +287,13 @@ export function MediaToolbarButton({
         ),
       );
 
-      insertTaggedMediaNodes(editor, nodes);
-      notifyAttachmentSyncStatus(nodes);
+      insertTaggedMediaNodes(
+        editor,
+        built.map(({ node }) => node),
+      );
+      notifyAttachmentSyncStatus(
+        built.flatMap(({ attachment }) => (attachment ? [attachment] : [])),
+      );
     } catch (error) {
       console.error("[media-toolbar] Failed to insert local media files", {
         error,

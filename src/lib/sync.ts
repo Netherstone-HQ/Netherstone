@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { ATTACHMENT_SYNC_LIMIT_BYTES } from "@/lib/attachment-sync-status";
 import { useHistoryStore } from "@/store/history";
 
 export type VaultSyncRecord = {
@@ -61,6 +60,8 @@ export type SkippedFile = {
   path: string;
   sizeBytes: number;
   reason: SkipReason;
+  /** The size limit behind `reason`, when it is about size. */
+  limitBytes: number | null;
 };
 
 export type SyncPlanSummary = {
@@ -166,15 +167,17 @@ export function turnOffBackup(vaultPath: string) {
 export function describeSkipReason(file: SkippedFile) {
   switch (file.reason) {
     case "localOnly":
-      return file.sizeBytes > ATTACHMENT_SYNC_LIMIT_BYTES
-        ? "Larger than 20 MB"
+      return file.limitBytes !== null && file.sizeBytes > file.limitBytes
+        ? `Larger than ${formatSizeLimit(file.limitBytes)}`
         : "This file type doesn't sync";
     case "blocked":
       return "Apps and scripts don't sync";
     case "pendingReview":
       return "File has no type";
     case "tooLarge":
-      return "Larger than GitHub's 100 MB limit";
+      return file.limitBytes === null
+        ? "Larger than GitHub's limit"
+        : `Larger than GitHub's ${formatSizeLimit(file.limitBytes)} limit`;
     case "unmanaged":
       return "Not a shard, drawing or attachment";
   }
@@ -193,6 +196,11 @@ export function describeBackupContents(plan: SyncPlanSummary) {
   if (named.length === 0) return "No files yet";
   if (named.length === 1) return named[0];
   return `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+}
+
+/** A size limit in whole megabytes, as "20 MB". */
+export function formatSizeLimit(bytes: number) {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
 }
 
 export function formatBytes(bytes: number) {

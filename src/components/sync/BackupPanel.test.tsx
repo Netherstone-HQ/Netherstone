@@ -26,8 +26,13 @@ const PLAN: SyncPlanSummary = {
   attachmentCount: 1,
   includedBytes: 2048,
   skipped: [
-    { path: "_attachments/movie.mp4", sizeBytes: 50 * 1024 * 1024, reason: "localOnly" },
-    { path: "_attachments/setup.exe", sizeBytes: 10, reason: "blocked" },
+    {
+      path: "_attachments/movie.mp4",
+      sizeBytes: 50 * 1024 * 1024,
+      reason: "localOnly",
+      limitBytes: 20 * 1024 * 1024,
+    },
+    { path: "_attachments/setup.exe", sizeBytes: 10, reason: "blocked", limitBytes: null },
   ],
 };
 

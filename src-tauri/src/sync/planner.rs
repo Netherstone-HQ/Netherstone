@@ -6,7 +6,8 @@
 //! instead of discovering it from a failed push.
 
 use crate::db::attachments::{
-    ATTACHMENTS_DIR_NAME, AttachmentSyncStatus, extension_for_path, sync_status_for_attachment,
+    ATTACHMENTS_DIR_NAME, AttachmentSyncStatus, SYNC_SOFT_LIMIT_BYTES, extension_for_path,
+    sync_status_for_attachment,
 };
 use crate::sync::state::has_vault_marker;
 use crate::vault::{is_drawing_path, is_markdown_path};
@@ -70,6 +71,8 @@ pub struct SkippedFile {
     pub path: String,
     pub size_bytes: u64,
     pub reason: SkipReason,
+    /// The size limit behind `reason`, when it is about size.
+    pub limit_bytes: Option<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -190,6 +193,11 @@ fn classify(path: &Path, relative: String, size_bytes: u64, plan: &mut SyncPlan)
             path: relative,
             size_bytes,
             reason,
+            limit_bytes: match reason {
+                SkipReason::LocalOnly => Some(SYNC_SOFT_LIMIT_BYTES),
+                SkipReason::TooLarge => Some(GITHUB_FILE_LIMIT_BYTES),
+                _ => None,
+            },
         }),
     }
 }

@@ -14,19 +14,8 @@ export const DndKit = [
       onDropFiles: ({ dragItem, editor, target }) => {
         const files = dragItem?.files;
 
-        console.debug("[dnd-kit] Handling dropped media files", {
-          fileCount: files?.length ?? 0,
-          files: Array.from(files ?? []).map((file) => ({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-          })),
-          target,
-        });
-
         void insertManagedMediaFiles(editor, files, {
           at: target ?? undefined,
-          debug: true,
         }).catch((error) => {
           console.error("[dnd-kit] Failed to insert dropped files", {
             error,

@@ -125,10 +125,7 @@ export const MountedEditor = memo(function MountedEditor({
         : `Adding ${fileCount} attachments…`,
     );
 
-    void insertManagedMediaFiles(editor, files, {
-      debug: true,
-      select: true,
-    })
+    void insertManagedMediaFiles(editor, files, { select: true })
       .then(() => {
         toast.dismiss(toastId);
       })

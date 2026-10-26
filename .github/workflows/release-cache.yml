@@ -1,0 +1,88 @@
+name: Release cache
+
+# A tag run can only restore caches saved on its own tag or on main, so each
+# release used to compile every Rust crate from scratch. This compiles the
+# release builds on main and saves their caches under the same keys the
+# Release workflow restores, leaving a tag to rebuild only the app crate.
+#
+# The cache key changes with Cargo.lock and the Rust version, so it is rebuilt
+# when the Rust dependencies change, and weekly to pick up a new stable Rust
+# and to keep GitHub from evicting caches unused for 7 days.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src-tauri/Cargo.toml
+      - src-tauri/Cargo.lock
+      - .github/workflows/release-cache.yml
+  schedule:
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: release-cache
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Same as the Release workflow.
+  NODE_OPTIONS: --max-old-space-size=6144
+
+jobs:
+  build:
+    name: Cache (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      # Keep in step with the build matrix in release.yml.
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
+          - name: macOS Intel
+            platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+          - name: Linux
+            platform: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+          - name: Windows
+            platform: windows-latest
+            args: ""
+            rust-targets: ""
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: release-${{ matrix.platform }}
+          key: ${{ matrix.rust-targets }}
+
+      - run: pnpm install --frozen-lockfile
+
+      # The same cargo build the Release workflow runs, without the installers.
+      - run: pnpm tauri build --no-bundle ${{ matrix.args }}

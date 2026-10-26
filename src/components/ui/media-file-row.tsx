@@ -22,13 +22,15 @@ import { Hint } from "@/components/ui/tooltip";
 import {
   type AttachmentSyncStatusLike,
   describeUnsyncedFiles,
-  getAttachmentSyncStatus,
 } from "@/lib/attachment-sync-status";
 import {
+  type AttachmentSyncInfo,
+  attachmentSyncInfo,
   describeMissingAttachment,
   type MissingAttachmentInfo,
 } from "@/lib/commands";
 import { toVaultRelativePath } from "@/lib/drawing-files";
+import { isVaultAttachmentReference } from "@/lib/media-source";
 import { REVEAL_LABEL } from "@/lib/platform";
 import { formatBytes } from "@/lib/sync";
 import { cn } from "@/lib/utils";
@@ -159,19 +161,63 @@ export function MediaFileRow({
   );
 }
 
+/** Where a media node's file is: its vault attachment path, or a link. */
+type MediaSource = { netherstoneStoredSource?: string; url?: string };
+
+/**
+ * What the sync rules say about the vault attachment a node shows, from the
+ * file as it is now, or null while asking and for files outside the vault.
+ */
+function useAttachmentSyncInfo(element: MediaSource) {
+  const vaultPath = useVaultStore((s) => s.currentVaultPath);
+  const source =
+    element.netherstoneStoredSource?.trim() || element.url?.trim() || "";
+  const [info, setInfo] = React.useState<AttachmentSyncInfo | null>(null);
+
+  React.useEffect(() => {
+    setInfo(null);
+    if (!vaultPath || !isVaultAttachmentReference(source)) return;
+
+    let cancelled = false;
+    attachmentSyncInfo(vaultPath, source)
+      .then((next) => {
+        if (!cancelled) setInfo(next);
+      })
+      .catch((error) => {
+        console.error("[Netherstone] Couldn't check whether a file syncs:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [source, vaultPath]);
+
+  return info;
+}
+
 /** "Won't sync" in the file's details, with the reason on hover. */
 export function UnsyncedTag({
   metadata,
   className,
 }: {
-  metadata: AttachmentSyncStatusLike;
+  metadata: MediaSource;
   className?: string;
 }) {
-  const status = getAttachmentSyncStatus(metadata);
-  if (!status || status === "syncable") return null;
+  const info = useAttachmentSyncInfo(metadata);
+  return info ? <UnsyncedLabel info={info} className={className} /> : null;
+}
+
+function UnsyncedLabel({
+  info,
+  className,
+}: {
+  info: AttachmentSyncInfo;
+  className?: string;
+}) {
+  const status = info.syncStatus;
+  if (status === "syncable") return null;
 
   return (
-    <Hint label={describeUnsyncedFiles(status, [metadata])}>
+    <Hint label={describeUnsyncedFiles(status, [info])}>
       <span
         className={cn(
           "block w-fit text-amber-600 text-ui-sm dark:text-amber-400",
@@ -185,30 +231,25 @@ export function UnsyncedTag({
 }
 
 /** A file's type and size, as "PDF · 1.2 MB". */
-function describeFile(metadata: AttachmentSyncStatusLike) {
-  const extension = metadata.netherstoneExtension?.trim().toUpperCase();
-  const size = metadata.netherstoneSizeBytes;
-  return [extension, typeof size === "number" ? formatBytes(size) : null]
+function describeFile(info: AttachmentSyncInfo) {
+  return [info.extension.toUpperCase(), formatBytes(info.sizeBytes)]
     .filter(Boolean)
     .join(" · ");
 }
 
 /** Details for a file copied into the vault: type, size and whether it syncs. */
-export function VaultFileDetails({
-  metadata,
-}: {
-  metadata: AttachmentSyncStatusLike;
-}) {
-  const described = describeFile(metadata);
-  const status = getAttachmentSyncStatus(metadata);
-  const syncs = !status || status === "syncable";
+export function VaultFileDetails({ metadata }: { metadata: MediaSource }) {
+  const info = useAttachmentSyncInfo(metadata);
+  if (!info) return null;
+
+  const described = describeFile(info);
   return (
     <>
       {described}
-      {syncs ? null : (
+      {info.syncStatus === "syncable" ? null : (
         <>
           {described ? " · " : null}
-          <UnsyncedTag metadata={metadata} />
+          <UnsyncedLabel info={info} />
         </>
       )}
     </>

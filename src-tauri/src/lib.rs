@@ -483,6 +483,16 @@ fn describe_missing_attachment(
     db::attachments::describe_missing_attachment(&conn, Path::new(&vault_path), &asset_path)
 }
 
+/// Whether the vault attachment at `asset_path` syncs, by today's rules.
+#[tauri::command(async)]
+fn attachment_sync_info(
+    vault_path: String,
+    asset_path: String,
+) -> Result<Option<db::attachments::AttachmentSyncInfo>, String> {
+    open_vault_only(&vault_path)?;
+    db::attachments::attachment_sync_info(Path::new(&vault_path), &asset_path)
+}
+
 #[tauri::command(async)]
 fn file_exists(file_path: String) -> Result<bool, String> {
     Ok(std::path::Path::new(&file_path).exists())
@@ -1832,6 +1842,7 @@ pub fn run() {
             list_attachments,
             gallery_thumbnail,
             describe_missing_attachment,
+            attachment_sync_info,
             clean_up_attachments,
             find_shards_containing,
             upsert_ast_cache,

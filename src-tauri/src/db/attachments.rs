@@ -1373,6 +1373,41 @@ fn describe_missing(
     Ok((original_name, found))
 }
 
+/// A vault attachment's type, size and whether it syncs, from the file on
+/// disk as it is now.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentSyncInfo {
+    pub extension: String,
+    pub size_bytes: u64,
+    pub sync_status: String,
+}
+
+/// What the sync rules say about the attachment at `asset_path` today, or
+/// nothing when the file isn't there.
+pub fn attachment_sync_info(
+    vault_path: &Path,
+    asset_path: &str,
+) -> Result<Option<AttachmentSyncInfo>, String> {
+    let asset_path = normalize_attachment_path(asset_path)
+        .ok_or_else(|| format!("Not a vault attachment: {}", asset_path))?;
+    let path = path_from_asset_path(vault_path, &asset_path)?;
+    let size_bytes = match std::fs::metadata(&path) {
+        Ok(metadata) if metadata.is_file() => metadata.len(),
+        _ => return Ok(None),
+    };
+    let extension = extension_for_path(&path);
+    let sync_status = sync_status_for_attachment(&extension, size_bytes)
+        .as_str()
+        .to_string();
+
+    Ok(Some(AttachmentSyncInfo {
+        extension,
+        size_bytes,
+        sync_status,
+    }))
+}
+
 /// Looks up a missing attachment for the editor: its original name, and a
 /// file with the same content to relink to.
 pub fn describe_missing_attachment(
@@ -2056,6 +2091,30 @@ mod tests {
         assert!(report.missing.is_empty());
 
         std::fs::remove_file(&outside).unwrap();
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn sync_info_reads_the_file_as_it_is_now() {
+        let vault = temp_vault("sync-info");
+        std::fs::write(vault.join("_attachments/Interview.mp3"), b"mp3").unwrap();
+        std::fs::write(vault.join("_attachments/setup.exe"), b"exe").unwrap();
+
+        let info = attachment_sync_info(&vault, "_attachments/Interview.mp3").unwrap();
+        assert_eq!(
+            info,
+            Some(AttachmentSyncInfo {
+                extension: "mp3".into(),
+                size_bytes: 3,
+                sync_status: "syncable".into(),
+            })
+        );
+        let blocked = attachment_sync_info(&vault, "_attachments/setup.exe").unwrap();
+        assert_eq!(blocked.unwrap().sync_status, "blocked");
+        assert_eq!(attachment_sync_info(&vault, "_attachments/gone.png").unwrap(), None);
+        assert!(attachment_sync_info(&vault, "notes/a.png").is_err());
+        assert!(attachment_sync_info(&vault, "_attachments/../secret.txt").is_err());
+
         std::fs::remove_dir_all(&vault).unwrap();
     }
 }

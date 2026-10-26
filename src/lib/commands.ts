@@ -318,6 +318,25 @@ export async function cleanUpAttachments(
  * The original name of a missing attachment and, when a file with the same
  * content is in the vault (it was renamed or moved), where it is now.
  */
+/** A vault attachment's type, size and whether it syncs, as it is now. */
+export interface AttachmentSyncInfo {
+  extension: string;
+  sizeBytes: number;
+  syncStatus: PersistedAttachment["syncStatus"];
+}
+
+/** What the sync rules say about a vault attachment today, or null when it's gone. */
+export async function attachmentSyncInfo(
+  vaultPath: string,
+  assetPath: string,
+): Promise<AttachmentSyncInfo | null> {
+  assertTauri();
+  return invoke<AttachmentSyncInfo | null>("attachment_sync_info", {
+    vaultPath,
+    assetPath,
+  });
+}
+
 export async function describeMissingAttachment(
   vaultPath: string,
   assetPath: string,

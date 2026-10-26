@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { describeMissingAttachment } from "@/lib/commands";
+import { attachmentSyncInfo, describeMissingAttachment } from "@/lib/commands";
 import { useVaultStore } from "@/store/vault";
 import {
   LinkedFileDetails,
@@ -11,7 +11,16 @@ import {
   VaultFileDetails,
 } from "./media-file-row";
 
-vi.mock("@/lib/commands", () => ({ describeMissingAttachment: vi.fn() }));
+vi.mock("@/lib/commands", () => ({
+  attachmentSyncInfo: vi.fn(),
+  describeMissingAttachment: vi.fn(),
+}));
+
+/** A vault file whose sync check finds `info`. */
+function vaultFile(info: Awaited<ReturnType<typeof attachmentSyncInfo>>) {
+  useVaultStore.setState({ currentVaultPath: "C:/Vault" });
+  vi.mocked(attachmentSyncInfo).mockResolvedValue(info);
+}
 
 function renderRow(row: React.ReactNode) {
   return render(<TooltipProvider>{row}</TooltipProvider>);
@@ -24,66 +33,59 @@ afterEach(() => {
 });
 
 describe("MediaFileRow", () => {
-  it("shows a file's type and size, and opens it on click", () => {
+  it("shows a file's type and size, and opens it on click", async () => {
+    vaultFile({ extension: "pdf", sizeBytes: 1_240_000, syncStatus: "syncable" });
     const onOpen = vi.fn();
     renderRow(
       <MediaFileRow
         name="Kitchen quote.pdf"
         details={
-          <VaultFileDetails
-            metadata={{
-              netherstoneExtension: "pdf",
-              netherstoneSizeBytes: 1_240_000,
-              netherstoneSyncStatus: "syncable",
-            }}
-          />
+          <VaultFileDetails metadata={{ url: "_attachments/Kitchen quote.pdf" }} />
         }
         onOpen={onOpen}
       />,
     );
 
-    expect(screen.getByText("PDF · 1.2 MB")).toBeTruthy();
+    expect(await screen.findByText("PDF · 1.2 MB")).toBeTruthy();
+    expect(attachmentSyncInfo).toHaveBeenCalledWith(
+      "C:/Vault",
+      "_attachments/Kitchen quote.pdf",
+    );
     expect(screen.queryByText("Won't sync")).toBeNull();
     fireEvent.click(screen.getByText("Kitchen quote.pdf"));
     expect(onOpen).toHaveBeenCalled();
   });
 
-  it("says when a file won't sync", () => {
+  it("says when a file won't sync", async () => {
+    vaultFile({ extension: "pdf", sizeBytes: 32_500_000, syncStatus: "local_only" });
     renderRow(
       <MediaFileRow
         name="Floor plans.pdf"
         details={
-          <VaultFileDetails
-            metadata={{
-              netherstoneExtension: "pdf",
-              netherstoneSizeBytes: 32_500_000,
-              netherstoneSyncStatus: "local_only",
-            }}
-          />
+          <VaultFileDetails metadata={{ url: "_attachments/Floor plans.pdf" }} />
         }
       />,
     );
 
-    expect(screen.getByText("Won't sync")).toBeTruthy();
+    expect(await screen.findByText("Won't sync")).toBeTruthy();
   });
 
-  it("goes by today's rules, not the status saved when the file was added", () => {
+  it("goes by the file as it is now, not what the shard saved", async () => {
+    vaultFile({ extension: "mp3", sizeBytes: 4_200_000, syncStatus: "syncable" });
+    const saved = {
+      url: "_attachments/Interview.mp3",
+      netherstoneExtension: "mp3",
+      netherstoneSizeBytes: 900,
+      netherstoneSyncStatus: "local_only",
+    };
     renderRow(
       <MediaFileRow
         name="Interview.mp3"
-        details={
-          <VaultFileDetails
-            metadata={{
-              netherstoneExtension: "mp3",
-              netherstoneSizeBytes: 4_200_000,
-              netherstoneSyncStatus: "local_only",
-            }}
-          />
-        }
+        details={<VaultFileDetails metadata={saved} />}
       />,
     );
 
-    expect(screen.getByText("MP3 · 4.0 MB")).toBeTruthy();
+    expect(await screen.findByText("MP3 · 4.0 MB")).toBeTruthy();
     expect(screen.queryByText("Won't sync")).toBeNull();
   });
 

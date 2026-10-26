@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
-import { parseXml, type XmlElement } from "./xml-tree";
+import { checkXml, parseXml, XmlStream, type XmlElement } from "./xml-tree";
 
 /** Elements, attributes and text as a list, the same for both trees. */
 function outline(element: Element | XmlElement, names: string[][]): string[] {
@@ -64,8 +64,40 @@ describe("XML tree", () => {
     ];
     for (const source of damaged) {
       expect(() => parseXml(source), source).toThrow("The document's XML is damaged.");
+      expect(() => checkXml(source), source).toThrow("The document's XML is damaged.");
+      expect(() => {
+        const stream = new XmlStream(source, () => true);
+        while (stream.next());
+      }, source).toThrow("The document's XML is damaged.");
       if (source) expect(new DOMParser().parseFromString(source, "application/xml").getElementsByTagName("parsererror").length, source).toBeGreaterThan(0);
     }
+  });
+
+  it("hands out a split element's children one by one, as the tree has them", () => {
+    const source = `<w:document xmlns:w="${W}"><w:background w:color="fff"><w:x/></w:background><w:body>
+      <w:p><w:r><w:t>One &amp; two</w:t></w:r></w:p><w:p/><![CDATA[dropped]]>
+      <w:tbl><w:tr><w:tc><w:p><w:body><w:p/></w:body></w:p></w:tc></w:tr></w:tbl>
+    </w:body><w:body><w:p/></w:body></w:document>`;
+    const tree = parseXml(source).documentElement;
+    const body = [...(function* () {
+      for (let node = tree.firstChild; node; node = node.nextSibling) yield node;
+    })()].find((node): node is XmlElement => node.nodeType === 1 && node.localName === "body")!;
+    const expected: string[][] = [];
+    for (let node = body.firstChild; node; node = node.nextSibling) if (node.nodeType === 1) expected.push(outline(node as XmlElement, [[W, "color", "w:color"]]));
+
+    const asked: string[] = [];
+    let found = false;
+    const stream = new XmlStream(source, (element, depth) => {
+      asked.push(`${depth} ${element.localName}`);
+      if (found || depth !== 1 || element.localName !== "body") return false;
+      found = true;
+      return true;
+    });
+    const handed: string[][] = [];
+    for (let node = stream.next(); node; node = stream.next()) handed.push(outline(node, [[W, "color", "w:color"]]));
+    expect(handed).toEqual(expected);
+    expect(handed).toHaveLength(3);
+    expect(asked.slice(0, 4)).toEqual(["0 document", "1 background", "2 x", "1 body"]);
   });
 
   it("never expands entities a file declares, unlike DOMParser", () => {

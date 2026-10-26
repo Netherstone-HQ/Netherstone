@@ -12,7 +12,7 @@ useDocxWorker();
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 /** A Word file with just a body, styles and numbering, as Word itself would write them. */
-async function wordFile(body: string, extra: { numbering?: string; rels?: string; media?: Record<string, Uint8Array> } = {}) {
+async function wordFile(body: string, extra: { styles?: string; numbering?: string; rels?: string; media?: Record<string, Uint8Array> } = {}) {
   const zip = new JSZip();
   zip.file(
     "[Content_Types].xml",
@@ -31,6 +31,7 @@ async function wordFile(body: string, extra: { numbering?: string; rels?: string
     `<?xml version="1.0"?><w:styles ${W}>
       <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="22"/></w:rPr></w:style>
       <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>
+      ${extra.styles ?? ""}
     </w:styles>`,
   );
   zip.file("word/numbering.xml", `<?xml version="1.0"?><w:numbering ${W}>${extra.numbering ?? ""}</w:numbering>`);
@@ -216,10 +217,39 @@ describe("Word import in its worker", () => {
     expect(DocxWorker.running.size).toBe(0);
   });
 
-  it("explains damaged XML", async () => {
-    const vault = memoryImport({ "Doc.docx": await wordFile("<w:p><w:r><w:t>Unclosed</w:r></w:p>") });
+  it("puts headings under a Title wherever the Title is", async () => {
+    const { markdown } = await importWord(
+      await wordFile(
+        para(run("Before"), '<w:pStyle w:val="Heading1"/>') +
+          `<w:tbl><w:tr>${cell(run("Cell heading"), "")}<w:tc>${para(run("Right"))}</w:tc></w:tr></w:tbl>` +
+          para(run("The title"), '<w:pStyle w:val="Title"/>') +
+          para(run("After"), '<w:pStyle w:val="Heading1"/>'),
+        { styles: '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/></w:style>' },
+      ),
+    );
+    expect(markdown).toContain("## Before\n");
+    expect(markdown).toContain("# The title\n");
+    expect(markdown).toContain("## After");
+  });
+
+  it("turns three or more links to headings in a row into a contents list", async () => {
+    const entry = (label: string) => para(`<w:hyperlink w:anchor="_${label}">${run(label)}</w:hyperlink>`);
+    const { markdown } = await importWord(
+      await wordFile(entry("One") + entry("Two") + entry("Three") + para(run("Text")) + entry("Four") + entry("Five") + para(run("End"))),
+    );
+    expect(markdown).toBe("<toc />\n\nText\n\nFour\n\nFive\n\nEnd\n");
+  });
+
+  it("explains damaged XML, before storing any picture", async () => {
+    const vault = memoryImport({
+      "Doc.docx": await wordFile(para(picture("rPic")) + "<w:p><w:r><w:t>Unclosed</w:r></w:p>", {
+        rels: pictureRel("rPic", "media/image1.png"),
+        media: { "image1.png": new Uint8Array([1]) },
+      }),
+    });
     const report = await vault.run();
     expect(report.failed).toEqual([{ source: "Doc.docx", error: "The document's XML is damaged." }]);
+    expect(vault.attachments.size).toBe(0);
   });
 
   it("explains a document without a body", async () => {

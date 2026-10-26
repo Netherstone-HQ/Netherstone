@@ -350,7 +350,6 @@ fn copy_into_attachments(
     open_vault_only(vault_path)?;
     let source = std::path::Path::new(source_path);
     let vault = std::path::Path::new(vault_path);
-    asset_scope::allow_vault(app, vault);
     let conn = db::open_connection()?;
 
     let attachment = db::attachments::persist_attachment_file(&conn, vault, source)?;
@@ -372,7 +371,6 @@ fn persist_attachment_bytes(
     let vault_path = export::header(&request, "x-vault-path").ok_or("The file is missing its vault.")?;
     open_vault_only(&vault_path)?;
     let vault = std::path::Path::new(&vault_path);
-    asset_scope::allow_vault(&app, vault);
     let conn = db::open_connection()?;
 
     let attachment = db::attachments::persist_attachment_bytes(

@@ -53,7 +53,7 @@ it("shuts the worker down once it has been idle", async () => {
 it("stays up while a request is in flight and restarts on demand", async () => {
   const { serializeMarkdownInWorker } =
     await import("./editor-markdown-worker");
-  const first = serializeMarkdownInWorker([], { timeoutMs: 0 });
+  const first = serializeMarkdownInWorker([]);
   const [worker] = FakeWorker.instances;
 
   vi.advanceTimersByTime(60_000);
@@ -64,49 +64,84 @@ it("stays up while a request is in flight and restarts on demand", async () => {
   vi.advanceTimersByTime(30_000);
   expect(worker.terminated).toBe(true);
 
-  const second = serializeMarkdownInWorker([], { timeoutMs: 0 });
+  const second = serializeMarkdownInWorker([]);
   expect(FakeWorker.instances).toHaveLength(2);
   FakeWorker.instances[1].reply("# Again");
   await expect(second).resolves.toBe("# Again");
 });
 
-it("stops the worker on a timeout and sends a queued save to a new one", async () => {
-  const { deserializeMarkdownInWorker, serializeMarkdownInWorker } =
-    await import("./editor-markdown-worker");
-  const stuck = deserializeMarkdownInWorker("# Big", {
-    timeoutMs: 1_000,
-    filePath: "big.md",
-  });
-  const waiting = serializeMarkdownInWorker([], {
-    timeoutMs: 0,
-    filePath: "small.md",
-  });
-  const [worker] = FakeWorker.instances;
-
-  vi.advanceTimersByTime(1_000);
-  await expect(stuck).rejects.toThrow("timed out after 1000ms");
-  expect(worker.terminated).toBe(true);
-  expect(FakeWorker.instances).toHaveLength(2);
-
-  const next = FakeWorker.instances[1];
-  expect(next.posted.map((message) => message.filePath)).toEqual(["small.md"]);
-  next.reply("# Small");
-  await expect(waiting).resolves.toBe("# Small");
-});
-
-it("starts no new worker after a timeout until it is needed", async () => {
+it("answers every read of the same shard", async () => {
   const { deserializeMarkdownInWorker } =
     await import("./editor-markdown-worker");
-  const stuck = deserializeMarkdownInWorker("# Big", {
-    timeoutMs: 1_000,
-    fallback: () => [{ type: "p", children: [{ text: "Big" }] }],
-  });
+  const mine = deserializeMarkdownInWorker("# Mine", { filePath: "a.md" });
+  const theirs = deserializeMarkdownInWorker("# Theirs", { filePath: "a.md" });
   const [worker] = FakeWorker.instances;
 
-  vi.advanceTimersByTime(1_000);
-  await expect(stuck).resolves.toEqual([
-    { type: "p", children: [{ text: "Big" }] },
+  for (const plateValue of [["mine"], ["theirs"]]) {
+    const { requestId, filePath } = worker.posted.shift()!;
+    worker.onmessage?.({
+      data: { type: "success", requestId, filePath, plateValue },
+    } as MessageEvent);
+  }
+
+  await expect(mine).resolves.toEqual(["mine"]);
+  await expect(theirs).resolves.toEqual(["theirs"]);
+});
+
+it("passes a worker error on without redoing the work", async () => {
+  const { deserializeMarkdownInWorker } =
+    await import("./editor-markdown-worker");
+  const fallback = vi.fn(() => []);
+  const read = deserializeMarkdownInWorker("# Big", { fallback });
+  const [worker] = FakeWorker.instances;
+  const { requestId, filePath } = worker.posted.shift()!;
+
+  worker.onmessage?.({
+    data: { type: "error", requestId, filePath, error: "Bad shard" },
+  } as MessageEvent);
+
+  await expect(read).rejects.toThrow("Bad shard");
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+it("puts an urgent save before a running read, then reads again", async () => {
+  const { deserializeMarkdownInWorker, serializeMarkdownInWorker } =
+    await import("./editor-markdown-worker");
+  const read = deserializeMarkdownInWorker("# Big", { filePath: "big.md" });
+  const save = serializeMarkdownInWorker([], {
+    filePath: "open.md",
+    urgent: true,
+  });
+  const [first] = FakeWorker.instances;
+
+  expect(first.terminated).toBe(true);
+  const next = FakeWorker.instances[1];
+  expect(next.posted.map((message) => message.filePath)).toEqual([
+    "open.md",
+    "big.md",
   ]);
-  expect(worker.terminated).toBe(true);
+
+  next.reply("# Saved");
+  await expect(save).resolves.toBe("# Saved");
+
+  const { requestId, filePath } = next.posted.shift()!;
+  next.onmessage?.({
+    data: { type: "success", requestId, filePath, plateValue: ["big"] },
+  } as MessageEvent);
+  await expect(read).resolves.toEqual(["big"]);
+});
+
+it("queues an autosave behind a running read", async () => {
+  const { deserializeMarkdownInWorker, serializeMarkdownInWorker } =
+    await import("./editor-markdown-worker");
+  void deserializeMarkdownInWorker("# Big", { filePath: "big.md" });
+  void serializeMarkdownInWorker([], { filePath: "open.md" });
+  const [worker] = FakeWorker.instances;
+
+  expect(worker.terminated).toBe(false);
   expect(FakeWorker.instances).toHaveLength(1);
+  expect(worker.posted.map((message) => message.filePath)).toEqual([
+    "big.md",
+    "open.md",
+  ]);
 });

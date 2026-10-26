@@ -245,9 +245,9 @@ export function useVaultItem(
 
     const content = plateEditor
       ? await serializeMarkdownInWorker(plateEditor.children, {
-          timeoutMs: 5000,
           filePath: currentFilePath,
           requestKey: `${reason}:${currentFilePath}`,
+          urgent: true,
           fallback: () =>
             getSaveMarkdownContent(plateEditor, markdownContent, {
               filePath: currentFilePath,

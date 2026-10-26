@@ -17,7 +17,6 @@ import {
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 
 const AUTOSAVE_DELAY_MS = 1800;
-const SERIALIZATION_WORKER_TIMEOUT_MS = 5000;
 
 type EditorStoreState = ReturnType<typeof useEditorStore.getState>;
 
@@ -101,7 +100,8 @@ export function useAutosave() {
       state.markSaved(content);
     };
 
-    const serializeCurrentMarkdown = async () => {
+    /** `urgent`: something waits on this save, so it goes before any read. */
+    const serializeCurrentMarkdown = async (urgent: boolean) => {
       const fallbackMarkdown = latestContentRef.current;
       const editor = latestEditorRef.current;
       const filePath = latestFilePathRef.current;
@@ -111,15 +111,15 @@ export function useAutosave() {
       }
 
       return serializeMarkdownInWorker(editor.children, {
-        timeoutMs: SERIALIZATION_WORKER_TIMEOUT_MS,
         filePath,
         requestKey: filePath ? `autosave:${filePath}` : "autosave",
+        urgent,
         fallback: () =>
           getSaveMarkdownContent(editor, fallbackMarkdown, { filePath }),
       });
     };
 
-    const performSave = async (retryIfChanged = true) => {
+    const performSave = async (retryIfChanged = true, urgent = false) => {
       const filePath = latestFilePathRef.current;
       const dirty = latestDirtyRef.current;
 
@@ -138,7 +138,7 @@ export function useAutosave() {
       // The text the file held when it was opened or last saved.
       const expectedContent = useEditorStore.getState().markdownContent;
       const savedEditTick = useEditorStore.getState().editTick;
-      const content = await serializeCurrentMarkdown();
+      const content = await serializeCurrentMarkdown(urgent);
 
       if (
         lastSavedFilePathRef.current === filePath &&
@@ -209,7 +209,7 @@ export function useAutosave() {
       // Bring in what changed outside the app, then save the edits with it.
       if (changedOnDisk) {
         await reloadOpenShardIfChanged();
-        await performSave(false);
+        await performSave(false, urgent);
         return;
       }
 
@@ -245,7 +245,7 @@ export function useAutosave() {
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
 
-      await performSave();
+      await performSave(true, true);
     };
 
     flushActiveAutosave = flushNow;

@@ -5,6 +5,7 @@
 //! edits add to. Days before the history began keep this device's own count,
 //! from what was typed in the editor.
 
+use super::attachments::vault_key;
 use super::parser::{LinkType, chart_tables, parse_markdown};
 use crate::sync::writing::WritingHistory;
 use rusqlite::{Connection, params};
@@ -71,15 +72,16 @@ pub struct ShardChart {
     pub rows: Vec<Vec<String>>,
 }
 
-/// Every chart drawn from a table, those in the shards edited last first.
-pub fn get_charts(conn: &Connection) -> rusqlite::Result<Vec<ShardChart>> {
+/// Every chart drawn from a table in the vault at `vault_path`, those in the
+/// shards edited last first.
+pub fn get_charts(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Vec<ShardChart>> {
     let mut stmt = conn.prepare(
         "SELECT f.path, f.name, s.content FROM files f JOIN fts_search s ON s.rowid = f.id
-         WHERE EXISTS (SELECT 1 FROM charts c WHERE c.file_id = f.id)
+         WHERE f.vault_path = ?1 AND EXISTS (SELECT 1 FROM charts c WHERE c.file_id = f.id)
          ORDER BY f.last_modified DESC, f.path",
     )?;
     let shards = stmt
-        .query_map([], |row| {
+        .query_map(params![vault_key(vault_path)], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -172,7 +174,7 @@ fn file_name(path: &str) -> String {
 /// The vault's totals and its last year of writing, for the Overview page:
 /// from `history` where it has the day, from this device's log before. The
 /// day the history began has both, so each shard keeps the larger count.
-/// The index holds only the open vault's shards; the log is filtered by path.
+/// The index is read for the vault's shards only; the log is filtered by path.
 pub fn get_writing_log(
     conn: &Connection,
     vault_path: &str,
@@ -186,21 +188,22 @@ pub fn get_writing_log(
         |row| row.get(0),
     )?;
 
+    let vault = Path::new(vault_path);
+    let indexed_vault = vault_key(vault);
     let (shard_count, word_count) = conn.query_row(
-        "SELECT COUNT(*), COALESCE(SUM(word_count), 0) FROM files",
-        [],
+        "SELECT COUNT(*), COALESCE(SUM(word_count), 0) FROM files WHERE vault_path = ?1",
+        params![indexed_vault],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
 
     let mut existing = HashSet::new();
     {
-        let mut stmt = conn.prepare("SELECT path FROM files")?;
-        for path in stmt.query_map([], |row| row.get::<_, String>(0))? {
+        let mut stmt = conn.prepare("SELECT path FROM files WHERE vault_path = ?1")?;
+        for path in stmt.query_map(params![indexed_vault], |row| row.get::<_, String>(0))? {
             existing.insert(path_key(&path?));
         }
     }
 
-    let vault = Path::new(vault_path);
     let began_on = history.map(|history| history.began_on.as_str());
     // By day and path key: the path as written, and the words.
     let mut words: HashMap<(String, String), (String, i64)> = HashMap::new();
@@ -276,14 +279,15 @@ fn is_shard_target(target: &str) -> bool {
     target.to_lowercase().ends_with(".md")
 }
 
-/// The @ links in the open vault that point to shards that don't exist, in
-/// the order of the shards holding them.
-pub fn get_broken_links(conn: &Connection) -> rusqlite::Result<Vec<BrokenLink>> {
+/// The @ links in the vault at `vault_path` that point to shards that don't
+/// exist, in the order of the shards holding them.
+pub fn get_broken_links(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Vec<BrokenLink>> {
+    let vault = vault_key(vault_path);
     let mut paths = HashSet::new();
     let mut names = HashSet::new();
     {
-        let mut stmt = conn.prepare("SELECT path FROM files")?;
-        for path in stmt.query_map([], |row| row.get::<_, String>(0))? {
+        let mut stmt = conn.prepare("SELECT path FROM files WHERE vault_path = ?1")?;
+        for path in stmt.query_map(params![vault], |row| row.get::<_, String>(0))? {
             let path = path?;
             let name = file_name(&path).to_lowercase();
             if let Some(stem) = name.strip_suffix(".md") {
@@ -297,10 +301,10 @@ pub fn get_broken_links(conn: &Connection) -> rusqlite::Result<Vec<BrokenLink>> 
     let mut stmt = conn.prepare(
         "SELECT f.path, f.name, l.link_type, l.target_path, l.link_text
          FROM links l JOIN files f ON f.id = l.source_file_id
-         WHERE l.link_type IN ('internal', 'mention')
+         WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')
          ORDER BY f.name COLLATE NOCASE, f.path, l.id",
     )?;
-    let rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map(params![vault], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
@@ -480,7 +484,7 @@ mod tests {
         for name in ["Runs.md", "Plain.md"] {
             crate::db::indexer::index_file(&conn, &dir, &dir.join(name)).unwrap();
         }
-        let charts = get_charts(&conn).unwrap();
+        let charts = get_charts(&conn, &dir).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
 
         let shown: Vec<_> = charts
@@ -514,7 +518,7 @@ mod tests {
         for name in ["Plan.md", "Notes/Ideas.md"] {
             crate::db::indexer::index_file(&conn, &dir, &dir.join(name)).unwrap();
         }
-        let broken = get_broken_links(&conn).unwrap();
+        let broken = get_broken_links(&conn, &dir).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
 
         let shown: Vec<_> = broken

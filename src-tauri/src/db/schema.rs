@@ -3,7 +3,8 @@ use rusqlite::Connection;
 /// SQL schema for the Netherstone knowledge base index.
 ///
 /// Tables:
-/// - `files`: Core metadata and editor stats for each markdown file in the vault
+/// - `files`: Core metadata and editor stats for each markdown file, keyed by
+///   its vault
 /// - `links`: Indexed outbound links including mentions, internal links, and external URLs
 /// - `tags`: Extracted hashtags from file content, each with the text around
 ///   its first appearance
@@ -19,8 +20,11 @@ use rusqlite::Connection;
 pub const SCHEMA: &str = r#"
 -- ── Files ──────────────────────────────────────────────────────────────────
 
+-- One database serves every vault, so each file names its vault, and what's
+-- shown for a vault only reads its own rows.
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vault_path TEXT NOT NULL,
     path TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     last_modified INTEGER NOT NULL,
@@ -33,6 +37,7 @@ CREATE TABLE IF NOT EXISTS files (
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_files_vault_path ON files(vault_path);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_files_last_modified ON files(last_modified);
 
@@ -192,82 +197,6 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, r
     Ok(false)
 }
 
-fn ensure_column_exists(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    definition: &str,
-) -> Result<(), rusqlite::Error> {
-    if !column_exists(conn, table, column)? {
-        conn.execute(
-            &format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, definition),
-            [],
-        )?;
-    }
-
-    Ok(())
-}
-
-fn links_table_needs_migration(conn: &Connection) -> Result<bool, rusqlite::Error> {
-    let create_sql: Option<String> = conn
-        .query_row(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'links'",
-            [],
-            |row| row.get(0),
-        )
-        .ok();
-
-    let Some(create_sql) = create_sql else {
-        return Ok(false);
-    };
-
-    Ok(create_sql.contains("'markdown'") || create_sql.contains("'wikilink'"))
-}
-
-fn migrate_links_table(conn: &Connection) -> Result<(), rusqlite::Error> {
-    if !links_table_needs_migration(conn)? {
-        return Ok(());
-    }
-
-    conn.execute_batch(
-        r#"
-        ALTER TABLE links RENAME TO links_old;
-
-        CREATE TABLE links (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_file_id INTEGER NOT NULL,
-            target_path TEXT NOT NULL,
-            link_text TEXT,
-            link_type TEXT NOT NULL CHECK(link_type IN ('mention', 'internal', 'external', 'email', 'phone', 'anchor', 'other')),
-            is_valid INTEGER DEFAULT 0,
-            FOREIGN KEY (source_file_id) REFERENCES files(id) ON DELETE CASCADE
-        );
-
-        INSERT INTO links (id, source_file_id, target_path, link_text, link_type, is_valid)
-        SELECT
-            id,
-            source_file_id,
-            target_path,
-            link_text,
-            CASE
-                WHEN link_type = 'mention' THEN 'mention'
-                WHEN link_type = 'markdown' THEN 'internal'
-                ELSE 'other'
-            END,
-            is_valid
-        FROM links_old;
-
-        DROP TABLE links_old;
-
-        CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_file_id);
-        CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_path);
-        CREATE INDEX IF NOT EXISTS idx_links_valid ON links(is_valid);
-        "#,
-    )?;
-
-    Ok(())
-}
-
 /// Drops attachment tables from before rows named their vault. Those keyed
 /// rows by `_attachments/<name>` alone, so two vaults with a file of the
 /// same name shared one. The tables only mirror what is on disk and in the
@@ -286,33 +215,66 @@ fn drop_attachment_tables_without_vault(conn: &Connection) -> Result<(), rusqlit
     Ok(())
 }
 
+/// Drops the search index from before files named their vault. It held
+/// every vault's files with nothing to tell them apart, and only mirrors the
+/// shards on disk, so indexing each vault when it opens fills it again.
+fn drop_index_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let has_table: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'files')",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_table && !column_exists(conn, "files", "vault_path")? {
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS charts;
+             DROP TABLE IF EXISTS tags;
+             DROP TABLE IF EXISTS links;
+             DROP TABLE files;
+             DROP TABLE IF EXISTS fts_search;",
+        )?;
+    }
+    Ok(())
+}
+
 /// Initialize the database schema.
 ///
 /// Creates all tables and indexes if they don't exist, and brings older
 /// databases up to date.
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     drop_attachment_tables_without_vault(conn)?;
+    drop_index_tables_without_vault(conn)?;
     conn.execute_batch(SCHEMA)?;
-    migrate_links_table(conn)?;
-
-    ensure_column_exists(conn, "files", "line_count", "INTEGER DEFAULT 0")?;
-    ensure_column_exists(conn, "files", "character_count", "INTEGER DEFAULT 0")?;
-    ensure_column_exists(conn, "files", "file_size", "INTEGER DEFAULT 0")?;
-
-    // Tags indexed before excerpts were stored get theirs from the indexed
-    // text, so the Tags view shows them without re-indexing every file.
-    if !column_exists(conn, "tags", "excerpt")? {
-        ensure_column_exists(conn, "tags", "position", "INTEGER NOT NULL DEFAULT 0")?;
-        ensure_column_exists(conn, "tags", "excerpt", "TEXT")?;
-        super::indexer::backfill_tag_excerpts(conn)?;
-    }
-    super::indexer::remove_tags_without_letters(conn)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_index_without_a_vault_is_rebuilt() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE files (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, last_modified INTEGER NOT NULL, last_indexed INTEGER NOT NULL, content_hash TEXT NOT NULL);
+             CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL, tag TEXT NOT NULL);
+             CREATE VIRTUAL TABLE fts_search USING fts5(path UNINDEXED, name, content);
+             INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, '/v/a.md', 'a.md', 0, 0, '');
+             INSERT INTO tags (file_id, tag) VALUES (1, 'one');
+             INSERT INTO fts_search (rowid, path, name, content) VALUES (1, '/v/a.md', 'a.md', 'a');",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        assert!(column_exists(&conn, "files", "vault_path").unwrap());
+        assert!(column_exists(&conn, "tags", "excerpt").unwrap());
+        for table in ["files", "tags", "fts_search"] {
+            let rows: i64 = conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(rows, 0, "{table}");
+        }
+    }
 
     #[test]
     fn attachment_tables_without_a_vault_are_rebuilt() {

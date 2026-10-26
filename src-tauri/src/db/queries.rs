@@ -1,3 +1,4 @@
+use super::attachments::vault_key;
 use super::indexer::resolve_link_target;
 use super::parser::{LinkType, classify_link_target};
 use crate::markdown_text::{BlockKind, TextBlock, TextPart, excerpt, text_blocks, word_matches};
@@ -56,11 +57,12 @@ pub struct FileMetadata {
     pub tags: Vec<String>,
 }
 
-/// Search files using FTS5 full-text search.
+/// Search the files of the vault at `vault_path` using FTS5 full-text search.
 ///
 /// Returns matching files with text snippets, ordered by relevance.
 pub fn search_files(
     conn: &Connection,
+    vault_path: &Path,
     query: &str,
     limit: usize,
 ) -> rusqlite::Result<Vec<SearchResult>> {
@@ -85,13 +87,13 @@ pub fn search_files(
         "SELECT f.path, f.name, fts_search.content, rank
          FROM fts_search
          INNER JOIN files f ON fts_search.rowid = f.id
-         WHERE fts_search MATCH ?1
+         WHERE fts_search MATCH ?1 AND f.vault_path = ?3
          ORDER BY rank
          LIMIT ?2",
     )?;
 
     let results = stmt
-        .query_map(params![fts_query, limit], |row| {
+        .query_map(params![fts_query, limit, vault_key(vault_path)], |row| {
             let content: String = row.get(2)?;
             Ok(SearchResult {
                 path: row.get(0)?,
@@ -164,15 +166,22 @@ fn normalize_path(path: &str) -> String {
     path.replace("\\", "/")
 }
 
-/// Every file with at least one tag, newest first, with the text around each
-/// tag's first appearance as the indexer stored it.
-pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
+/// Every file of the vault at `vault_path` with at least one tag, newest
+/// first, with the text around each tag's first appearance as the indexer
+/// stored it.
+pub fn get_tagged_files(conn: &Connection, vault_path: &Path) -> Result<Vec<TaggedFile>, String> {
+    let vault = vault_key(vault_path);
     let mut tags_by_file: HashMap<i64, Vec<TagExcerpt>> = HashMap::new();
     let mut stmt = conn
-        .prepare("SELECT file_id, tag, excerpt FROM tags ORDER BY file_id, position, tag")
+        .prepare(
+            "SELECT t.file_id, t.tag, t.excerpt FROM tags t
+             JOIN files f ON f.id = t.file_id
+             WHERE f.vault_path = ?1
+             ORDER BY t.file_id, t.position, t.tag",
+        )
         .map_err(|e| format!("Failed to prepare tags query: {}", e))?;
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(params![vault], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -193,13 +202,13 @@ pub fn get_tagged_files(conn: &Connection) -> Result<Vec<TaggedFile>, String> {
         .prepare(
             "SELECT id, path, name, last_modified
              FROM files
-             WHERE id IN (SELECT file_id FROM tags)
+             WHERE vault_path = ?1 AND id IN (SELECT file_id FROM tags)
              ORDER BY last_modified DESC, name ASC",
         )
         .map_err(|e| format!("Failed to prepare tagged files query: {}", e))?;
 
     let files = stmt
-        .query_map([], |row| {
+        .query_map(params![vault], |row| {
             let file_id: i64 = row.get(0)?;
             Ok(TaggedFile {
                 path: row.get(1)?,
@@ -278,19 +287,24 @@ impl LinkedShard {
     }
 }
 
-/// Every file that links to or mentions the shard at `file_path`, by name,
-/// with the text around its first link to it.
-pub fn get_backlinks(conn: &Connection, file_path: &str) -> Result<Vec<Backlink>, String> {
+/// Every file of the vault at `vault_path` that links to or mentions the
+/// shard at `file_path`, by name, with the text around its first link to it.
+pub fn get_backlinks(
+    conn: &Connection,
+    vault_path: &Path,
+    file_path: &str,
+) -> Result<Vec<Backlink>, String> {
     let shard = LinkedShard::new(file_path);
 
     let mut stmt = conn
         .prepare(
-            "SELECT source_file_id, link_type, target_path FROM links
-             WHERE link_type IN ('internal', 'mention')",
+            "SELECT l.source_file_id, l.link_type, l.target_path FROM links l
+             JOIN files f ON f.id = l.source_file_id
+             WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')",
         )
         .map_err(|e| format!("Failed to prepare links query: {}", e))?;
     let links = stmt
-        .query_map([], |row| {
+        .query_map(params![vault_key(vault_path)], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -466,7 +480,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         crate::db::schema::init_schema(&conn).unwrap();
         conn.execute(
-            "INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, 'Quote.md', 'Quote.md', 0, 0, '')",
+            "INSERT INTO files (id, vault_path, path, name, last_modified, last_indexed, content_hash) VALUES (1, '/v', 'Quote.md', 'Quote.md', 0, 0, '')",
             [],
         )
         .unwrap();
@@ -476,7 +490,7 @@ mod tests {
         )
         .unwrap();
 
-        let results = search_files(&conn, "contractor's quote", 20).unwrap();
+        let results = search_files(&conn, Path::new("/v"), "contractor's quote", 20).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(
             shown(&results[0].snippet),
@@ -491,8 +505,51 @@ mod tests {
             "(quote",
             "quote*",
         ] {
-            assert!(search_files(&conn, query, 20).is_ok(), "{query}");
+            assert!(search_files(&conn, Path::new("/v"), query, 20).is_ok(), "{query}");
         }
+    }
+
+    #[test]
+    fn keeps_each_vaults_rows_apart() {
+        let root =
+            std::env::temp_dir().join(format!("netherstone-two-vaults-{}", std::process::id()));
+        let (work, home, empty) = (root.join("Work"), root.join("Home"), root.join("Empty"));
+        for vault in [&work, &home, &empty] {
+            std::fs::create_dir_all(vault).unwrap();
+        }
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        for (vault, name) in [(&work, "Plan.md"), (&work, "Gone.md"), (&home, "Trip.md")] {
+            let path = vault.join(name);
+            std::fs::write(&path, "Shared plan #ideas").unwrap();
+            crate::db::indexer::index_file(&conn, vault, &path).unwrap();
+        }
+        let names = |vault: &Path| -> Vec<String> {
+            search_files(&conn, vault, "plan", 20)
+                .unwrap()
+                .into_iter()
+                .map(|r| r.name)
+                .collect()
+        };
+
+        let plan = work.join("Plan.md").to_string_lossy().into_owned();
+        crate::db::indexer::prune_deleted_files(&conn, &work, &[plan]).unwrap();
+        crate::db::indexer::prune_deleted_files(&conn, &empty, &[]).unwrap();
+
+        assert_eq!(names(&work), ["Plan.md"]);
+        assert_eq!(names(&home), ["Trip.md"]);
+        assert!(names(&empty).is_empty());
+        let tagged = get_tagged_files(&conn, &home).unwrap();
+        assert_eq!(tagged.len(), 1);
+        assert_eq!(tagged[0].name, "Trip.md");
+        // The pruned file's search text went with it.
+        let searchable: i64 = conn
+            .query_row("SELECT COUNT(*) FROM fts_search", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(searchable, 2);
+        let trip = home.join("Trip.md");
+        assert!(!crate::db::indexer::needs_indexing(&conn, &home, &trip).unwrap());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
@@ -510,7 +567,7 @@ mod tests {
         crate::db::schema::init_schema(&conn).unwrap();
         for (id, name, modified) in [(1, "old.md", 100), (2, "new.md", 200), (3, "plain.md", 300)] {
             conn.execute(
-                "INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (?1, ?2, ?2, ?3, ?3, '')",
+                "INSERT INTO files (id, vault_path, path, name, last_modified, last_indexed, content_hash) VALUES (?1, '/v', ?2, ?2, ?3, ?3, '')",
                 params![id, name, modified],
             )
             .unwrap();
@@ -537,7 +594,7 @@ mod tests {
             .unwrap();
         }
 
-        let files = get_tagged_files(&conn).unwrap();
+        let files = get_tagged_files(&conn, Path::new("/v")).unwrap();
         let names: Vec<_> = files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, ["new.md", "old.md"]);
         assert_eq!(files[0].last_modified, 200);
@@ -575,7 +632,7 @@ mod tests {
         // The view reads only what the index stored.
         conn.execute("DELETE FROM fts_search", []).unwrap();
 
-        let files = get_tagged_files(&conn).unwrap();
+        let files = get_tagged_files(&conn, &vault).unwrap();
         let tags: Vec<_> = files[0]
             .tags
             .iter()
@@ -589,54 +646,6 @@ mod tests {
             ]
         );
         std::fs::remove_dir_all(&vault).unwrap();
-    }
-
-    #[test]
-    fn fills_in_excerpts_for_tags_indexed_without_them() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE files (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, last_modified INTEGER NOT NULL, last_indexed INTEGER NOT NULL, content_hash TEXT NOT NULL);
-             CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL, tag TEXT NOT NULL);
-             CREATE VIRTUAL TABLE fts_search USING fts5(path UNINDEXED, name, content);
-             INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, 'a.md', 'a.md', 0, 0, '');
-             INSERT INTO fts_search (rowid, path, name, content) VALUES (1, 'a.md', 'a.md', 'First #one\n\nThen #two');
-             INSERT INTO tags (file_id, tag) VALUES (1, 'two'), (1, 'one'), (1, 'gone');",
-        )
-        .unwrap();
-
-        crate::db::schema::init_schema(&conn).unwrap();
-
-        let files = get_tagged_files(&conn).unwrap();
-        let tags: Vec<_> = files[0]
-            .tags
-            .iter()
-            .map(|t| (t.tag.as_str(), t.excerpt.as_deref().map(shown)))
-            .collect();
-        assert_eq!(
-            tags,
-            [
-                ("one", Some("First [#one]".to_string())),
-                ("two", Some("Then [#two]".to_string())),
-                ("gone", None),
-            ]
-        );
-    }
-
-    #[test]
-    fn drops_number_tags_indexed_before_tags_needed_a_letter() {
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::schema::init_schema(&conn).unwrap();
-        conn.execute_batch(
-            "INSERT INTO files (id, path, name, last_modified, last_indexed, content_hash) VALUES (1, 'a.md', 'a.md', 0, 0, '');
-             INSERT INTO tags (file_id, tag) VALUES (1, '3'), (1, 'q3'), (1, '2026');",
-        )
-        .unwrap();
-
-        crate::db::schema::init_schema(&conn).unwrap();
-
-        let files = get_tagged_files(&conn).unwrap();
-        let tags: Vec<_> = files[0].tags.iter().map(|t| t.tag.as_str()).collect();
-        assert_eq!(tags, ["q3"]);
     }
 
     #[test]
@@ -667,7 +676,7 @@ mod tests {
         }
 
         let plan = vault.join("Work/Plan.md").to_string_lossy().into_owned();
-        let backlinks = get_backlinks(&conn, &plan).unwrap();
+        let backlinks = get_backlinks(&conn, &vault, &plan).unwrap();
         let found: Vec<_> = backlinks
             .iter()
             .map(|b| (b.name.as_str(), shown(b.excerpt.as_ref().unwrap())))
@@ -723,7 +732,7 @@ mod tests {
             crate::db::indexer::index_file(&conn, &vault, &vault.join(name)).unwrap();
         }
 
-        let backlinks = get_backlinks(&conn, &roadmap.to_string_lossy()).unwrap();
+        let backlinks = get_backlinks(&conn, &vault, &roadmap.to_string_lossy()).unwrap();
         let names: Vec<_> = backlinks.iter().map(|b| b.name.as_str()).collect();
         assert_eq!(names, ["Bracketed.md", "Encoded.md"]);
 
@@ -731,22 +740,23 @@ mod tests {
     }
 }
 
-/// The indexed files holding a link or mention to any of `shards`, as their
-/// paths. The index is only as current as the last pass; a file edited since
-/// may be missing.
+/// The indexed files of the vault at `vault_path` holding a link or mention
+/// to any of `shards`, as their paths. The index is only as current as the
+/// last pass; a file edited since may be missing.
 pub fn files_linking_to_any(
     conn: &Connection,
+    vault_path: &Path,
     shards: &[LinkedShard],
 ) -> Result<Vec<String>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT DISTINCT f.path, l.link_type, l.target_path FROM links l
              JOIN files f ON f.id = l.source_file_id
-             WHERE l.link_type IN ('internal', 'mention')",
+             WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')",
         )
         .map_err(|e| format!("Failed to prepare links query: {}", e))?;
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(params![vault_key(vault_path)], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,

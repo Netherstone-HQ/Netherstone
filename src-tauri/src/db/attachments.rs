@@ -675,14 +675,24 @@ pub fn persist_attachment_bytes(
     bytes: &[u8],
 ) -> Result<PersistedAttachment, String> {
     let hash = blake3::hash(bytes).to_hex().to_string();
-    persist_attachment(
+    let attachment = persist_attachment(
         conn,
         vault_path,
         original_name,
         &hash,
         bytes.len() as u64,
         AttachmentSource::Bytes(bytes),
-    )
+    )?;
+
+    // A copy already in the vault is as new as these bytes. Drawing pictures
+    // are re-exported when older than their drawing, so one exported again
+    // unchanged must not stay older.
+    let _ = std::fs::File::options()
+        .write(true)
+        .open(&attachment.absolute_path)
+        .and_then(|file| file.set_modified(SystemTime::now()));
+
+    Ok(attachment)
 }
 
 /// Writes the new attachment before taking `writes.lock`, so a big file

@@ -223,6 +223,27 @@ function rewriteLinkedDrawingImages(
 }
 
 /**
+ * The drawings `markdown` shows pictures of, each with the sources of its
+ * pictures, light and dark. A missing or empty source is null.
+ */
+export function getLinkedDrawingSources(markdown: string) {
+  const drawings = new Map<string, (string | null)[]>();
+  const source = (tag: string, name: string) => {
+    const value = new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+    return value ? decodeHtmlAttribute(value) : null;
+  };
+
+  for (const [tag, ref] of markdown.matchAll(LINKED_IMAGE_TAG)) {
+    const drawingRef = decodeHtmlAttribute(ref);
+    const sources = drawings.get(drawingRef) ?? [];
+    sources.push(source(tag, "src"), source(tag, DARK_SOURCE_ATTRIBUTE));
+    drawings.set(drawingRef, sources);
+  }
+
+  return drawings;
+}
+
+/**
  * Replaces every image in `markdown` linked to `drawingRef` with a fresh
  * export, keeping each image's width. Returns null when none is linked.
  */

@@ -328,16 +328,62 @@ export interface AttachmentSyncInfo {
   syncLimitBytes: number;
 }
 
-/** What the sync rules say about a vault attachment today, or null when it's gone. */
-export async function attachmentSyncInfo(
+type SyncInfoAsk = {
+  promise: Promise<AttachmentSyncInfo | null>;
+  resolve: (info: AttachmentSyncInfo | null) => void;
+  reject: (error: unknown) => void;
+};
+
+/** Asks not yet sent, by vault, then by attachment. */
+const pendingSyncInfo = new Map<string, Map<string, SyncInfoAsk>>();
+
+/**
+ * What the sync rules say about a vault attachment today, or null when it's
+ * gone. Every file block asks as it shows, so asks made in the same turn go
+ * to the backend together: a shard asks once for all its files when it opens.
+ */
+export function attachmentSyncInfo(
   vaultPath: string,
   assetPath: string,
 ): Promise<AttachmentSyncInfo | null> {
   assertTauri();
-  return invoke<AttachmentSyncInfo | null>("attachment_sync_info", {
+  let batch = pendingSyncInfo.get(vaultPath);
+  if (!batch) {
+    batch = new Map();
+    pendingSyncInfo.set(vaultPath, batch);
+    queueMicrotask(() => sendSyncInfoAsks(vaultPath));
+  }
+
+  let ask = batch.get(assetPath);
+  if (!ask) {
+    let resolve!: SyncInfoAsk["resolve"];
+    let reject!: SyncInfoAsk["reject"];
+    const promise = new Promise<AttachmentSyncInfo | null>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    ask = { promise, resolve, reject };
+    batch.set(assetPath, ask);
+  }
+  return ask.promise;
+}
+
+function sendSyncInfoAsks(vaultPath: string) {
+  const batch = pendingSyncInfo.get(vaultPath);
+  pendingSyncInfo.delete(vaultPath);
+  if (!batch) return;
+
+  const asks = [...batch.values()];
+  invoke<(AttachmentSyncInfo | null)[]>("attachment_sync_infos", {
     vaultPath,
-    assetPath,
-  });
+    assetPaths: [...batch.keys()],
+  })
+    .then((infos) => {
+      asks.forEach((ask, index) => ask.resolve(infos[index] ?? null));
+    })
+    .catch((error) => {
+      for (const ask of asks) ask.reject(error);
+    });
 }
 
 export async function describeMissingAttachment(

@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_PREFERENCES, useSettingsStore } from "@/store/settings";
@@ -7,8 +14,23 @@ import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 import { SETTINGS_CATEGORIES, SettingsPage } from "./SettingsPage";
 
+const AI_APP = {
+  id: "cursor",
+  name: "Cursor",
+  installed: true,
+  connected: false,
+  downloadUrl: "https://cursor.com/download",
+};
+
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async () => null),
+  invoke: vi.fn(async (command: string) => {
+    if (command === "ai_apps") return [AI_APP];
+    if (command === "mcp_get_enabled") return false;
+    if (command === "mcp_vaults") {
+      return [{ path: "/v/Work", name: "Work", allowed: false }];
+    }
+    return null;
+  }),
   isTauri: () => false,
 }));
 vi.mock("@tauri-apps/api/app", () => ({
@@ -67,6 +89,25 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
     fireEvent.click(screen.getByRole("radio", { name: "Light" }));
     expect(useSettingsStore.getState().theme).toBe("light");
+  });
+
+  it("connects an AI app and picks vaults once AI apps are on", async () => {
+    useUIStore.setState({ settingsCategory: "ai-apps" });
+    render(<SettingsPage />);
+    const connect = await screen.findByRole("button", { name: "Connect" });
+    const toggle = screen.getByLabelText("Connect your AI apps");
+    await waitFor(() => expect(toggle).toHaveProperty("disabled", false));
+    expect(connect).toHaveProperty("disabled", true);
+
+    fireEvent.click(toggle);
+    expect(invoke).toHaveBeenCalledWith("mcp_set_enabled", { enabled: true });
+    fireEvent.click(connect);
+    expect(invoke).toHaveBeenCalledWith("ai_app_connect", { id: "cursor" });
+    fireEvent.click(screen.getByLabelText("Work"));
+    expect(invoke).toHaveBeenCalledWith("mcp_set_vault_allowed", {
+      path: "/v/Work",
+      allowed: true,
+    });
   });
 
   it("closes on Escape", () => {

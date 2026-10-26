@@ -77,7 +77,7 @@ export function BackupPanel({
     body = (
       <div className="space-y-3">
         <p className="text-muted-foreground text-ui">
-          Connect GitHub to sync this vault across your devices.
+          Connect GitHub to sync this vault across your devices
         </p>
         <GitHubSignIn compact />
         {accountError ? (
@@ -181,7 +181,7 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
           <span className="text-muted-foreground"> ({formatBytes(plan.includedBytes)})</span>
         ) : null}{" "}
         will sync privately through{" "}
-        <span className="font-medium">@{login}</span> on GitHub.
+        <span className="font-medium">@{login}</span> on GitHub
       </p>
 
       {skipped.length > 0 ? (
@@ -246,7 +246,7 @@ function SyncStatus({
           Offline
         </div>
         <p className="pl-6 text-muted-foreground text-ui-sm">
-          Changes sync when you're back online.
+          Changes sync when you're back online
         </p>
       </div>
     );
@@ -318,15 +318,15 @@ function BackupPicker({
     <div className="space-y-3">
       <p className="text-muted-foreground text-ui">
         {vaultHasFiles
-          ? "Choose a synced vault. Its files and this vault's files are combined."
-          : "Choose a synced vault to download here. It keeps syncing after that."}
+          ? "Choose a synced vault to combine with this one"
+          : "Choose a synced vault to download here, it keeps syncing after that"}
       </p>
       {backups === null ? (
         <div className="flex h-16 items-center justify-center">
           <LoaderCircleIcon className="size-4 animate-spin text-muted-foreground" />
         </div>
       ) : backups.length === 0 ? (
-        <p className="text-ui">No backups found on your GitHub account.</p>
+        <p className="text-ui">No backups found on your GitHub account</p>
       ) : (
         <ul className="max-h-48 space-y-1 overflow-y-auto">
           {backups.map((backup) => (

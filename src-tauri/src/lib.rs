@@ -1,3 +1,4 @@
+mod ai_apps;
 mod asset_scope;
 mod browser;
 mod copy_access;
@@ -168,6 +169,24 @@ fn mcp_set_vault_allowed(path: String, allowed: bool) -> Result<(), String> {
         Ok(false) => Err("Netherstone hasn't opened that vault".to_string()),
         Err(error) => Err(error.to_string()),
     }
+}
+
+/// The AI apps Settings can connect, and which are installed and connected.
+#[tauri::command(async)]
+fn ai_apps() -> Result<Vec<ai_apps::AppStatus>, String> {
+    ai_apps::statuses()
+}
+
+/// Sets up the AI app `id` to start the MCP server.
+#[tauri::command(async)]
+fn ai_app_connect(id: String) -> Result<(), String> {
+    ai_apps::connect(&id)
+}
+
+/// The MCP server setup to paste into any other AI app.
+#[tauri::command(async)]
+fn mcp_setup() -> Result<String, String> {
+    ai_apps::setup_snippet()
 }
 
 /// Where new vaults go unless the user picks somewhere else: their
@@ -1740,6 +1759,9 @@ pub fn run() {
             mcp_set_enabled,
             mcp_vaults,
             mcp_set_vault_allowed,
+            ai_apps,
+            ai_app_connect,
+            mcp_setup,
             default_vault_location,
             create_vault,
             open_media_files_dialog,

@@ -6,12 +6,14 @@ import {
   PaintbrushIcon,
   PaperclipIcon,
   PencilLineIcon,
+  PlugIcon,
   RefreshCwIcon,
   SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
 
 import { AboutSettings } from "@/components/settings/sections/AboutSettings";
+import { AiAppsSettings } from "@/components/settings/sections/AiAppsSettings";
 import { AppearanceSettings } from "@/components/settings/sections/AppearanceSettings";
 import { EditorSettings } from "@/components/settings/sections/EditorSettings";
 import { FilesSettings } from "@/components/settings/sections/FilesSettings";
@@ -84,6 +86,12 @@ export const SETTINGS_CATEGORIES: Category[] = [
     Content: SyncSettings,
   },
   {
+    id: "ai-apps",
+    label: "AI apps",
+    icon: PlugIcon,
+    Content: AiAppsSettings,
+  },
+  {
     id: "about",
     label: "About",
     icon: InfoIcon,
@@ -153,7 +161,7 @@ export function SettingsPage() {
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div
           key={category.id}
-          className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-10 pt-10 pb-16"
+          className="mx-auto flex w-full max-w-275 flex-col gap-8 px-10 pt-10 pb-16"
         >
           <h2 className="font-semibold text-xl tracking-tight">
             {category.label}

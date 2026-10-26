@@ -15,7 +15,8 @@ export function AppearanceSettings() {
   return (
     <>
       <SettingsGroup title="Theme">
-        <ThemePicker className="p-4" />
+        {/* As many themes to a row as fit, so wide windows don't blow them up. */}
+        <ThemePicker className="grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] p-4" />
       </SettingsGroup>
 
       <SettingsGroup>
@@ -32,7 +33,7 @@ function ZoomRow() {
   return (
     <SettingRow
       label="Zoom"
-      description="Makes everything in Netherstone bigger or smaller."
+      description="Makes everything in Netherstone bigger or smaller"
     >
       <Stepper
         label="Zoom"

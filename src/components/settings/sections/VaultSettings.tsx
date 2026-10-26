@@ -29,7 +29,7 @@ export function VaultSettings() {
             vaultPath ? (
               <span className="break-all font-mono">{vaultPath}</span>
             ) : (
-              "Any folder works, even an empty one."
+              "Any folder works, even an empty one"
             )
           }
         >
@@ -45,7 +45,7 @@ export function VaultSettings() {
         </SettingRow>
         <SettingRow
           label="Open another vault"
-          description="Switch to a different folder."
+          description="Switch to a different folder"
         >
           <Button variant="outline" size="sm" onClick={() => void openOther()}>
             Choose folder
@@ -57,7 +57,7 @@ export function VaultSettings() {
         <PreferenceSegments
           name="newShardLocation"
           label="Create new shards in"
-          description="Where a shard goes when you create it from the sidebar or header."
+          description="Where a shard goes when you create it from the sidebar or header"
           options={[
             { value: "vault-root", label: "Top of the vault" },
             { value: "current-folder", label: "Current folder" },
@@ -98,7 +98,7 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
   return (
     <SettingRow
       label="Refresh search index"
-      description="Use it when search, tags or links look out of date."
+      description="Use it when search, tags or links look out of date"
     >
       <Button
         variant="outline"

@@ -83,8 +83,8 @@ function RememberChoice({
       </Label>
       <p className="text-muted-foreground text-ui-sm leading-5">
         {remember
-          ? "Saved in a file only you can read, since this computer has no keyring."
-          : "You'll connect again each time you open Netherstone."}
+          ? "Saved in a file only you can read, since this computer has no keyring"
+          : "You'll connect again each time you open Netherstone"}
       </p>
     </div>
   );
@@ -114,7 +114,7 @@ function SignInCodePrompt({
   return (
     <div className="space-y-3">
       <p className="text-ui">
-        Enter this code on GitHub to connect your account.
+        Enter this code on GitHub to connect your account
       </p>
       <div
         className={cn(

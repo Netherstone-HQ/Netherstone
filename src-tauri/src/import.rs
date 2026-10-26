@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::db::attachments::ATTACHMENTS_DIR_NAME;
+use crate::db::attachments::{ATTACHMENTS_DIR_NAME, vault_key};
 use crate::vault;
 use crate::vault_access::is_within;
 
@@ -257,8 +257,8 @@ pub fn remove_new_attachments(
         }
         let unused_and_new: bool = conn
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM attachments WHERE asset_path = ?1 AND created_at >= ?2 AND ref_count = 0)",
-                params![asset_path, since],
+                "SELECT EXISTS(SELECT 1 FROM attachments WHERE vault_path = ?3 AND asset_path = ?1 AND created_at >= ?2 AND ref_count = 0)",
+                params![asset_path, since, vault_key(vault_root)],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to check attachment {}: {}", asset_path, e))?;
@@ -270,8 +270,8 @@ pub fn remove_new_attachments(
             remove(&path)?;
         }
         conn.execute(
-            "DELETE FROM attachments WHERE asset_path = ?1 AND ref_count = 0",
-            params![asset_path],
+            "DELETE FROM attachments WHERE vault_path = ?2 AND asset_path = ?1 AND ref_count = 0",
+            params![asset_path, vault_key(vault_root)],
         )
         .map_err(|e| format!("Failed to forget attachment {}: {}", asset_path, e))?;
         removed.push(asset_path.clone());
@@ -382,9 +382,9 @@ mod tests {
         crate::db::init_schema(&conn).unwrap();
         for (name, created_at, ref_count) in [("old.png", 100, 0), ("new.png", 200, 0), ("used.png", 200, 1)] {
             conn.execute(
-                "INSERT INTO attachments (asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count)
-                 VALUES (?1, ?1, ?1, 'png', 'image/png', 1, ?2, ?2, 'syncable', ?3)",
-                params![format!("_attachments/{}", name), created_at, ref_count],
+                "INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count)
+                 VALUES (?4, ?1, ?1, ?1, 'png', 'image/png', 1, ?2, ?2, 'syncable', ?3)",
+                params![format!("_attachments/{}", name), created_at, ref_count, vault_key(&vault)],
             )
             .unwrap();
         }

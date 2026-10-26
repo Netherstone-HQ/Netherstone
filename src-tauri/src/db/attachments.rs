@@ -1534,9 +1534,16 @@ pub struct CleanupResult {
 }
 
 /// A file left by a write that never finished: today's hidden
-/// `.name.netherstone-tmp`, or `name.tmp` from earlier versions.
-fn is_interrupted_write(asset_path: &str) -> bool {
-    asset_path.ends_with(".tmp") || asset_path.ends_with(".netherstone-tmp")
+/// `.name.netherstone-tmp`, or `<hash>.<ext>.tmp` from versions that named
+/// attachments by their hash. Any other `.tmp` file is an attachment.
+pub(super) fn is_interrupted_write(asset_path: &str) -> bool {
+    if asset_path.ends_with(".netherstone-tmp") {
+        return true;
+    }
+    let name = asset_path.rsplit('/').next().unwrap_or(asset_path);
+    name.strip_suffix(".tmp")
+        .map(|name| name.split('.').next().unwrap_or(name))
+        .is_some_and(is_hash_stem)
 }
 
 /// Whether an unused file has been unused long enough to remove. Leftovers
@@ -1929,8 +1936,11 @@ mod tests {
         let kept = persist_attachment_bytes(&conn, &vault, "kept.png", b"kept").unwrap();
         let old = persist_attachment_bytes(&conn, &vault, "old.png", b"old!").unwrap();
         let recent = persist_attachment_bytes(&conn, &vault, "recent.png", b"new").unwrap();
-        std::fs::write(vault.join("_attachments/cd/leftover.png.tmp"), b"x").unwrap();
+        let leftover = format!("_attachments/cd/{USED_HASH}.png.tmp");
+        std::fs::write(vault.join(&leftover), b"x").unwrap();
         std::fs::write(vault.join("_attachments/.cut.png.netherstone-tmp"), b"y").unwrap();
+        // A file the user named .tmp is an attachment like any other.
+        std::fs::write(vault.join("_attachments/notes.tmp"), b"z").unwrap();
         let note = path_string(vault.join("note.md"));
         std::fs::write(&note, format!("![k]({})\n", kept.asset_path)).unwrap();
 
@@ -1948,8 +1958,9 @@ mod tests {
             kept.asset_path.clone(),
             old.asset_path.clone(),
             recent.asset_path.clone(),
-            "_attachments/cd/leftover.png.tmp".to_string(),
+            leftover.clone(),
             "_attachments/.cut.png.netherstone-tmp".to_string(),
+            "_attachments/notes.tmp".to_string(),
         ];
         let result = clean_up_vault_attachments(&conn, &vault, &shards, &requested, now, |path| {
             std::fs::remove_file(path).map_err(|e| e.to_string())
@@ -1960,15 +1971,20 @@ mod tests {
             result.removed,
             vec![
                 old.asset_path.clone(),
-                "_attachments/cd/leftover.png.tmp".to_string(),
+                leftover.clone(),
                 "_attachments/.cut.png.netherstone-tmp".to_string()
             ]
         );
         assert_eq!(result.freed_bytes, 6);
         assert_eq!(
             result.kept,
-            vec![kept.asset_path.clone(), recent.asset_path.clone()]
+            vec![
+                kept.asset_path.clone(),
+                recent.asset_path.clone(),
+                "_attachments/notes.tmp".to_string()
+            ]
         );
+        assert!(vault.join("_attachments/notes.tmp").is_file());
         assert!(vault.join(&kept.asset_path).is_file());
         assert!(vault.join(&recent.asset_path).is_file());
         assert!(!vault.join(&old.asset_path).exists());

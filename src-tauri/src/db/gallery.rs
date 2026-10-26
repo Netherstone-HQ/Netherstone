@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use super::attachments::{
-    ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, parse_drawing_exports,
-    path_from_asset_path, reference_kind_for_path, scan_attachment_files,
+    ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, is_interrupted_write,
+    parse_drawing_exports, path_from_asset_path, reference_kind_for_path, scan_attachment_files,
 };
 
 /// A file in the vault's attachment folder, as the Gallery shows it.
@@ -43,7 +43,7 @@ fn kind_for(asset_path: &str, is_drawing: bool) -> &'static str {
 /// Leftovers from an interrupted write and hidden files are not attachments.
 fn is_listed(asset_path: &str) -> bool {
     let name = asset_path.rsplit('/').next().unwrap_or(asset_path);
-    !name.starts_with('.') && !name.ends_with(".tmp")
+    !name.starts_with('.') && !is_interrupted_write(asset_path)
 }
 
 fn modified_seconds(path: &Path) -> i64 {
@@ -417,7 +417,7 @@ mod tests {
         let other = temp_vault("scoped-other");
         let conn = connection();
         write(&vault, "_attachments/Pic.png", "png");
-        write(&vault, "_attachments/Pic.png.tmp", "half");
+        write(&vault, &format!("_attachments/{}.png.tmp", "ab".repeat(32)), "half");
         write(&vault, "_attachments/.Pic.png.netherstone-tmp", "half");
         write(&other, "_attachments/Pic.png", "png");
         save_shard(&conn, &other, "Elsewhere.md", "![](_attachments/Pic.png)\n");

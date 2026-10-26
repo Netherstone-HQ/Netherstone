@@ -1,7 +1,7 @@
 use super::queries::locate_tags;
-use crate::markdown_text::{has_letter, text_blocks};
-use rusqlite::{Connection, OptionalExtension, params};
-use std::collections::{HashMap, HashSet};
+use crate::markdown_text::text_blocks;
+use rusqlite::{Connection, params};
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use urlencoding::decode;
@@ -169,6 +169,7 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
+    let vault = super::attachments::vault_key(vault_path);
 
     // Check if file already exists in DB
     let existing_file_id: Option<i64> = conn
@@ -182,7 +183,7 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
     let file_id = if let Some(id) = existing_file_id {
         // Update existing file
         conn.execute(
-            "UPDATE files SET name = ?1, last_modified = ?2, last_indexed = ?3, content_hash = ?4, word_count = ?5, line_count = ?6, character_count = ?7, file_size = ?8, created_at = ?9 WHERE id = ?10",
+            "UPDATE files SET name = ?1, last_modified = ?2, last_indexed = ?3, content_hash = ?4, word_count = ?5, line_count = ?6, character_count = ?7, file_size = ?8, created_at = ?9, vault_path = ?10 WHERE id = ?11",
             params![
                 file_name,
                 last_modified,
@@ -193,6 +194,7 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
                 parsed.character_count as i64,
                 file_size,
                 created_at,
+                vault,
                 id
             ],
         )
@@ -210,8 +212,9 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
     } else {
         // Insert new file
         conn.execute(
-            "INSERT INTO files (path, name, last_modified, last_indexed, content_hash, word_count, line_count, character_count, file_size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO files (vault_path, path, name, last_modified, last_indexed, content_hash, word_count, line_count, character_count, file_size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
+                vault,
                 path_str,
                 file_name,
                 last_modified,
@@ -297,58 +300,16 @@ fn insert_tags(
     Ok(())
 }
 
-/// Fills in positions and excerpts for tags indexed before they were stored,
-/// from the text already in the search index.
-pub(crate) fn backfill_tag_excerpts(conn: &Connection) -> rusqlite::Result<()> {
-    let mut tags_by_file: HashMap<i64, Vec<String>> = HashMap::new();
-    {
-        let mut stmt = conn.prepare("SELECT file_id, tag FROM tags")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-        })?;
-        for row in rows {
-            let (file_id, tag) = row?;
-            tags_by_file.entry(file_id).or_default().push(tag);
-        }
-    }
-    if tags_by_file.is_empty() {
-        return Ok(());
-    }
-
-    let tx = conn.unchecked_transaction()?;
-    for (file_id, tags) in tags_by_file {
-        let content: Option<String> = tx
-            .query_row(
-                "SELECT content FROM fts_search WHERE rowid = ?1",
-                params![file_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        tx.execute("DELETE FROM tags WHERE file_id = ?1", params![file_id])?;
-        insert_tags(&tx, file_id, content.as_deref().unwrap_or(""), tags)?;
-    }
-    tx.commit()
-}
-
-/// Removes tags without a letter, such as `#3`, indexed before tags needed
-/// one; files only drop them when they change otherwise.
-pub(crate) fn remove_tags_without_letters(conn: &Connection) -> rusqlite::Result<()> {
-    let tags: Vec<String> = conn
-        .prepare("SELECT DISTINCT tag FROM tags")?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    for tag in tags.into_iter().filter(|tag| !has_letter(tag)) {
-        conn.execute("DELETE FROM tags WHERE tag = ?1", params![tag])?;
-    }
-    Ok(())
-}
-
 /// Check if a file needs to be re-indexed.
 ///
 /// Returns true if:
-/// - File doesn't exist in DB
+/// - File doesn't exist in DB for the vault at `vault_path`
 /// - File's last_modified is newer than last_indexed
-pub fn needs_indexing(conn: &Connection, file_path: &Path) -> Result<bool, String> {
+pub fn needs_indexing(
+    conn: &Connection,
+    vault_path: &Path,
+    file_path: &Path,
+) -> Result<bool, String> {
     let path_str = file_path
         .to_str()
         .ok_or_else(|| "Invalid file path".to_string())?;
@@ -365,8 +326,8 @@ pub fn needs_indexing(conn: &Connection, file_path: &Path) -> Result<bool, Strin
 
     let result: Option<i64> = conn
         .query_row(
-            "SELECT last_indexed FROM files WHERE path = ?1 AND last_modified >= ?2",
-            params![path_str, last_modified],
+            "SELECT last_indexed FROM files WHERE path = ?1 AND last_modified >= ?2 AND vault_path = ?3",
+            params![path_str, last_modified, super::attachments::vault_key(vault_path)],
             |row| row.get(0),
         )
         .ok();
@@ -375,13 +336,28 @@ pub fn needs_indexing(conn: &Connection, file_path: &Path) -> Result<bool, Strin
     Ok(result.is_none())
 }
 
-/// Remove files from the database that no longer exist on disk.
-pub fn prune_deleted_files(conn: &Connection, existing_paths: &[String]) -> Result<usize, String> {
+/// Removes the files of the vault at `vault_path` that no longer exist on
+/// disk, with their search text. Other vaults' files stay, so opening one
+/// again doesn't index it from scratch.
+pub fn prune_deleted_files(
+    conn: &Connection,
+    vault_path: &Path,
+    existing_paths: &[String],
+) -> Result<usize, String> {
+    let vault = super::attachments::vault_key(vault_path);
     let prune = || -> rusqlite::Result<usize> {
         super::fill_kept_paths(conn, existing_paths)?;
+        // The search text isn't tied to its file, so it goes first.
         conn.execute(
-            "DELETE FROM files WHERE path NOT IN (SELECT path FROM kept_paths)",
-            [],
+            "DELETE FROM fts_search WHERE rowid IN (
+                 SELECT id FROM files
+                 WHERE vault_path = ?1 AND path NOT IN (SELECT path FROM kept_paths)
+             )",
+            params![vault],
+        )?;
+        conn.execute(
+            "DELETE FROM files WHERE vault_path = ?1 AND path NOT IN (SELECT path FROM kept_paths)",
+            params![vault],
         )
     };
 

@@ -1065,12 +1065,16 @@ fn search_files(
     query: String,
     limit: Option<usize>,
 ) -> Result<Vec<db::queries::SearchResult>, SearchError> {
+    // With no vault open there is nothing to search.
+    let Ok(vault) = vault_access::get().open_vault() else {
+        return Ok(Vec::new());
+    };
     let conn = db::open_connection().map_err(|e| {
         eprintln!("[Netherstone] Couldn't open the search index: {}", e);
         SearchError::Unavailable
     })?;
 
-    db::queries::search_files(&conn, &query, limit.unwrap_or(20)).map_err(|e| {
+    db::queries::search_files(&conn, &vault, &query, limit.unwrap_or(20)).map_err(|e| {
         eprintln!("[Netherstone] Search failed: {}", e);
         SearchError::Failed
     })
@@ -1174,7 +1178,7 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
         .iter()
         .map(|m| db::queries::LinkedShard::new(&m.old))
         .collect();
-    match db::queries::files_linking_to_any(&conn, &shards) {
+    match db::queries::files_linking_to_any(&conn, &vault, &shards) {
         Ok(linking) => {
             for path in linking {
                 let is_moved = moved.iter().any(|m| {
@@ -1433,10 +1437,11 @@ fn delete_path(target: &Path) -> Result<(), String> {
 
 #[tauri::command(async)]
 fn get_tagged_files() -> Result<Vec<db::queries::TaggedFile>, String> {
+    let vault = vault_access::get().open_vault()?;
     let db = db::Database::new()?;
 
     db.with_connection(|conn| {
-        db::queries::get_tagged_files(conn).map_err(|_e| rusqlite::Error::InvalidQuery)
+        db::queries::get_tagged_files(conn, &vault).map_err(|_e| rusqlite::Error::InvalidQuery)
     })
 }
 
@@ -1469,25 +1474,29 @@ fn get_writing_log(vault_path: String) -> Result<db::data::WritingLog, String> {
 
 #[tauri::command(async)]
 fn get_charts() -> Result<Vec<db::data::ShardChart>, String> {
+    let vault = vault_access::get().open_vault()?;
     let db = db::Database::new()?;
 
-    db.with_connection(db::data::get_charts)
+    db.with_connection(|conn| db::data::get_charts(conn, &vault))
 }
 
 #[tauri::command(async)]
 fn get_broken_links() -> Result<Vec<db::data::BrokenLink>, String> {
+    let vault = vault_access::get().open_vault()?;
     let db = db::Database::new()?;
 
-    db.with_connection(db::data::get_broken_links)
+    db.with_connection(|conn| db::data::get_broken_links(conn, &vault))
 }
 
 #[tauri::command(async)]
 fn get_backlinks(file_path: String) -> Result<Vec<db::queries::Backlink>, String> {
     in_open_vault(&file_path)?;
+    let vault = vault_access::get().open_vault()?;
     let db = db::Database::new()?;
 
     db.with_connection(|conn| {
-        db::queries::get_backlinks(conn, &file_path).map_err(|_e| rusqlite::Error::InvalidQuery)
+        db::queries::get_backlinks(conn, &vault, &file_path)
+            .map_err(|_e| rusqlite::Error::InvalidQuery)
     })
 }
 
@@ -1543,7 +1552,7 @@ fn index_vault(vault_path: String) -> Result<String, String> {
         for path_str in &all_paths {
             let path = std::path::Path::new(path_str);
 
-            match db::indexer::needs_indexing(conn, path) {
+            match db::indexer::needs_indexing(conn, vault, path) {
                 Ok(true) => {
                     match db::indexer::index_file(conn, vault, path) {
                         Ok(_) => {
@@ -1569,8 +1578,8 @@ fn index_vault(vault_path: String) -> Result<String, String> {
             eprintln!("[Netherstone] Failed to start the writing log: {}", e);
         }
 
-        // Prune deleted files
-        if let Err(e) = db::indexer::prune_deleted_files(conn, &all_paths) {
+        // Prune this vault's deleted files only.
+        if let Err(e) = db::indexer::prune_deleted_files(conn, vault, &all_paths) {
             eprintln!("Failed to prune deleted files: {}", e);
         }
 

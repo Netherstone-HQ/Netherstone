@@ -58,7 +58,6 @@ type PendingRequest = {
 
 export interface SerializeMarkdownInWorkerOptions {
   timeoutMs?: number;
-  signal?: AbortSignal;
   fallback?: () => string | Promise<string>;
   /**
    * Logical file identity for race handling and worker metadata.
@@ -74,7 +73,6 @@ export interface SerializeMarkdownInWorkerOptions {
 
 export interface DeserializeMarkdownInWorkerOptions {
   timeoutMs?: number;
-  signal?: AbortSignal;
   fallback?: () => unknown[] | Promise<unknown[]>;
   /**
    * Logical file identity for worker metadata and logging.
@@ -178,16 +176,8 @@ function resolveRequestKey(
   return normalizeFilePath(filePath) ?? DEFAULT_REQUEST_KEY;
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
 function isSupersededError(error: unknown): boolean {
   return error instanceof SupersededSerializationError;
-}
-
-function shouldBypassFallback(error: unknown): boolean {
-  return isAbortError(error) || isSupersededError(error);
 }
 
 function cleanupRequest(requestId: number) {
@@ -389,7 +379,7 @@ async function runFallbackValue<T>(
   fallback: (() => T | Promise<T>) | undefined,
   originalError: unknown,
 ): Promise<T> {
-  if (shouldBypassFallback(originalError)) {
+  if (isSupersededError(originalError)) {
     throw originalError;
   }
 
@@ -449,34 +439,13 @@ export async function deserializeMarkdownInWorker(
             }, timeoutMs)
           : null;
 
-      const abortHandler = () => {
-        finish(() => {
-          cleanupRequest(requestId);
-          reject(new DOMException("Deserialization aborted.", "AbortError"));
-        });
-      };
-
       const cleanup = () => {
         if (timeoutId !== null) {
           window.clearTimeout(timeoutId);
         }
 
-        if (options.signal) {
-          options.signal.removeEventListener("abort", abortHandler);
-        }
-
         cleanupRequest(requestId);
       };
-
-      if (options.signal?.aborted) {
-        cleanup();
-        reject(new DOMException("Deserialization aborted.", "AbortError"));
-        return;
-      }
-
-      if (options.signal) {
-        options.signal.addEventListener("abort", abortHandler, { once: true });
-      }
 
       const payload: DeserializeMarkdownWorkerRequest = {
         type: "deserialize",
@@ -570,34 +539,13 @@ export async function serializeMarkdownInWorker(
             }, timeoutMs)
           : null;
 
-      const abortHandler = () => {
-        finish(() => {
-          cleanupRequest(requestId);
-          reject(new DOMException("Serialization aborted.", "AbortError"));
-        });
-      };
-
       const cleanup = () => {
         if (timeoutId !== null) {
           window.clearTimeout(timeoutId);
         }
 
-        if (options.signal) {
-          options.signal.removeEventListener("abort", abortHandler);
-        }
-
         cleanupRequest(requestId);
       };
-
-      if (options.signal?.aborted) {
-        cleanup();
-        reject(new DOMException("Serialization aborted.", "AbortError"));
-        return;
-      }
-
-      if (options.signal) {
-        options.signal.addEventListener("abort", abortHandler, { once: true });
-      }
 
       const payload: SerializeMarkdownWorkerRequest = {
         type: "serialize",

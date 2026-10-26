@@ -21,6 +21,10 @@ export const FontKit = [
         defaultNodeValue: 'black',
       },
     },
+    // Text copied from a web page carries that page's own text colour, which
+    // can be unreadable on the app's theme. Colours picked in Netherstone
+    // paste through Plate's own fragment, not HTML.
+    parsers: { html: { deserializer: { query: () => false } } },
   }),
   FontBackgroundColorPlugin.configure(options),
   FontSizePlugin.configure(options),

@@ -21,7 +21,7 @@ use serde::Serialize;
 use std::path::Path;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
-const AST_CACHE_VERSION: i64 = 2;
+const AST_CACHE_VERSION: i64 = 3;
 
 // Commands here are marked `async` so Tauri runs them on its async runtime.
 // Plain sync commands run on the main thread, where file IO, SQLite and vault

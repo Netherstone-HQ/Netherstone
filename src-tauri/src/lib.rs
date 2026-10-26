@@ -479,14 +479,24 @@ fn describe_missing_attachment(
     db::attachments::describe_missing_attachment(&conn, Path::new(&vault_path), &asset_path)
 }
 
-/// Whether the vault attachment at `asset_path` syncs, by today's rules.
+/// Whether each vault attachment in `asset_paths` syncs, by today's rules, in
+/// the same order. A path that isn't a vault attachment gets nothing.
 #[tauri::command(async)]
-fn attachment_sync_info(
+fn attachment_sync_infos(
     vault_path: String,
-    asset_path: String,
-) -> Result<Option<db::attachments::AttachmentSyncInfo>, String> {
+    asset_paths: Vec<String>,
+) -> Result<Vec<Option<db::attachments::AttachmentSyncInfo>>, String> {
     open_vault_only(&vault_path)?;
-    db::attachments::attachment_sync_info(Path::new(&vault_path), &asset_path)
+    let vault = Path::new(&vault_path);
+    Ok(asset_paths
+        .iter()
+        .map(|asset_path| {
+            db::attachments::attachment_sync_info(vault, asset_path).unwrap_or_else(|e| {
+                eprintln!("[Netherstone] Couldn't check whether a file syncs: {}", e);
+                None
+            })
+        })
+        .collect())
 }
 
 #[tauri::command(async)]
@@ -1704,7 +1714,7 @@ pub fn run() {
             list_attachments,
             gallery_thumbnail,
             describe_missing_attachment,
-            attachment_sync_info,
+            attachment_sync_infos,
             clean_up_attachments,
             find_shards_containing,
             upsert_ast_cache,

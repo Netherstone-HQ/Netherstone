@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { isAttachmentOnlyChange } from "@/lib/gallery";
@@ -6,8 +6,6 @@ import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppress
 import { indexVault } from "@/lib/refresh-vault";
 import { getBrokenLinks, missingFileRows } from "@/lib/data";
 import { useAttachmentReportStore, useUIStore, useVaultStore } from "@/store";
-
-const initialIndexedVaultPaths = new Set<string>();
 
 type VaultChangedPayload = {
   paths?: string[];
@@ -44,44 +42,18 @@ function getChangedVaultPaths(payload: VaultChangedPayload | null | undefined) {
     : [];
 }
 
-/**
- * Hook to trigger vault indexing when a vault is opened or files change.
- *
- * Runs the indexing process in the background and tracks its status.
- * Also listens for vault:changed events to re-index when files are modified.
- */
+/** Indexes the vault when it opens, and again when its files change. */
 export function useVaultIndexing() {
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
-  const [isIndexing, setIsIndexing] = useState(false);
-  const [indexingError, setIndexingError] = useState<string | null>(null);
-  const [reindexTick, setReindexTick] = useState(0);
 
-  const runIndexing = useCallback(async (vaultPath: string) => {
-    setIsIndexing(true);
-    setIndexingError(null);
-
-    try {
-      const result = await indexVault(vaultPath);
-      console.log("Indexing complete:", result);
-    } catch (error) {
-      console.error("Indexing failed:", error);
-      setIndexingError(error as string);
-    } finally {
-      setIsIndexing(false);
-    }
-  }, []);
-
-  // Index when vault is first opened.
-  // Guard against React Strict Mode double-invoking mount effects in development.
+  // Each opened vault is indexed, also when it's opened again: indexing
+  // another vault drops this one's rows.
   useEffect(() => {
     if (!currentVaultPath) return;
-    if (initialIndexedVaultPaths.has(currentVaultPath)) return;
-
-    initialIndexedVaultPaths.add(currentVaultPath);
     void runIndexing(currentVaultPath).then(() =>
       checkVaultHealth(currentVaultPath),
     );
-  }, [currentVaultPath, runIndexing]);
+  }, [currentVaultPath]);
 
   // Re-index when files change, but coalesce bursts of events.
   useEffect(() => {
@@ -111,7 +83,7 @@ export function useVaultIndexing() {
       // Saving and watcher updates can fire rapidly while typing.
       // Delay re-index so tag/headings updates don't interrupt editing.
       debounceTimer = window.setTimeout(() => {
-        setReindexTick((v) => v + 1);
+        void runIndexing(currentVaultPath);
       }, 3000);
     }).then((unlisten) => {
       unlistenFn = unlisten;
@@ -124,15 +96,12 @@ export function useVaultIndexing() {
       unlistenFn?.();
     };
   }, [currentVaultPath]);
+}
 
-  useEffect(() => {
-    if (!currentVaultPath || reindexTick === 0) return;
-    runIndexing(currentVaultPath);
-  }, [currentVaultPath, reindexTick, runIndexing]);
-
-  return {
-    isIndexing,
-    indexingError,
-    reindex: () => currentVaultPath && runIndexing(currentVaultPath),
-  };
+async function runIndexing(vaultPath: string) {
+  try {
+    await indexVault(vaultPath);
+  } catch (error) {
+    console.error("Indexing failed:", error);
+  }
 }

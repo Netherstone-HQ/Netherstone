@@ -500,6 +500,9 @@ describe("media attachments", () => {
     netherstoneStoredSource: "_attachments/0c/s.mp3",
     netherstoneImportedPath: "C:\\v\\_attachments\\0c\\s.mp3",
     netherstoneVaultPath: "C:\\v",
+    netherstoneOriginalPath: "C:\\Users\\me\\s.mp3",
+    netherstoneShardPath: "C:\\v\\note.md",
+    netherstoneInsertionMethod: "toolbar-upload",
     netherstoneRenderUrl:
       "http://asset.localhost/C%3A%5Cv%5C_attachments%5C0c%5Cs.mp3",
     netherstoneMissing: false,
@@ -510,7 +513,7 @@ describe("media attachments", () => {
 
     expect(saved).toContain('src="_attachments/0c/s.mp3"');
     expect(saved).not.toMatch(
-      /netherstone(ImportedPath|VaultPath|RenderUrl|Missing)/,
+      /netherstone(ImportedPath|VaultPath|RenderUrl|Missing|OriginalPath|ShardPath|InsertionMethod)/,
     );
   });
 

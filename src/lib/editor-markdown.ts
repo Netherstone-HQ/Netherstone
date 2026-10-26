@@ -336,16 +336,19 @@ const TRANSIENT_TYPES = new Set([
 const MEDIA_TYPES = new Set(["audio", "file", "img", "video"]);
 
 /**
- * Media props that only describe the file on this device right now: its
- * absolute path, the URL it plays from, and whether it was found. They are
- * worked out again from the stored source, so they are never saved, and are
- * dropped on load from shards that saved them, where they go stale once the
- * file moves or the vault opens on another device.
+ * Media props that only describe this device: absolute paths (the file's,
+ * where it was picked from, the shard's and the vault's), the URL it plays
+ * from, whether it was found and how it was added. They are never saved, and
+ * are dropped on load from shards that saved them, where they go stale once
+ * the file moves or the vault opens on another device.
  */
 const DEVICE_MEDIA_PROPS = [
   "netherstoneImportedPath",
+  "netherstoneInsertionMethod",
   "netherstoneMissing",
+  "netherstoneOriginalPath",
   "netherstoneRenderUrl",
+  "netherstoneShardPath",
   "netherstoneVaultPath",
 ] as const;
 

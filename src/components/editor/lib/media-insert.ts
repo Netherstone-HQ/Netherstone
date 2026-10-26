@@ -38,9 +38,6 @@ export type LocalMediaNode = {
   netherstoneOriginalPath?: string;
   netherstoneImportedPath?: string;
   netherstoneRenderUrl?: string;
-  netherstoneExtension?: string;
-  netherstoneSizeBytes?: number;
-  netherstoneSyncStatus?: PersistedAttachment["syncStatus"];
 };
 
 export type LocalMediaFileInput =
@@ -123,7 +120,7 @@ export function getLocalMediaNodeTypeForFile(
 async function createManagedMediaNode(
   file: File,
   options: Pick<InsertLocalMediaFilesOptions, "preferredType">,
-): Promise<LocalMediaNode> {
+): Promise<{ node: LocalMediaNode; attachment: PersistedAttachment }> {
   const currentVaultPath = useVaultStore.getState().currentVaultPath;
   const currentFilePath = useEditorStore.getState().currentFilePath;
 
@@ -143,7 +140,7 @@ async function createManagedMediaNode(
   const type = getLocalMediaNodeTypeForFile(file, options.preferredType);
   const renderUrl = toRenderableLocalUrl(persisted.absolutePath);
 
-  return {
+  const node: LocalMediaNode = {
     children: [{ text: "" }],
     name: type === KEYS.file ? persisted.originalName : undefined,
     type,
@@ -153,10 +150,8 @@ async function createManagedMediaNode(
     netherstoneOriginalPath: file.name,
     netherstoneImportedPath: persisted.absolutePath,
     netherstoneRenderUrl: renderUrl,
-    netherstoneExtension: persisted.extension,
-    netherstoneSizeBytes: persisted.sizeBytes,
-    netherstoneSyncStatus: persisted.syncStatus,
   };
+  return { node, attachment: persisted };
 }
 
 function insertMediaNodes(
@@ -200,15 +195,16 @@ export async function insertManagedMediaFiles(
   let nodes: LocalMediaNode[] = [];
 
   try {
-    nodes = await Promise.all(
+    const created = await Promise.all(
       normalizedFiles.map((file) =>
         createManagedMediaNode(file, { preferredType: options.preferredType }),
       ),
     );
+    nodes = created.map(({ node }) => node);
 
     insertMediaNodes(editor, nodes, options);
 
-    notifyAttachmentSyncStatus(nodes);
+    notifyAttachmentSyncStatus(created.map(({ attachment }) => attachment));
 
     return {
       insertedCount: nodes.length,

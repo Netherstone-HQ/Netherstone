@@ -14,6 +14,8 @@ export interface PersistedAttachment {
   mimeType: string;
   sizeBytes: number;
   syncStatus: "syncable" | "local_only" | "blocked" | "pending_review";
+  /** The size above which files stay on this device. */
+  syncLimitBytes: number;
 }
 
 /** A file shards link to that is not in the vault. */
@@ -323,6 +325,7 @@ export interface AttachmentSyncInfo {
   extension: string;
   sizeBytes: number;
   syncStatus: PersistedAttachment["syncStatus"];
+  syncLimitBytes: number;
 }
 
 /** What the sync rules say about a vault attachment today, or null when it's gone. */

@@ -13,17 +13,10 @@ export type PersistedMediaText = {
 
 export interface PersistedMediaMetadata {
   netherstoneImportedPath?: string;
-  netherstoneExtension?: string;
   netherstoneOriginalPath?: string;
   netherstoneRenderUrl?: string;
   netherstoneSourceKind?: PersistedMediaSourceKind;
   netherstoneStoredSource?: string;
-  netherstoneSyncStatus?:
-    | "syncable"
-    | "local_only"
-    | "blocked"
-    | "pending_review";
-  netherstoneSizeBytes?: number;
 }
 
 export interface PersistedMediaElementBase extends PersistedMediaMetadata {

@@ -16,6 +16,8 @@ vi.mock("@/lib/commands", () => ({
   describeMissingAttachment: vi.fn(),
 }));
 
+const LIMIT = 20 * 1024 * 1024;
+
 /** A vault file whose sync check finds `info`. */
 function vaultFile(info: Awaited<ReturnType<typeof attachmentSyncInfo>>) {
   useVaultStore.setState({ currentVaultPath: "C:/Vault" });
@@ -34,7 +36,12 @@ afterEach(() => {
 
 describe("MediaFileRow", () => {
   it("shows a file's type and size, and opens it on click", async () => {
-    vaultFile({ extension: "pdf", sizeBytes: 1_240_000, syncStatus: "syncable" });
+    vaultFile({
+      extension: "pdf",
+      sizeBytes: 1_240_000,
+      syncStatus: "syncable",
+      syncLimitBytes: LIMIT,
+    });
     const onOpen = vi.fn();
     renderRow(
       <MediaFileRow
@@ -57,7 +64,12 @@ describe("MediaFileRow", () => {
   });
 
   it("says when a file won't sync", async () => {
-    vaultFile({ extension: "pdf", sizeBytes: 32_500_000, syncStatus: "local_only" });
+    vaultFile({
+      extension: "pdf",
+      sizeBytes: 32_500_000,
+      syncStatus: "local_only",
+      syncLimitBytes: LIMIT,
+    });
     renderRow(
       <MediaFileRow
         name="Floor plans.pdf"
@@ -71,7 +83,12 @@ describe("MediaFileRow", () => {
   });
 
   it("goes by the file as it is now, not what the shard saved", async () => {
-    vaultFile({ extension: "mp3", sizeBytes: 4_200_000, syncStatus: "syncable" });
+    vaultFile({
+      extension: "mp3",
+      sizeBytes: 4_200_000,
+      syncStatus: "syncable",
+      syncLimitBytes: LIMIT,
+    });
     const saved = {
       url: "_attachments/Interview.mp3",
       netherstoneExtension: "mp3",
@@ -93,7 +110,7 @@ describe("MediaFileRow", () => {
     renderRow(
       <MediaFileRow
         name="Site photos.pdf"
-        details={<LinkedFileDetails metadata={{}} />}
+        details={<LinkedFileDetails />}
       />,
     );
 

@@ -19,10 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Hint } from "@/components/ui/tooltip";
-import {
-  type AttachmentSyncStatusLike,
-  describeUnsyncedFiles,
-} from "@/lib/attachment-sync-status";
+import { describeUnsyncedFiles } from "@/lib/attachment-sync-status";
 import {
   type AttachmentSyncInfo,
   attachmentSyncInfo,
@@ -257,18 +254,12 @@ export function VaultFileDetails({ metadata }: { metadata: MediaSource }) {
 }
 
 /** Details for a file linked from this computer: other devices won't have it. */
-export function LinkedFileDetails({
-  metadata,
-}: {
-  metadata: AttachmentSyncStatusLike;
-}) {
-  const size = metadata.netherstoneSizeBytes;
+export function LinkedFileDetails() {
   return (
     <Hint label="Other devices won't have this file.">
       <span className="inline-flex items-center gap-1">
         <LinkIcon className="size-3.5" />
         Linked
-        {typeof size === "number" ? ` · ${formatBytes(size)}` : null}
       </span>
     </Hint>
   );

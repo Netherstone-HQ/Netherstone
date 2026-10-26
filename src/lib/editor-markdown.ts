@@ -338,17 +338,21 @@ const MEDIA_TYPES = new Set(["audio", "file", "img", "video"]);
 /**
  * Media props that only describe this device: absolute paths (the file's,
  * where it was picked from, the shard's and the vault's), the URL it plays
- * from, whether it was found and how it was added. They are never saved, and
- * are dropped on load from shards that saved them, where they go stale once
- * the file moves or the vault opens on another device.
+ * from, whether it was found and how it was added, and the file's type, size
+ * and sync status, which Rust reads from the file itself. They are never
+ * saved, and are dropped on load from shards that saved them, where they go
+ * stale once the file changes or the vault opens on another device.
  */
 const DEVICE_MEDIA_PROPS = [
+  "netherstoneExtension",
   "netherstoneImportedPath",
   "netherstoneInsertionMethod",
   "netherstoneMissing",
   "netherstoneOriginalPath",
   "netherstoneRenderUrl",
   "netherstoneShardPath",
+  "netherstoneSizeBytes",
+  "netherstoneSyncStatus",
   "netherstoneVaultPath",
 ] as const;
 

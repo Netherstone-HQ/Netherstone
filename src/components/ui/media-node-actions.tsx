@@ -12,6 +12,7 @@ import {
   openMediaFilesDialog,
   persistAttachmentFile,
   type MediaDialogKind,
+  type PersistedAttachment,
 } from "@/lib/commands";
 import {
   isAbsoluteFilesystemPath,
@@ -158,13 +159,13 @@ async function buildVaultImportPatch(
   element: PersistedMediaElement,
   sourcePath: string,
   vaultPath: string,
-): Promise<MediaNodeActionPatch> {
+): Promise<{ patch: MediaNodeActionPatch; attachment: PersistedAttachment }> {
   const persisted = await persistAttachmentFile(sourcePath, vaultPath);
   const namePatch = shouldPersistName(element)
     ? { name: getPathBaseName(sourcePath) }
     : {};
 
-  return {
+  const patch: MediaNodeActionPatch = {
     ...namePatch,
     url: persisted.assetPath,
     netherstoneSourceKind: "vault",
@@ -174,10 +175,8 @@ async function buildVaultImportPatch(
     netherstoneRenderUrl: resolveMediaRenderUrl(persisted.assetPath, {
       vaultPath,
     }),
-    netherstoneExtension: persisted.extension,
-    netherstoneSizeBytes: persisted.sizeBytes,
-    netherstoneSyncStatus: persisted.syncStatus,
   };
+  return { patch, attachment: persisted };
 }
 
 async function pickSingleMediaPath(
@@ -272,14 +271,14 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
           sourcePath ?? (await pickSingleMediaPath(effectiveMediaKind));
         if (!replacementPath) return;
 
-        const patch = await buildVaultImportPatch(
+        const { patch, attachment } = await buildVaultImportPatch(
           element,
           replacementPath,
           currentVaultPath,
         );
 
         updateCurrentNode(patch);
-        notifyAttachmentSyncStatus([patch]);
+        notifyAttachmentSyncStatus([attachment]);
 
         toast.success(getReplacementSuccessLabel(element), {
           description: getPathBaseName(replacementPath),
@@ -322,13 +321,13 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
 
       if (!sourcePath) return;
 
-      const patch = await buildVaultImportPatch(
+      const { patch, attachment } = await buildVaultImportPatch(
         element,
         sourcePath,
         currentVaultPath,
       );
       updateCurrentNode(patch);
-      notifyAttachmentSyncStatus([patch]);
+      notifyAttachmentSyncStatus([attachment]);
 
       toast.success(getImportSuccessLabel(element), {
         description: getPathBaseName(sourcePath),

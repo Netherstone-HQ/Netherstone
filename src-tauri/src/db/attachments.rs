@@ -74,6 +74,8 @@ pub struct PersistedAttachment {
     pub mime_type: String,
     pub size_bytes: u64,
     pub sync_status: String,
+    /// The size above which files stay on this device.
+    pub sync_limit_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -737,6 +739,7 @@ fn persist_attachment(
         mime_type: mime_type_for_extension(&extension),
         size_bytes,
         sync_status: sync_status.as_str().to_string(),
+        sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
     };
 
     upsert_attachment_record(conn, &attachment)?;
@@ -783,6 +786,7 @@ fn register_existing_attachment(
         sync_status: sync_status_for_attachment(&extension, size_bytes)
             .as_str()
             .to_string(),
+        sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
     };
 
     let mut attachment = attachment;
@@ -1254,6 +1258,7 @@ fn register_untracked_attachment(
             sync_status: sync_status_for_attachment(&extension, size_bytes)
                 .as_str()
                 .to_string(),
+            sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
         },
     )
 }
@@ -1337,6 +1342,8 @@ pub struct AttachmentSyncInfo {
     pub extension: String,
     pub size_bytes: u64,
     pub sync_status: String,
+    /// The size above which files stay on this device.
+    pub sync_limit_bytes: u64,
 }
 
 /// What the sync rules say about the attachment at `asset_path` today, or
@@ -1361,6 +1368,7 @@ pub fn attachment_sync_info(
         extension,
         size_bytes,
         sync_status,
+        sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
     }))
 }
 
@@ -1723,6 +1731,7 @@ mod tests {
                 mime_type: "image/png".into(),
                 size_bytes: 4,
                 sync_status: "syncable".into(),
+                sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
             },
         )
         .unwrap();
@@ -2020,6 +2029,7 @@ mod tests {
                 mime_type: "image/png".into(),
                 size_bytes: 6,
                 sync_status: "syncable".into(),
+                sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
             },
         )
         .unwrap();
@@ -2085,6 +2095,7 @@ mod tests {
                 extension: "mp3".into(),
                 size_bytes: 3,
                 sync_status: "syncable".into(),
+                sync_limit_bytes: SYNC_SOFT_LIMIT_BYTES,
             })
         );
         let blocked = attachment_sync_info(&vault, "_attachments/setup.exe").unwrap();

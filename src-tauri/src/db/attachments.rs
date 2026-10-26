@@ -309,38 +309,13 @@ fn ensure_attachment_record_for_existing_asset(
     };
 
     let absolute_path = path_from_asset_path(vault_path, asset_path)?;
-    if !absolute_path.is_file() {
-        return Ok(false);
-    }
-
-    let bytes = std::fs::read(&absolute_path).map_err(|e| {
-        format!(
-            "Failed to read attachment {}: {}",
-            absolute_path.display(),
-            e
-        )
-    })?;
-    let hash = blake3::hash(&bytes).to_hex().to_string();
-    let extension = extension_for_path(&absolute_path);
-    let original_name = absolute_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("attachment")
-        .to_string();
-    let sync_status = sync_status_for_attachment(&extension, bytes.len() as u64);
-
-    let attachment = PersistedAttachment {
-        asset_path: asset_path.to_string(),
-        absolute_path: absolute_path.to_string_lossy().to_string(),
-        hash,
-        original_name,
-        extension: extension.clone(),
-        mime_type: mime_type_for_extension(&extension),
-        size_bytes: bytes.len() as u64,
-        sync_status: sync_status.as_str().to_string(),
+    let size_bytes = match std::fs::metadata(&absolute_path) {
+        Ok(metadata) if metadata.is_file() => metadata.len(),
+        _ => return Ok(false),
     };
 
-    upsert_attachment_record(conn, &attachment)?;
+    // Read a piece at a time: the file can be a long video.
+    register_untracked_attachment(conn, vault_path, asset_path, size_bytes)?;
     Ok(true)
 }
 

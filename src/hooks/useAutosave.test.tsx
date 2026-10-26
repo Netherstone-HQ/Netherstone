@@ -9,7 +9,7 @@ import { openEditorFile } from "@/lib/open-editor-file";
 import { rememberSavedValue } from "@/lib/outside-changes";
 import { useEditorStore } from "@/store";
 import { loadMarkdown } from "@/test/markdown";
-import { useAutosave } from "./useAutosave";
+import { useAutosave, writeOpenShardCache } from "./useAutosave";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -151,12 +151,14 @@ describe("autosave", () => {
     expect(savedFiles()).toEqual([{ filePath: NOTE_A, content: "Hello a b\n" }]);
   });
 
-  it("refreshes the AST cache with what it saved", async () => {
+  it("caches what it saved once the shard is left", async () => {
     const editor = openNote(NOTE_A, "Hello\n");
 
     type(editor, "!");
     await wait(AUTOSAVE_DELAY_MS);
+    expect(upsertAstCache).not.toHaveBeenCalled();
 
+    await writeOpenShardCache();
     expect(upsertAstCache).toHaveBeenCalledWith({
       filePath: NOTE_A,
       markdown: "Hello!\n",
@@ -279,6 +281,7 @@ describe("autosave", () => {
     const savedValue = editor.children;
     type(editor, " two");
     await act(async () => finishWrite());
+    await writeOpenShardCache();
 
     expect(upsertAstCache).toHaveBeenCalledWith({
       filePath: NOTE_A,

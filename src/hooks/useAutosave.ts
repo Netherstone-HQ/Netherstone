@@ -24,6 +24,34 @@ type EditorStoreState = ReturnType<typeof useEditorStore.getState>;
 let flushActiveAutosave: (() => Promise<void>) | null = null;
 
 /**
+ * The open shard's last saved text and the editor value it was saved from.
+ * It goes into the editor cache when the shard is switched or closed, not
+ * on every save: the cache only matters the next time the shard opens.
+ */
+let pendingCacheEntry: {
+  filePath: string;
+  markdown: string;
+  plateValue: unknown;
+} | null = null;
+
+/** Writes the open shard's last save to the editor cache. */
+export async function writeOpenShardCache(): Promise<void> {
+  const entry = pendingCacheEntry;
+  if (!entry) return;
+  pendingCacheEntry = null;
+
+  try {
+    await upsertAstCache(entry);
+  } catch (error) {
+    console.error(
+      "[Netherstone] AST cache write failed:",
+      entry.filePath,
+      error,
+    );
+  }
+}
+
+/**
  * Immediately persists any unsaved edits to the currently open file, waiting
  * for an in-flight save first. Call before replacing the open document.
  */
@@ -171,29 +199,7 @@ export function useAutosave() {
         });
 
         if (savedValue) {
-          console.info(
-            "[Netherstone] Autosave refreshing AST cache:",
-            filePath,
-          );
-
-          try {
-            await upsertAstCache({
-              filePath,
-              markdown: content,
-              plateValue: savedValue,
-            });
-
-            console.info(
-              "[Netherstone] Autosave AST cache refresh succeeded:",
-              filePath,
-            );
-          } catch (error) {
-            console.error(
-              "[Netherstone] Autosave AST cache refresh failed:",
-              filePath,
-              error,
-            );
-          }
+          pendingCacheEntry = { filePath, markdown: content, plateValue: savedValue };
         }
 
         if (editor && savedValue) rememberSavedValue(editor, savedValue);
@@ -294,6 +300,7 @@ export function useAutosave() {
         timeoutRef.current !== null ||
         inFlightRef.current ||
         !!(latestDirtyRef.current && latestFilePathRef.current) ||
+        pendingCacheEntry !== null ||
         hasPendingDrawingSave();
 
       if (!hasPendingPersistenceWork) {
@@ -307,6 +314,7 @@ export function useAutosave() {
       } catch (error) {
         console.error("Failed to save on shutdown:", error);
       }
+      await writeOpenShardCache();
 
       try {
         await finishDrawingSession();

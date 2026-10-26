@@ -562,18 +562,6 @@ export function finalizeSerializedMarkdown(markdown: string): string {
   return clean.trim() === "" ? "" : clean;
 }
 
-export function getSerializableMarkdownValue(
-  value: unknown,
-): SerializableEditorValue {
-  return prepareSerializableMarkdownValue(value).value;
-}
-
-export function getSerializableEditorValue(
-  editor: SlateEditor,
-): SerializableEditorValue {
-  return getSerializableMarkdownValue(editor.children);
-}
-
 /**
  * Serializes an editor value to the file's Markdown: front matter first,
  * then the document with toggles gathered up and transient nodes dropped.

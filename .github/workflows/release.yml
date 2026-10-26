@@ -262,6 +262,7 @@ jobs:
             # Each call writes a few releases, so older ones without notes take more calls.
             while result=$(curl --fail --silent --show-error -X POST \
                 -H "Authorization: Bearer $SITE_RELEASE_NOTES_KEY" \
+                -H "Content-Type: application/json" \
                 https://netherstone.app/api/release-notes); do
               echo "$result"
               count=$(jq '.written | length' <<< "$result")

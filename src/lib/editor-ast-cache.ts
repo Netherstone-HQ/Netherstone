@@ -1,9 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Descendant } from "platejs";
 
-// Bump whenever the persisted Plate value shape changes (v2: Plate 53 blockquotes hold block children).
-export const AST_CACHE_VERSION = 3;
-
 export type PlateAstValue = Descendant[];
 
 type OpenMarkdownFileCommandResult = {
@@ -26,7 +23,6 @@ export type UpsertAstCacheInput = {
   filePath: string;
   markdown: string;
   plateValue: unknown;
-  cacheVersion?: number;
 };
 
 type AstCacheLogDetails = Record<string, unknown>;
@@ -71,31 +67,23 @@ function normalizePlateValue(value: unknown): PlateAstValue | null {
 
 export async function openMarkdownFile(
   filePath: string,
-  options?: { cacheVersion?: number },
 ): Promise<OpenMarkdownFileResult> {
   assertTauri();
 
-  const cacheVersion = options?.cacheVersion ?? AST_CACHE_VERSION;
-
   logAstCacheInfo("open:start", {
     filePath,
-    cacheVersion,
   });
 
   try {
     const result = await invoke<OpenMarkdownFileCommandResult>(
       "open_markdown_file",
-      {
-        filePath,
-        cacheVersion,
-      },
+      { filePath },
     );
 
     const plateValue = normalizePlateValue(result.plate_value);
 
     logAstCacheInfo(result.cache_hit ? "open:hit" : "open:miss", {
       filePath: result.file_path,
-      cacheVersion,
       contentHash: result.content_hash,
       markdownChars: result.markdown.length,
       hasPlateValue: plateValue !== null,
@@ -111,7 +99,6 @@ export async function openMarkdownFile(
   } catch (error) {
     logAstCacheError("open:error", error, {
       filePath,
-      cacheVersion,
     });
     throw error;
   }
@@ -121,13 +108,11 @@ export async function upsertAstCache({
   filePath,
   markdown,
   plateValue,
-  cacheVersion = AST_CACHE_VERSION,
 }: UpsertAstCacheInput): Promise<void> {
   assertTauri();
 
   logAstCacheInfo("write:start", {
     filePath,
-    cacheVersion,
     markdownChars: markdown.length,
     hasPlateValue: Array.isArray(plateValue),
   });
@@ -136,75 +121,19 @@ export async function upsertAstCache({
     await invoke("upsert_ast_cache", {
       filePath,
       markdown,
-      cacheVersion,
       plateValue,
     });
 
     logAstCacheInfo("write:success", {
       filePath,
-      cacheVersion,
       markdownChars: markdown.length,
       hasPlateValue: Array.isArray(plateValue),
     });
   } catch (error) {
     logAstCacheError("write:error", error, {
       filePath,
-      cacheVersion,
       markdownChars: markdown.length,
       hasPlateValue: Array.isArray(plateValue),
-    });
-    throw error;
-  }
-}
-
-export async function deleteAstCache(filePath: string): Promise<boolean> {
-  assertTauri();
-
-  logAstCacheInfo("delete:start", { filePath });
-
-  try {
-    const deleted = await invoke<boolean>("delete_ast_cache", { filePath });
-
-    logAstCacheInfo("delete:result", {
-      filePath,
-      deleted,
-    });
-
-    return deleted;
-  } catch (error) {
-    logAstCacheError("delete:error", error, { filePath });
-    throw error;
-  }
-}
-
-export async function renameAstCache(
-  oldPath: string,
-  newPath: string,
-): Promise<boolean> {
-  assertTauri();
-
-  logAstCacheInfo("rename:start", {
-    oldPath,
-    newPath,
-  });
-
-  try {
-    const renamed = await invoke<boolean>("rename_ast_cache", {
-      oldPath,
-      newPath,
-    });
-
-    logAstCacheInfo("rename:result", {
-      oldPath,
-      newPath,
-      renamed,
-    });
-
-    return renamed;
-  } catch (error) {
-    logAstCacheError("rename:error", error, {
-      oldPath,
-      newPath,
     });
     throw error;
   }

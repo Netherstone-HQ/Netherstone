@@ -288,7 +288,7 @@ fn upsert_attachment_record(
 /// missing.
 fn ensure_attachment_record_for_existing_asset(
     conn: &Connection,
-    vault_path: Option<&Path>,
+    vault_path: &Path,
     asset_path: &str,
 ) -> Result<bool, String> {
     let exists: Option<String> = conn
@@ -304,43 +304,14 @@ fn ensure_attachment_record_for_existing_asset(
         return Ok(true);
     }
 
-    let Some(vault_path) = vault_path else {
-        return Ok(false);
-    };
-
     let absolute_path = path_from_asset_path(vault_path, asset_path)?;
-    if !absolute_path.is_file() {
-        return Ok(false);
-    }
-
-    let bytes = std::fs::read(&absolute_path).map_err(|e| {
-        format!(
-            "Failed to read attachment {}: {}",
-            absolute_path.display(),
-            e
-        )
-    })?;
-    let hash = blake3::hash(&bytes).to_hex().to_string();
-    let extension = extension_for_path(&absolute_path);
-    let original_name = absolute_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("attachment")
-        .to_string();
-    let sync_status = sync_status_for_attachment(&extension, bytes.len() as u64);
-
-    let attachment = PersistedAttachment {
-        asset_path: asset_path.to_string(),
-        absolute_path: absolute_path.to_string_lossy().to_string(),
-        hash,
-        original_name,
-        extension: extension.clone(),
-        mime_type: mime_type_for_extension(&extension),
-        size_bytes: bytes.len() as u64,
-        sync_status: sync_status.as_str().to_string(),
+    let size_bytes = match std::fs::metadata(&absolute_path) {
+        Ok(metadata) if metadata.is_file() => metadata.len(),
+        _ => return Ok(false),
     };
 
-    upsert_attachment_record(conn, &attachment)?;
+    // Read a piece at a time: the file can be a long video.
+    register_untracked_attachment(conn, vault_path, asset_path, size_bytes)?;
     Ok(true)
 }
 
@@ -862,15 +833,15 @@ pub fn persist_attachment_file(
     )
 }
 
+/// Points the attachment references of the shard at `file_path`, in the
+/// vault at `vault_path`, at what `content` links to.
 pub fn sync_references_for_saved_markdown(
     conn: &Connection,
+    vault_path: &Path,
     file_path: &str,
     content: &str,
 ) -> Result<(), String> {
     let references = parse_attachment_references(content);
-    let vault_path = Path::new(file_path)
-        .parent()
-        .and_then(find_vault_root_for_markdown_file);
     let now = now_unix_seconds();
 
     let previous_paths: HashSet<String> = {
@@ -900,7 +871,7 @@ pub fn sync_references_for_saved_markdown(
     for (asset_path, reference_kind) in &current_by_path {
         // A link to a missing file can't be stored (references need an
         // attachment row). Reconciliation reports those links instead.
-        if !ensure_attachment_record_for_existing_asset(conn, vault_path.as_deref(), asset_path)? {
+        if !ensure_attachment_record_for_existing_asset(conn, vault_path, asset_path)? {
             continue;
         }
         conn.execute(
@@ -951,21 +922,6 @@ pub fn remove_references_for_markdown_file(
     .map_err(|e| format!("Failed to delete attachment references: {}", e))?;
 
     refresh_attachment_counts(conn, &previous_paths)
-}
-
-fn find_vault_root_for_markdown_file(start_dir: &Path) -> Option<PathBuf> {
-    let mut current = Some(start_dir);
-
-    while let Some(dir) = current {
-        if dir.join(ATTACHMENTS_DIR_NAME).exists() {
-            return Some(dir.to_path_buf());
-        }
-        current = dir.parent();
-    }
-
-    // If the attachment folder has not been created yet, the direct parent is
-    // the best available root for pre-existing markdown reference indexing.
-    Some(start_dir.to_path_buf())
 }
 
 /// An attachment that shards in the vault link to but is not on disk.
@@ -1487,7 +1443,7 @@ pub fn reconcile_vault_attachments(
         let Ok(content) = std::fs::read_to_string(shard_path) else {
             continue;
         };
-        sync_references_for_saved_markdown(&tx, shard_path, &content)?;
+        sync_references_for_saved_markdown(&tx, vault_path, shard_path, &content)?;
 
         let mut seen = HashSet::new();
         for reference in parse_attachment_references(&content) {
@@ -1569,9 +1525,16 @@ pub struct CleanupResult {
 }
 
 /// A file left by a write that never finished: today's hidden
-/// `.name.netherstone-tmp`, or `name.tmp` from earlier versions.
-fn is_interrupted_write(asset_path: &str) -> bool {
-    asset_path.ends_with(".tmp") || asset_path.ends_with(".netherstone-tmp")
+/// `.name.netherstone-tmp`, or `<hash>.<ext>.tmp` from versions that named
+/// attachments by their hash. Any other `.tmp` file is an attachment.
+pub(super) fn is_interrupted_write(asset_path: &str) -> bool {
+    if asset_path.ends_with(".netherstone-tmp") {
+        return true;
+    }
+    let name = asset_path.rsplit('/').next().unwrap_or(asset_path);
+    name.strip_suffix(".tmp")
+        .map(|name| name.split('.').next().unwrap_or(name))
+        .is_some_and(is_hash_stem)
 }
 
 /// Whether an unused file has been unused long enough to remove. Leftovers
@@ -1739,9 +1702,14 @@ mod tests {
         let deleted = path_string(vault.join("deleted.md"));
         let other_vault = std::env::temp_dir().join("netherstone-other-vault");
         let other = path_string(other_vault.join("other.md"));
-        for file_path in [&deleted, &other] {
-            sync_references_for_saved_markdown(&conn, file_path, "![x](_attachments/cd/old.png)\n")
-                .unwrap();
+        for (vault_path, file_path) in [(&vault, &deleted), (&other_vault, &other)] {
+            sync_references_for_saved_markdown(
+                &conn,
+                vault_path,
+                file_path,
+                "![x](_attachments/cd/old.png)\n",
+            )
+            .unwrap();
         }
         // The other vault's file is not on this disk, so nothing registered it.
         upsert_attachment_record(
@@ -1813,6 +1781,7 @@ mod tests {
 
         sync_references_for_saved_markdown(
             &conn,
+            &vault,
             &note,
             &format!("![gone](_attachments/zz/gone.png)\n\n![a]({used})\n"),
         )
@@ -1964,8 +1933,11 @@ mod tests {
         let kept = persist_attachment_bytes(&conn, &vault, "kept.png", b"kept").unwrap();
         let old = persist_attachment_bytes(&conn, &vault, "old.png", b"old!").unwrap();
         let recent = persist_attachment_bytes(&conn, &vault, "recent.png", b"new").unwrap();
-        std::fs::write(vault.join("_attachments/cd/leftover.png.tmp"), b"x").unwrap();
+        let leftover = format!("_attachments/cd/{USED_HASH}.png.tmp");
+        std::fs::write(vault.join(&leftover), b"x").unwrap();
         std::fs::write(vault.join("_attachments/.cut.png.netherstone-tmp"), b"y").unwrap();
+        // A file the user named .tmp is an attachment like any other.
+        std::fs::write(vault.join("_attachments/notes.tmp"), b"z").unwrap();
         let note = path_string(vault.join("note.md"));
         std::fs::write(&note, format!("![k]({})\n", kept.asset_path)).unwrap();
 
@@ -1983,8 +1955,9 @@ mod tests {
             kept.asset_path.clone(),
             old.asset_path.clone(),
             recent.asset_path.clone(),
-            "_attachments/cd/leftover.png.tmp".to_string(),
+            leftover.clone(),
             "_attachments/.cut.png.netherstone-tmp".to_string(),
+            "_attachments/notes.tmp".to_string(),
         ];
         let result = clean_up_vault_attachments(&conn, &vault, &shards, &requested, now, |path| {
             std::fs::remove_file(path).map_err(|e| e.to_string())
@@ -1995,15 +1968,20 @@ mod tests {
             result.removed,
             vec![
                 old.asset_path.clone(),
-                "_attachments/cd/leftover.png.tmp".to_string(),
+                leftover.clone(),
                 "_attachments/.cut.png.netherstone-tmp".to_string()
             ]
         );
         assert_eq!(result.freed_bytes, 6);
         assert_eq!(
             result.kept,
-            vec![kept.asset_path.clone(), recent.asset_path.clone()]
+            vec![
+                kept.asset_path.clone(),
+                recent.asset_path.clone(),
+                "_attachments/notes.tmp".to_string()
+            ]
         );
+        assert!(vault.join("_attachments/notes.tmp").is_file());
         assert!(vault.join(&kept.asset_path).is_file());
         assert!(vault.join(&recent.asset_path).is_file());
         assert!(!vault.join(&old.asset_path).exists());

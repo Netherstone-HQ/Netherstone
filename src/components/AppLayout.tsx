@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppShortcuts } from "@/hooks/useAppShortcuts";
+import { saveEditorFile } from "@/lib/open-editor-file";
 import { useRecentSwitching } from "@/hooks/useRecentSwitching";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useUIStore } from "@/store";
@@ -206,7 +207,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     () => setIsNewShardDialogOpen(true),
     [],
   );
-  useAppShortcuts({ onNewShard: openNewShardDialog });
+  useAppShortcuts({ onNewShard: openNewShardDialog, onSave: saveEditorFile });
   useRecentSwitching();
 
   return (

@@ -17,11 +17,38 @@ import {
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 
 const AUTOSAVE_DELAY_MS = 1800;
-const SERIALIZATION_WORKER_TIMEOUT_MS = 5000;
 
 type EditorStoreState = ReturnType<typeof useEditorStore.getState>;
 
 let flushActiveAutosave: (() => Promise<void>) | null = null;
+
+/**
+ * The open shard's last saved text and the editor value it was saved from.
+ * It goes into the editor cache when the shard is switched or closed, not
+ * on every save: the cache only matters the next time the shard opens.
+ */
+let pendingCacheEntry: {
+  filePath: string;
+  markdown: string;
+  plateValue: unknown;
+} | null = null;
+
+/** Writes the open shard's last save to the editor cache. */
+export async function writeOpenShardCache(): Promise<void> {
+  const entry = pendingCacheEntry;
+  if (!entry) return;
+  pendingCacheEntry = null;
+
+  try {
+    await upsertAstCache(entry);
+  } catch (error) {
+    console.error(
+      "[Netherstone] AST cache write failed:",
+      entry.filePath,
+      error,
+    );
+  }
+}
 
 /**
  * Immediately persists any unsaved edits to the currently open file, waiting
@@ -101,7 +128,8 @@ export function useAutosave() {
       state.markSaved(content);
     };
 
-    const serializeCurrentMarkdown = async () => {
+    /** `urgent`: something waits on this save, so it goes before any read. */
+    const serializeCurrentMarkdown = async (urgent: boolean) => {
       const fallbackMarkdown = latestContentRef.current;
       const editor = latestEditorRef.current;
       const filePath = latestFilePathRef.current;
@@ -111,15 +139,15 @@ export function useAutosave() {
       }
 
       return serializeMarkdownInWorker(editor.children, {
-        timeoutMs: SERIALIZATION_WORKER_TIMEOUT_MS,
         filePath,
         requestKey: filePath ? `autosave:${filePath}` : "autosave",
+        urgent,
         fallback: () =>
           getSaveMarkdownContent(editor, fallbackMarkdown, { filePath }),
       });
     };
 
-    const performSave = async (retryIfChanged = true) => {
+    const performSave = async (retryIfChanged = true, urgent = false) => {
       const filePath = latestFilePathRef.current;
       const dirty = latestDirtyRef.current;
 
@@ -138,7 +166,7 @@ export function useAutosave() {
       // The text the file held when it was opened or last saved.
       const expectedContent = useEditorStore.getState().markdownContent;
       const savedEditTick = useEditorStore.getState().editTick;
-      const content = await serializeCurrentMarkdown();
+      const content = await serializeCurrentMarkdown(urgent);
 
       if (
         lastSavedFilePathRef.current === filePath &&
@@ -171,29 +199,7 @@ export function useAutosave() {
         });
 
         if (savedValue) {
-          console.info(
-            "[Netherstone] Autosave refreshing AST cache:",
-            filePath,
-          );
-
-          try {
-            await upsertAstCache({
-              filePath,
-              markdown: content,
-              plateValue: savedValue,
-            });
-
-            console.info(
-              "[Netherstone] Autosave AST cache refresh succeeded:",
-              filePath,
-            );
-          } catch (error) {
-            console.error(
-              "[Netherstone] Autosave AST cache refresh failed:",
-              filePath,
-              error,
-            );
-          }
+          pendingCacheEntry = { filePath, markdown: content, plateValue: savedValue };
         }
 
         if (editor && savedValue) rememberSavedValue(editor, savedValue);
@@ -209,7 +215,7 @@ export function useAutosave() {
       // Bring in what changed outside the app, then save the edits with it.
       if (changedOnDisk) {
         await reloadOpenShardIfChanged();
-        await performSave(false);
+        await performSave(false, urgent);
         return;
       }
 
@@ -245,7 +251,7 @@ export function useAutosave() {
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
 
-      await performSave();
+      await performSave(true, true);
     };
 
     flushActiveAutosave = flushNow;
@@ -294,6 +300,7 @@ export function useAutosave() {
         timeoutRef.current !== null ||
         inFlightRef.current ||
         !!(latestDirtyRef.current && latestFilePathRef.current) ||
+        pendingCacheEntry !== null ||
         hasPendingDrawingSave();
 
       if (!hasPendingPersistenceWork) {
@@ -307,6 +314,7 @@ export function useAutosave() {
       } catch (error) {
         console.error("Failed to save on shutdown:", error);
       }
+      await writeOpenShardCache();
 
       try {
         await finishDrawingSession();

@@ -1,5 +1,5 @@
 import { Separator } from "@/components/ui/separator";
-import { closeEditorFile } from "@/lib/open-editor-file";
+import { closeEditorFile, saveEditorFile } from "@/lib/open-editor-file";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store";
 import { useHistoryStore } from "@/store/history";
@@ -13,6 +13,7 @@ import {
 import { HistoryToggle } from "./history/HistoryToggle";
 import { FileBreadcrumb } from "./vault/FileBreadcrumb";
 
+const saveShard = () => void saveEditorFile();
 const closeShard = () => void closeEditorFile();
 
 /** A deleted shard's name, while its history is open. */
@@ -39,7 +40,11 @@ export function AppHeader() {
       {deletedPath ? (
         <DeletedShardName path={deletedPath} />
       ) : (
-        <FileBreadcrumb path={currentFilePath} onClose={closeShard} />
+        <FileBreadcrumb
+          path={currentFilePath}
+          onSave={saveShard}
+          onClose={closeShard}
+        />
       )}
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {deletedPath ? null : (

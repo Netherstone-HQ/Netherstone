@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
@@ -16,7 +16,7 @@ describe("useAppShortcuts zoom", () => {
   beforeEach(() => {
     useSettingsStore.setState({ zoom: 100 });
     useUIStore.setState({ appMode: "notes" });
-    renderHook(() => useAppShortcuts({ onNewShard: () => {} }));
+    renderHook(() => useAppShortcuts({ onNewShard: () => {}, onSave: () => {} }));
   });
   afterEach(cleanup);
 
@@ -41,7 +41,7 @@ describe("useAppShortcuts zoom", () => {
 describe("useAppShortcuts modes", () => {
   beforeEach(() => {
     useUIStore.setState({ appMode: "notes", activeNavItem: null });
-    renderHook(() => useAppShortcuts({ onNewShard: () => {} }));
+    renderHook(() => useAppShortcuts({ onNewShard: () => {}, onSave: () => {} }));
   });
   afterEach(cleanup);
 
@@ -63,5 +63,27 @@ describe("useAppShortcuts modes", () => {
     expect(useUIStore.getState().appMode).toBe("data");
     pressDigit(1);
     expect(useUIStore.getState().appMode).toBe("notes");
+  });
+});
+
+describe("useAppShortcuts save", () => {
+  const onSave = vi.fn();
+
+  beforeEach(() => {
+    onSave.mockClear();
+    useUIStore.setState({ appMode: "notes" });
+    renderHook(() => useAppShortcuts({ onNewShard: () => {}, onSave }));
+  });
+  afterEach(cleanup);
+
+  it("saves the open shard", () => {
+    press("s");
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the key to the drawing in Canvas", () => {
+    useUIStore.setState({ appMode: "canvas" });
+    press("s");
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

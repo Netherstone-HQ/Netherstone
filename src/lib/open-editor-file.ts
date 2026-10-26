@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { flushPendingAutosave } from "@/hooks/useAutosave";
+import { flushPendingAutosave, writeOpenShardCache } from "@/hooks/useAutosave";
 import {
   openMarkdownFile,
   type OpenMarkdownFileResult,
@@ -33,6 +33,11 @@ export async function openEditorFile(
   }
 }
 
+/** Saves the open shard now, and says so if it couldn't. */
+export async function saveEditorFile() {
+  await saveOpenShard();
+}
+
 /** Saves the open shard and closes it. It stays open if the save fails. */
 export async function closeEditorFile() {
   if (await saveOpenShard()) useEditorStore.getState().closeFile();
@@ -44,6 +49,7 @@ export async function closeEditorFile() {
  */
 async function saveOpenShard(): Promise<boolean> {
   await flushPendingAutosave();
+  await writeOpenShardCache();
 
   const { isDirty, currentFilePath } = useEditorStore.getState();
   if (!isDirty || !currentFilePath) return true;

@@ -34,13 +34,10 @@ export type LocalMediaNode = {
   type: LocalMediaNodeType;
   url: string;
   netherstoneSourceKind?: "vault";
-  netherstoneInsertionMethod?: "drop-or-paste";
   netherstoneStoredSource?: string;
   netherstoneOriginalPath?: string;
   netherstoneImportedPath?: string;
-  netherstoneVaultPath?: string;
   netherstoneRenderUrl?: string;
-  netherstoneMissing?: boolean;
   netherstoneExtension?: string;
   netherstoneSizeBytes?: number;
   netherstoneSyncStatus?: PersistedAttachment["syncStatus"];
@@ -55,7 +52,6 @@ export type LocalMediaFileInput =
 
 export type InsertLocalMediaFilesOptions = {
   at?: Path;
-  debug?: boolean;
   preferredType?: LocalMediaNodeType | string;
   select?: boolean;
 };
@@ -67,17 +63,6 @@ export type InsertLocalMediaFilesResult = {
 
 export type InsertManagedMediaFilesResult =
   Promise<InsertLocalMediaFilesResult>;
-
-function debugLog(enabled: boolean, message: string, details?: unknown) {
-  if (!enabled) return;
-
-  if (typeof details === "undefined") {
-    console.debug(LOG_PREFIX, message);
-    return;
-  }
-
-  console.debug(LOG_PREFIX, message, details);
-}
 
 function canUseTauriConvertFileSrc(): boolean {
   try {
@@ -137,7 +122,7 @@ export function getLocalMediaNodeTypeForFile(
 
 async function createManagedMediaNode(
   file: File,
-  options: Pick<InsertLocalMediaFilesOptions, "debug" | "preferredType">,
+  options: Pick<InsertLocalMediaFilesOptions, "preferredType">,
 ): Promise<LocalMediaNode> {
   const currentVaultPath = useVaultStore.getState().currentVaultPath;
   const currentFilePath = useEditorStore.getState().currentFilePath;
@@ -158,32 +143,16 @@ async function createManagedMediaNode(
   const type = getLocalMediaNodeTypeForFile(file, options.preferredType);
   const renderUrl = toRenderableLocalUrl(persisted.absolutePath);
 
-  debugLog(
-    options.debug ?? false,
-    "Persisted media file into vault attachments",
-    {
-      assetPath: persisted.assetPath,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-      syncStatus: persisted.syncStatus,
-      type,
-    },
-  );
-
   return {
     children: [{ text: "" }],
     name: type === KEYS.file ? persisted.originalName : undefined,
     type,
     url: persisted.assetPath,
     netherstoneSourceKind: "vault",
-    netherstoneInsertionMethod: "drop-or-paste",
     netherstoneStoredSource: persisted.assetPath,
     netherstoneOriginalPath: file.name,
     netherstoneImportedPath: persisted.absolutePath,
-    netherstoneVaultPath: currentVaultPath,
     netherstoneRenderUrl: renderUrl,
-    netherstoneMissing: false,
     netherstoneExtension: persisted.extension,
     netherstoneSizeBytes: persisted.sizeBytes,
     netherstoneSyncStatus: persisted.syncStatus,
@@ -223,13 +192,8 @@ export async function insertManagedMediaFiles(
   options: InsertLocalMediaFilesOptions = {},
 ): InsertManagedMediaFilesResult {
   const normalizedFiles = normalizeLocalMediaFiles(files);
-  const debug = options.debug ?? false;
 
   if (normalizedFiles.length === 0) {
-    debugLog(
-      debug,
-      "Skipped managed media insertion because no files were provided",
-    );
     return { insertedCount: 0, nodes: [] };
   }
 
@@ -238,28 +202,13 @@ export async function insertManagedMediaFiles(
   try {
     nodes = await Promise.all(
       normalizedFiles.map((file) =>
-        createManagedMediaNode(file, {
-          debug,
-          preferredType: options.preferredType,
-        }),
+        createManagedMediaNode(file, { preferredType: options.preferredType }),
       ),
     );
-
-    debugLog(debug, "Inserting managed media nodes", {
-      at: options.at,
-      count: nodes.length,
-      preferredType: options.preferredType,
-      resolvedTypes: nodes.map((node) => node.type),
-      select: options.select,
-    });
 
     insertMediaNodes(editor, nodes, options);
 
     notifyAttachmentSyncStatus(nodes);
-
-    debugLog(debug, "Finished inserting managed media nodes", {
-      insertedCount: nodes.length,
-    });
 
     return {
       insertedCount: nodes.length,

@@ -117,7 +117,8 @@ pub fn resolve_link_target(link_type: LinkType, target: &str, file_path: &Path) 
 
 use super::parser::{LinkType, parse_markdown};
 
-/// Index a single markdown file into the database.
+/// Index a single markdown file of the vault at `vault_path` into the
+/// database.
 ///
 /// Steps:
 /// 1. Read file metadata (created_at, last_modified, file_size, content)
@@ -125,7 +126,7 @@ use super::parser::{LinkType, parse_markdown};
 /// 3. Insert/update file record
 /// 4. Insert extracted metadata (links, tags)
 /// 5. Update FTS5 search index
-pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
+pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Result<(), String> {
     let path_str = file_path
         .to_str()
         .ok_or_else(|| "Invalid file path".to_string())?;
@@ -253,7 +254,7 @@ pub fn index_file(conn: &Connection, file_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to insert chart: {}", e))?;
     }
 
-    super::attachments::sync_references_for_saved_markdown(conn, path_str, &content)?;
+    super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
 
     // Update FTS5 search index
     // FTS5 virtual tables support standard INSERT/UPDATE/DELETE operations

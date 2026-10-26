@@ -13,7 +13,7 @@ async function renderOn(userAgent: string) {
   vi.resetModules();
   const { useAppShortcuts } = await import("./useAppShortcuts");
   const onNewShard = vi.fn();
-  renderHook(() => useAppShortcuts({ onNewShard }));
+  renderHook(() => useAppShortcuts({ onNewShard, onSave: () => {} }));
   return onNewShard;
 }
 

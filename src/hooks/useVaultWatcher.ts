@@ -11,7 +11,6 @@ import {
   isSamePath,
   reloadOpenDrawingIfChanged,
 } from "@/lib/drawing-files";
-import { deleteAstCache } from "@/lib/editor-ast-cache";
 import { isAttachmentOnlyChange, isAttachmentPath } from "@/lib/gallery";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { partitionSuppressedVaultChangePaths } from "@/lib/vault-change-suppression";
@@ -86,22 +85,10 @@ export function useVaultWatcher() {
           );
         }
 
+        // A changed shard's cached tree no longer matches its text, so the
+        // next open misses it and drops it.
         if (unsuppressedPaths.length > 0) {
           await closeOpenFileIfRemoved(unsuppressedPaths);
-
-          await Promise.allSettled(
-            unsuppressedPaths.map(async (filePath) => {
-              try {
-                await deleteAstCache(filePath);
-              } catch (err) {
-                console.error(
-                  "[Netherstone] AST cache invalidation after file change failed:",
-                  filePath,
-                  err,
-                );
-              }
-            }),
-          );
         }
       }
 

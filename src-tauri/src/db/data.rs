@@ -478,7 +478,7 @@ mod tests {
 
         let conn = memory_db();
         for name in ["Runs.md", "Plain.md"] {
-            crate::db::indexer::index_file(&conn, &dir.join(name)).unwrap();
+            crate::db::indexer::index_file(&conn, &dir, &dir.join(name)).unwrap();
         }
         let charts = get_charts(&conn).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
@@ -512,7 +512,7 @@ mod tests {
 
         let conn = memory_db();
         for name in ["Plan.md", "Notes/Ideas.md"] {
-            crate::db::indexer::index_file(&conn, &dir.join(name)).unwrap();
+            crate::db::indexer::index_file(&conn, &dir, &dir.join(name)).unwrap();
         }
         let broken = get_broken_links(&conn).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();

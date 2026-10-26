@@ -55,30 +55,6 @@ fn get_content_addressed_ast_json(
     })
 }
 
-fn get_legacy_ast_json(
-    conn: &Connection,
-    file_path: &str,
-    expected_content_hash: &str,
-    expected_cache_version: i64,
-) -> Result<Option<String>, String> {
-    conn.query_row(
-        "SELECT ast_json
-         FROM ast_cache
-         WHERE file_path = ?1
-           AND content_hash = ?2
-           AND cache_version = ?3",
-        params![file_path, expected_content_hash, expected_cache_version],
-        |row| row.get::<_, String>(0),
-    )
-    .optional()
-    .map_err(|error| {
-        format!(
-            "Failed to load legacy AST cache for {}: {}",
-            file_path, error
-        )
-    })
-}
-
 fn upsert_content_addressed_ast_cache_json(
     conn: &Connection,
     file_path: &str,
@@ -130,19 +106,6 @@ fn upsert_content_addressed_ast_cache_json(
     Ok(())
 }
 
-fn delete_legacy_ast_cache(conn: &Connection, file_path: &str) -> Result<usize, String> {
-    conn.execute(
-        "DELETE FROM ast_cache WHERE file_path = ?1",
-        params![file_path],
-    )
-    .map_err(|error| {
-        format!(
-            "Failed to delete legacy AST cache for {}: {}",
-            file_path, error
-        )
-    })
-}
-
 fn delete_content_addressed_ast_cache(conn: &Connection, file_path: &str) -> Result<usize, String> {
     conn.execute(
         "DELETE FROM ast_cache_index WHERE file_path = ?1",
@@ -170,44 +133,6 @@ fn prune_orphaned_ast_cache_blobs(conn: &Connection) -> Result<usize, String> {
     .map_err(|error| format!("Failed to prune orphaned AST cache blobs: {}", error))
 }
 
-fn delete_version_mismatched_content_addressed_ast_cache(
-    conn: &Connection,
-    file_path: &str,
-    expected_cache_version: i64,
-) -> Result<usize, String> {
-    conn.execute(
-        "DELETE FROM ast_cache_index
-         WHERE file_path = ?1
-           AND cache_version != ?2",
-        params![file_path, expected_cache_version],
-    )
-    .map_err(|error| {
-        format!(
-            "Failed to delete version-mismatched content-addressed AST cache for {}: {}",
-            file_path, error
-        )
-    })
-}
-
-fn delete_version_mismatched_legacy_ast_cache(
-    conn: &Connection,
-    file_path: &str,
-    expected_cache_version: i64,
-) -> Result<usize, String> {
-    conn.execute(
-        "DELETE FROM ast_cache
-         WHERE file_path = ?1
-           AND cache_version != ?2",
-        params![file_path, expected_cache_version],
-    )
-    .map_err(|error| {
-        format!(
-            "Failed to delete version-mismatched legacy AST cache for {}: {}",
-            file_path, error
-        )
-    })
-}
-
 fn rename_content_addressed_ast_cache(
     conn: &Connection,
     old_path: &str,
@@ -231,38 +156,6 @@ fn rename_content_addressed_ast_cache(
         })?;
 
     Ok(renamed)
-}
-
-fn rename_legacy_ast_cache(
-    conn: &Connection,
-    old_path: &str,
-    new_path: &str,
-) -> Result<usize, String> {
-    let updated_at = now_unix_timestamp()?;
-
-    conn.execute(
-        "DELETE FROM ast_cache WHERE file_path = ?1",
-        params![new_path],
-    )
-    .map_err(|error| {
-        format!(
-            "Failed to clear destination legacy AST cache before rename {} -> {}: {}",
-            old_path, new_path, error
-        )
-    })?;
-
-    conn.execute(
-        "UPDATE ast_cache
-         SET file_path = ?1, updated_at = ?2
-         WHERE file_path = ?3",
-        params![new_path, updated_at, old_path],
-    )
-    .map_err(|error| {
-        format!(
-            "Failed to rename legacy AST cache {} -> {}: {}",
-            old_path, new_path, error
-        )
-    })
 }
 
 fn delete_vault_scoped_rows(
@@ -326,36 +219,14 @@ pub fn get_valid_ast_cache(
     expected_content_hash: &str,
     expected_cache_version: i64,
 ) -> Result<Option<Value>, String> {
-    if let Some(ast_json) = get_content_addressed_ast_json(
+    get_content_addressed_ast_json(
         conn,
         file_path,
         expected_content_hash,
         expected_cache_version,
-    )? {
-        return parse_ast_value(file_path, &ast_json).map(Some);
-    }
-
-    let legacy_ast_json = get_legacy_ast_json(
-        conn,
-        file_path,
-        expected_content_hash,
-        expected_cache_version,
-    )?;
-
-    match legacy_ast_json {
-        Some(ast_json) => {
-            let ast = parse_ast_value(file_path, &ast_json)?;
-            let _ = upsert_content_addressed_ast_cache_json(
-                conn,
-                file_path,
-                expected_content_hash,
-                expected_cache_version,
-                &ast_json,
-            );
-            Ok(Some(ast))
-        }
-        None => Ok(None),
-    }
+    )?
+    .map(|ast_json| parse_ast_value(file_path, &ast_json))
+    .transpose()
 }
 
 pub fn upsert_ast_cache(
@@ -373,20 +244,14 @@ pub fn upsert_ast_cache(
         content_hash,
         cache_version,
         &ast_json,
-    )?;
-
-    // Best-effort legacy cleanup after content-addressed write succeeds.
-    let _ = delete_legacy_ast_cache(conn, file_path);
-
-    Ok(())
+    )
 }
 
 pub fn delete_ast_cache(conn: &Connection, file_path: &str) -> Result<bool, String> {
     let deleted_index_rows = delete_content_addressed_ast_cache(conn, file_path)?;
-    let deleted_legacy_rows = delete_legacy_ast_cache(conn, file_path)?;
     let _ = prune_orphaned_ast_cache_blobs(conn)?;
 
-    Ok(deleted_index_rows > 0 || deleted_legacy_rows > 0)
+    Ok(deleted_index_rows > 0)
 }
 
 pub fn rename_ast_cache(conn: &Connection, old_path: &str, new_path: &str) -> Result<bool, String> {
@@ -395,27 +260,9 @@ pub fn rename_ast_cache(conn: &Connection, old_path: &str, new_path: &str) -> Re
     }
 
     let renamed_index_rows = rename_content_addressed_ast_cache(conn, old_path, new_path)?;
-    let renamed_legacy_rows = rename_legacy_ast_cache(conn, old_path, new_path)?;
     let _ = prune_orphaned_ast_cache_blobs(conn)?;
 
-    Ok(renamed_index_rows > 0 || renamed_legacy_rows > 0)
-}
-
-pub fn delete_ast_cache_for_version_mismatch(
-    conn: &Connection,
-    file_path: &str,
-    expected_cache_version: i64,
-) -> Result<bool, String> {
-    let deleted_index_rows = delete_version_mismatched_content_addressed_ast_cache(
-        conn,
-        file_path,
-        expected_cache_version,
-    )?;
-    let deleted_legacy_rows =
-        delete_version_mismatched_legacy_ast_cache(conn, file_path, expected_cache_version)?;
-    let _ = prune_orphaned_ast_cache_blobs(conn)?;
-
-    Ok(deleted_index_rows > 0 || deleted_legacy_rows > 0)
+    Ok(renamed_index_rows > 0)
 }
 
 pub fn prune_stale_ast_cache_for_vault(
@@ -425,9 +272,7 @@ pub fn prune_stale_ast_cache_for_vault(
 ) -> Result<usize, String> {
     let deleted_index_rows =
         delete_vault_scoped_rows(conn, "ast_cache_index", vault_path, existing_paths)?;
-    let deleted_legacy_rows =
-        delete_vault_scoped_rows(conn, "ast_cache", vault_path, existing_paths)?;
     let _ = prune_orphaned_ast_cache_blobs(conn)?;
 
-    Ok(deleted_index_rows + deleted_legacy_rows)
+    Ok(deleted_index_rows)
 }

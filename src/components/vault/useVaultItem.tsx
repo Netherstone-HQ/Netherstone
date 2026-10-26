@@ -12,6 +12,7 @@ import {
   PencilIcon,
   PinIcon,
   PinOffIcon,
+  SaveIcon,
   ShareIcon,
   Trash2Icon,
   XIcon,
@@ -146,6 +147,8 @@ async function relinkMovedDrawings(
 
 export type VaultItemOptions = {
   onNewFolder?: () => void;
+  /** Adds Save, for the open shard. */
+  onSave?: () => void;
   /** Adds Close, for the open file. */
   onClose?: () => void;
   /** Actions before the file's own, such as New drawing. */
@@ -163,6 +166,7 @@ export function useVaultItem(
   node: FileTreeNode,
   {
     onNewFolder,
+    onSave,
     onClose,
     leadingActions = [],
     exportActions,
@@ -245,9 +249,9 @@ export function useVaultItem(
 
     const content = plateEditor
       ? await serializeMarkdownInWorker(plateEditor.children, {
-          timeoutMs: 5000,
           filePath: currentFilePath,
           requestKey: `${reason}:${currentFilePath}`,
+          urgent: true,
           fallback: () =>
             getSaveMarkdownContent(plateEditor, markdownContent, {
               filePath: currentFilePath,
@@ -566,13 +570,23 @@ export function useVaultItem(
                     onSelect: () => openExportDialog(node.path),
                   },
                 ])),
+          ...(onSave
+            ? [
+                {
+                  label: "Save",
+                  icon: SaveIcon,
+                  onSelect: onSave,
+                  separated: true,
+                },
+              ]
+            : []),
           ...(onClose
             ? [
                 {
                   label: "Close",
                   icon: XIcon,
                   onSelect: onClose,
-                  separated: true,
+                  separated: !onSave,
                 },
                 { ...trash, separated: false },
               ]

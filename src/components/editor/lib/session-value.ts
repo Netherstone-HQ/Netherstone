@@ -16,16 +16,15 @@ import {
 
 /**
  * Resolves the initial Plate value for a newly opened file: the cached AST
- * when available, otherwise markdown deserialized in the worker (falling back
- * to the main thread if the worker fails).
+ * when available, otherwise markdown deserialized in the worker.
  */
 export async function resolveSessionValue(
   filePath: string,
   content: string,
   cachedValue: any[] | null,
 ): Promise<any[]> {
-  // Values cached before device-specific media props stopped being saved
-  // may still carry them.
+  // Inserted media carry device-specific props in the editor, and the cache
+  // stores the editor's value.
   if (cachedValue) return withCurrentShardLinks(filePath, stripDeviceMediaProps(cachedValue));
 
   const startMs = getEditorLifecycleNowMs();
@@ -36,29 +35,18 @@ export async function resolveSessionValue(
       }),
     ) as any[];
 
-  try {
-    const value = await deserializeMarkdownInWorker(content, {
-      filePath,
-      fallback: deserializeInMainThread,
-    });
+  const value = await deserializeMarkdownInWorker(content, {
+    filePath,
+    fallback: deserializeInMainThread,
+  });
 
-    logEditorLifecycle("deserialize:complete", {
-      filePath,
-      nodeCount: getPlateValueNodeCount(value),
-      duration: formatEditorLifecycleDurationMs(startMs),
-    });
+  logEditorLifecycle("deserialize:complete", {
+    filePath,
+    nodeCount: getPlateValueNodeCount(value),
+    duration: formatEditorLifecycleDurationMs(startMs),
+  });
 
-    return withCurrentShardLinks(
-      filePath,
-      Array.isArray(value) ? (value as any[]) : [],
-    );
-  } catch (error) {
-    console.error("Failed to deserialize markdown in worker:", {
-      filePath,
-      error,
-    });
-    return withCurrentShardLinks(filePath, deserializeInMainThread());
-  }
+  return withCurrentShardLinks(filePath, value);
 }
 
 /** Points the @ links of a loaded shard at where their shards are now. */

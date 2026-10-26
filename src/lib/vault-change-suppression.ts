@@ -1,7 +1,5 @@
 export type VaultChangeSuppressionReason =
   | "autosave"
-  | "manual-save"
-  | "close-save"
   | "rename"
   | "move"
   | "app-initiated"

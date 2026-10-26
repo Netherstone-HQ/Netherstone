@@ -23,10 +23,17 @@ const ZOOM_KEYS: Record<string, 1 | -1 | 0> = {
 
 /**
  * App-wide shortcuts: Ctrl+1 to 5 (⌘ on a Mac) switch between Editor,
- * Canvas, Tags, Gallery and Overview, Ctrl+N starts a new shard, and Ctrl+= / Ctrl+− /
- * Ctrl+0 zoom the interface. Listed in Settings › Shortcuts.
+ * Canvas, Tags, Gallery and Overview, Ctrl+N starts a new shard, Ctrl+S saves
+ * the open shard, and Ctrl+= / Ctrl+− / Ctrl+0 zoom the interface. Listed in
+ * Settings › Shortcuts.
  */
-export function useAppShortcuts({ onNewShard }: { onNewShard: () => void }) {
+export function useAppShortcuts({
+  onNewShard,
+  onSave,
+}: {
+  onNewShard: () => void;
+  onSave: () => void;
+}) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!hasModKey(e) || e.altKey) return;
@@ -53,10 +60,15 @@ export function useAppShortcuts({ onNewShard }: { onNewShard: () => void }) {
       } else if (e.key.toLowerCase() === "n") {
         e.preventDefault();
         onNewShard();
+      } else if (e.key.toLowerCase() === "s") {
+        // Canvas keeps it for the drawing.
+        if (useUIStore.getState().appMode === "canvas") return;
+        e.preventDefault();
+        onSave();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onNewShard]);
+  }, [onNewShard, onSave]);
 }

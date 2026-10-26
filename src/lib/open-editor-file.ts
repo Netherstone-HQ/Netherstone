@@ -33,6 +33,11 @@ export async function openEditorFile(
   }
 }
 
+/** Saves the open shard now, and says so if it couldn't. */
+export async function saveEditorFile() {
+  await saveOpenShard();
+}
+
 /** Saves the open shard and closes it. It stays open if the save fails. */
 export async function closeEditorFile() {
   if (await saveOpenShard()) useEditorStore.getState().closeFile();

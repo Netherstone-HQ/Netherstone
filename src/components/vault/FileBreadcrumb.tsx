@@ -23,7 +23,7 @@ function Slash() {
 /** What the file's name menu offers beyond the file tree's actions. */
 type FileMenuOptions = Pick<
   VaultItemOptions,
-  "onClose" | "leadingActions" | "exportActions"
+  "onSave" | "onClose" | "leadingActions" | "exportActions"
 >;
 
 /**

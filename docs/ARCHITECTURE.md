@@ -105,12 +105,17 @@ window (`src/components/export/`), which loads only when it first opens.
 
 ## AI apps (MCP)
 
-AI apps reach the vault through an MCP server: the app's own program
+AI apps reach the vaults through an MCP server: the app's own program
 started as `Netherstone mcp` by the AI app, talking over stdin and stdout
 with no window (`src-tauri/src/mcp.rs`, on the official `rmcp` SDK). It
-works on the vault the app opened last and does nothing while AI apps are
-turned off in Settings; both are kept in the `settings` table, which every
-Netherstone process reads.
+does nothing while AI apps are turned off in Settings, and uses only the
+vaults picked there. Every vault the app opens goes in the `vaults` table,
+newest first, with whether AI apps may use it, which every Netherstone
+process reads (`db/settings.rs`).
+
+- `list_vaults` gives the picked vaults. Every other tool takes an
+  optional `vault`, and works on the vault opened last without one. Each
+  vault is indexed and watched from the first call to it.
 
 - The tools live in `src-tauri/src/tools/`, apart from the server: they take
   a vault and JSON arguments and return JSON, so the in-app assistant can
@@ -119,8 +124,8 @@ Netherstone process reads.
 - Every change saves versions around it in local history, only of the
   files it changed: the files as they were, then as the AI app left them,
   noted "Changed by" the app with its summary (`sync::save_app_change`).
-- The server indexes the vault once when it starts, then only what the
-  file watcher reports (`tools/index.rs`). Writes share the app's locks
+- The server indexes a vault once, then only what the file watcher
+  reports (`tools/index.rs`). Writes share the app's locks
   (`locks.rs`), so the two never write at once.
 - A drawing an AI app embeds has no picture yet; the app makes it when the
   shard is opened.

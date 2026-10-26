@@ -17,7 +17,9 @@ use rusqlite::Connection;
 ///   in the editor on this device. Never synced.
 /// - `writing_log_start`: The day this device started counting for each vault
 /// - `settings`: What every Netherstone process on this device reads, like
-///   the vault opened last (see `settings.rs`)
+///   whether AI apps may connect (see `settings.rs`)
+/// - `vaults`: Every vault the app has opened on this device, in the order
+///   it last opened them, and whether AI apps may use each (see `settings.rs`)
 /// - `fts_search`: FTS5 virtual table for full-text search
 pub const SCHEMA: &str = r#"
 -- ── Files ──────────────────────────────────────────────────────────────────
@@ -184,6 +186,15 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS vaults (
+    path TEXT PRIMARY KEY,
+    -- Higher for a vault opened more recently.
+    open_order INTEGER NOT NULL,
+    ai_allowed INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_vaults_open_order ON vaults(open_order DESC);
 
 -- ── Full-Text Search ────────────────────────────────────────────────────────
 

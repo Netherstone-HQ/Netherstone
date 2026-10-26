@@ -64,6 +64,11 @@ impl OpenVault {
         Ok(())
     }
 
+    /// The open vault.
+    pub fn open_vault(&self) -> Result<PathBuf, String> {
+        lock(&self.open).clone().ok_or_else(|| "No vault is open".to_string())
+    }
+
     /// Checks that `vault_path` is the open vault.
     pub fn check_vault(&self, vault_path: &Path) -> Result<(), String> {
         match &*lock(&self.open) {

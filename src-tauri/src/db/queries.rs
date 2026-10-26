@@ -564,14 +564,14 @@ mod tests {
             "# Monday\n\nRead a **chapter** #reading\n\nCall Sam #todo",
         )
         .unwrap();
-        crate::db::indexer::index_file(&conn, &file).unwrap();
+        crate::db::indexer::index_file(&conn, &vault, &file).unwrap();
         // Re-indexing replaces what was stored.
         std::fs::write(
             &file,
             "# Monday\n\nCall Sam #todo\n\nRead a **chapter** #reading",
         )
         .unwrap();
-        crate::db::indexer::index_file(&conn, &file).unwrap();
+        crate::db::indexer::index_file(&conn, &vault, &file).unwrap();
         // The view reads only what the index stored.
         conn.execute("DELETE FROM fts_search", []).unwrap();
 
@@ -663,7 +663,7 @@ mod tests {
         ] {
             let path = vault.join(name);
             std::fs::write(&path, content).unwrap();
-            crate::db::indexer::index_file(&conn, &path).unwrap();
+            crate::db::indexer::index_file(&conn, &vault, &path).unwrap();
         }
 
         let plan = vault.join("Work/Plan.md").to_string_lossy().into_owned();
@@ -720,7 +720,7 @@ mod tests {
             "Encoded.md",
             "Bracketed.md",
         ] {
-            crate::db::indexer::index_file(&conn, &vault.join(name)).unwrap();
+            crate::db::indexer::index_file(&conn, &vault, &vault.join(name)).unwrap();
         }
 
         let backlinks = get_backlinks(&conn, &roadmap.to_string_lossy()).unwrap();

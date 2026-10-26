@@ -336,7 +336,7 @@ mod tests {
 
     fn save_shard(conn: &Connection, vault: &Path, name: &str, content: &str) -> String {
         let path = write(vault, name, content);
-        sync_references_for_saved_markdown(conn, &path, content).unwrap();
+        sync_references_for_saved_markdown(conn, vault, &path, content).unwrap();
         path
     }
 

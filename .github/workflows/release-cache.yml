@@ -79,8 +79,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          shared-key: release-${{ matrix.platform }}
-          key: ${{ matrix.rust-targets }}
+          # rust-cache leaves `key` out when shared-key is set, so the target
+          # goes in here, or both macOS builds would share one cache.
+          shared-key: release-${{ matrix.platform }}-${{ matrix.rust-targets }}
 
       - run: pnpm install --frozen-lockfile
 

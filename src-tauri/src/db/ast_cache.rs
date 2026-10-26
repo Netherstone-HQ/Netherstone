@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension, ToSql};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -164,53 +164,29 @@ fn delete_vault_scoped_rows(
     vault_path: &str,
     existing_paths: &[String],
 ) -> Result<usize, String> {
-    let normalized_vault_path = vault_path.replace("\\", "/");
-    let vault_pattern = format!("{}%", normalized_vault_path);
+    // Paths inside the vault start with its path and a separator, so a vault
+    // named "Notes" leaves "Notes2" alone.
+    let vault_prefix = format!("{}/", vault_path.replace('\\', "/").trim_end_matches('/'));
 
-    if existing_paths.is_empty() {
-        return conn
-            .execute(
-                &format!(
-                    "DELETE FROM {}
-                     WHERE REPLACE(file_path, '\\\\', '/') LIKE ?1",
-                    table_name
-                ),
-                params![vault_pattern],
-            )
-            .map_err(|error| {
-                format!(
-                    "Failed to prune stale AST cache rows from {} for empty vault {}: {}",
-                    table_name, vault_path, error
-                )
-            });
-    }
+    let prune = || -> rusqlite::Result<usize> {
+        crate::db::fill_kept_paths(conn, existing_paths)?;
+        conn.execute(
+            &format!(
+                "DELETE FROM {}
+                 WHERE substr(REPLACE(file_path, '\\', '/'), 1, length(?1)) = ?1
+                   AND file_path NOT IN (SELECT path FROM kept_paths)",
+                table_name
+            ),
+            params![vault_prefix],
+        )
+    };
 
-    let placeholders = existing_paths
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(",");
-
-    let query = format!(
-        "DELETE FROM {}
-         WHERE REPLACE(file_path, '\\\\', '/') LIKE ?
-           AND file_path NOT IN ({})",
-        table_name, placeholders
-    );
-
-    let mut dynamic_params: Vec<&dyn ToSql> = Vec::with_capacity(existing_paths.len() + 1);
-    dynamic_params.push(&vault_pattern);
-    for path in existing_paths {
-        dynamic_params.push(path as &dyn ToSql);
-    }
-
-    conn.execute(&query, dynamic_params.as_slice())
-        .map_err(|error| {
-            format!(
-                "Failed to prune stale AST cache rows from {} for vault {}: {}",
-                table_name, vault_path, error
-            )
-        })
+    prune().map_err(|error| {
+        format!(
+            "Failed to prune stale AST cache rows from {} for vault {}: {}",
+            table_name, vault_path, error
+        )
+    })
 }
 
 pub fn get_valid_ast_cache(
@@ -275,4 +251,37 @@ pub fn prune_stale_ast_cache_for_vault(
     let _ = prune_orphaned_ast_cache_blobs(conn)?;
 
     Ok(deleted_index_rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cached_paths(conn: &Connection) -> Vec<String> {
+        let mut statement = conn
+            .prepare("SELECT file_path FROM ast_cache_index ORDER BY file_path")
+            .unwrap();
+        statement
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    #[test]
+    fn prunes_only_the_vaults_own_missing_shards() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::init_schema(&conn).unwrap();
+        let ast = serde_json::json!([]);
+        for path in ["/v/Notes/a.md", "/v/Notes/gone.md", "/v/Notes2/b.md"] {
+            upsert_ast_cache(&conn, path, path, 1, &ast).unwrap();
+        }
+
+        // More kept paths than SQLite allows parameters in one statement.
+        let mut existing: Vec<String> = (0..40_000).map(|i| format!("/v/Notes/{i}.md")).collect();
+        existing.push("/v/Notes/a.md".to_string());
+        prune_stale_ast_cache_for_vault(&conn, "/v/Notes", &existing).unwrap();
+
+        assert_eq!(cached_paths(&conn), ["/v/Notes/a.md", "/v/Notes2/b.md"]);
+    }
 }

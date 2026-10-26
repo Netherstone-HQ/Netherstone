@@ -921,23 +921,15 @@ fn rename_ast_cache(old_path: String, new_path: String) -> Result<bool, String> 
 fn write_shard(writes: &locks::VaultWrites, file_path: &str, content: &str) -> Result<(), String> {
     vault::write_atomically(writes, Path::new(file_path), content.as_bytes())?;
 
-    match db::open_connection() {
-        Ok(conn) => {
-            if let Err(error) =
-                db::attachments::sync_references_for_saved_markdown(&conn, file_path, content)
-            {
-                eprintln!(
-                    "[Netherstone] Failed to sync attachment references after save {}: {}",
-                    file_path, error
-                );
-            }
-        }
-        Err(error) => {
-            eprintln!(
-                "[Netherstone] Failed to open database while syncing attachment references {}: {}",
-                file_path, error
-            );
-        }
+    let synced = vault_access::get().open_vault().and_then(|vault| {
+        let conn = db::open_connection()?;
+        db::attachments::sync_references_for_saved_markdown(&conn, &vault, file_path, content)
+    });
+    if let Err(error) = synced {
+        eprintln!(
+            "[Netherstone] Failed to sync attachment references after save {}: {}",
+            file_path, error
+        );
     }
 
     Ok(())
@@ -1257,8 +1249,11 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
         return;
     }
 
-    let conn = match db::open_connection() {
-        Ok(conn) => conn,
+    let opened = vault_access::get()
+        .open_vault()
+        .and_then(|vault| Ok((vault, db::open_connection()?)));
+    let (vault, conn) = match opened {
+        Ok(opened) => opened,
         Err(error) => {
             eprintln!(
                 "[Netherstone] Failed to open database to rewrite links after {}: {}",
@@ -1338,7 +1333,7 @@ fn rewrite_links_after_path_change(old_path: &str, new_path: &Path, action: &str
                 file_new, error
             );
         }
-        if let Err(error) = db::indexer::index_file(&conn, Path::new(&file_new)) {
+        if let Err(error) = db::indexer::index_file(&conn, &vault, Path::new(&file_new)) {
             eprintln!(
                 "[Netherstone] Failed to re-index {} after rewriting links: {}",
                 file_new, error
@@ -1606,10 +1601,11 @@ fn get_file_metadata(file_path: String) -> Result<Option<db::queries::FileMetada
         return Err(format!("Path is not a file: {}", file_path));
     }
 
+    let vault = vault_access::get().open_vault()?;
     let db = db::Database::new()?;
 
     db.with_connection(|conn| {
-        db::indexer::index_file(conn, path).map_err(|_e| rusqlite::Error::InvalidQuery)?;
+        db::indexer::index_file(conn, &vault, path).map_err(|_e| rusqlite::Error::InvalidQuery)?;
         db::queries::get_file_metadata(conn, &file_path).map_err(|_e| rusqlite::Error::InvalidQuery)
     })
 }
@@ -1654,7 +1650,7 @@ fn index_vault(vault_path: String) -> Result<String, String> {
             match db::indexer::needs_indexing(conn, path) {
                 Ok(true) => {
                     eprintln!("[Netherstone] Indexing: {}", path_str);
-                    match db::indexer::index_file(conn, path) {
+                    match db::indexer::index_file(conn, vault, path) {
                         Ok(_) => {
                             indexed_count += 1;
                             eprintln!("[Netherstone] Successfully indexed: {}", path_str);

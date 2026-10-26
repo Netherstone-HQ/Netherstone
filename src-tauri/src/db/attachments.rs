@@ -288,7 +288,7 @@ fn upsert_attachment_record(
 /// missing.
 fn ensure_attachment_record_for_existing_asset(
     conn: &Connection,
-    vault_path: Option<&Path>,
+    vault_path: &Path,
     asset_path: &str,
 ) -> Result<bool, String> {
     let exists: Option<String> = conn
@@ -303,10 +303,6 @@ fn ensure_attachment_record_for_existing_asset(
     if exists.is_some() {
         return Ok(true);
     }
-
-    let Some(vault_path) = vault_path else {
-        return Ok(false);
-    };
 
     let absolute_path = path_from_asset_path(vault_path, asset_path)?;
     let size_bytes = match std::fs::metadata(&absolute_path) {
@@ -837,15 +833,15 @@ pub fn persist_attachment_file(
     )
 }
 
+/// Points the attachment references of the shard at `file_path`, in the
+/// vault at `vault_path`, at what `content` links to.
 pub fn sync_references_for_saved_markdown(
     conn: &Connection,
+    vault_path: &Path,
     file_path: &str,
     content: &str,
 ) -> Result<(), String> {
     let references = parse_attachment_references(content);
-    let vault_path = Path::new(file_path)
-        .parent()
-        .and_then(find_vault_root_for_markdown_file);
     let now = now_unix_seconds();
 
     let previous_paths: HashSet<String> = {
@@ -875,7 +871,7 @@ pub fn sync_references_for_saved_markdown(
     for (asset_path, reference_kind) in &current_by_path {
         // A link to a missing file can't be stored (references need an
         // attachment row). Reconciliation reports those links instead.
-        if !ensure_attachment_record_for_existing_asset(conn, vault_path.as_deref(), asset_path)? {
+        if !ensure_attachment_record_for_existing_asset(conn, vault_path, asset_path)? {
             continue;
         }
         conn.execute(
@@ -926,21 +922,6 @@ pub fn remove_references_for_markdown_file(
     .map_err(|e| format!("Failed to delete attachment references: {}", e))?;
 
     refresh_attachment_counts(conn, &previous_paths)
-}
-
-fn find_vault_root_for_markdown_file(start_dir: &Path) -> Option<PathBuf> {
-    let mut current = Some(start_dir);
-
-    while let Some(dir) = current {
-        if dir.join(ATTACHMENTS_DIR_NAME).exists() {
-            return Some(dir.to_path_buf());
-        }
-        current = dir.parent();
-    }
-
-    // If the attachment folder has not been created yet, the direct parent is
-    // the best available root for pre-existing markdown reference indexing.
-    Some(start_dir.to_path_buf())
 }
 
 /// An attachment that shards in the vault link to but is not on disk.
@@ -1427,7 +1408,7 @@ pub fn reconcile_vault_attachments(
         let Ok(content) = std::fs::read_to_string(shard_path) else {
             continue;
         };
-        sync_references_for_saved_markdown(&tx, shard_path, &content)?;
+        sync_references_for_saved_markdown(&tx, vault_path, shard_path, &content)?;
 
         let mut seen = HashSet::new();
         for reference in parse_attachment_references(&content) {
@@ -1679,9 +1660,14 @@ mod tests {
         let deleted = path_string(vault.join("deleted.md"));
         let other_vault = std::env::temp_dir().join("netherstone-other-vault");
         let other = path_string(other_vault.join("other.md"));
-        for file_path in [&deleted, &other] {
-            sync_references_for_saved_markdown(&conn, file_path, "![x](_attachments/cd/old.png)\n")
-                .unwrap();
+        for (vault_path, file_path) in [(&vault, &deleted), (&other_vault, &other)] {
+            sync_references_for_saved_markdown(
+                &conn,
+                vault_path,
+                file_path,
+                "![x](_attachments/cd/old.png)\n",
+            )
+            .unwrap();
         }
         // The other vault's file is not on this disk, so nothing registered it.
         upsert_attachment_record(
@@ -1753,6 +1739,7 @@ mod tests {
 
         sync_references_for_saved_markdown(
             &conn,
+            &vault,
             &note,
             &format!("![gone](_attachments/zz/gone.png)\n\n![a]({used})\n"),
         )

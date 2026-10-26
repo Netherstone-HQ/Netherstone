@@ -51,7 +51,6 @@ import {
 import type { WithPersistedMediaMetadata } from "./media-types";
 
 export type LocalMediaSourceKind = "vault" | "local";
-export type MediaInsertionMethod = "toolbar-upload" | "toolbar-url";
 
 export type TaggedMediaNode = TElement &
   WithPersistedMediaMetadata<{
@@ -61,7 +60,6 @@ export type TaggedMediaNode = TElement &
     url: string;
   }> & {
     netherstoneSourceKind: "remote" | LocalMediaSourceKind;
-    netherstoneInsertionMethod: MediaInsertionMethod;
   };
 
 const MEDIA_CONFIG: Record<
@@ -157,11 +155,9 @@ function getUploadActionLabel(preference: MediaInsertionPreference): string {
 export function buildTaggedRemoteNode({
   nodeType,
   url,
-  currentFilePath,
 }: {
   nodeType: string;
   url: string;
-  currentFilePath?: string | null;
 }): TaggedMediaNode {
   return {
     children: [{ text: "" }],
@@ -169,11 +165,8 @@ export function buildTaggedRemoteNode({
     type: nodeType,
     url,
     netherstoneSourceKind: "remote",
-    netherstoneInsertionMethod: "toolbar-url",
     netherstoneStoredSource: url,
-    netherstoneShardPath: currentFilePath ?? undefined,
     netherstoneRenderUrl: url,
-    netherstoneMissing: false,
   };
 }
 
@@ -209,14 +202,10 @@ export async function buildTaggedNativePathNode({
       type: nodeType,
       url: attachmentReference,
       netherstoneSourceKind: "vault",
-      netherstoneInsertionMethod: "toolbar-upload",
       netherstoneStoredSource: attachmentReference,
       netherstoneOriginalPath: sourcePath,
       netherstoneImportedPath: importedPath,
-      netherstoneShardPath: currentFilePath ?? undefined,
-      netherstoneVaultPath: currentVaultPath,
       netherstoneRenderUrl: renderUrl,
-      netherstoneMissing: false,
       netherstoneExtension: persisted.extension,
       netherstoneSizeBytes: persisted.sizeBytes,
       netherstoneSyncStatus: persisted.syncStatus,
@@ -231,12 +220,9 @@ export async function buildTaggedNativePathNode({
     type: nodeType,
     url: sourcePath,
     netherstoneSourceKind: "local",
-    netherstoneInsertionMethod: "toolbar-upload",
     netherstoneStoredSource: sourcePath,
     netherstoneOriginalPath: sourcePath,
-    netherstoneShardPath: currentFilePath ?? undefined,
     netherstoneRenderUrl: renderUrl,
-    netherstoneMissing: false,
   };
 }
 
@@ -408,7 +394,6 @@ function MediaUrlDialogContent({
   setOpen: (value: boolean) => void;
 }) {
   const editor = useEditorRef();
-  const currentFilePath = useEditorStore((s) => s.currentFilePath);
   const [url, setUrl] = React.useState("");
 
   const embedMedia = React.useCallback(() => {
@@ -425,9 +410,7 @@ function MediaUrlDialogContent({
     setOpen(false);
 
     try {
-      editor.tf.insertNodes(
-        buildTaggedRemoteNode({ nodeType, url, currentFilePath }),
-      );
+      editor.tf.insertNodes(buildTaggedRemoteNode({ nodeType, url }));
     } catch (error) {
       console.error("[media-toolbar] Failed to insert media from URL", {
         error,
@@ -436,7 +419,7 @@ function MediaUrlDialogContent({
       });
       toast.error("Failed to insert media from URL");
     }
-  }, [currentFilePath, editor, nodeType, setOpen, url]);
+  }, [editor, nodeType, setOpen, url]);
 
   return (
     <>

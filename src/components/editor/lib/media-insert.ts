@@ -34,13 +34,10 @@ export type LocalMediaNode = {
   type: LocalMediaNodeType;
   url: string;
   netherstoneSourceKind?: "vault";
-  netherstoneInsertionMethod?: "drop-or-paste";
   netherstoneStoredSource?: string;
   netherstoneOriginalPath?: string;
   netherstoneImportedPath?: string;
-  netherstoneVaultPath?: string;
   netherstoneRenderUrl?: string;
-  netherstoneMissing?: boolean;
   netherstoneExtension?: string;
   netherstoneSizeBytes?: number;
   netherstoneSyncStatus?: PersistedAttachment["syncStatus"];
@@ -152,13 +149,10 @@ async function createManagedMediaNode(
     type,
     url: persisted.assetPath,
     netherstoneSourceKind: "vault",
-    netherstoneInsertionMethod: "drop-or-paste",
     netherstoneStoredSource: persisted.assetPath,
     netherstoneOriginalPath: file.name,
     netherstoneImportedPath: persisted.absolutePath,
-    netherstoneVaultPath: currentVaultPath,
     netherstoneRenderUrl: renderUrl,
-    netherstoneMissing: false,
     netherstoneExtension: persisted.extension,
     netherstoneSizeBytes: persisted.sizeBytes,
     netherstoneSyncStatus: persisted.syncStatus,

@@ -13,8 +13,6 @@ export type PersistedMediaText = {
 
 export interface PersistedMediaMetadata {
   netherstoneImportedPath?: string;
-  netherstoneInsertionMethod?: string;
-  netherstoneMissing?: boolean;
   netherstoneExtension?: string;
   netherstoneOriginalPath?: string;
   netherstoneRenderUrl?: string;
@@ -25,9 +23,7 @@ export interface PersistedMediaMetadata {
     | "local_only"
     | "blocked"
     | "pending_review";
-  netherstoneShardPath?: string;
   netherstoneSizeBytes?: number;
-  netherstoneVaultPath?: string;
 }
 
 export interface PersistedMediaElementBase extends PersistedMediaMetadata {

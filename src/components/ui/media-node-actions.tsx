@@ -138,7 +138,6 @@ function getAbsoluteLocalSourceCandidate(
 function buildLocalReferencePatch(
   element: PersistedMediaElement,
   sourcePath: string,
-  shardPath?: string,
 ): MediaNodeActionPatch {
   const namePatch = shouldPersistName(element)
     ? { name: getPathBaseName(sourcePath) }
@@ -148,13 +147,10 @@ function buildLocalReferencePatch(
     ...namePatch,
     url: sourcePath,
     netherstoneSourceKind: "local",
-    netherstoneInsertionMethod: "manual-relink",
     netherstoneStoredSource: sourcePath,
     netherstoneOriginalPath: sourcePath,
     netherstoneImportedPath: undefined,
-    netherstoneShardPath: normalizeMediaSourceValue(shardPath) || undefined,
     netherstoneRenderUrl: resolveMediaRenderUrl(sourcePath),
-    netherstoneMissing: false,
   };
 }
 
@@ -162,7 +158,6 @@ async function buildVaultImportPatch(
   element: PersistedMediaElement,
   sourcePath: string,
   vaultPath: string,
-  shardPath: string,
 ): Promise<MediaNodeActionPatch> {
   const persisted = await persistAttachmentFile(sourcePath, vaultPath);
   const namePatch = shouldPersistName(element)
@@ -173,16 +168,12 @@ async function buildVaultImportPatch(
     ...namePatch,
     url: persisted.assetPath,
     netherstoneSourceKind: "vault",
-    netherstoneInsertionMethod: "manual-import",
     netherstoneStoredSource: persisted.assetPath,
     netherstoneOriginalPath: sourcePath,
     netherstoneImportedPath: persisted.absolutePath,
-    netherstoneShardPath: shardPath,
-    netherstoneVaultPath: vaultPath,
     netherstoneRenderUrl: resolveMediaRenderUrl(persisted.assetPath, {
       vaultPath,
     }),
-    netherstoneMissing: false,
     netherstoneExtension: persisted.extension,
     netherstoneSizeBytes: persisted.sizeBytes,
     netherstoneSyncStatus: persisted.syncStatus,
@@ -258,24 +249,14 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
       const replacementPath = await pickSingleMediaPath(effectiveMediaKind);
       if (!replacementPath) return;
 
-      const patch = buildLocalReferencePatch(
-        element,
-        replacementPath,
-        currentFilePath ?? element.netherstoneShardPath,
-      );
+      const patch = buildLocalReferencePatch(element, replacementPath);
       updateCurrentNode(patch);
 
       toast.success(getReplacementSuccessLabel(element), {
         description: getPathBaseName(replacementPath),
       });
     });
-  }, [
-    currentFilePath,
-    effectiveMediaKind,
-    element,
-    runAction,
-    updateCurrentNode,
-  ]);
+  }, [effectiveMediaKind, element, runAction, updateCurrentNode]);
 
   const relinkVaultAttachmentTo = React.useCallback(
     async (sourcePath: string | null) => {
@@ -295,7 +276,6 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
           element,
           replacementPath,
           currentVaultPath,
-          currentFilePath,
         );
 
         updateCurrentNode(patch);
@@ -346,7 +326,6 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
         element,
         sourcePath,
         currentVaultPath,
-        currentFilePath,
       );
       updateCurrentNode(patch);
       notifyAttachmentSyncStatus([patch]);
@@ -373,24 +352,14 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
 
       if (!originalPath) return;
 
-      const patch = buildLocalReferencePatch(
-        element,
-        originalPath,
-        currentFilePath ?? element.netherstoneShardPath,
-      );
+      const patch = buildLocalReferencePatch(element, originalPath);
       updateCurrentNode(patch);
 
       toast.success("Linked original file", {
         description: getPathBaseName(originalPath),
       });
     });
-  }, [
-    currentFilePath,
-    effectiveMediaKind,
-    element,
-    runAction,
-    updateCurrentNode,
-  ]);
+  }, [effectiveMediaKind, element, runAction, updateCurrentNode]);
 
   const canImportToVault = !readOnly && !!currentVaultPath && !!currentFilePath;
   const canLinkOriginalFile =

@@ -1,10 +1,11 @@
 //! The MCP server AI apps start as `Netherstone mcp`, talking over stdin
-//! and stdout. It runs without a window, works on the vault the app opened
-//! last, and offers the vault tools (`crate::tools`), the shard format
-//! guide and a few ready-made prompts. It does nothing while "Connect your
-//! AI apps" is off in Settings.
+//! and stdout. It runs without a window and works on the vaults picked in
+//! Settings, the one the app opened last unless a call names another. It
+//! offers the vault tools (`crate::tools`), the shard format guide and a few
+//! ready-made prompts. It does nothing while "Connect your AI apps" is off.
 
-use crate::tools::{self, Caller, Tool, Vault, guide};
+use crate::db::settings::{self, KnownVault};
+use crate::tools::{self, Caller, Page, Tool, Vault, guide};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, GetPromptRequestParams,
     GetPromptResponse, GetPromptResult, Implementation, ListPromptsResult, ListResourcesResult,
@@ -14,29 +15,48 @@ use rmcp::model::{
 };
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
-use std::path::PathBuf;
+use serde_json::{Map, Value, json};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-/// The vault being worked on, kept indexed while it is.
+/// A vault AI apps have worked on, kept indexed while the server runs.
 struct Session {
     vault: Arc<Vault>,
     _watch: tools::index::Watch,
 }
 
+/// A vault's session, opened by the first call that needs it.
+type Slot = Arc<Mutex<Option<Session>>>;
+
 #[derive(Clone)]
 struct Server {
     tools: Arc<Vec<Tool>>,
-    session: Arc<Mutex<Option<Session>>>,
+    /// One slot per vault, so opening a big one doesn't hold up calls to
+    /// the others.
+    sessions: Arc<Mutex<HashMap<PathBuf, Slot>>>,
 }
 
 /// What a call can't go ahead without, said so the AI app can tell the user.
-const TURNED_OFF: &str = "Netherstone isn't letting AI apps use the vault. Turn on Connect your AI apps in Netherstone's Settings, then try again.";
+const TURNED_OFF: &str = "Netherstone isn't letting AI apps use its vaults. Turn on Connect your AI apps in Netherstone's Settings, then try again.";
 const NO_VAULT: &str = "No vault has been opened in Netherstone yet. Open one in the app, then try again.";
+const NONE_PICKED: &str = "Netherstone isn't letting AI apps use any of its vaults yet. Pick the ones they may use in Netherstone's Settings, then try again.";
+
+/// The argument every vault tool takes to name its vault.
+const VAULT_ARGUMENT: &str = "vault";
+const VAULT_ARGUMENT_DESCRIPTION: &str = "The vault to work on: a path list_vaults gave. \
+Leave it out to work on the vault opened last in Netherstone.";
+
+const LIST_VAULTS: &str = "list_vaults";
+const LIST_VAULTS_DESCRIPTION: &str = "List the vaults you may use, the one opened last \
+in Netherstone first. Give a vault's path as the vault argument of the other tools to \
+work on it; without one they work on the vault opened last. Results come a page at a \
+time: pass next_cursor back as cursor for the next page.";
 
 const INSTRUCTIONS: &str = "Netherstone is a local-first knowledge app. These tools \
-work on the user's vault, the one they opened last in Netherstone: shards (Markdown \
-notes), folders, links between shards, tags, tables and Excalidraw drawings. Paths are \
-relative to the vault. Read a shard before changing it, and change only what was asked: \
+work on the user's vaults: shards (Markdown notes), folders, links between shards, \
+tags, tables and Excalidraw drawings. They use the vault opened last in Netherstone \
+unless you pass another from list_vaults as vault. Paths are relative to the vault. Read a shard before changing it, and change only what was asked: \
 edit_shard changes part of a shard and leaves the rest as it is. Nothing is ever \
 deleted, and every change is saved in the shard's History first, so the user can undo \
 it. Give each change a short summary. Before writing shards, read the format guide \
@@ -46,29 +66,64 @@ impl Server {
     fn new() -> Self {
         Self {
             tools: Arc::new(tools::all()),
-            session: Arc::new(Mutex::new(None)),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// The vault to work on, once AI apps may: the one opened last, indexed
-    /// and watched from the first call that needs it.
-    fn vault(&self) -> Result<Arc<Vault>, String> {
+    /// Opens the database, once AI apps may use it.
+    fn settings(&self) -> Result<rusqlite::Connection, String> {
         let conn = crate::db::open_connection()?;
-        if !crate::db::settings::mcp_enabled(&conn).map_err(|e| e.to_string())? {
+        if !settings::mcp_enabled(&conn).map_err(|e| e.to_string())? {
             return Err(TURNED_OFF.to_string());
         }
-        let root: PathBuf = crate::db::settings::last_vault(&conn)
-            .map_err(|e| e.to_string())?
-            .filter(|root| root.is_dir())
-            .ok_or_else(|| NO_VAULT.to_string())?;
+        Ok(conn)
+    }
 
-        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(open) = session.as_ref().filter(|open| open.vault.root == root) {
+    /// The vault a call works on: `asked`, or the one opened last, if AI
+    /// apps may use it. It's indexed and watched from the first call to it.
+    fn vault(&self, asked: Option<&str>) -> Result<Arc<Vault>, String> {
+        let conn = self.settings()?;
+        let picked = |vault: Option<KnownVault>| vault.filter(|vault| vault.ai_allowed);
+        let known = match asked {
+            Some(asked) => {
+                let path = Path::new(asked);
+                picked(settings::known_vault(&conn, path).map_err(|e| e.to_string())?).ok_or_else(|| {
+                    // It may have been taken off the list since it was opened.
+                    self.close(path);
+                    format!("'{}' isn't a vault Netherstone lets AI apps use. list_vaults gives the ones it does.", asked)
+                })?
+            }
+            None => {
+                let last = settings::last_vault(&conn).map_err(|e| e.to_string())?.ok_or(NO_VAULT)?;
+                if !last.ai_allowed {
+                    let any = settings::known_vaults(&conn, true, 0, Some(1)).map_err(|e| e.to_string())?;
+                    self.close(&last.path);
+                    return Err(if any.is_empty() {
+                        NONE_PICKED.to_string()
+                    } else {
+                        format!(
+                            "Netherstone isn't letting AI apps use {}, the vault opened last. Pass one from list_vaults as vault.",
+                            last.name()
+                        )
+                    });
+                }
+                last
+            }
+        };
+        if !known.path.is_dir() {
+            return Err(format!("The vault {} isn't at {} anymore", known.name(), known.path.display()));
+        }
+
+        let slot = {
+            let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+            sessions.entry(known.path.clone()).or_default().clone()
+        };
+        let mut session = slot.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(open) = session.as_ref() {
             return Ok(open.vault.clone());
         }
-        // A different vault was opened in the app since: work on that one.
         let vault = Arc::new(Vault {
-            root,
+            root: known.path,
             sync_root: crate::sync::sync_root()?,
         });
         let watch = tools::index::keep_indexed(&vault)?;
@@ -77,6 +132,33 @@ impl Server {
             _watch: watch,
         });
         Ok(vault)
+    }
+
+    /// Stops watching a vault AI apps may no longer use.
+    fn close(&self, path: &Path) {
+        self.sessions.lock().unwrap_or_else(|e| e.into_inner()).remove(path);
+    }
+
+    /// The vaults AI apps may use, a page at a time.
+    fn list_vaults(&self, arguments: &Map<String, Value>) -> Result<Value, String> {
+        let conn = self.settings()?;
+        let cursor = arguments.get("cursor").and_then(Value::as_str);
+        let limit = arguments.get("limit").and_then(Value::as_u64).map(|limit| limit as usize);
+        let page = Page::new(cursor, limit).map_err(|error| error.0)?;
+        let last = settings::last_vault(&conn).map_err(|e| e.to_string())?.map(|vault| vault.path);
+        let vaults = settings::known_vaults(&conn, true, page.offset, Some(page.fetch())).map_err(|e| e.to_string())?;
+        let (vaults, next_cursor) = page.finish(vaults);
+        let vaults: Vec<Value> = vaults
+            .into_iter()
+            .map(|vault| {
+                json!({
+                    "name": vault.name(),
+                    "path": vault.path.to_string_lossy(),
+                    "opened_last": last.as_ref() == Some(&vault.path),
+                })
+            })
+            .collect();
+        Ok(json!({ "vaults": vaults, "next_cursor": next_cursor }))
     }
 }
 
@@ -90,15 +172,47 @@ fn caller(context: &RequestContext<RoleServer>) -> Caller {
     Caller { app }
 }
 
+fn annotated(tool: rmcp::model::Tool, title: &str, read_only: bool) -> rmcp::model::Tool {
+    tool.with_title(title.to_string()).with_annotations(
+        ToolAnnotations::with_title(title)
+            .read_only(read_only)
+            .destructive(false)
+            .open_world(false),
+    )
+}
+
+/// A vault tool, with the argument that names its vault added.
 fn mcp_tool(tool: &Tool) -> rmcp::model::Tool {
-    rmcp::model::Tool::new(tool.name, tool.description.clone(), Arc::new(tool.input_schema.clone()))
-        .with_title(tool.title)
-        .with_annotations(
-            ToolAnnotations::with_title(tool.title)
-                .read_only(tool.read_only)
-                .destructive(false)
-                .open_world(false),
-        )
+    let mut schema = tool.input_schema.clone();
+    if let Value::Object(properties) = schema.entry("properties").or_insert_with(|| json!({})) {
+        properties.insert(
+            VAULT_ARGUMENT.to_string(),
+            json!({ "type": "string", "description": VAULT_ARGUMENT_DESCRIPTION }),
+        );
+    }
+    annotated(
+        rmcp::model::Tool::new(tool.name, tool.description.clone(), Arc::new(schema)),
+        tool.title,
+        tool.read_only,
+    )
+}
+
+fn list_vaults_tool() -> rmcp::model::Tool {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "cursor": { "type": "string", "description": "The next_cursor of the last page, for the page after it." },
+            "limit": { "type": "integer", "minimum": 1, "description": "Results per page." },
+        },
+    })
+    .as_object()
+    .cloned()
+    .unwrap_or_default();
+    annotated(
+        rmcp::model::Tool::new(LIST_VAULTS, LIST_VAULTS_DESCRIPTION, Arc::new(schema)),
+        "List vaults",
+        true,
+    )
 }
 
 // ── Prompts ──────────────────────────────────────────────────────────────────
@@ -175,10 +289,14 @@ impl ServerHandler for Server {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(self.tools.iter().map(mcp_tool).collect()))
+        let vault_tools = self.tools.iter().map(mcp_tool);
+        Ok(ListToolsResult::with_all_items(std::iter::once(list_vaults_tool()).chain(vault_tools).collect()))
     }
 
     fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
+        if name == LIST_VAULTS {
+            return Some(list_vaults_tool());
+        }
         self.tools.iter().find(|tool| tool.name == name).map(mcp_tool)
     }
 
@@ -190,17 +308,25 @@ impl ServerHandler for Server {
         let caller = caller(&context);
         let server = self.clone();
         let name = request.name.to_string();
-        let arguments = request.arguments.map(serde_json::Value::Object).unwrap_or_default();
+        let mut arguments = request.arguments.unwrap_or_default();
         // The tools read and write files and the index, so they run off the
         // threads that read and write messages.
         let result = tokio::task::spawn_blocking(move || {
-            let vault = server.vault()?;
+            if name == LIST_VAULTS {
+                return server.list_vaults(&arguments);
+            }
+            let asked = match arguments.remove(VAULT_ARGUMENT) {
+                None | Some(Value::Null) => None,
+                Some(Value::String(asked)) => Some(asked),
+                Some(_) => return Err("vault takes a path list_vaults gave".to_string()),
+            };
+            let vault = server.vault(asked.as_deref())?;
             let tool = server
                 .tools
                 .iter()
                 .find(|tool| tool.name == name)
                 .ok_or_else(|| format!("There's no tool named {}", name))?;
-            tool.call(&vault, &caller, arguments).map_err(|error| error.0)
+            tool.call(&vault, &caller, Value::Object(arguments)).map_err(|error| error.0)
         })
         .await
         .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;

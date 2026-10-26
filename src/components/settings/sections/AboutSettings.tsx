@@ -91,13 +91,13 @@ export function AboutSettings() {
         <PreferenceSwitch
           name="betaUpdates"
           label="Get beta updates"
-          description="New features early, with a few rough edges."
+          description="New features early, with a few rough edges"
         />
         {companionUnlocked ? (
           <PreferenceSwitch
             name="showCompanion"
             label="Kevin"
-            description="He keeps you company in the corner."
+            description="He keeps you company in the corner"
           />
         ) : null}
       </SettingsGroup>
@@ -106,7 +106,7 @@ export function AboutSettings() {
         <WelcomeRow />
         <SettingRow
           label="Source code"
-          description="Netherstone is built in the open."
+          description="Netherstone is built in the open"
         >
           <Button
             variant="outline"
@@ -118,7 +118,7 @@ export function AboutSettings() {
         </SettingRow>
         <SettingRow
           label="Report a problem"
-          description="Let us know when something isn't working."
+          description="Let us know when something isn't working"
         >
           <Button
             variant="outline"
@@ -144,17 +144,17 @@ export function AboutSettings() {
 function updateDescription(status: UpdateStatus): string {
   switch (status.kind) {
     case "idle":
-      return "Netherstone checks for updates each time it opens.";
+      return "Netherstone checks for updates each time it opens";
     case "checking":
       return "Checking for updates…";
     case "up-to-date":
-      return "You have the latest version.";
+      return "You have the latest version";
     case "available":
       return `Netherstone ${status.update.version} is available.`;
     case "installing":
       return `Updating to Netherstone ${status.update.version}…`;
     case "error":
-      return "Couldn't check for updates. Check your connection and try again.";
+      return "Couldn't check for updates, check your connection and try again";
   }
 }
 
@@ -165,7 +165,7 @@ function UpdateRow() {
     return (
       <SettingRow
         label="Updates"
-        description="Updates are turned off in development builds."
+        description="Updates are turned off in development builds"
       />
     );
   }
@@ -201,7 +201,7 @@ function WelcomeRow() {
   return (
     <SettingRow
       label="Welcome tour"
-      description="Go through the first-run setup again."
+      description="Go through the first-run setup again"
     >
       <Button variant="outline" size="sm" onClick={resetOnboarding}>
         Show welcome again

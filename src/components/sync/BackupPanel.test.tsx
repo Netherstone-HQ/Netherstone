@@ -143,7 +143,7 @@ describe("BackupPanel", () => {
     render(<BackupPanel vaultPath={VAULT} />);
     expect(await screen.findByRole("button", { name: /install on github/i })).toBeTruthy();
     expect(
-      screen.getByText(/sync to your personal account\. Install it on @octocat too/),
+      screen.getByText(/sync to your personal account, install it on @octocat too/),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /turn on sync/i })).toHaveProperty(
       "disabled",

@@ -32,7 +32,7 @@ export function GeneralSettings() {
         <PreferenceSwitch
           name="reopenLastShard"
           label="Reopen your last shard"
-          description="Pick up where you left off when Netherstone opens."
+          description="Pick up where you left off when Netherstone opens"
         />
       </SettingsGroup>
 
@@ -55,7 +55,7 @@ export function GeneralSettings() {
         <PreferenceSwitch
           name="confirmBeforeDelete"
           label="Ask before moving to trash"
-          description="Deleted shards and folders go to your system trash."
+          description="Deleted shards and folders go to your system trash"
         />
       </SettingsGroup>
 
@@ -76,7 +76,7 @@ function RecentShardsRows() {
       <PreferenceSwitch
         name="showRecentFiles"
         label="Show recent shards"
-        description="List the shards you opened last above your files."
+        description="List the shards you opened last above your files"
       />
       {show ? (
         <SettingRow label="Number of recent shards">
@@ -100,7 +100,7 @@ function ResetRow() {
   return (
     <SettingRow
       label="Restore default settings"
-      description="Your vault, shards and sync stay as they are."
+      description="Your vault, shards and sync stay as they are"
     >
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         Restore defaults

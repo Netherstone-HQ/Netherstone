@@ -134,7 +134,7 @@ impl Drop for StagedFile {
     }
 }
 
-fn replace_atomically(
+pub(crate) fn replace_atomically(
     path: &Path,
     fill: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
 ) -> Result<(), String> {

@@ -1,3 +1,4 @@
+mod ai_apps;
 mod asset_scope;
 mod browser;
 mod copy_access;
@@ -109,15 +110,16 @@ fn open_vault_dialog(app: tauri::AppHandle) -> Option<String> {
 
 /// Makes `vault_path` the open vault, the only folder the other commands
 /// touch. It must be a vault already, or a folder just picked or created.
-/// It's kept as the vault opened last, which the MCP server works on.
+/// It's kept in the list of vaults opened, newest first, which Settings
+/// shows to pick the ones AI apps may use.
 #[tauri::command(async)]
 fn open_vault(vault_path: String) -> Result<(), String> {
     let vault = Path::new(&vault_path);
     vault_access::get().open(&sync::sync_root()?, vault)?;
     let kept = db::open_connection()
-        .and_then(|conn| db::settings::set_last_vault(&conn, vault).map_err(|e| e.to_string()));
+        .and_then(|conn| db::settings::record_opened_vault(&conn, vault).map_err(|e| e.to_string()));
     if let Err(error) = kept {
-        eprintln!("[Netherstone] Couldn't keep the vault opened last: {}", error);
+        eprintln!("[Netherstone] Couldn't keep the vault in the vaults opened: {}", error);
     }
     Ok(())
 }
@@ -133,6 +135,58 @@ fn mcp_get_enabled() -> Result<bool, String> {
 #[tauri::command(async)]
 fn mcp_set_enabled(enabled: bool) -> Result<(), String> {
     db::settings::set_mcp_enabled(&db::open_connection()?, enabled).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+struct McpVault {
+    path: String,
+    name: String,
+    allowed: bool,
+}
+
+/// Every vault the app has opened, the most recent first, with whether AI
+/// apps may use it.
+#[tauri::command(async)]
+fn mcp_vaults() -> Result<Vec<McpVault>, String> {
+    let conn = db::open_connection()?;
+    let vaults = db::settings::known_vaults(&conn, false, 0, None).map_err(|e| e.to_string())?;
+    Ok(vaults
+        .into_iter()
+        .map(|vault| McpVault {
+            name: vault.name(),
+            path: vault.path.to_string_lossy().into_owned(),
+            allowed: vault.ai_allowed,
+        })
+        .collect())
+}
+
+/// Lets AI apps use a vault the app has opened, or stops them.
+#[tauri::command(async)]
+fn mcp_set_vault_allowed(path: String, allowed: bool) -> Result<(), String> {
+    let conn = db::open_connection()?;
+    match db::settings::set_vault_ai_allowed(&conn, Path::new(&path), allowed) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("Netherstone hasn't opened that vault".to_string()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// The AI apps Settings can connect, and which are installed and connected.
+#[tauri::command(async)]
+fn ai_apps() -> Result<Vec<ai_apps::AppStatus>, String> {
+    ai_apps::statuses()
+}
+
+/// Sets up the AI app `id` to start the MCP server.
+#[tauri::command(async)]
+fn ai_app_connect(id: String) -> Result<(), String> {
+    ai_apps::connect(&id)
+}
+
+/// The MCP server setup to paste into any other AI app.
+#[tauri::command(async)]
+fn mcp_setup() -> Result<String, String> {
+    ai_apps::setup_snippet()
 }
 
 /// Where new vaults go unless the user picks somewhere else: their
@@ -1703,6 +1757,11 @@ pub fn run() {
             open_vault,
             mcp_get_enabled,
             mcp_set_enabled,
+            mcp_vaults,
+            mcp_set_vault_allowed,
+            ai_apps,
+            ai_app_connect,
+            mcp_setup,
             default_vault_location,
             create_vault,
             open_media_files_dialog,

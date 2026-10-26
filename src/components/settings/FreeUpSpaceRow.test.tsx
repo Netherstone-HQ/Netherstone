@@ -38,7 +38,7 @@ describe("FreeUpSpaceRow", () => {
     mockCommands(OLD);
     render(<FreeUpSpaceRow vaultPath={VAULT} />);
     expect(
-      await screen.findByText("They take 4.0 MB in history."),
+      await screen.findByText("They take 4.0 MB in history"),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Free up space" }));
@@ -60,14 +60,14 @@ describe("FreeUpSpaceRow", () => {
       }),
     );
     expect(
-      await screen.findByText("They take 1.0 MB in history."),
+      await screen.findByText("They take 1.0 MB in history"),
     ).toBeTruthy();
   });
 
   it("has nothing to free in a history without old versions", async () => {
     mockCommands([]);
     render(<FreeUpSpaceRow vaultPath={VAULT} />);
-    expect(await screen.findByText("Nothing to free up.")).toBeTruthy();
+    expect(await screen.findByText("Nothing to free up")).toBeTruthy();
     expect(
       (
         screen.getByRole("button", {

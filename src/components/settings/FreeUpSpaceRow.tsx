@@ -105,8 +105,8 @@ export function FreeUpSpaceRow({ vaultPath }: { vaultPath: string }) {
         old === null
           ? undefined
           : old.length === 0
-            ? "Nothing to free up."
-            : `They take ${formatBytes(total)} in history.`
+            ? "Nothing to free up"
+            : `They take ${formatBytes(total)} in history`
       }
     >
       <Button

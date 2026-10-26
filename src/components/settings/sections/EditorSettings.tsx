@@ -41,12 +41,12 @@ export function EditorSettings() {
         <PreferenceSwitch
           name="spellcheck"
           label="Check spelling"
-          description="Underline misspelled words as you type."
+          description="Underline misspelled words as you type"
         />
         <PreferenceSwitch
           name="showWordCount"
           label="Show word count"
-          description="Shown at the top of the window while a shard is open."
+          description="Shown at the top of the window while a shard is open"
         />
       </SettingsGroup>
 
@@ -61,7 +61,7 @@ export function EditorSettings() {
         <PreferenceSegments
           name="contentWidth"
           label="Line width"
-          description="How wide the text column gets in a large window."
+          description="How wide the text column gets in a large window"
           options={WIDTHS}
         />
       </SettingsGroup>

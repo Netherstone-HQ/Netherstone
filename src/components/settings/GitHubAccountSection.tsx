@@ -26,7 +26,7 @@ export function GitHubAccountSection() {
       title="GitHub account"
       description={
         <span className="inline-flex items-center gap-1.5">
-          Your vaults sync through your GitHub account.
+          Your vaults sync through your GitHub account
           <SyncHelpDialog />
         </span>
       }
@@ -70,15 +70,15 @@ function TokenStorageNote({ storage }: { storage: GitHubTokenStorage | null }) {
   if (storage === "file") {
     return (
       <p className="text-muted-foreground text-ui-sm leading-5">
-        Saved in a file only you can read. To use a keyring, install GNOME
-        Keyring or KWallet and restart.
+        Saved in a file only you can read, install GNOME Keyring or KWallet
+        and restart to use a keyring
       </p>
     );
   }
   if (storage === "memory") {
     return (
       <p className="text-muted-foreground text-ui-sm leading-5">
-        You'll connect again next time you open Netherstone.
+        You'll connect again next time you open Netherstone
       </p>
     );
   }

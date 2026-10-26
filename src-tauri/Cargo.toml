@@ -44,6 +44,8 @@ tokio = { version = "1", features = ["time", "sync", "rt-multi-thread", "macros"
 # The MCP server (`Netherstone mcp`), which AI apps start over stdio.
 rmcp = { version = "3.7", default-features = false, features = ["server", "transport-io"] }
 schemars = "1"
+# Goose keeps its MCP servers in YAML.
+serde_yaml_ng = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

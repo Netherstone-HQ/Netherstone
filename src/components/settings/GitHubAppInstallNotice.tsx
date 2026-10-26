@@ -44,14 +44,18 @@ export function GitHubAppInstallNotice() {
   return (
     <div className="space-y-2.5 rounded-lg border bg-background p-3">
       <p className="font-medium text-ui">One more step on GitHub</p>
-      <p className="text-muted-foreground text-ui-sm leading-5">
-        {elsewhere.length > 0
-          ? `Your vaults sync to your personal account. Install it on ${login ? `@${login}` : "your account"} too.`
-          : "Install the Netherstone app on GitHub so it can sync your vaults."}{" "}
-        When GitHub asks, choose{" "}
-        <span className="text-foreground">All repositories</span>. Netherstone
-        only touches the repositories it creates.
-      </p>
+      <div className="space-y-1 text-muted-foreground text-ui-sm leading-5">
+        <p>
+          {elsewhere.length > 0
+            ? `Your vaults sync to your personal account, install it on ${login ? `@${login}` : "your account"} too`
+            : "Install the Netherstone app on GitHub so it can sync your vaults"}
+        </p>
+        <p>
+          When GitHub asks, choose{" "}
+          <span className="text-foreground">All repositories</span>
+        </p>
+        <p>Netherstone only touches the repositories it creates</p>
+      </div>
       <Button size="sm" onClick={() => void openUrl(installation.installUrl)}>
         Install on GitHub
       </Button>

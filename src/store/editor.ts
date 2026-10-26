@@ -5,15 +5,6 @@ import type { Descendant, SlateEditor } from "platejs";
 
 import { isSamePath } from "@/lib/drawing-files";
 
-const EDITOR_STORE_LOG_PREFIX = "[Netherstone][Editor Store]";
-
-function logEditorStoreLifecycle(
-  event: string,
-  details: Record<string, unknown>,
-): void {
-  console.info(EDITOR_STORE_LOG_PREFIX, event, details);
-}
-
 // ── Types ───────────────────────────────────────────────────────────────────
 
 /**
@@ -183,16 +174,6 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       const nextEditorSessionTick = state.editorSessionTick + 1;
 
-      logEditorStoreLifecycle("openFile", {
-        previousPath: state.currentFilePath,
-        nextPath: path,
-        previousEditorSessionTick: state.editorSessionTick,
-        nextEditorSessionTick,
-        cacheHit,
-        hasInitialValue: plateValue !== null,
-        markdownChars: content.length,
-      });
-
       return {
         currentFilePath: path,
         editorSessionTick: nextEditorSessionTick,
@@ -219,14 +200,6 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   renameOpenFile: (path, content) =>
     set((state) => {
-      logEditorStoreLifecycle("renameOpenFile", {
-        previousPath: state.currentFilePath,
-        nextPath: path,
-        editorSessionTick: state.editorSessionTick,
-        editTick: state.editTick,
-        markdownChars: content.length,
-      });
-
       return {
         currentFilePath: path,
         content,
@@ -239,17 +212,6 @@ export const useEditorStore = create<EditorState>((set) => ({
   closeFile: () =>
     set((state) => {
       const nextEditorSessionTick = state.editorSessionTick + 1;
-
-      logEditorStoreLifecycle("closeFile", {
-        previousPath: state.currentFilePath,
-        previousEditorSessionTick: state.editorSessionTick,
-        nextEditorSessionTick,
-        previousEditTick: state.editTick,
-        wasDirty: state.isDirty,
-        wasSaving: state.isSaving,
-        hadPlateEditor: state.plateEditor !== null,
-        previousTocHeadingCount: state.tocHeadings.length,
-      });
 
       return {
         currentFilePath: null,

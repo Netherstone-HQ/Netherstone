@@ -59,12 +59,6 @@ async function saveOpenShard(): Promise<boolean> {
 async function readAndOpenFile(
   filePath: string,
 ): Promise<OpenMarkdownFileResult> {
-  const openStartTime = performance.now();
-
-  console.info("[Netherstone][Open File] start", {
-    filePath,
-  });
-
   // Opening a file replaces the editor session. If the open shard's edits
   // can't be saved, stay on it rather than discard them.
   if (!(await saveOpenShard())) {
@@ -74,51 +68,11 @@ async function readAndOpenFile(
   }
 
   const result = await openMarkdownFile(filePath);
-  const afterBackendOpenTime = performance.now();
 
-  console.info(
-    `[Netherstone] AST cache ${result.cacheHit ? "hit" : "miss"} for open: ${result.filePath}`,
-    {
-      filePath: result.filePath,
-      cacheHit: result.cacheHit,
-      contentHash: result.contentHash,
-      hasPlateValue: Array.isArray(result.plateValue),
-      markdownChars: result.markdown.length,
-      backendOpenDurationMs: Number(
-        (afterBackendOpenTime - openStartTime).toFixed(2),
-      ),
-    },
-  );
-
-  const storeOpenStartTime = performance.now();
-  const payload = toOpenEditorFilePayload(result);
-
-  console.info("[Netherstone][Open File] store:open:start", {
-    filePath: result.filePath,
-    cacheHit: result.cacheHit,
-    hasInitialValue: Array.isArray(payload.plateValue),
-  });
-
-  useEditorStore.getState().openFile(payload);
+  useEditorStore.getState().openFile(toOpenEditorFilePayload(result));
   useUIStore.getState().pushRecentFile({
     path: result.filePath,
     name: result.filePath.split(/[\\/]/).pop() ?? result.filePath,
-  });
-
-  const afterStoreOpenTime = performance.now();
-
-  console.info("[Netherstone][Open File] store:open:complete", {
-    filePath: result.filePath,
-    cacheHit: result.cacheHit,
-    backendOpenDurationMs: Number(
-      (afterBackendOpenTime - openStartTime).toFixed(2),
-    ),
-    storeOpenDurationMs: Number(
-      (afterStoreOpenTime - storeOpenStartTime).toFixed(2),
-    ),
-    totalOpenDispatchDurationMs: Number(
-      (afterStoreOpenTime - openStartTime).toFixed(2),
-    ),
   });
 
   return result;

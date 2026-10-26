@@ -1,11 +1,13 @@
 import { toast } from "sonner";
 import { flushPendingAutosave, writeOpenShardCache } from "@/hooks/useAutosave";
+import { fillDrawingPictures } from "@/lib/drawing-exports";
 import {
   openMarkdownFile,
   type OpenMarkdownFileResult,
 } from "@/lib/editor-ast-cache";
 import { useEditorStore, type OpenEditorFilePayload } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
+import { useVaultStore } from "@/store/vault";
 
 export function toOpenEditorFilePayload(
   result: OpenMarkdownFileResult,
@@ -79,6 +81,11 @@ async function readAndOpenFile(
     path: result.filePath,
     name: result.filePath.split(/[\\/]/).pop() ?? result.filePath,
   });
+
+  const vaultPath = useVaultStore.getState().currentVaultPath;
+  if (vaultPath) {
+    void fillDrawingPictures(result.filePath, result.markdown, vaultPath);
+  }
 
   return result;
 }

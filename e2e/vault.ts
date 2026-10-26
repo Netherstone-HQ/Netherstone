@@ -350,6 +350,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         get_tagged_files: () => [],
         search_files: () => [],
         find_shards_containing: () => [],
+        stale_drawing_pictures: () => [],
         sync_get_vault_record: () => null,
         // Versions are named by file and position: "Note.md#0" is the newest.
         history_list_versions: ({ filePath }) => {

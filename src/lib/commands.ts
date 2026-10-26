@@ -512,6 +512,25 @@ export async function findShardsContaining(
   return invoke<string[]>("find_shards_containing", { vaultPath, needles });
 }
 
+/** A drawing a shard shows, with the files its pictures point at. */
+export interface DrawingPictures {
+  drawingPath: string;
+  /** null where a picture has no source or it isn't a file. */
+  imagePaths: (string | null)[];
+}
+
+/**
+ * Returns the drawings among `drawings` that have a picture missing or older
+ * than the drawing. Drawings that don't exist are left out.
+ */
+export async function staleDrawingPictures(
+  vaultPath: string,
+  drawings: DrawingPictures[],
+): Promise<string[]> {
+  assertTauri();
+  return invoke<string[]>("stale_drawing_pictures", { vaultPath, drawings });
+}
+
 // ── Watcher ───────────────────────────────────────────────────────────────────
 
 /**

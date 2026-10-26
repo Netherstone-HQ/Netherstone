@@ -1039,6 +1039,59 @@ fn shards_containing(vault: &Path, needles: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// A drawing a shard shows, with the files its pictures point at: `None`
+/// where a picture has no source or it isn't a file in the vault.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DrawingPictures {
+    drawing_path: String,
+    image_paths: Vec<Option<String>>,
+}
+
+/// Returns the drawings among `drawings` that have a picture missing or older
+/// than the drawing, such as one changed while the app was closed. Drawings
+/// that don't exist are left out.
+#[tauri::command(async)]
+fn stale_drawing_pictures(
+    vault_path: String,
+    drawings: Vec<DrawingPictures>,
+) -> Result<Vec<String>, String> {
+    open_vault_only(&vault_path)?;
+    Ok(drawings
+        .into_iter()
+        .filter(|drawing| {
+            let images: Vec<Option<&Path>> = drawing
+                .image_paths
+                .iter()
+                .map(|path| {
+                    path.as_deref()
+                        .filter(|path| in_open_vault(path).is_ok())
+                        .map(Path::new)
+                })
+                .collect();
+            in_open_vault(&drawing.drawing_path).is_ok()
+                && pictures_are_stale(Path::new(&drawing.drawing_path), &images)
+        })
+        .map(|drawing| drawing.drawing_path)
+        .collect())
+}
+
+fn pictures_are_stale(drawing: &Path, images: &[Option<&Path>]) -> bool {
+    fn modified(path: &Path) -> Option<std::time::SystemTime> {
+        std::fs::metadata(path)
+            .ok()
+            .filter(|meta| meta.is_file())
+            .and_then(|meta| meta.modified().ok())
+    }
+
+    let Some(drawn) = modified(drawing).filter(|_| vault::is_drawing_path(drawing)) else {
+        return false;
+    };
+    images
+        .iter()
+        .any(|image| image.and_then(modified).is_none_or(|exported| exported < drawn))
+}
+
 /// Creates the folder `name` inside `parent` and returns its path.
 #[tauri::command(async)]
 fn create_folder(parent: String, name: String) -> Result<String, String> {
@@ -1730,6 +1783,7 @@ pub fn run() {
             attachment_sync_infos,
             clean_up_attachments,
             find_shards_containing,
+            stale_drawing_pictures,
             upsert_ast_cache,
             index_vault,
             search_files,
@@ -1799,6 +1853,38 @@ mod tests {
 
         write_drawing_file(&drawing, "merged", Some("outside")).unwrap();
         assert_eq!(std::fs::read_to_string(&drawing).unwrap(), "merged");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn pictures_are_stale_when_missing_or_older_than_the_drawing() {
+        let dir = std::env::temp_dir().join(format!("netherstone-stale-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let at = |name: &str, seconds: u64| {
+            let path = dir.join(name);
+            std::fs::write(&path, name).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(seconds))
+                .unwrap();
+            path
+        };
+        let drawing = at("Plan.excalidraw", 20);
+        let older = at("old.png", 10);
+        let same = at("same.png", 20);
+        let newer = at("new.png", 30);
+        let missing = dir.join("missing.png");
+        let not_a_drawing = at("Plan.md", 20);
+
+        let stale = |images: &[Option<&Path>]| pictures_are_stale(&drawing, images);
+        assert!(!stale(&[Some(&same), Some(&newer)]));
+        assert!(stale(&[Some(&newer), Some(&older)]));
+        assert!(stale(&[Some(&newer), Some(&missing)]));
+        assert!(stale(&[Some(&newer), None]));
+        assert!(!pictures_are_stale(&dir.join("Gone.excalidraw"), &[None]));
+        assert!(!pictures_are_stale(&not_a_drawing, &[None]));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -12,15 +12,19 @@ import {
   readDrawingFile,
   readMarkdownFile,
   saveMarkdownFile,
+  staleDrawingPictures,
 } from "@/lib/commands";
 import {
   buildDrawingImageTag,
   getDrawingLinkNeedles,
+  getLinkedDrawingSources,
   getVaultFileDisplayName,
   relinkDrawingImages,
   replaceLinkedDrawingImages,
+  resolveVaultRelativePath,
   toVaultRelativePath,
 } from "@/lib/drawing-files";
+import { getFilesystemPathFromMediaSource } from "@/lib/media-source";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { rewriteShards } from "@/lib/shard-rewrite";
 import { useEditorStore } from "@/store/editor";
@@ -149,6 +153,79 @@ export async function refreshLinkedDrawingImages(
   return rewriteShards(shardPaths, (markdown) =>
     replaceLinkedDrawingImages(markdown, drawingRef, buildTag),
   );
+}
+
+let fillChain = Promise.resolve();
+
+/**
+ * Exports the pictures in the shard at `shardPath` that are missing or older
+ * than their drawing, such as a drawing written while the app was closed.
+ * Only the drawings `markdown` shows are checked and only this shard is
+ * updated, so the cost stays with the shard; other shards showing the same
+ * drawing catch up when they open.
+ */
+export function fillDrawingPictures(
+  shardPath: string,
+  markdown: string,
+  vaultPath: string,
+) {
+  const linked = getLinkedDrawingSources(markdown);
+  if (linked.size === 0) return fillChain;
+
+  // One at a time, so reopening the shard after filling it doesn't export
+  // the same pictures again.
+  fillChain = fillChain
+    .then(() => fillStalePictures(shardPath, linked, vaultPath))
+    .catch((error) => {
+      console.error("[Netherstone] Failed to fill in drawing pictures:", error);
+    });
+  return fillChain;
+}
+
+async function fillStalePictures(
+  shardPath: string,
+  linked: Map<string, (string | null)[]>,
+  vaultPath: string,
+) {
+  const refsByPath = new Map<string, string>();
+  const drawings = [...linked].map(([drawingRef, sources]) => {
+    const drawingPath = resolveVaultRelativePath(drawingRef, vaultPath);
+    refsByPath.set(drawingPath, drawingRef);
+    return {
+      drawingPath,
+      imagePaths: sources.map((source) =>
+        getFilesystemPathFromMediaSource(source, { vaultPath }),
+      ),
+    };
+  });
+
+  const builders = new Map<string, (width: string | null) => string>();
+  for (const drawingPath of await staleDrawingPictures(vaultPath, drawings)) {
+    try {
+      const scene = await readDrawingScene(drawingPath);
+      // Keep the last picture rather than replacing it with an empty one.
+      if (!scene.elements.some((element) => !element.isDeleted)) continue;
+
+      builders.set(
+        refsByPath.get(drawingPath)!,
+        await exportDrawingImages(scene, drawingPath, vaultPath),
+      );
+    } catch (error) {
+      // A drawing that can't be read keeps its picture; the others still fill.
+      console.error(`[Netherstone] Failed to export ${drawingPath}:`, error);
+    }
+  }
+  if (builders.size === 0) return;
+
+  await rewriteShards([shardPath], (markdown) => {
+    let next: string | null = null;
+    for (const [drawingRef, buildTag] of builders) {
+      next =
+        replaceLinkedDrawingImages(next ?? markdown, drawingRef, buildTag) ??
+        next;
+    }
+    return next;
+  });
 }
 
 /**

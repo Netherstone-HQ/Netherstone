@@ -181,8 +181,8 @@ jobs:
 
       # The notes come from release-notes/<tag>.md when that file exists,
       # otherwise from the commit subjects since the previous version, leaving
-      # out merges, reverts and release commits. The website's changelog shows
-      # them; the download line is only for the GitHub release page.
+      # out merges, reverts and release commits. The website writes its own
+      # short notes from this list; the download line is only for GitHub.
       - name: Write the release notes
         run: |
           file="release-notes/$GITHUB_REF_NAME.md"
@@ -248,13 +248,30 @@ jobs:
           fi
           gh release upload updates "${files[@]}" --clobber
 
-      # The website reads releases at build time, so rebuild it to put this
-      # release on the changelog and download page. Skipped until the
-      # SITE_DEPLOY_HOOK secret (a Cloudflare Workers Builds deploy hook) is set.
-      - name: Rebuild the website
+      # The website reads releases at build time. Ask it to write this
+      # release's notes: their commit redeploys the site. If it commits
+      # nothing, rebuild it with the deploy hook instead. Each step is skipped
+      # until its secret is set.
+      - name: Update the website
         env:
+          SITE_RELEASE_NOTES_KEY: ${{ secrets.SITE_RELEASE_NOTES_KEY }}
           SITE_DEPLOY_HOOK: ${{ secrets.SITE_DEPLOY_HOOK }}
         run: |
+          written=0
+          if [ -n "$SITE_RELEASE_NOTES_KEY" ]; then
+            # Each call writes a few releases, so older ones without notes take more calls.
+            while result=$(curl --fail --silent --show-error -X POST \
+                -H "Authorization: Bearer $SITE_RELEASE_NOTES_KEY" \
+                https://netherstone.app/api/release-notes); do
+              echo "$result"
+              count=$(jq '.written | length' <<< "$result")
+              written=$((written + count))
+              if [ "$count" -eq 0 ] || [ "$(jq .remaining <<< "$result")" -eq 0 ]; then break; fi
+            done
+          else
+            echo "::warning::SITE_RELEASE_NOTES_KEY is not set, so no release notes were written."
+          fi
+          if [ "$written" -gt 0 ]; then exit 0; fi
           if [ -z "$SITE_DEPLOY_HOOK" ]; then
             echo "::warning::SITE_DEPLOY_HOOK is not set, so the website was not rebuilt."
             exit 0

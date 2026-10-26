@@ -22,9 +22,6 @@ export interface ResolvedMediaSource {
   isMissing: boolean;
   /** A file outside the vault the app hasn't been allowed to show yet. */
   isPending: boolean;
-  isMachineLocal: boolean;
-  isPortable: boolean;
-  isVaultManaged: boolean;
 }
 
 const REMOTE_URL_RE = /^(https?:|mailto:|tel:|ftp:)/i;
@@ -167,7 +164,7 @@ export function getFilesystemPathFromMediaSource(
   return null;
 }
 
-export function isVaultManagedPath(
+function isVaultManagedPath(
   filePath: string | null | undefined,
   vaultPath: string | null | undefined,
 ): boolean {
@@ -185,105 +182,6 @@ export function isVaultManagedPath(
   return file === attachmentsRoot || file.startsWith(`${attachmentsRoot}/`);
 }
 
-export function getVaultAttachmentReference(
-  filePath: string | null | undefined,
-  vaultPath: string | null | undefined,
-): string | null {
-  const normalizedFilePath = normalizeMediaSourceValue(filePath);
-  const normalizedVaultPath = normalizeMediaSourceValue(vaultPath);
-
-  if (!normalizedFilePath || !normalizedVaultPath) return null;
-  if (!isVaultManagedPath(normalizedFilePath, normalizedVaultPath)) return null;
-
-  const file = normalizePathSlashes(normalizedFilePath);
-  const vault = normalizePathSlashes(normalizedVaultPath).replace(/\/+$/, "");
-
-  return file.slice(vault.length + 1);
-}
-
-function stripPathExtension(path: string): string {
-  const lastSlashIndex = path.lastIndexOf("/");
-  const lastDotIndex = path.lastIndexOf(".");
-
-  if (lastDotIndex <= lastSlashIndex) {
-    return path;
-  }
-
-  return path.slice(0, lastDotIndex);
-}
-
-export function getVaultRelativePath(
-  filePath: string | null | undefined,
-  vaultPath: string | null | undefined,
-): string | null {
-  const normalizedFilePath = normalizeMediaSourceValue(filePath);
-  const normalizedVaultPath = normalizeMediaSourceValue(vaultPath);
-
-  if (!normalizedFilePath || !normalizedVaultPath) return null;
-
-  const file = normalizePathSlashes(normalizedFilePath);
-  const vault = normalizePathSlashes(normalizedVaultPath).replace(/\/+$/, "");
-
-  if (file === vault) return "";
-  if (!file.startsWith(`${vault}/`)) return null;
-
-  return file.slice(vault.length + 1);
-}
-
-export function getShardAttachmentDirectoryReference(
-  shardPath: string | null | undefined,
-  vaultPath: string | null | undefined,
-): string | null {
-  const relativeShardPath = getVaultRelativePath(shardPath, vaultPath);
-  if (relativeShardPath === null) return null;
-
-  const normalizedRelativeShardPath = normalizePathSlashes(relativeShardPath)
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-  const shardStem = stripPathExtension(normalizedRelativeShardPath);
-
-  return shardStem ? `_attachments/${shardStem}` : "_attachments";
-}
-
-export function resolveShardAttachmentDirectoryPath(
-  shardPath: string | null | undefined,
-  vaultPath: string | null | undefined,
-): string | null {
-  const attachmentReference = getShardAttachmentDirectoryReference(
-    shardPath,
-    vaultPath,
-  );
-  const normalizedVaultPath = normalizeMediaSourceValue(vaultPath);
-
-  if (!attachmentReference || !normalizedVaultPath) return null;
-
-  const vaultRoot = normalizePathSlashes(normalizedVaultPath).replace(
-    /\/+$/,
-    "",
-  );
-
-  return `${vaultRoot}/${attachmentReference}`;
-}
-
-export function getShardScopedAttachmentReference(
-  fileName: string | null | undefined,
-  shardPath: string | null | undefined,
-  vaultPath: string | null | undefined,
-): string | null {
-  const attachmentDirectory = getShardAttachmentDirectoryReference(
-    shardPath,
-    vaultPath,
-  );
-  const normalizedFileName = normalizeMediaSourceValue(fileName)
-    .replace(/\\/g, "/")
-    .split("/")
-    .pop();
-
-  if (!attachmentDirectory || !normalizedFileName) return null;
-
-  return `${attachmentDirectory}/${normalizedFileName}`;
-}
-
 export function getMediaSourceKind(
   source: string | null | undefined,
   options: Pick<ResolveMediaSourceOptions, "vaultPath"> = {},
@@ -299,14 +197,6 @@ export function getMediaSourceKind(
   if (!filePath) return "unknown";
 
   return isVaultManagedPath(filePath, options.vaultPath) ? "vault" : "local";
-}
-
-export function isMachineLocalMediaSource(kind: MediaSourceKind): boolean {
-  return kind === "vault" || kind === "local" || kind === "blob";
-}
-
-export function isPortableMediaSource(kind: MediaSourceKind): boolean {
-  return kind === "remote" || kind === "data" || kind === "vault";
 }
 
 function canUseTauriConvertFileSrc(): boolean {
@@ -418,9 +308,6 @@ export function resolveMediaSourceSync(
     isPending:
       !normalizeMediaSourceValue(options.explicitRenderUrl) &&
       isPendingLocalFile(kind, path),
-    isMachineLocal: isMachineLocalMediaSource(kind),
-    isPortable: isPortableMediaSource(kind),
-    isVaultManaged: kind === "vault",
   };
 }
 

@@ -213,6 +213,19 @@ pub fn commit_file_version(
     path: &str,
     bytes: &[u8],
 ) -> Result<Option<SnapshotCommit>, String> {
+    commit_files(repository, &[(path, Some(bytes))], None)
+}
+
+/// Commits `files` on top of the last version, each vault path with its new
+/// bytes, or `None` when it's gone, and every other file as it was there.
+/// Only these files are read, however big the vault. `note` is the commit
+/// message's body (see `history::Note`). Returns `None` when the last
+/// version already matches.
+pub fn commit_files(
+    repository: &Repository,
+    files: &[(&str, Option<&[u8]>)],
+    note: Option<&str>,
+) -> Result<Option<SnapshotCommit>, String> {
     let parent = head_commit(repository)?;
     let parent_tree = tree_of(parent.as_ref())?;
 
@@ -224,26 +237,43 @@ pub fn commit_file_version(
             .read_tree(tree)
             .map_err(|e| git_error("Failed to read last backup", e))?;
     }
-    let existed = index.get_path(Path::new(path), 0).is_some();
-    let blob = repository
-        .blob(bytes)
-        .map_err(|e| git_error("Failed to save file version", e))?;
-    index
-        .add(&IndexEntry {
-            ctime: IndexTime::new(0, 0),
-            mtime: IndexTime::new(0, 0),
-            dev: 0,
-            ino: 0,
-            mode: 0o100644,
-            uid: 0,
-            gid: 0,
-            file_size: bytes.len() as u32,
-            id: blob,
-            flags: 0,
-            flags_extended: 0,
-            path: path.as_bytes().to_vec(),
-        })
-        .map_err(|e| git_error("Failed to save file version", e))?;
+    let (mut added, mut modified, mut removed) = (0, 0, 0);
+    for (path, bytes) in files {
+        let existing = index.get_path(Path::new(path), 0).map(|entry| entry.id);
+        let Some(bytes) = bytes else {
+            if existing.is_some() {
+                index
+                    .remove_path(Path::new(path))
+                    .map_err(|e| git_error("Failed to save file version", e))?;
+                removed += 1;
+            }
+            continue;
+        };
+        let blob = repository
+            .blob(bytes)
+            .map_err(|e| git_error("Failed to save file version", e))?;
+        match existing {
+            Some(id) if id == blob => continue,
+            Some(_) => modified += 1,
+            None => added += 1,
+        }
+        index
+            .add(&IndexEntry {
+                ctime: IndexTime::new(0, 0),
+                mtime: IndexTime::new(0, 0),
+                dev: 0,
+                ino: 0,
+                mode: 0o100644,
+                uid: 0,
+                gid: 0,
+                file_size: bytes.len() as u32,
+                id: blob,
+                flags: 0,
+                flags_extended: 0,
+                path: path.as_bytes().to_vec(),
+            })
+            .map_err(|e| git_error("Failed to save file version", e))?;
+    }
     let tree_id = index
         .write_tree_to(repository)
         .map_err(|e| git_error("Failed to write sync tree", e))?;
@@ -254,8 +284,7 @@ pub fn commit_file_version(
         .find_tree(tree_id)
         .map_err(|e| git_error("Failed to read sync tree", e))?;
 
-    let counts = if existed { (0, 1, 0) } else { (1, 0, 0) };
-    commit_tree(repository, &tree, parent.as_ref(), counts, None).map(Some)
+    commit_tree(repository, &tree, parent.as_ref(), (added, modified, removed), note).map(Some)
 }
 
 pub fn head_commit(repository: &Repository) -> Result<Option<Commit<'_>>, String> {

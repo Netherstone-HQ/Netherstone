@@ -164,7 +164,13 @@ fn walk(dir: &Path, relative_dir: &str, plan: &mut SyncPlan) -> Result<(), Strin
     Ok(())
 }
 
-fn classify(path: &Path, relative: String, size_bytes: u64, plan: &mut SyncPlan) {
+/// Whether the vault file at `path` (`relative` in the vault) is backed up,
+/// without walking the rest of the vault.
+pub fn is_backed_up(path: &Path, relative: &str, size_bytes: u64) -> bool {
+    outcome(path, relative, size_bytes).is_ok()
+}
+
+fn outcome(path: &Path, relative: &str, size_bytes: u64) -> Result<PlannedFileKind, SkipReason> {
     let in_attachments = relative.starts_with(&format!("{}/", ATTACHMENTS_DIR_NAME));
 
     let outcome = if in_attachments {
@@ -178,12 +184,14 @@ fn classify(path: &Path, relative: String, size_bytes: u64, plan: &mut SyncPlan)
         Err(SkipReason::Unmanaged)
     };
 
-    let outcome = match outcome {
+    match outcome {
         Ok(_) if size_bytes > GITHUB_FILE_LIMIT_BYTES => Err(SkipReason::TooLarge),
         other => other,
-    };
+    }
+}
 
-    match outcome {
+fn classify(path: &Path, relative: String, size_bytes: u64, plan: &mut SyncPlan) {
+    match outcome(path, &relative, size_bytes) {
         Ok(kind) => plan.included.push(PlannedFile {
             path: relative,
             size_bytes,

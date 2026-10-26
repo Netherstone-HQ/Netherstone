@@ -56,6 +56,9 @@ pub struct BrokenLink {
     /// The shard holding the link.
     pub path: String,
     pub name: String,
+    /// Where it points, as the index stores it: a mention's shard name, or
+    /// an internal link's path.
+    pub target: String,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -337,7 +340,7 @@ pub fn get_broken_links(conn: &Connection, vault_path: &Path) -> rusqlite::Resul
         });
         // The same missing shard linked twice from one shard is one fix.
         if seen.insert((path.clone(), path_key(&target))) {
-            broken.push(BrokenLink { text, path, name });
+            broken.push(BrokenLink { text, path, name, target });
         }
     }
     Ok(broken)

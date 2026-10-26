@@ -16,6 +16,8 @@ use rusqlite::Connection;
 /// - `writing_log`: Words each shard started and ended a day with, from saves
 ///   in the editor on this device. Never synced.
 /// - `writing_log_start`: The day this device started counting for each vault
+/// - `settings`: What every Netherstone process on this device reads, like
+///   the vault opened last (see `settings.rs`)
 /// - `fts_search`: FTS5 virtual table for full-text search
 pub const SCHEMA: &str = r#"
 -- ── Files ──────────────────────────────────────────────────────────────────
@@ -174,6 +176,13 @@ CREATE INDEX IF NOT EXISTS idx_writing_log_file_path ON writing_log(file_path);
 CREATE TABLE IF NOT EXISTS writing_log_start (
     vault_path TEXT PRIMARY KEY,
     started_on TEXT NOT NULL
+);
+
+-- ── Settings ────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 -- ── Full-Text Search ────────────────────────────────────────────────────────

@@ -16,6 +16,8 @@ const version = (overrides: Partial<FileVersion>): FileVersion => ({
   time: at(0),
   kind: "edited",
   restoredFrom: null,
+  changedBy: null,
+  summary: null,
   path: "Notes/Plan.md",
   renamedFrom: null,
   device: null,
@@ -83,6 +85,13 @@ describe("describeVersion", () => {
         now,
       ),
     ).toMatch(/^Restored from .*12.*, /);
+    expect(
+      describeVersion(
+        version({ kind: "changedByApp", changedBy: "Goose" }),
+        false,
+        now,
+      ),
+    ).toBe("Changed by Goose");
   });
 });
 

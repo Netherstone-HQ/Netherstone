@@ -8,7 +8,8 @@ export type VersionKind =
   | "outsideChange"
   | "restored"
   | "synced"
-  | "renamed";
+  | "renamed"
+  | "changedByApp";
 
 /** An earlier version of a shard or drawing, from the vault's local history. */
 export type FileVersion = {
@@ -21,6 +22,9 @@ export type FileVersion = {
   kind: VersionKind;
   /** For a restored version, when the version it brought back was saved. */
   restoredFrom: number | null;
+  /** For a version an AI app made: the app, and what it said it did. */
+  changedBy: string | null;
+  summary: string | null;
   /** Its path in this version, relative to the vault. */
   path: string;
   /** The path it had before, when this version renamed or moved it. */
@@ -207,6 +211,8 @@ function describeChange(version: FileVersion, isDrawing: boolean, now: Date) {
       return "Changed outside the app";
     case "synced":
       return "Changed on another device";
+    case "changedByApp":
+      return `Changed by ${version.changedBy ?? "an AI app"}`;
     case "restored":
       return version.restoredFrom === null
         ? "Restored"

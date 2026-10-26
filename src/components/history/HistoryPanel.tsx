@@ -94,6 +94,7 @@ function VersionRow({
   time,
   device,
   detail,
+  summary,
   isCurrent,
   isPicked,
   onPick,
@@ -101,6 +102,8 @@ function VersionRow({
   time: string;
   device?: string | null;
   detail?: string;
+  /** What the AI app that made the version said it did. */
+  summary?: string | null;
   isCurrent?: boolean;
   isPicked: boolean;
   onPick: () => void;
@@ -131,6 +134,9 @@ function VersionRow({
       </span>
       {detail ? (
         <span className="text-ui-sm text-muted-foreground">{detail}</span>
+      ) : null}
+      {summary ? (
+        <span className="text-ui-sm text-muted-foreground">{summary}</span>
       ) : null}
     </button>
   );
@@ -255,6 +261,7 @@ export function HistoryPanel({
                     ? undefined
                     : describeVersion(current, isDrawing)
                 }
+                summary={current?.summary}
                 isCurrent
                 isPicked={picked === null}
                 onPick={() => pickVersion(null)}
@@ -272,6 +279,7 @@ export function HistoryPanel({
                   time={formatTime(version.time)}
                   device={showsDevices ? version.device : null}
                   detail={describeVersion(version, isDrawing)}
+                  summary={version.summary}
                   isPicked={picked?.id === version.id}
                   onPick={() => pickVersion(version)}
                 />

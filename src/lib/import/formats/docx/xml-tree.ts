@@ -105,156 +105,246 @@ const isSpace = (code: number) => code === 32 || code === 9 || code === 10 || co
 type Scope = Record<string, string>;
 
 export function parseXml(source: string): XmlDocument {
-  try {
-    return parse(source);
-  } catch (error) {
-    if (error instanceof Damaged) throw error;
+  const parser = new Parser(source, true, () => false);
+  parser.next();
+  return parser.document;
+}
+
+/** Refuses `source` if it isn't well-formed, without building anything. */
+export function checkXml(source: string) {
+  new Parser(source, false, () => false).next();
+}
+
+/**
+ * Reads `source` a piece at a time. The children of the element `split`
+ * picks come from `next` one by one as each ends, and never join the tree,
+ * so a long document is never in memory whole. `split` is asked once for
+ * each element as it starts, `depth` 0 being the root.
+ */
+export class XmlStream {
+  private readonly parser: Parser;
+
+  constructor(source: string, split: (element: XmlElement, depth: number) => boolean) {
+    this.parser = new Parser(source, true, split);
+  }
+
+  /** The next child of a split element, or `null` at the end. */
+  next(): XmlElement | null {
+    return this.parser.next();
+  }
+}
+
+class Parser {
+  private at: number;
+  private readonly names: string[] = [];
+  /** Open elements; only when building. */
+  private readonly open: XmlElement[] = [];
+  /** Whether each open element hands its children out. */
+  private readonly splits: boolean[] = [];
+  private readonly scopes: Scope[] = [];
+  private scope: Scope = Object.assign(Object.create(null) as Scope, { xml: XML_NAMESPACE, xmlns: XMLNS_NAMESPACE, "": "" });
+  private root: XmlElement | null = null;
+  private hasRoot = false;
+  private ended = false;
+
+  constructor(
+    private readonly source: string,
+    private readonly build: boolean,
+    private readonly split: (element: XmlElement, depth: number) => boolean,
+  ) {
+    this.at = source.charCodeAt(0) === 0xfeff ? 1 : 0;
+  }
+
+  get document(): XmlDocument {
+    if (!this.ended || !this.root) throw new Error("The XML hasn't been read to the end.");
+    return { documentElement: this.root };
+  }
+
+  next(): XmlElement | null {
+    try {
+      return this.read();
+    } catch (error) {
+      if (error instanceof Damaged) throw error;
+      throw new Damaged();
+    }
+  }
+
+  private read(): XmlElement | null {
+    const { source, names, open, splits, build } = this;
+    const length = source.length;
+    let at = this.at;
+
+    while (at < length) {
+      const lt = source.indexOf("<", at);
+      const textEnd = lt < 0 ? length : lt;
+      if (textEnd > at) {
+        const raw = source.slice(at, textEnd);
+        if (!names.length) {
+          if (raw.trim()) throw new Damaged();
+        } else if (build && !splits[splits.length - 1]) {
+          open[open.length - 1].append(new XmlText(3, decodeEntities(lineEnds(raw))));
+        } else {
+          // Only checked: text right inside a split element isn't kept.
+          decodeEntities(raw);
+        }
+      }
+      if (lt < 0) break;
+
+      const next = source.charCodeAt(lt + 1);
+      if (next === 63 /* ? */) {
+        const end = source.indexOf("?>", lt + 2);
+        if (end < 0) throw new Damaged();
+        at = end + 2;
+        continue;
+      }
+      if (next === 33 /* ! */) {
+        at = this.skipMarkup(lt);
+        continue;
+      }
+      if (next === 47 /* / */) {
+        const end = source.indexOf(">", lt + 2);
+        if (end < 0) throw new Damaged();
+        const name = names.pop();
+        if (name === undefined || name !== source.slice(lt + 2, end).trimEnd()) throw new Damaged();
+        splits.pop();
+        this.scope = this.scopes.pop()!;
+        at = end + 1;
+        if (build) {
+          const element = open.pop()!;
+          if (splits[splits.length - 1]) {
+            this.at = at;
+            return element;
+          }
+        }
+        continue;
+      }
+
+      // A start tag: its name, then attributes up to `>` or `/>`.
+      let position = lt + 1;
+      while (position < length) {
+        const code = source.charCodeAt(position);
+        if (isSpace(code) || code === 47 || code === 62) break;
+        position += 1;
+      }
+      const tagName = source.slice(lt + 1, position);
+      if (!tagName) throw new Damaged();
+      const written: [string, string][] = [];
+      let empty = false;
+      for (;;) {
+        while (position < length && isSpace(source.charCodeAt(position))) position += 1;
+        const code = source.charCodeAt(position);
+        if (position >= length) throw new Damaged();
+        if (code === 62) {
+          position += 1;
+          break;
+        }
+        if (code === 47) {
+          if (source.charCodeAt(position + 1) !== 62) throw new Damaged();
+          empty = true;
+          position += 2;
+          break;
+        }
+        const equals = source.indexOf("=", position);
+        if (equals < 0) throw new Damaged();
+        const name = source.slice(position, equals).trimEnd();
+        if (!name || /[\s<>"'/]/.test(name)) throw new Damaged();
+        let quoteAt = equals + 1;
+        while (quoteAt < length && isSpace(source.charCodeAt(quoteAt))) quoteAt += 1;
+        const quote = source[quoteAt];
+        if (quote !== '"' && quote !== "'") throw new Damaged();
+        const close = source.indexOf(quote, quoteAt + 1);
+        if (close < 0) throw new Damaged();
+        const raw = source.slice(quoteAt + 1, close);
+        if (raw.includes("<")) throw new Damaged();
+        // Attribute values have their white space turned into spaces.
+        written.push([name, decodeEntities(lineEnds(raw).replace(/[\t\n]/g, " "))]);
+        position = close + 1;
+        const after = source.charCodeAt(position);
+        if (!isSpace(after) && after !== 47 && after !== 62) throw new Damaged();
+      }
+
+      const parentScope = this.scope;
+      let scope = parentScope;
+      for (const [name, value] of written) {
+        if (name !== "xmlns" && !name.startsWith("xmlns:")) continue;
+        if (scope === parentScope) scope = Object.create(scope) as Scope;
+        scope[name === "xmlns" ? "" : name.slice(6)] = value;
+      }
+      const seen = new Set<string>();
+      const attributes = written.map(([name, value]): XmlAttribute => {
+        if (seen.has(name)) throw new Damaged();
+        seen.add(name);
+        if (name === "xmlns") return { name, uri: XMLNS_NAMESPACE, local: name, value };
+        const colon = name.indexOf(":");
+        if (colon < 0) return { name, uri: "", local: name, value };
+        const uri = scope[name.slice(0, colon)];
+        if (uri === undefined) throw new Damaged();
+        return { name, uri, local: name.slice(colon + 1), value };
+      });
+      const colon = tagName.indexOf(":");
+      const uri = scope[colon < 0 ? "" : tagName.slice(0, colon)];
+      if (uri === undefined) throw new Damaged();
+
+      if (!names.length) {
+        if (this.hasRoot) throw new Damaged();
+        this.hasRoot = true;
+      }
+      let splitting = false;
+      let element: XmlElement | null = null;
+      if (build) {
+        element = new XmlElement(tagName, colon < 0 ? tagName : tagName.slice(colon + 1), uri || null, attributes);
+        const handedOut = splits[splits.length - 1];
+        if (!names.length) this.root = element;
+        else if (!handedOut) open[open.length - 1].append(element);
+        splitting = this.split(element, names.length);
+      }
+      at = position;
+      if (empty) {
+        if (build && splits[splits.length - 1]) {
+          this.at = at;
+          return element;
+        }
+        continue;
+      }
+      names.push(tagName);
+      splits.push(splitting);
+      this.scopes.push(parentScope);
+      this.scope = scope;
+      if (build) open.push(element!);
+    }
+
+    if (names.length || !this.hasRoot) throw new Damaged();
+    this.at = length;
+    this.ended = true;
+    return null;
+  }
+
+  /** Skips a comment or the doctype, or reads a CDATA section; returns where it ends. */
+  private skipMarkup(lt: number) {
+    const { source } = this;
+    if (source.startsWith("!--", lt + 1)) {
+      const end = source.indexOf("-->", lt + 4);
+      if (end < 0) throw new Damaged();
+      return end + 3;
+    }
+    if (source.startsWith("![CDATA[", lt + 1)) {
+      const end = source.indexOf("]]>", lt + 9);
+      if (end < 0 || !this.names.length) throw new Damaged();
+      if (this.build && !this.splits[this.splits.length - 1]) {
+        this.open[this.open.length - 1].append(new XmlText(4, lineEnds(source.slice(lt + 9, end))));
+      }
+      return end + 3;
+    }
+    if (source.startsWith("!DOCTYPE", lt + 1) && !this.hasRoot) {
+      // Declarations inside `[...]` are skipped; entities they declare stay unknown.
+      let depth = 0;
+      for (let position = lt + 9; position < source.length; position += 1) {
+        const char = source[position];
+        if (char === "[") depth += 1;
+        else if (char === "]") depth -= 1;
+        else if (char === ">" && depth === 0) return position + 1;
+      }
+    }
     throw new Damaged();
   }
-}
-
-function parse(source: string): XmlDocument {
-  const open: XmlElement[] = [];
-  const scopes: Scope[] = [];
-  let scope: Scope = Object.assign(Object.create(null) as Scope, { xml: XML_NAMESPACE, xmlns: XMLNS_NAMESPACE, "": "" });
-  let root: XmlElement | null = null;
-  const length = source.length;
-  let at = source.charCodeAt(0) === 0xfeff ? 1 : 0;
-
-  while (at < length) {
-    const lt = source.indexOf("<", at);
-    const textEnd = lt < 0 ? length : lt;
-    if (textEnd > at) {
-      const raw = source.slice(at, textEnd);
-      const parent = open[open.length - 1];
-      if (parent) parent.append(new XmlText(3, decodeEntities(lineEnds(raw))));
-      else if (raw.trim()) throw new Damaged();
-    }
-    if (lt < 0) break;
-
-    const next = source.charCodeAt(lt + 1);
-    if (next === 63 /* ? */) {
-      const end = source.indexOf("?>", lt + 2);
-      if (end < 0) throw new Damaged();
-      at = end + 2;
-      continue;
-    }
-    if (next === 33 /* ! */) {
-      at = skipMarkup(source, lt, open, root === null);
-      continue;
-    }
-    if (next === 47 /* / */) {
-      const end = source.indexOf(">", lt + 2);
-      if (end < 0) throw new Damaged();
-      const element = open.pop();
-      if (!element || element.tagName !== source.slice(lt + 2, end).trimEnd()) throw new Damaged();
-      scope = scopes.pop()!;
-      at = end + 1;
-      continue;
-    }
-
-    // A start tag: its name, then attributes up to `>` or `/>`.
-    let position = lt + 1;
-    while (position < length) {
-      const code = source.charCodeAt(position);
-      if (isSpace(code) || code === 47 || code === 62) break;
-      position += 1;
-    }
-    const tagName = source.slice(lt + 1, position);
-    if (!tagName) throw new Damaged();
-    const written: [string, string][] = [];
-    let empty = false;
-    for (;;) {
-      while (position < length && isSpace(source.charCodeAt(position))) position += 1;
-      const code = source.charCodeAt(position);
-      if (position >= length) throw new Damaged();
-      if (code === 62) {
-        position += 1;
-        break;
-      }
-      if (code === 47) {
-        if (source.charCodeAt(position + 1) !== 62) throw new Damaged();
-        empty = true;
-        position += 2;
-        break;
-      }
-      const equals = source.indexOf("=", position);
-      if (equals < 0) throw new Damaged();
-      const name = source.slice(position, equals).trimEnd();
-      if (!name || /[\s<>"'/]/.test(name)) throw new Damaged();
-      let quoteAt = equals + 1;
-      while (quoteAt < length && isSpace(source.charCodeAt(quoteAt))) quoteAt += 1;
-      const quote = source[quoteAt];
-      if (quote !== '"' && quote !== "'") throw new Damaged();
-      const close = source.indexOf(quote, quoteAt + 1);
-      if (close < 0) throw new Damaged();
-      const raw = source.slice(quoteAt + 1, close);
-      if (raw.includes("<")) throw new Damaged();
-      // Attribute values have their white space turned into spaces.
-      written.push([name, decodeEntities(lineEnds(raw).replace(/[\t\n]/g, " "))]);
-      position = close + 1;
-      const after = source.charCodeAt(position);
-      if (!isSpace(after) && after !== 47 && after !== 62) throw new Damaged();
-    }
-
-    scopes.push(scope);
-    for (const [name, value] of written) {
-      if (name !== "xmlns" && !name.startsWith("xmlns:")) continue;
-      if (scope === scopes[scopes.length - 1]) scope = Object.create(scope) as Scope;
-      scope[name === "xmlns" ? "" : name.slice(6)] = value;
-    }
-    const names = new Set<string>();
-    const attributes = written.map(([name, value]): XmlAttribute => {
-      if (names.has(name)) throw new Damaged();
-      names.add(name);
-      if (name === "xmlns") return { name, uri: XMLNS_NAMESPACE, local: name, value };
-      const colon = name.indexOf(":");
-      if (colon < 0) return { name, uri: "", local: name, value };
-      const uri = scope[name.slice(0, colon)];
-      if (uri === undefined) throw new Damaged();
-      return { name, uri, local: name.slice(colon + 1), value };
-    });
-    const colon = tagName.indexOf(":");
-    const uri = scope[colon < 0 ? "" : tagName.slice(0, colon)];
-    if (uri === undefined) throw new Damaged();
-    const element = new XmlElement(tagName, colon < 0 ? tagName : tagName.slice(colon + 1), uri || null, attributes);
-
-    const parent = open[open.length - 1];
-    if (parent) parent.append(element);
-    else if (root) throw new Damaged();
-    else root = element;
-    if (empty) scope = scopes.pop()!;
-    else open.push(element);
-    at = position;
-  }
-
-  if (open.length || !root) throw new Damaged();
-  return { documentElement: root };
-}
-
-/** Skips a comment or the doctype, or reads a CDATA section; returns where it ends. */
-function skipMarkup(source: string, lt: number, open: XmlElement[], beforeRoot: boolean) {
-  if (source.startsWith("!--", lt + 1)) {
-    const end = source.indexOf("-->", lt + 4);
-    if (end < 0) throw new Damaged();
-    return end + 3;
-  }
-  if (source.startsWith("![CDATA[", lt + 1)) {
-    const end = source.indexOf("]]>", lt + 9);
-    const parent = open[open.length - 1];
-    if (end < 0 || !parent) throw new Damaged();
-    parent.append(new XmlText(4, lineEnds(source.slice(lt + 9, end))));
-    return end + 3;
-  }
-  if (source.startsWith("!DOCTYPE", lt + 1) && beforeRoot) {
-    // Declarations inside `[...]` are skipped; entities they declare stay unknown.
-    let depth = 0;
-    for (let position = lt + 9; position < source.length; position += 1) {
-      const char = source[position];
-      if (char === "[") depth += 1;
-      else if (char === "]") depth -= 1;
-      else if (char === ">" && depth === 0) return position + 1;
-    }
-  }
-  throw new Damaged();
 }

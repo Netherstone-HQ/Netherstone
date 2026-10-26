@@ -106,7 +106,9 @@ export class DocxReader {
   private readonly noteOrder: { id: string; number: number }[] = [];
   private readonly listCounters = new Map<string, number[]>();
   private tocDone = false;
-  private headingOffset = 0;
+  private hasTitle = false;
+  /** Headings below the Title, with their level before the Title is known. */
+  private readonly headings: { node: PlateNode; level: number }[] = [];
   private pictureCount = 0;
   private oldPictures = 0;
   private charts = 0;
@@ -119,19 +121,35 @@ export class DocxReader {
     private readonly context: ReaderContext,
   ) {}
 
-  async read(body: XmlElement): Promise<PlateNode[]> {
-    // A document with a Title has it as its one top heading; its Heading 1s
-    // sit a level under it.
-    this.headingOffset = descendants(body, "w", "pStyle").some(
-      (element) => this.parts.styles.paragraphStyle(attr(element, "w", "val")).kind === "title",
-    )
-      ? 1
-      : 0;
+  /**
+   * Reads the body's blocks as they come, one at a time, so only the block
+   * being read is in memory, not the whole document.
+   */
+  async read(blocks: Iterable<XmlElement>): Promise<PlateNode[]> {
     const out: PlateNode[] = [];
-    await this.blocks(elements(body), out, false);
+    // Contents entries are held back until their run ends, so `blocks` can
+    // tell a contents list from a lone link.
+    const entries: XmlElement[] = [];
+    for (const node of blocks) {
+      if (!this.hasTitle) this.hasTitle = this.findTitle(node);
+      entries.push(node);
+      if (isContentsEntry(node)) continue;
+      await this.blocks(entries, out, false);
+      entries.length = 0;
+    }
+    await this.blocks(entries, out, false);
+    // A document with a Title has it as its one top heading; its Heading 1s
+    // sit a level under it. The Title can come anywhere, so the levels are
+    // only known at the end.
+    if (this.hasTitle) for (const { node, level } of this.headings) node.type = heading(level + 1, []).type;
     await this.appendNotes(out);
     this.warnings();
     return out;
+  }
+
+  private findTitle(element: XmlElement): boolean {
+    if (is(element, "w", "pStyle")) return this.parts.styles.paragraphStyle(attr(element, "w", "val")).kind === "title";
+    return elements(element).some((inner) => this.findTitle(inner));
   }
 
   private warnings() {
@@ -273,8 +291,13 @@ export class DocxReader {
 
     if (style.headingLevel !== null) {
       this.lastQuote = null;
-      const level = style.kind === "title" ? 1 : style.headingLevel + this.headingOffset;
-      out.push(inCell ? paragraph(spaced.map((node) => (typeof node.text === "string" ? { ...node, bold: true } : node))) : heading(level, spaced, { align }));
+      if (inCell) {
+        out.push(paragraph(spaced.map((node) => (typeof node.text === "string" ? { ...node, bold: true } : node))));
+        return;
+      }
+      const node = heading(style.kind === "title" ? 1 : style.headingLevel, spaced, { align });
+      if (style.kind !== "title") this.headings.push({ node, level: style.headingLevel });
+      out.push(node);
       return;
     }
 

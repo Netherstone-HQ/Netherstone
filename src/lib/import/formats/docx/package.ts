@@ -3,8 +3,8 @@ import JSZip from "jszip";
 import { ImportError, type PlateNode } from "../../types";
 import { DocxReader, resolvePart, type ReaderContext, type Relationship } from "./reader";
 import { Numbering, Styles } from "./styles";
-import { attr, child, elements, is } from "./xml";
-import { parseXml, type XmlElement } from "./xml-tree";
+import { attr, elements, is } from "./xml";
+import { checkXml, parseXml, XmlStream, type XmlElement } from "./xml-tree";
 
 const RELATIONSHIP_TYPES = {
   document: /\/officeDocument$/,
@@ -13,6 +13,8 @@ const RELATIONSHIP_TYPES = {
   footnotes: /\/footnotes$/,
   endnotes: /\/endnotes$/,
 };
+
+const NO_TEXT = "This Word document has no text in it.";
 
 /** Reads a Word package, `name` being its file name without extension. */
 export async function readWordPackage(bytes: Uint8Array, name: string, context: ReaderContext): Promise<PlateNode[]> {
@@ -45,9 +47,19 @@ export async function readWordPackage(bytes: Uint8Array, name: string, context: 
   const packageRelationships = await relationshipsOf("");
   const main = [...packageRelationships.values()].find((rel) => RELATIONSHIP_TYPES.document.test(rel.type));
   const documentPath = main ? resolvePart("", main.target) : "word/document.xml";
-  const document = await readXml(documentPath);
-  const body = child(document?.documentElement, "w", "body");
-  if (!body) throw new ImportError("This Word document has no text in it.");
+  // The main document is read a block at a time; checking it first keeps a
+  // damaged one from storing pictures before it fails.
+  const source = await zip.file(documentPath)?.async("string");
+  if (source === undefined) throw new ImportError(NO_TEXT);
+  checkXml(source);
+  let hasBody = false;
+  const stream = new XmlStream(source, (element, depth) => {
+    if (hasBody || depth !== 1 || !is(element, "w", "body")) return false;
+    hasBody = true;
+    return true;
+  });
+  const first = stream.next();
+  if (!hasBody) throw new ImportError(NO_TEXT);
 
   const base = documentPath.slice(0, documentPath.lastIndexOf("/") + 1);
   const relationships = await relationshipsOf(documentPath);
@@ -81,5 +93,9 @@ export async function readWordPackage(bytes: Uint8Array, name: string, context: 
     },
     context,
   );
-  return reader.read(body);
+  return reader.read(blocksOf(first, stream));
+}
+
+function* blocksOf(first: XmlElement | null, stream: XmlStream) {
+  for (let block = first; block; block = stream.next()) yield block;
 }

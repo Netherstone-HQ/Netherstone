@@ -101,6 +101,16 @@ pub fn has_vault_marker(folder: &Path) -> bool {
     read_vault_id(folder).is_some()
 }
 
+/// True when `path`, in the vault at `root`, is in another vault inside it:
+/// `path` or a folder between it and `root` holds a vault's marker.
+pub fn crosses_into_another_vault(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root).is_ok_and(|_| {
+        path.ancestors()
+            .take_while(|folder| *folder != root)
+            .any(has_vault_marker)
+    })
+}
+
 fn read_vault_id(vault_path: &Path) -> Option<String> {
     let id = std::fs::read_to_string(vault_id_path(vault_path)).ok()?;
     let id = id.trim();

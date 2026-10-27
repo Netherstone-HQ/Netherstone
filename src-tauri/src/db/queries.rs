@@ -643,6 +643,35 @@ mod tests {
     }
 
     #[test]
+    fn a_vault_inside_another_keeps_its_own_rows() {
+        let dir = crate::sync::state::tests::temp_dir("index-nested-vault");
+        let (outer, inner) = (dir.join("Outer"), dir.join("Outer/Inner"));
+        std::fs::create_dir_all(&inner).unwrap();
+        crate::sync::state::load_or_create_record(&dir.join("sync"), &inner).unwrap();
+        std::fs::write(outer.join("Plan.md"), "Outer plan").unwrap();
+        std::fs::write(inner.join("Plan.md"), "Inner plan").unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        let paths = |vault: &Path| -> Vec<String> {
+            search_files(&conn, vault, "plan", 20)
+                .unwrap()
+                .into_iter()
+                .map(|r| r.path)
+                .collect()
+        };
+
+        crate::db::indexer::index_vault(&conn, &outer).unwrap();
+        crate::db::indexer::index_file(&conn, &outer, &inner.join("Plan.md")).unwrap();
+        crate::db::indexer::index_vault(&conn, &inner).unwrap();
+        assert_eq!(paths(&outer), [outer.join("Plan.md").to_string_lossy()]);
+        assert_eq!(paths(&inner), [inner.join("Plan.md").to_string_lossy()]);
+
+        // Indexing the outer vault again leaves the inner one's rows alone.
+        crate::db::indexer::index_vault(&conn, &outer).unwrap();
+        assert_eq!(paths(&inner), [inner.join("Plan.md").to_string_lossy()]);
+    }
+
+    #[test]
     fn keeps_each_vaults_rows_apart() {
         let root =
             std::env::temp_dir().join(format!("netherstone-two-vaults-{}", std::process::id()));

@@ -34,7 +34,7 @@ fn index_change(conn: &rusqlite::Connection, root: &Path, folders: &mut FolderTr
     } else if folders.observe(path) {
         if path.is_dir() {
             let mut shards = Vec::new();
-            for node in &crate::vault::scan_dir(path) {
+            for node in &crate::vault::scan_own_dir(path) {
                 crate::vault::collect_file_paths(node, &mut shards);
             }
             for shard in shards {

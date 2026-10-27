@@ -165,19 +165,28 @@ fn read_shard(file_path: &Path) -> Result<ShardFile, String> {
 /// 3. Insert/update file record
 /// 4. Insert extracted metadata (links, tags, drawing embeds)
 /// 5. Update FTS5 search index
+///
+/// A shard in another vault inside this one is that vault's, so it's left out.
 pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Result<(), String> {
+    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
+        return Ok(());
+    }
     store_shard(conn, vault_path, file_path, read_shard(file_path)?)
 }
 
 /// Indexes the file at `file_path` unless the index already holds this
 /// content for it in the vault at `vault_path`, as when another process
 /// (the app, or another AI app's server) indexed the same save first.
-/// Returns whether it wrote anything.
+/// Returns whether it wrote anything. Like [`index_file`], it leaves out a
+/// shard in another vault inside this one.
 pub fn index_file_if_changed(
     conn: &Connection,
     vault_path: &Path,
     file_path: &Path,
 ) -> Result<bool, String> {
+    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
+        return Ok(false);
+    }
     let path_str = file_path
         .to_str()
         .ok_or_else(|| "Invalid file path".to_string())?;
@@ -447,14 +456,15 @@ pub struct VaultIndexed {
 }
 
 /// Indexes the shards of the vault at `vault_path` that changed since they
-/// were last indexed, and forgets the ones that are gone.
+/// were last indexed, and forgets the ones that are gone or belong to another
+/// vault inside it.
 pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed, String> {
     if !vault_path.is_dir() {
         return Err(format!("Vault path is not a directory: {}", vault_path.display()));
     }
 
     let mut paths = Vec::new();
-    for node in &crate::vault::scan_dir(vault_path) {
+    for node in &crate::vault::scan_own_dir(vault_path) {
         crate::vault::collect_file_paths(node, &mut paths);
     }
 

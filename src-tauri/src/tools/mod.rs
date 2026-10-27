@@ -61,9 +61,9 @@ pub type ToolResult<T> = Result<T, ToolError>;
 
 impl Vault {
     /// The file or folder at `relative` in the vault. Refuses paths that
-    /// leave the vault, by `..`, from the root, or through a link, and the
+    /// leave the vault, by `..`, from the root, or through a link, the
     /// folders the vault tree hides (`vault::is_scanned_name`), by any name
-    /// that leads there.
+    /// that leads there, and other vaults inside this one.
     pub fn resolve(&self, relative: &str) -> ToolResult<PathBuf> {
         let trimmed = relative.trim().trim_start_matches("./");
         let path = Path::new(trimmed);
@@ -95,7 +95,19 @@ impl Vault {
         if !crate::vault::is_scanned_path(&root, &real) {
             return Err(not_in_vault());
         }
+        if crate::sync::state::crosses_into_another_vault(&root, &real) {
+            return Err(ToolError(format!("'{}' is in another vault inside this one", relative)));
+        }
         Ok(full)
+    }
+
+    /// Whether `target`, a path as the index stores it, is a file in the
+    /// vault. Anything outside it counts as not there.
+    pub fn has_file(&self, target: &str) -> bool {
+        let path = Path::new(target);
+        path.is_absolute()
+            && crate::vault_access::is_within(&self.root, path)
+            && self.resolve(&self.relative(path)).is_ok_and(|path| path.is_file())
     }
 
     /// `relative`, which must be a shard (`.md`) that exists.
@@ -289,6 +301,34 @@ pub(crate) mod tests {
         for hidden in ["GIT~1", "GIT~1/config", "Pictures/Trip.jpg"] {
             assert!(vault.resolve(hidden).is_err(), "{hidden}");
         }
+    }
+
+    #[test]
+    fn other_vaults_inside_stay_out() {
+        let vault = vault("tools-resolve-nested");
+        let inner = vault.root.join("Inner");
+        std::fs::create_dir_all(inner.join("Notes")).unwrap();
+        std::fs::write(inner.join("Notes/Plan.md"), "Inner plan").unwrap();
+        crate::sync::state::load_or_create_record(&vault.sync_root, &inner).unwrap();
+
+        for nested in ["Inner", "Inner/Notes/Plan.md", "Inner/Notes/New.md"] {
+            assert!(vault.resolve(nested).is_err(), "{nested}");
+        }
+        assert!(!vault.has_file(&inner.join("Notes/Plan.md").to_string_lossy()));
+        assert!(vault.resolve("Other/Plan.md").is_ok());
+    }
+
+    #[test]
+    fn only_files_in_the_vault_are_there() {
+        let vault = vault("tools-has-file");
+        let shard = vault.root.join("Plan.md");
+        std::fs::write(&shard, "The plan").unwrap();
+        let outside = vault.root.parent().unwrap().join("Outside.md");
+        std::fs::write(&outside, "Not in the vault").unwrap();
+
+        assert!(vault.has_file(&shard.to_string_lossy()));
+        assert!(!vault.has_file(&outside.to_string_lossy()));
+        assert!(!vault.has_file("Plan.md"));
     }
 
     #[test]

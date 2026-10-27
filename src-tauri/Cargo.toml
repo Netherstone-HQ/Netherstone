@@ -46,6 +46,10 @@ rmcp = { version = "3.7", default-features = false, features = ["server", "trans
 schemars = "1"
 # Goose keeps its MCP servers in YAML.
 serde_yaml_ng = "0.10"
+# Connect edits only its own entry in AI apps' JSON(C) and YAML settings,
+# keeping the rest of the file as the user wrote it.
+jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
+yaml-edit = { version = "0.3", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

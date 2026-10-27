@@ -48,7 +48,9 @@ import {
   useMarkToolbarButtonState,
 } from "platejs/react";
 
-import { formatKeys, withShortcut } from "@/lib/platform";
+import { useShortcutKeys } from "@/hooks/useShortcut";
+import { keysText } from "@/lib/platform";
+import type { ShortcutId } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
 import { AlignToolbarButton } from "./align-toolbar-button";
@@ -87,7 +89,7 @@ import { TurnIntoToolbarButton } from "./turn-into-toolbar-button";
 /** A ⋯ menu row for a toolbar button: same action, with a label and shortcut. */
 function MenuRow({
   icon,
-  keys,
+  shortcut,
   label,
   onClick,
   pressed,
@@ -95,9 +97,10 @@ function MenuRow({
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  keys?: string;
+  shortcut?: ShortcutId;
   pressed?: boolean;
 }) {
+  const keys = useShortcutKeys(shortcut);
   return (
     <DropdownMenuItem
       className={cn(pressed && "bg-accent text-accent-foreground")}
@@ -107,7 +110,7 @@ function MenuRow({
       {label}
       {keys && (
         <DropdownMenuShortcut className="pl-6 tracking-normal">
-          {formatKeys(keys).join("+")}
+          {keysText(keys)}
         </DropdownMenuShortcut>
       )}
     </DropdownMenuItem>
@@ -141,14 +144,14 @@ function ExtraMarkRows() {
         clear={KEYS.sub}
         icon={<SuperscriptIcon />}
         label="Superscript"
-        keys="mod+period"
+        shortcut="superscript"
       />
       <MarkMenuRow
         nodeType={KEYS.sub}
         clear={KEYS.sup}
         icon={<SubscriptIcon />}
         label="Subscript"
-        keys="mod+comma"
+        shortcut="subscript"
       />
     </>
   );
@@ -257,37 +260,43 @@ const GROUPS: { key: string; content: React.ReactNode; menu: React.ReactNode }[]
         <>
           <MarkToolbarButton
             nodeType={KEYS.bold}
-            tooltip={withShortcut("Bold", "mod+b")}
+            tooltip="Bold"
+            shortcut="bold"
           >
             <BoldIcon />
           </MarkToolbarButton>
           <MarkToolbarButton
             nodeType={KEYS.italic}
-            tooltip={withShortcut("Italic", "mod+i")}
+            tooltip="Italic"
+            shortcut="italic"
           >
             <ItalicIcon />
           </MarkToolbarButton>
           <MarkToolbarButton
             nodeType={KEYS.underline}
-            tooltip={withShortcut("Underline", "mod+u")}
+            tooltip="Underline"
+            shortcut="underline"
           >
             <UnderlineIcon />
           </MarkToolbarButton>
           <MarkToolbarButton
             nodeType={KEYS.strikethrough}
-            tooltip={withShortcut("Strikethrough", "mod+shift+x")}
+            tooltip="Strikethrough"
+            shortcut="strikethrough"
           >
             <StrikethroughIcon />
           </MarkToolbarButton>
           <MarkToolbarButton
             nodeType={KEYS.code}
-            tooltip={withShortcut("Code", "mod+e")}
+            tooltip="Code"
+            shortcut="code"
           >
             <Code2Icon />
           </MarkToolbarButton>
           <MarkToolbarButton
             nodeType={KEYS.highlight}
-            tooltip={withShortcut("Highlight", "mod+shift+h")}
+            tooltip="Highlight"
+            shortcut="highlight"
           >
             <HighlighterIcon />
           </MarkToolbarButton>
@@ -308,38 +317,38 @@ const GROUPS: { key: string; content: React.ReactNode; menu: React.ReactNode }[]
             nodeType={KEYS.bold}
             icon={<BoldIcon />}
             label="Bold"
-            keys="mod+b"
+            shortcut="bold"
           />
           <MarkMenuRow
             nodeType={KEYS.italic}
             icon={<ItalicIcon />}
             label="Italic"
-            keys="mod+i"
+            shortcut="italic"
           />
           <MarkMenuRow
             nodeType={KEYS.underline}
             icon={<UnderlineIcon />}
             label="Underline"
-            keys="mod+u"
+            shortcut="underline"
           />
           <MarkMenuRow
             nodeType={KEYS.strikethrough}
             icon={<StrikethroughIcon />}
             label="Strikethrough"
-            keys="mod+shift+x"
+            shortcut="strikethrough"
           />
           <MarkMenuRow
             nodeType={KEYS.code}
             icon={<Code2Icon />}
             label="Code"
-            keys="mod+e"
+            shortcut="code"
           />
           <ExtraMarkRows />
           <MarkMenuRow
             nodeType={KEYS.highlight}
             icon={<HighlighterIcon />}
             label="Highlight"
-            keys="mod+shift+h"
+            shortcut="highlight"
           />
           <FontColorToolbarButton
             nodeType={KEYS.color}

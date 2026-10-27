@@ -10,8 +10,6 @@ import {
 import { KEYS } from 'platejs';
 import { useEditorReadOnly } from 'platejs/react';
 
-import { withShortcut } from '@/lib/platform';
-
 import { LinkToolbarButton } from './link-toolbar-button';
 import { MarkToolbarButton } from './mark-toolbar-button';
 import { ToolbarGroup } from './toolbar';
@@ -26,23 +24,23 @@ export function FloatingToolbarButtons() {
         <ToolbarGroup>
           <TurnIntoToolbarButton />
 
-          <MarkToolbarButton nodeType={KEYS.bold} tooltip={withShortcut("Bold", "mod+b")}>
+          <MarkToolbarButton nodeType={KEYS.bold} tooltip="Bold" shortcut="bold">
             <BoldIcon />
           </MarkToolbarButton>
 
-          <MarkToolbarButton nodeType={KEYS.italic} tooltip={withShortcut("Italic", "mod+i")}>
+          <MarkToolbarButton nodeType={KEYS.italic} tooltip="Italic" shortcut="italic">
             <ItalicIcon />
           </MarkToolbarButton>
 
-          <MarkToolbarButton nodeType={KEYS.underline} tooltip={withShortcut("Underline", "mod+u")}>
+          <MarkToolbarButton nodeType={KEYS.underline} tooltip="Underline" shortcut="underline">
             <UnderlineIcon />
           </MarkToolbarButton>
 
-          <MarkToolbarButton nodeType={KEYS.strikethrough} tooltip={withShortcut("Strikethrough", "mod+shift+x")}>
+          <MarkToolbarButton nodeType={KEYS.strikethrough} tooltip="Strikethrough" shortcut="strikethrough">
             <StrikethroughIcon />
           </MarkToolbarButton>
 
-          <MarkToolbarButton nodeType={KEYS.code} tooltip={withShortcut("Code", "mod+e")}>
+          <MarkToolbarButton nodeType={KEYS.code} tooltip="Code" shortcut="code">
             <Code2Icon />
           </MarkToolbarButton>
 

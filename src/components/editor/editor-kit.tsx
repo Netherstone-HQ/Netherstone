@@ -23,6 +23,7 @@ import { MediaKit } from "./kits/media-kit";
 import { MentionKit } from "./kits/mention-kit";
 import { RawBlockKit } from "./kits/raw-block-kit";
 import { ShardLinkKit } from "./kits/shard-link-kit";
+import { ShortcutsKit } from "./kits/shortcuts-kit";
 import { SlashKit } from "./kits/slash-kit";
 import { TableKit } from "./kits/table-kit";
 import { TocKit } from "./kits/toc-kit";
@@ -32,6 +33,7 @@ import { TrailingLineKit } from "./kits/trailing-line-kit";
 import { AutoformatKit } from "./kits/autoformat-kit";
 
 export const EditorKit = [
+  ...ShortcutsKit, // first, so its keys run before other key handling
   ...AlignKit,
   ...AutoformatKit, // enables markdown formatting
   ...BasicBlocksKit, // for headings, blockquote and diviers

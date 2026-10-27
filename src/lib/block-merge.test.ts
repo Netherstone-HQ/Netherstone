@@ -123,6 +123,15 @@ describe("mergeHunks", () => {
     expect(mergeHunks([hunk(2, 5)], [hunk(3, 3, 1)], never)).toBeNull();
   });
 
+  it("merges a removed block next to an edit, and refuses one inside it", () => {
+    // Theirs removes block 3; ours changes block 2.
+    expect(mergeHunks([hunk(2, 3)], [hunk(3, 4, 0)], never)).toEqual([
+      { hunk: hunk(3, 4, 0), start: 3 },
+    ]);
+    // Ours removed blocks 2 to 4; theirs changes block 3.
+    expect(mergeHunks([hunk(2, 5, 0)], [hunk(3, 4)], never)).toBeNull();
+  });
+
   it("refuses blocks added at the same place", () => {
     expect(mergeHunks([hunk(2, 2, 1)], [hunk(2, 2, 1)], never)).toBeNull();
   });
@@ -192,6 +201,29 @@ describe("rebaseHistory", () => {
     expect(texts(editor)).toEqual(["One1", "Outside", "Three"]);
     editor.undo();
     expect(texts(editor)).toEqual(["One1", "Outside", "Three"]);
+  });
+
+  it("keeps redo working around blocks changed outside", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n");
+    type(editor, 0, "!");
+    type(editor, 2, "?");
+    editor.undo();
+    editor.undo();
+    replace(editor, 1, 2, "Outside\n");
+
+    editor.redo();
+    editor.redo();
+    expect(texts(editor)).toEqual(["One!", "Outside", "Three?"]);
+  });
+
+  it("lets go of history when a step moved a whole block", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n\nFour\n");
+    type(editor, 3, "!");
+    editor.tf.withNewBatch(() => editor.tf.moveNodes({ at: [0], to: [2] }));
+    replace(editor, 3, 4, "Outside\n");
+
+    expect(editor.history.undos).toHaveLength(0);
+    expect(texts(editor)).toEqual(["Two", "Three", "One", "Outside"]);
   });
 
   it("moves split and joined blocks", () => {

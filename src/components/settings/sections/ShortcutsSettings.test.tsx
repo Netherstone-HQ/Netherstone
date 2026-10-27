@@ -43,7 +43,7 @@ describe("ShortcutsSettings", () => {
 
   it("refuses system keys and keys without a modifier", () => {
     record("Bold", { key: "c", code: "KeyC", ctrlKey: true });
-    expect(within(row("Bold")).getByText("Kept for Copy")).toBeTruthy();
+    expect(within(row("Bold")).getByText("Reserved for Copy")).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("button", { name: "Change keys for Bold" }), {
       key: "b",
       code: "KeyB",

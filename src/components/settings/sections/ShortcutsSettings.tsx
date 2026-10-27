@@ -82,7 +82,7 @@ function problemNote(problem: KeysProblem): string {
     case "modifier":
       return IS_MAC ? "Add ⌘ or ⌥" : "Add Ctrl or Alt";
     case "reserved":
-      return `Kept for ${problem.label}`;
+      return `Reserved for ${problem.label}`;
     case "taken":
       return `Used by ${problem.by.label}`;
   }
@@ -229,7 +229,7 @@ function RestoreDefaultsRow() {
           <AlertDialogHeader>
             <AlertDialogTitle>Restore default shortcuts?</AlertDialogTitle>
             <AlertDialogDescription>
-              Every shortcut goes back to its default keys.
+              Every shortcut goes back to its default keys
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -237,7 +237,7 @@ function RestoreDefaultsRow() {
             <AlertDialogAction
               onClick={() => {
                 setPreference("shortcuts", {});
-                toast("Shortcuts restored to their defaults.");
+                toast("Shortcuts restored to their defaults");
               }}
             >
               Restore defaults

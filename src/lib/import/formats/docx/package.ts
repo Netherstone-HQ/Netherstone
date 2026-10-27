@@ -4,7 +4,7 @@ import { ImportError, type PlateNode } from "../../types";
 import { DocxReader, resolvePart, type ReaderContext, type Relationship } from "./reader";
 import { Numbering, Styles } from "./styles";
 import { attr, elements, is } from "./xml";
-import { checkXml, parseXml, XmlStream, type XmlElement } from "./xml-tree";
+import { checkXml, parseXml, XmlStream, type XmlDocument, type XmlElement } from "./xml-tree";
 
 const RELATIONSHIP_TYPES = {
   document: /\/officeDocument$/,
@@ -89,11 +89,29 @@ export async function readWordPackage(bytes: Uint8Array, name: string, context: 
       numbering: new Numbering(await load(RELATIONSHIP_TYPES.numbering)),
       relationships,
       notes,
+      contentTypeOf: contentTypesOf(await readXml("[Content_Types].xml")),
       name,
     },
     context,
   );
   return reader.read(blocksOf(first, stream));
+}
+
+/** The type each part declares: its own Override first, then the Default for its extension. */
+function contentTypesOf(types: XmlDocument | null) {
+  const overrides = new Map<string, string>();
+  const defaults = new Map<string, string>();
+  for (const element of elements(types?.documentElement)) {
+    const type = element.getAttribute("ContentType");
+    if (!type) continue;
+    // Part names and extensions match without regard to case.
+    if (is(element, "ct", "Override")) overrides.set(resolvePart("", element.getAttribute("PartName") ?? "").toLowerCase(), type);
+    else if (is(element, "ct", "Default")) defaults.set((element.getAttribute("Extension") ?? "").toLowerCase(), type);
+  }
+  return (path: string) => {
+    const lower = path.toLowerCase();
+    return overrides.get(lower) ?? defaults.get(lower.slice(lower.lastIndexOf(".") + 1)) ?? null;
+  };
 }
 
 function* blocksOf(first: XmlElement | null, stream: XmlStream) {

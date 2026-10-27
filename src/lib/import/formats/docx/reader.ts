@@ -50,6 +50,8 @@ export interface DocxParts {
   numbering: Numbering;
   relationships: Map<string, Relationship>;
   notes: Map<string, XmlElement>;
+  /** The content type the package declares for a part, if any. */
+  contentTypeOf(path: string): string | null;
   /** File name without extension, used to name stored pictures. */
   name: string;
 }
@@ -737,7 +739,7 @@ export class DocxReader {
     let stored = this.pictures.get(path);
     if (!stored) {
       stored = (async () => {
-        const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+        const extension = this.pictureExtension(path);
         if (UNSUPPORTED_PICTURES.has(extension)) {
           this.oldPictures += 1;
           return null;
@@ -751,6 +753,17 @@ export class DocxReader {
       this.pictures.set(path, stored);
     }
     return stored;
+  }
+
+  /**
+   * The extension a stored picture gets, from the type the package declares
+   * for it (`image/png` gives png, `image/svg+xml` svg, `image/x-wmf` wmf).
+   * Word often stores pictures as `.bin`, so the part's own extension is used
+   * only when no picture type is declared.
+   */
+  private pictureExtension(path: string): string {
+    const declared = /^image\/(?:x-)?([a-z0-9]+)(?:\+[a-z]+)?\s*(?:;|$)/i.exec(this.parts.contentTypeOf(path) ?? "");
+    return (declared ? declared[1] : path.slice(path.lastIndexOf(".") + 1)).toLowerCase();
   }
 
   // ── Notes ─────────────────────────────────────────────────────────────────

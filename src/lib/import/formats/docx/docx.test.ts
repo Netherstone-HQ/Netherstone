@@ -12,11 +12,14 @@ useDocxWorker();
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 /** A Word file with just a body, styles and numbering, as Word itself would write them. */
-async function wordFile(body: string, extra: { styles?: string; numbering?: string; rels?: string; media?: Record<string, Uint8Array> } = {}) {
+async function wordFile(
+  body: string,
+  extra: { styles?: string; numbering?: string; rels?: string; types?: string; media?: Record<string, Uint8Array> } = {},
+) {
   const zip = new JSZip();
   zip.file(
     "[Content_Types].xml",
-    `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+    `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>${extra.types ?? ""}</Types>`,
   );
   zip.file(
     "_rels/.rels",
@@ -163,6 +166,32 @@ describe("Word import in its worker", () => {
     expect(report.created.find((shard) => shard.source === "Doc.docx")!.warnings).toEqual([
       "1 picture is in an old Windows format (EMF or WMF) and was left out.",
     ]);
+  });
+
+  it("names pictures by the type the file declares for them", async () => {
+    const bytes = await wordFile([para(picture("rPng")), para(picture("rWmf")), para(picture("rSvg")), para(picture("rPlain"))].join(""), {
+      rels:
+        pictureRel("rPng", "media/image1.bin") +
+        pictureRel("rWmf", "media/image2.bin") +
+        pictureRel("rSvg", "media/image3.bin") +
+        pictureRel("rPlain", "media/image4.gif"),
+      types:
+        '<Default Extension="BIN" ContentType="image/png"/>' +
+        '<Override PartName="/word/media/IMAGE2.bin" ContentType="image/x-wmf"/>' +
+        '<Override PartName="/word/media/image3.bin" ContentType="image/svg+xml"/>',
+      media: { "image1.bin": new Uint8Array([1]), "image2.bin": new Uint8Array([2]), "image3.bin": new Uint8Array([3]), "image4.gif": new Uint8Array([4]) },
+    });
+    const vault = memoryImport({ "Doc.docx": bytes });
+    const report = await vault.run();
+
+    expect(report.failed).toEqual([]);
+    const markdown = vault.shards.get("/vault/Doc.md")!;
+    // The Default for .bin, an Override per part, and the part's own extension when nothing is declared.
+    expect(markdown).toContain("_attachments/Doc 1.png");
+    expect(markdown).toContain("_attachments/Doc 2.svg");
+    expect(markdown).toContain("_attachments/Doc 3.gif");
+    expect(markdown).not.toContain(".bin");
+    expect(report.created[0].warnings).toEqual(["1 picture is in an old Windows format (EMF or WMF) and was left out."]);
   });
 
   it("reads many small files one after another in as many workers as it reads at once", async () => {

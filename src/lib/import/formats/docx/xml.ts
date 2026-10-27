@@ -23,6 +23,7 @@ const NAMESPACES = {
   mc: ["http://schemas.openxmlformats.org/markup-compatibility/2006"],
   wps: ["http://schemas.microsoft.com/office/word/2010/wordprocessingShape"],
   pr: ["http://schemas.openxmlformats.org/package/2006/relationships"],
+  ct: ["http://schemas.openxmlformats.org/package/2006/content-types"],
   dc: ["http://purl.org/dc/elements/1.1/"],
 } as const;
 

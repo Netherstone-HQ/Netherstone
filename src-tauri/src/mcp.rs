@@ -419,7 +419,8 @@ impl ServerHandler for Server {
 
 /// Runs the server until the AI app that started it closes the connection.
 pub fn run() -> Result<(), String> {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
+    // Only messages run here; the tools run on the blocking pool.
+    let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;

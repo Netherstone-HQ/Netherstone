@@ -3,8 +3,8 @@
 use super::planner::SyncPlan;
 use super::state::DEFAULT_BRANCH;
 use git2::{
-    Commit, Index, IndexAddOption, IndexEntry, IndexTime, Repository, RepositoryInitOptions,
-    Signature, Tree,
+    Commit, Index, IndexAddOption, IndexEntry, IndexTime, ObjectType, Oid, Repository,
+    RepositoryInitOptions, Signature, Tree,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -285,6 +285,18 @@ pub fn commit_files(
         .map_err(|e| git_error("Failed to read sync tree", e))?;
 
     commit_tree(repository, &tree, parent.as_ref(), (added, modified, removed), note).map(Some)
+}
+
+/// Whether the last version holds `bytes` as the vault file `path`.
+pub fn last_version_holds(repository: &Repository, path: &str, bytes: &[u8]) -> Result<bool, String> {
+    let Some(tree) = tree_of(head_commit(repository)?.as_ref())? else {
+        return Ok(false);
+    };
+    let blob = Oid::hash_object(ObjectType::Blob, bytes)
+        .map_err(|e| git_error("Failed to read last backup", e))?;
+    Ok(tree
+        .get_path(Path::new(path))
+        .is_ok_and(|entry| entry.id() == blob))
 }
 
 pub fn head_commit(repository: &Repository) -> Result<Option<Commit<'_>>, String> {

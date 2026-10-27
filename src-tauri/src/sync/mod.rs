@@ -58,7 +58,9 @@ pub fn snapshot_vault(sync_root: &Path, vault_path: &Path) -> Result<VaultSnapsh
 /// Saves `previous` as the last version of the vault file `file_path`, then a
 /// version of the whole vault. Called when a file changed outside the app, so
 /// the text the app last saved and the outside change are both kept, whatever
-/// is saved next.
+/// is saved next. When both are versions already, as after an AI app's
+/// change (`save_app_change`), only the rest of the vault is saved: saving
+/// `previous` again would make the change look undone, then redone.
 pub fn snapshot_outside_change(
     sync_root: &Path,
     vault_path: &Path,
@@ -68,14 +70,24 @@ pub fn snapshot_outside_change(
     let _guard = crate::locks::history(sync_root)?;
     let relative = vault_relative(vault_path, file_path)?;
     let plan = planner::plan_vault(vault_path)?;
-    let note = plan.includes(&relative).then(|| history::Note::OutsideChange {
-        path: relative.clone(),
-    });
-    if note.is_some() {
+    let mut note = None;
+    if plan.includes(&relative) {
         let record = state::load_or_create_record(sync_root, vault_path)?;
         let repository =
             repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault_path)?;
-        repo::commit_file_version(&repository, &relative, previous.as_bytes())?;
+        let on_disk = std::fs::read(file_path).ok();
+        let kept = match on_disk {
+            Some(bytes) if repo::last_version_holds(&repository, &relative, &bytes)? => {
+                history::has_version(&repository, &relative, previous.as_bytes())?
+            }
+            _ => false,
+        };
+        if !kept {
+            repo::commit_file_version(&repository, &relative, previous.as_bytes())?;
+            note = Some(history::Note::OutsideChange {
+                path: relative.clone(),
+            });
+        }
     }
     commit_snapshot(sync_root, vault_path, plan, note)
 }
@@ -510,17 +522,66 @@ mod tests {
             snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
         assert!(result.commit.is_some());
 
-        let repository =
-            repo::open_or_init(&state::git_dir(&sync_root, &result.vault_id), &vault).unwrap();
+        assert_eq!(note_versions(&sync_root, &vault), ["outside", "mine", "first"]);
+    }
+
+    #[test]
+    fn an_ai_apps_change_is_not_saved_again_as_an_outside_change() {
+        let dir = state::tests::temp_dir("outside-change-app");
+        let vault = dir.join("vault");
+        let sync_root = dir.join("sync");
+        fs::create_dir_all(&vault).unwrap();
+        fs::write(vault.join("Note.md"), "first").unwrap();
+        snapshot_vault(&sync_root, &vault).unwrap();
+
+        // Saved by the app, then changed by an AI app, which saves both.
+        fs::write(vault.join("Note.md"), "mine").unwrap();
+        fs::write(vault.join("Note.md"), "the app's").unwrap();
+        save_app_change(
+            &sync_root,
+            &vault,
+            &[AppChange {
+                path: "Note.md".into(),
+                before: Some(b"mine".to_vec()),
+                after: Some(b"the app's".to_vec()),
+            }],
+            "Some app",
+            None,
+        )
+        .unwrap();
+        let result =
+            snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
+        assert!(result.commit.is_none());
+        assert_eq!(note_versions(&sync_root, &vault), ["the app's", "mine", "first"]);
+    }
+
+    #[test]
+    fn an_outside_change_back_to_the_last_version_keeps_the_apps_text() {
+        let dir = state::tests::temp_dir("outside-change-back");
+        let vault = dir.join("vault");
+        let sync_root = dir.join("sync");
+        fs::create_dir_all(&vault).unwrap();
+        fs::write(vault.join("Note.md"), "first").unwrap();
+        snapshot_vault(&sync_root, &vault).unwrap();
+
+        // Saved by the app, then put back outside as the last version had it.
+        let result =
+            snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
+        assert!(result.commit.is_some());
+        assert_eq!(note_versions(&sync_root, &vault), ["first", "mine", "first"]);
+    }
+
+    /// Each version's `Note.md`, newest first.
+    fn note_versions(sync_root: &Path, vault: &Path) -> Vec<String> {
+        let record = state::load_or_create_record(sync_root, vault).unwrap();
+        let repository = repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault).unwrap();
         let mut walk = repository.revwalk().unwrap();
         walk.push_head().unwrap();
-        let versions: Vec<Vec<u8>> = walk
-            .map(|id| {
-                let tree = repository.find_commit(id.unwrap()).unwrap().tree().unwrap();
-                let entry = tree.get_path(Path::new("Note.md")).unwrap();
-                repository.find_blob(entry.id()).unwrap().content().to_vec()
-            })
-            .collect();
-        assert_eq!(versions, [&b"outside"[..], b"mine", b"first"]);
+        walk.map(|id| {
+            let tree = repository.find_commit(id.unwrap()).unwrap().tree().unwrap();
+            let entry = tree.get_path(Path::new("Note.md")).unwrap();
+            String::from_utf8(repository.find_blob(entry.id()).unwrap().content().to_vec()).unwrap()
+        })
+        .collect()
     }
 }

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppShortcuts } from "@/hooks/useAppShortcuts";
+import { useLaunches } from "@/lib/launch";
 import { saveEditorFile } from "@/lib/open-editor-file";
 import { useRecentSwitching } from "@/hooks/useRecentSwitching";
 import { cn } from "@/lib/utils";
@@ -209,6 +210,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
   useAppShortcuts({ onNewShard: openNewShardDialog, onSave: saveEditorFile });
   useRecentSwitching();
+  useLaunches();
 
   return (
     <SidebarProvider open={isSidebarOpen} onOpenChange={setSidebarOpen}>

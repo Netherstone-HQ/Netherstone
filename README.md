@@ -22,6 +22,7 @@ isn't code-signed yet. We plan to sign it in a future version.
 - Charts from tables, and an Overview of your vault
 - Every version of a shard or drawing in History
 - Import from Word, PDF, HTML and more, and export to PDF, Word or HTML
+- Open folders and files from the terminal (`netherstone .`) or your file manager
 - Free sync through your own GitHub account
 - Light, Dark and three more themes
 

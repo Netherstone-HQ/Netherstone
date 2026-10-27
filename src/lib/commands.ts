@@ -178,6 +178,41 @@ export async function pickImportPaths(folder: boolean): Promise<string[]> {
   return invoke<string[]>("open_import_dialog", { folder });
 }
 
+/** What was opened from outside the app and not yet taken. */
+export interface Launched {
+  /** A folder to open as the vault. */
+  vault: string | null;
+  /** Files to import, which Rust now lets the import read. */
+  files: string[];
+  /** Names of files that wait until they can be imported. */
+  waiting: string[];
+}
+
+/**
+ * Takes the folders and files opened from outside the app (the terminal,
+ * Open with, the Dock). Files stay in Rust until `canImport`.
+ */
+export async function takeLaunch(canImport: boolean): Promise<Launched> {
+  assertTauri();
+  return invoke<Launched>("take_launch", { canImport });
+}
+
+/** A way the system can open things in Netherstone, set up from Settings. */
+export type Integration = "openWith" | "folderMenu" | "terminal";
+
+/** Whether each one is on, or null where this system doesn't offer it. */
+export type Integrations = Record<Integration, boolean | null>;
+
+export async function getIntegrations(): Promise<Integrations> {
+  assertTauri();
+  return invoke<Integrations>("integrations_get");
+}
+
+export async function setIntegration(integration: Integration, on: boolean): Promise<void> {
+  assertTauri();
+  return invoke<void>("integrations_set", { integration, on });
+}
+
 /** Every file in the picked files and folders, hidden ones left out. */
 export async function listImportSources(
   paths: string[],

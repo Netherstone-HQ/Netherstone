@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "fileAssociations": [
+      { "ext": ["md"], "mimeType": "text/markdown" },
+      { "ext": ["txt"], "mimeType": "text/plain" },
+      { "ext": ["pdf"], "mimeType": "application/pdf" },
+      { "ext": ["docx"], "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+      { "ext": ["html"], "mimeType": "text/html" }
+    ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "installer/linux/netherstone.desktop",
+        "files": { "/usr/bin/netherstone": "installer/linux/netherstone" }
+      },
+      "rpm": {
+        "desktopTemplate": "installer/linux/netherstone.desktop",
+        "files": { "/usr/bin/netherstone": "installer/linux/netherstone" }
+      }
+    }
+  }
+}

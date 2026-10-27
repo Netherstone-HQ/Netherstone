@@ -61,8 +61,9 @@ pub type ToolResult<T> = Result<T, ToolError>;
 
 impl Vault {
     /// The file or folder at `relative` in the vault. Refuses paths that
-    /// leave the vault, by `..`, from the root, or through a link, and the
-    /// hidden folders Netherstone and other apps keep there.
+    /// leave the vault, by `..`, from the root, or through a link, the
+    /// hidden folders Netherstone and other apps keep there, and other
+    /// vaults inside this one.
     pub fn resolve(&self, relative: &str) -> ToolResult<PathBuf> {
         let trimmed = relative.trim().trim_start_matches("./");
         let path = Path::new(trimmed);
@@ -81,17 +82,27 @@ impl Vault {
         let full = self.root.join(path);
 
         // Through links, too: the nearest part that exists must be inside.
+        // Only folders that exist can hold another vault's marker.
         let existing = full.ancestors().find(|part| part.exists()).unwrap_or(&self.root);
-        let inside = self
-            .root
-            .canonicalize()
-            .ok()
-            .zip(existing.canonicalize().ok())
-            .is_some_and(|(root, real)| crate::vault_access::is_within(&root, &real));
-        if !inside {
+        let Some((root, real)) = self.root.canonicalize().ok().zip(existing.canonicalize().ok()) else {
+            return Err(ToolError(format!("'{}' leads outside the vault", relative)));
+        };
+        if !crate::vault_access::is_within(&root, &real) {
             return Err(ToolError(format!("'{}' leads outside the vault", relative)));
         }
+        if crate::sync::state::crosses_into_another_vault(&root, &real) {
+            return Err(ToolError(format!("'{}' is in another vault inside this one", relative)));
+        }
         Ok(full)
+    }
+
+    /// Whether `target`, a path as the index stores it, is a file in the
+    /// vault. Anything outside it counts as not there.
+    pub fn has_file(&self, target: &str) -> bool {
+        let path = Path::new(target);
+        path.is_absolute()
+            && crate::vault_access::is_within(&self.root, path)
+            && self.resolve(&self.relative(path)).is_ok_and(|path| path.is_file())
     }
 
     /// `relative`, which must be a shard (`.md`) that exists.
@@ -262,6 +273,34 @@ pub(crate) mod tests {
         for outside in ["../secret.md", "Notes/../../x.md", "/etc/passwd", ".netherstone/vault-id", "Notes/.git/config"] {
             assert!(vault.resolve(outside).is_err(), "{outside}");
         }
+    }
+
+    #[test]
+    fn other_vaults_inside_stay_out() {
+        let vault = vault("tools-resolve-nested");
+        let inner = vault.root.join("Inner");
+        std::fs::create_dir_all(inner.join("Notes")).unwrap();
+        std::fs::write(inner.join("Notes/Plan.md"), "Inner plan").unwrap();
+        crate::sync::state::load_or_create_record(&vault.sync_root, &inner).unwrap();
+
+        for nested in ["Inner", "Inner/Notes/Plan.md", "Inner/Notes/New.md"] {
+            assert!(vault.resolve(nested).is_err(), "{nested}");
+        }
+        assert!(!vault.has_file(&inner.join("Notes/Plan.md").to_string_lossy()));
+        assert!(vault.resolve("Other/Plan.md").is_ok());
+    }
+
+    #[test]
+    fn only_files_in_the_vault_are_there() {
+        let vault = vault("tools-has-file");
+        let shard = vault.root.join("Plan.md");
+        std::fs::write(&shard, "The plan").unwrap();
+        let outside = vault.root.parent().unwrap().join("Outside.md");
+        std::fs::write(&outside, "Not in the vault").unwrap();
+
+        assert!(vault.has_file(&shard.to_string_lossy()));
+        assert!(!vault.has_file(&outside.to_string_lossy()));
+        assert!(!vault.has_file("Plan.md"));
     }
 
     #[test]

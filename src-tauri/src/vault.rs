@@ -207,6 +207,16 @@ fn sync_folder(path: &Path) {
 ///   the app shows up while folders of only images or other files stay out.
 /// - Results are sorted: directories first, then files, both case-insensitively.
 pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
+    scan(dir, false)
+}
+
+/// [`scan_dir`] without the folders of other vaults inside `dir`, which keep
+/// their own shards: what belongs to the vault at `dir`.
+pub fn scan_own_dir(dir: &Path) -> Vec<FileNode> {
+    scan(dir, true)
+}
+
+fn scan(dir: &Path, own_only: bool) -> Vec<FileNode> {
     let mut entries = match std::fs::read_dir(dir) {
         Ok(rd) => rd.filter_map(|e| e.ok()).collect::<Vec<_>>(),
         Err(_) => return vec![],
@@ -241,7 +251,10 @@ pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
         };
 
         if file_type.is_dir() {
-            let children = scan_dir(&path);
+            if own_only && crate::sync::state::has_vault_marker(&path) {
+                continue;
+            }
+            let children = scan(&path, own_only);
             if !children.is_empty() || is_empty_dir(&path) {
                 nodes.push(FileNode {
                     name,

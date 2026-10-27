@@ -267,10 +267,23 @@ fn documents_at(path: &Path) -> Vec<PathBuf> {
     found
 }
 
+/// Whether another vault is somewhere inside `folder`.
+fn holds_another_vault(folder: &Path) -> bool {
+    std::fs::read_dir(folder).into_iter().flatten().flatten().any(|entry| {
+        let path = entry.path();
+        entry.file_type().is_ok_and(|kind| kind.is_dir())
+            && crate::vault::is_scanned_name(&entry.file_name().to_string_lossy())
+            && (crate::sync::state::has_vault_marker(&path) || holds_another_vault(&path))
+    })
+}
+
 pub fn move_path(vault: &Vault, caller: &Caller, params: MoveParams) -> ToolResult<Written> {
     let source = vault.resolve(&params.path)?;
     if source == vault.root || !source.exists() {
         return Err(ToolError(format!("There's nothing to move at '{}'", params.path)));
+    }
+    if holds_another_vault(&source) {
+        return Err(ToolError(format!("'{}' has another vault inside it, so it stays where it is", params.path)));
     }
     let destination = params.to_folder.as_deref().map(|folder| folder_or_root(vault, Some(folder))).transpose()?;
     let new_name = params.new_name.as_deref().map(file_name).transpose()?.map(str::to_string);
@@ -376,5 +389,27 @@ mod tests {
         assert!(remove_tag("Nothing".into(), "book").is_err());
         assert!(tag_name("two words").is_err());
         assert!(tag_name("#3").is_err());
+    }
+
+    #[test]
+    fn a_folder_with_another_vault_inside_stays_put() {
+        let vault = super::super::tests::vault("tools-move-nested");
+        let inner = vault.root.join("Projects/Inner");
+        std::fs::create_dir_all(&inner).unwrap();
+        crate::sync::state::load_or_create_record(&vault.sync_root, &inner).unwrap();
+        let caller = Caller { app: "Goose".into() };
+
+        let moved = move_path(
+            &vault,
+            &caller,
+            MoveParams {
+                path: "Projects".into(),
+                to_folder: None,
+                new_name: Some("Work".into()),
+                summary: None,
+            },
+        );
+        assert!(moved.is_err());
+        assert!(inner.is_dir());
     }
 }

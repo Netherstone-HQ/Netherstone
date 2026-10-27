@@ -102,10 +102,8 @@ pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkP
             for link in parse_markdown(&markdown).links {
                 let target = crate::db::indexer::resolve_link_target(link.link_type, &link.target, shard);
                 let works = match link.link_type {
-                    LinkType::Internal if target.to_lowercase().ends_with(".md") => {
-                        Some(Path::new(&target).is_file())
-                    }
-                    LinkType::Mention => Some(Path::new(&target).is_file() || shard_named(vault, &conn, &target)?),
+                    LinkType::Internal if target.to_lowercase().ends_with(".md") => Some(vault.has_file(&target)),
+                    LinkType::Mention => Some(vault.has_file(&target) || shard_named(vault, &conn, &target)?),
                     _ => None,
                 };
                 links.push(Link {

@@ -44,6 +44,19 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Command {
     )
 }
 
+/// Moves the app's current folder to its own data folder, once the command
+/// line's paths are read against it. Started from inside a folder, as by
+/// `netherstone .` or a folder's menu, the app would otherwise hold that
+/// folder for as long as it runs, so it couldn't be deleted or renamed.
+pub fn leave_current_folder() {
+    let own = crate::db::get_db_path().ok().and_then(|db| db.parent().map(Path::to_path_buf));
+    if let Some(own) = own
+        && let Err(error) = std::env::set_current_dir(&own)
+    {
+        eprintln!("[Netherstone] Couldn't leave the folder the app started in: {}", error);
+    }
+}
+
 /// The event the window listens for to take what came in.
 pub const EVENT: &str = "launch";
 

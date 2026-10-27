@@ -36,13 +36,13 @@ impl WatcherState {
 /// the shards inside it, so those events must refresh the vault too. A folder
 /// that already existed is also reported whenever a file inside it changes
 /// (Windows does this on every save), and those events must not.
-pub(crate) struct FolderTracker {
+struct FolderTracker {
     root: PathBuf,
     folders: HashSet<PathBuf>,
 }
 
 impl FolderTracker {
-    pub(crate) fn new(root: &Path) -> Self {
+    fn new(root: &Path) -> Self {
         let mut tracker = Self {
             root: root.to_path_buf(),
             folders: HashSet::new(),
@@ -53,7 +53,7 @@ impl FolderTracker {
     }
 
     /// True when `path` is a folder that appeared or disappeared.
-    pub(crate) fn observe(&mut self, path: &Path) -> bool {
+    fn observe(&mut self, path: &Path) -> bool {
         if !self.is_scanned(path) {
             return false;
         }

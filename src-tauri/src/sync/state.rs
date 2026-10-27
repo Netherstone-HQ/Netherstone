@@ -261,6 +261,41 @@ fn recorded_vaults(sync_root: &Path) -> Vec<(PathBuf, PathBuf)> {
         .collect()
 }
 
+/// Whether the folder `record` was kept for no longer holds its vault: it's
+/// gone ([`crate::gone_vaults::is_gone`]), or another vault, or a folder that
+/// isn't one anymore, is there now. The vault may have been moved and not
+/// opened from its new place yet, so this alone is no reason to drop it.
+fn names_no_vault(record: &VaultSyncRecord) -> bool {
+    let path = Path::new(&record.vault_path);
+    if crate::gone_vaults::is_gone(path) {
+        return true;
+    }
+    match std::fs::read_to_string(vault_id_path(path)) {
+        Ok(id) => id.trim() != record.vault_id,
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound && path.is_dir(),
+    }
+}
+
+/// The records of the vaults whose folder no longer holds them.
+pub fn records_of_gone_vaults(sync_root: &Path) -> Vec<VaultSyncRecord> {
+    let Ok(entries) = std::fs::read_dir(sync_root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| read_record(sync_root, &entry.file_name().to_string_lossy()).ok()?)
+        .filter(names_no_vault)
+        .collect()
+}
+
+/// The record kept as `vault_id`, if its folder no longer holds it.
+pub fn record_of_gone_vault(sync_root: &Path, vault_id: &str) -> Result<Option<VaultSyncRecord>, String> {
+    if !is_valid_vault_id(vault_id) {
+        return Ok(None);
+    }
+    Ok(read_record(sync_root, vault_id)?.filter(names_no_vault))
+}
+
 /// The first vault marker in a folder below `folder`, skipping hidden ones.
 fn marked_vault_below(folder: &Path) -> Option<PathBuf> {
     let mut queue = std::collections::VecDeque::from([folder.to_path_buf()]);

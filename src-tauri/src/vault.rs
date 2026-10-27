@@ -54,6 +54,16 @@ pub fn is_scanned_name(name: &str) -> bool {
     !name.starts_with('.') && !IGNORED_NAMES.contains(&name)
 }
 
+/// Whether `path` is somewhere the vault tree shows: inside `root`, with no
+/// hidden or skipped part on the way.
+pub fn is_scanned_path(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root).is_ok_and(|relative| {
+        relative
+            .components()
+            .all(|part| is_scanned_name(&part.as_os_str().to_string_lossy()))
+    })
+}
+
 /// Files shown in the vault tree: shards and drawings.
 pub fn is_vault_document_path(path: &Path) -> bool {
     is_markdown_path(path) || is_drawing_path(path)

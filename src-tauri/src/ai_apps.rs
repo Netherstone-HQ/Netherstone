@@ -1,7 +1,7 @@
 //! The AI apps Settings connects to the vault, by adding the MCP server
 //! (`Netherstone mcp`) to each app's own list of MCP servers. Every app is
-//! one row in [`APPS`]: where it is installed, where it keeps its servers and
-//! in what shape, so adding an app is adding a row.
+//! one row in [`APPS`]: where it can be installed, where it keeps its servers
+//! and in what shape, so adding an app, or a way to install one, is data.
 
 use jsonc_parser::ParseOptions;
 use jsonc_parser::cst::{CstInputValue, CstRootNode};
@@ -26,6 +26,8 @@ enum Base {
     /// The system's folder for app settings: AppData\Roaming on Windows,
     /// Library/Application Support on macOS, ~/.config on Linux.
     Config,
+    /// The system's folder for local app data: AppData\Local on Windows.
+    LocalData,
 }
 
 #[derive(Clone, Copy)]
@@ -39,6 +41,7 @@ impl Place {
         let base = match self.base {
             Base::Home => dirs::home_dir(),
             Base::Config => dirs::config_dir(),
+            Base::LocalData => dirs::data_local_dir(),
         }?;
         Some(self.path.iter().fold(base, |path, part| path.join(part)))
     }
@@ -54,61 +57,117 @@ enum Format {
     GooseYaml,
 }
 
+/// One way an app can be installed, and where that install keeps its
+/// settings.
+struct Install {
+    /// Exists once the app is installed this way and has run.
+    installed: Place,
+    config: Place,
+}
+
 struct AiApp {
     id: &'static str,
     name: &'static str,
-    /// Exists once the app is installed and has run.
-    installed: Place,
-    config: Place,
+    /// Every way the app can be installed, checked in order. The first is
+    /// also the one set up when none is found. A package is removed with its
+    /// app, so it goes before folders an old install can leave behind.
+    installs: &'static [Install],
     format: Format,
     download_url: &'static str,
 }
+
+impl AiApp {
+    /// The install on this computer, if there's one.
+    fn found(&self) -> Option<&Install> {
+        self.installs
+            .iter()
+            .find(|install| install.installed.resolve().is_some_and(|path| path.exists()))
+    }
+
+    /// Where the app's settings are: the found install's, or the first one's.
+    fn config(&self) -> Option<PathBuf> {
+        self.found().unwrap_or(&self.installs[0]).config.resolve()
+    }
+}
+
+/// Claude Desktop as installed from its own installer.
+const CLAUDE_DESKTOP: Install = Install {
+    installed: Place { base: Base::Config, path: &["Claude"] },
+    config: Place { base: Base::Config, path: &["Claude", "claude_desktop_config.json"] },
+};
+
+/// Claude Desktop as a Windows app package (MSIX): Windows keeps its
+/// AppData\Roaming in the package's own folder, where only it looks.
+const CLAUDE_DESKTOP_PACKAGE: Install = Install {
+    installed: Place { base: Base::LocalData, path: &["Packages", "Claude_pzs8sxrjxfjjc"] },
+    config: Place {
+        base: Base::LocalData,
+        path: &[
+            "Packages",
+            "Claude_pzs8sxrjxfjjc",
+            "LocalCache",
+            "Roaming",
+            "Claude",
+            "claude_desktop_config.json",
+        ],
+    },
+};
 
 const APPS: &[AiApp] = &[
     AiApp {
         id: "claude-desktop",
         name: "Claude Desktop",
-        installed: Place { base: Base::Config, path: &["Claude"] },
-        config: Place { base: Base::Config, path: &["Claude", "claude_desktop_config.json"] },
+        installs: if cfg!(windows) {
+            &[CLAUDE_DESKTOP_PACKAGE, CLAUDE_DESKTOP]
+        } else {
+            &[CLAUDE_DESKTOP]
+        },
         format: Format::Json { key: "mcpServers", typed: false },
         download_url: "https://claude.ai/download",
     },
     AiApp {
         id: "claude-code",
         name: "Claude Code",
-        installed: Place { base: Base::Home, path: &[".claude"] },
-        config: Place { base: Base::Home, path: &[".claude.json"] },
+        installs: &[Install {
+            installed: Place { base: Base::Home, path: &[".claude"] },
+            config: Place { base: Base::Home, path: &[".claude.json"] },
+        }],
         format: Format::Json { key: "mcpServers", typed: true },
         download_url: "https://claude.com/product/claude-code",
     },
     AiApp {
         id: "cursor",
         name: "Cursor",
-        installed: Place { base: Base::Home, path: &[".cursor"] },
-        config: Place { base: Base::Home, path: &[".cursor", "mcp.json"] },
+        installs: &[Install {
+            installed: Place { base: Base::Home, path: &[".cursor"] },
+            config: Place { base: Base::Home, path: &[".cursor", "mcp.json"] },
+        }],
         format: Format::Json { key: "mcpServers", typed: false },
         download_url: "https://cursor.com/download",
     },
     AiApp {
         id: "vscode",
         name: "VS Code",
-        installed: Place { base: Base::Config, path: &["Code", "User"] },
-        config: Place { base: Base::Config, path: &["Code", "User", "mcp.json"] },
+        installs: &[Install {
+            installed: Place { base: Base::Config, path: &["Code", "User"] },
+            config: Place { base: Base::Config, path: &["Code", "User", "mcp.json"] },
+        }],
         format: Format::Json { key: "servers", typed: true },
         download_url: "https://code.visualstudio.com/download",
     },
     AiApp {
         id: "goose",
         name: "Goose",
-        installed: if cfg!(windows) {
-            Place { base: Base::Config, path: &["Block", "goose", "config"] }
+        installs: if cfg!(windows) {
+            &[Install {
+                installed: Place { base: Base::Config, path: &["Block", "goose", "config"] },
+                config: Place { base: Base::Config, path: &["Block", "goose", "config", "config.yaml"] },
+            }]
         } else {
-            Place { base: Base::Home, path: &[".config", "goose"] }
-        },
-        config: if cfg!(windows) {
-            Place { base: Base::Config, path: &["Block", "goose", "config", "config.yaml"] }
-        } else {
-            Place { base: Base::Home, path: &[".config", "goose", "config.yaml"] }
+            &[Install {
+                installed: Place { base: Base::Home, path: &[".config", "goose"] },
+                config: Place { base: Base::Home, path: &[".config", "goose", "config.yaml"] },
+            }]
         },
         format: Format::GooseYaml,
         download_url: "https://block.github.io/goose/docs/getting-started/installation",
@@ -143,10 +202,9 @@ pub fn statuses() -> Result<Vec<AppStatus>, String> {
         .map(|app| AppStatus {
             id: app.id,
             name: app.name,
-            installed: app.installed.resolve().is_some_and(|path| path.exists()),
+            installed: app.found().is_some(),
             connected: app
-                .config
-                .resolve()
+                .config()
                 .is_some_and(|path| is_connected(app.format, &path, &command)),
             download_url: app.download_url,
         })
@@ -162,8 +220,7 @@ pub fn connect(id: &str) -> Result<(), String> {
         .find(|app| app.id == id)
         .ok_or_else(|| format!("Unknown app: {id}"))?;
     let config = app
-        .config
-        .resolve()
+        .config()
         .ok_or_else(|| format!("Couldn't find where {} keeps its settings", app.name))?;
     add_server(app.format, &config, &server_command()?)
 }
@@ -348,9 +405,10 @@ mod tests {
     }
 
     #[test]
-    fn every_app_has_its_own_id() {
+    fn every_app_has_its_own_id_and_an_install() {
         for (index, app) in APPS.iter().enumerate() {
             assert!(APPS[..index].iter().all(|other| other.id != app.id));
+            assert!(!app.installs.is_empty());
         }
     }
 

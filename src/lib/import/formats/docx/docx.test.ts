@@ -12,7 +12,10 @@ useDocxWorker();
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 /** A Word file with just a body, styles and numbering, as Word itself would write them. */
-async function wordFile(body: string, extra: { styles?: string; numbering?: string; rels?: string; media?: Record<string, Uint8Array> } = {}) {
+async function wordFile(
+  body: string,
+  extra: { styles?: string; numbering?: string; rels?: string; media?: Record<string, Uint8Array>; parts?: Record<string, string> } = {},
+) {
   const zip = new JSZip();
   zip.file(
     "[Content_Types].xml",
@@ -37,6 +40,7 @@ async function wordFile(body: string, extra: { styles?: string; numbering?: stri
   zip.file("word/numbering.xml", `<?xml version="1.0"?><w:numbering ${W}>${extra.numbering ?? ""}</w:numbering>`);
   zip.file("word/document.xml", `<?xml version="1.0"?><w:document ${W}><w:body>${body}</w:body></w:document>`);
   for (const [name, bytes] of Object.entries(extra.media ?? {})) zip.file(`word/media/${name}`, bytes);
+  for (const [name, xml] of Object.entries(extra.parts ?? {})) zip.file(`word/${name}`, xml);
   return zip.generateAsync({ type: "uint8array" });
 }
 
@@ -120,6 +124,51 @@ describe("Word import", () => {
     expect(markdown).toContain("1. First\n   - Detail\n2. Second");
     expect(markdown).toContain("<!-- netherstone: widths 133 133; merge A1:B1 A2:A3; fill A1=#ffeedd -->");
     expect(markdown).toContain("| Tall | x |\n|     | y |");
+  });
+
+  it("keeps tracked insertions and leaves out deletions and hidden text", async () => {
+    const body = [
+      para(`${run("Kept ")}<w:ins w:id="1" w:author="A">${run("added ")}</w:ins><w:del w:id="2" w:author="A"><w:r><w:delText>removed </w:delText></w:r></w:del>${run("end.")}`),
+      para(`${run("Shown")}${run(" secret", "<w:vanish/>")}`),
+      `<w:ins w:id="3" w:author="A">${para(run("A whole inserted paragraph"))}</w:ins>`,
+    ].join("");
+    const { markdown } = await importWord(await wordFile(body));
+
+    expect(markdown).toContain("Kept added end.");
+    expect(markdown).toContain("Shown");
+    expect(markdown).toContain("A whole inserted paragraph");
+    expect(markdown).not.toContain("removed");
+    expect(markdown).not.toContain("secret");
+  });
+
+  it("reads footnotes, checkboxes, field links and text boxes", async () => {
+    const field = (instruction: string, result: string) =>
+      `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${instruction}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run(result)}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+    const checkbox = (checked: boolean) =>
+      `<w:sdt xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:sdtPr><w14:checkbox><w14:checked w14:val="${checked ? 1 : 0}"/></w14:checkbox></w:sdtPr><w:sdtContent>${run(checked ? "☒" : "☐")}</w:sdtContent></w:sdt>`;
+    const body = [
+      para(`${run("A claim")}<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="2"/></w:r>${run(".")}`),
+      para(`${checkbox(true)}${run("Done")}`),
+      para(`${checkbox(false)}${run("Not yet")}`),
+      para(`${run("See ")}${field(' HYPERLINK "https://example.com/field" ', "the page")}${run(".")}`),
+      para(
+        `<w:r><w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="1905000" cy="952500"/><wp:docPr id="2" name="Text Box"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent>${para(run("Inside the box"))}</w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`,
+      ),
+    ].join("");
+    const footnotes = `<?xml version="1.0"?><w:footnotes ${W}>
+      <w:footnote w:type="separator" w:id="-1">${para("<w:r><w:separator/></w:r>")}</w:footnote>
+      <w:footnote w:id="2">${para(`<w:r><w:footnoteRef/></w:r>${run(" Where it comes from.")}`)}</w:footnote>
+    </w:footnotes>`;
+    const bytes = await wordFile(body, {
+      rels: '<Relationship Id="rNotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>',
+      parts: { "footnotes.xml": footnotes },
+    });
+    const { markdown } = await importWord(bytes);
+    expect(markdown).toContain("A claim<sup>1</sup>.");
+    expect(markdown).toContain("- [x] Done\n- [ ] Not yet");
+    expect(markdown).toContain("See [the page](https://example.com/field).");
+    expect(markdown).toContain("Inside the box");
+    expect(markdown).toMatch(/---\n\n1\. Where it comes from\.\n*$/);
   });
 
   it("explains files that aren't Word documents", async () => {

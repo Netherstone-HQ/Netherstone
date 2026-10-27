@@ -7,7 +7,9 @@ name: Release cache
 #
 # The cache key changes with Cargo.lock and the Rust version, so it is rebuilt
 # when the Rust dependencies change, and weekly to pick up a new stable Rust
-# and to keep GitHub from evicting caches unused for 7 days.
+# and to keep GitHub from evicting caches unused for 7 days. A version bump
+# also changes Cargo.lock but leaves the dependencies alone, so it skips the
+# rebuild and the tag reuses the last cache.
 
 on:
   push:
@@ -19,10 +21,6 @@ on:
   schedule:
     - cron: "0 4 * * 1"
 
-concurrency:
-  group: release-cache
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
@@ -31,8 +29,36 @@ env:
   NODE_OPTIONS: --max-old-space-size=6144
 
 jobs:
+  # Whether this push only bumps the app's version (scripts/version-bump.mjs).
+  # If the check fails, the caches are rebuilt anyway.
+  changes:
+    name: Version bump check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    outputs:
+      bump: ${{ steps.check.outputs.bump }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/
+          sparse-checkout-cone-mode: false
+
+      - id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          git fetch --quiet --depth=1 origin "$BEFORE"
+          echo "bump=$(node scripts/version-bump.mjs "$BEFORE" "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+
   build:
     name: Cache (${{ matrix.name }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bump != 'true' }}
+    # Per target, so a version bump that skips its builds doesn't cancel a
+    # rebuild still running for an earlier push.
+    concurrency:
+      group: release-cache-${{ matrix.name }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       # Keep in step with the build matrix in release.yml.

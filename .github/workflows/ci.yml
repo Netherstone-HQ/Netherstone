@@ -108,10 +108,9 @@ jobs:
 
   # What this run needs to test. A run that only changes docs (Markdown at the
   # root or in .github/, or docs/) tests nothing. A pull request that only
-  # bumps the version (one version line in each of the four version files, all
-  # set to the same value) only checks Cargo.lock. Otherwise a push to main
-  # tests everything, and a pull request runs the Rust tests only when it
-  # changes src-tauri/ or this file.
+  # bumps the app's version (scripts/version-bump.mjs) only checks Cargo.lock.
+  # Otherwise a push to main tests everything, and a pull request runs the Rust
+  # tests only when it changes src-tauri/ or this file.
   changes:
     name: Changed files
     runs-on: ubuntu-24.04
@@ -124,9 +123,14 @@ jobs:
       playwright: ${{ steps.playwright.outputs.version }}
       bump: ${{ steps.check.outputs.bump }}
     steps:
+      # A pull request checks out its merge commit, whose first parent is the
+      # base branch, so two commits are enough to see what it changes.
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: package.json
+          fetch-depth: 2
+          sparse-checkout: |
+            package.json
+            scripts/
           sparse-checkout-cone-mode: false
 
       - id: playwright
@@ -140,16 +144,8 @@ jobs:
         run: |
           bump=false
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            pr_files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[] | {filename, patch}')
-            files=$(jq -r '.filename' <<< "$pr_files")
-            bump=$(jq -s '
-              def changed: [.patch // "" | split("\n")[] | select(test("^[-+]"))];
-              def version_line: test("^[-+]\\s*(\"version\": \"[^\"]+\",?|version = \"[^\"]+\")$");
-              length > 0
-              and all(.[]; .filename | IN("package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"))
-              and all(.[]; .patch != null and (changed | map(.[:1]) | sort) == ["+", "-"] and all(changed[]; version_line))
-              and ([.[] | changed[] | select(startswith("+")) | sub("^.*\"(?<v>[^\"]+)\",?$"; "\(.v)")] | unique | length) == 1
-            ' <<< "$pr_files")
+            files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+            bump=$(node scripts/version-bump.mjs HEAD^1 HEAD)
           elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
             files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename')
           else

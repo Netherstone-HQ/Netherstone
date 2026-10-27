@@ -103,7 +103,7 @@ export function releaseNoteSubjects(subjects) {
   );
   const seen = new Set();
   return subjects.filter((subject) => {
-    if (!subject.trim() || /^(Revert |Release |Netherstone )/.test(subject)) {
+    if (!subject.trim() || /^(Revert |(Release|Netherstone) \d)/.test(subject)) {
       return false;
     }
     if (reverted.has(subject) || seen.has(subject)) return false;

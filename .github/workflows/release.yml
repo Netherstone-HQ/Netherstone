@@ -197,7 +197,7 @@ jobs:
             # A reverted change never shipped, so drop it along with its revert.
             reverted=$(printf '%s\n' "$subjects" | sed -n 's/^Revert "\(.*\)"$/\1/p')
             printf '%s\n' "$subjects" \
-              | grep -vE '^(Revert |Release |Netherstone )' \
+              | grep -vE '^(Revert |(Release|Netherstone) [0-9])' \
               | grep -vxF -f <(printf '%s\n' "$reverted" | grep .) \
               | awk 'NF && !seen[$0]++' \
               | sed -E "s|\(#([0-9]+)\)|([#\1](https://github.com/$GH_REPO/pull/\1))|; s|^|- |" > notes.md

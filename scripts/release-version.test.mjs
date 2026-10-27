@@ -71,6 +71,15 @@ describe("releaseNoteSubjects", () => {
     ).toEqual(["Fix sync", "Add Outline"]);
   });
 
+  it("keeps a change whose title starts with Release", () => {
+    expect(
+      releaseNoteSubjects([
+        "Release 0.6.0-beta.2 (#202)",
+        "Release vault folders (#201)",
+      ]),
+    ).toEqual(["Release vault folders (#201)"]);
+  });
+
   it("keeps a change whose title only starts like a reverted one", () => {
     expect(
       releaseNoteSubjects(['Revert "Add X"', "Add X and Y", "Add X"]),

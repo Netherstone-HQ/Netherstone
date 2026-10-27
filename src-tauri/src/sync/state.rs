@@ -261,6 +261,48 @@ fn recorded_vaults(sync_root: &Path) -> Vec<(PathBuf, PathBuf)> {
         .collect()
 }
 
+/// Whether the folder `record` was kept for no longer holds its vault: it's
+/// `gone`, or another vault is there now. The vault may have been moved and
+/// not opened from its new place yet, so this alone is no reason to drop it.
+/// A folder with no marker could be one whose marker hasn't come down from a
+/// cloud drive yet, so it still counts as the vault.
+fn names_no_vault(record: &VaultSyncRecord, gone: impl Fn(&Path) -> bool) -> bool {
+    let path = Path::new(&record.vault_path);
+    gone(path) || read_vault_id(path).is_some_and(|id| id != record.vault_id)
+}
+
+/// Every vault's record on this device.
+pub fn records(sync_root: &Path) -> Vec<VaultSyncRecord> {
+    let Ok(entries) = std::fs::read_dir(sync_root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| read_record(sync_root, &entry.file_name().to_string_lossy()).ok()?)
+        .collect()
+}
+
+/// The records of the vaults whose folder no longer holds them, as `gone`
+/// tells which folders are gone.
+pub fn records_of_gone_vaults(sync_root: &Path, gone: impl Fn(&Path) -> bool) -> Vec<VaultSyncRecord> {
+    records(sync_root)
+        .into_iter()
+        .filter(|record| names_no_vault(record, &gone))
+        .collect()
+}
+
+/// The record kept as `vault_id`, if its folder no longer holds it.
+pub fn record_of_gone_vault(
+    sync_root: &Path,
+    vault_id: &str,
+    gone: impl Fn(&Path) -> bool,
+) -> Result<Option<VaultSyncRecord>, String> {
+    if !is_valid_vault_id(vault_id) {
+        return Ok(None);
+    }
+    Ok(read_record(sync_root, vault_id)?.filter(|record| names_no_vault(record, &gone)))
+}
+
 /// The first vault marker in a folder below `folder`, skipping hidden ones.
 fn marked_vault_below(folder: &Path) -> Option<PathBuf> {
     let mut queue = std::collections::VecDeque::from([folder.to_path_buf()]);

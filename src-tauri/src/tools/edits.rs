@@ -53,14 +53,17 @@ pub(super) fn change<R>(
 }
 
 /// Brings the index up to date with the shard at `path`, or forgets it once
-/// it's gone. A failure only leaves the index to catch up when the vault is
-/// next watched or opened.
+/// it's gone. A failure only leaves the index to catch up on the next call
+/// that reads it, or when the app opens the vault.
 pub(super) fn reindex(vault: &Vault, path: &Path) {
     if !crate::vault::is_markdown_path(path) {
         return;
     }
-    let result = vault.index().and_then(|conn| {
-        if path.is_file() {
+    let result = vault.index_caught_up().and_then(|(conn, now)| {
+        if now {
+            // Bringing the index up to date just now took this change in.
+            Ok(())
+        } else if path.is_file() {
             Ok(crate::db::indexer::index_file(&conn, &vault.root, path)?)
         } else {
             crate::db::indexer::forget_path(&conn, &vault.root, path).map(|_| ()).map_err(Into::into)

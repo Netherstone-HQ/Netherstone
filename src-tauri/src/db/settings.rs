@@ -40,6 +40,8 @@ pub struct KnownVault {
     pub path: PathBuf,
     /// Whether AI apps may use it. Off until it's picked in Settings.
     pub ai_allowed: bool,
+    /// The drive it was on when last opened (`gone_vaults::drive_of`).
+    pub drive: Option<u64>,
 }
 
 impl KnownVault {
@@ -55,34 +57,25 @@ impl KnownVault {
         Ok(Self {
             path: PathBuf::from(row.get::<_, String>(0)?),
             ai_allowed: row.get(1)?,
+            drive: row.get::<_, Option<i64>>(2)?.map(|drive| drive as u64),
         })
     }
 }
 
-/// Keeps `vault_path` as the vault opened most recently.
-pub fn record_opened_vault(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()> {
+/// Keeps `vault_path`, on `drive`, as the vault opened most recently.
+pub fn record_opened_vault(conn: &Connection, vault_path: &Path, drive: Option<u64>) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT INTO vaults (path, open_order)
-         VALUES (?1, (SELECT COALESCE(MAX(open_order), 0) + 1 FROM vaults))
-         ON CONFLICT(path) DO UPDATE SET open_order = excluded.open_order",
-        params![vault_path.to_string_lossy()],
+        "INSERT INTO vaults (path, open_order, drive)
+         VALUES (?1, (SELECT COALESCE(MAX(open_order), 0) + 1 FROM vaults), ?2)
+         ON CONFLICT(path) DO UPDATE SET open_order = excluded.open_order, drive = excluded.drive",
+        params![vault_path.to_string_lossy(), drive.map(|drive| drive as i64)],
     )
     .map(|_| ())
 }
 
-/// The vault the app opened last.
-pub fn last_vault(conn: &Connection) -> rusqlite::Result<Option<KnownVault>> {
-    conn.query_row(
-        "SELECT path, ai_allowed FROM vaults ORDER BY open_order DESC LIMIT 1",
-        [],
-        KnownVault::from_row,
-    )
-    .optional()
-}
-
 pub fn known_vault(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Option<KnownVault>> {
     conn.query_row(
-        "SELECT path, ai_allowed FROM vaults WHERE path = ?1",
+        "SELECT path, ai_allowed, drive FROM vaults WHERE path = ?1",
         params![vault_path.to_string_lossy()],
         KnownVault::from_row,
     )
@@ -100,12 +93,18 @@ pub fn known_vaults(
     // SQLite reads a negative limit as none.
     let limit = limit.map_or(-1, |limit| limit as i64);
     let mut statement = conn.prepare_cached(
-        "SELECT path, ai_allowed FROM vaults WHERE ai_allowed = 1 OR ?1 = 0
+        "SELECT path, ai_allowed, drive FROM vaults WHERE ai_allowed = 1 OR ?1 = 0
          ORDER BY open_order DESC LIMIT ?2 OFFSET ?3",
     )?;
     statement
         .query_map(params![ai_allowed_only, limit, offset as i64], KnownVault::from_row)?
         .collect()
+}
+
+/// Forgets the vault at `vault_path`, once its folder is gone.
+pub fn forget_vault(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM vaults WHERE path = ?1", params![vault_path.to_string_lossy()])
+        .map(|_| ())
 }
 
 /// Lets AI apps use the vault at `vault_path`, or stops them. False when
@@ -140,21 +139,23 @@ mod tests {
     fn vaults_are_kept_newest_first_and_allowed_one_by_one() {
         let conn = db();
         let (one, two) = (Path::new("/v/One"), Path::new("/v/Two"));
-        assert_eq!(last_vault(&conn).unwrap(), None);
+        assert!(known_vaults(&conn, false, 0, None).unwrap().is_empty());
 
-        record_opened_vault(&conn, one).unwrap();
-        record_opened_vault(&conn, two).unwrap();
-        record_opened_vault(&conn, one).unwrap();
+        record_opened_vault(&conn, one, None).unwrap();
+        record_opened_vault(&conn, two, Some(7)).unwrap();
+        record_opened_vault(&conn, one, None).unwrap();
         let paths = |vaults: Vec<KnownVault>| vaults.into_iter().map(|v| v.path).collect::<Vec<_>>();
         assert_eq!(paths(known_vaults(&conn, false, 0, None).unwrap()), [one, two]);
         assert_eq!(paths(known_vaults(&conn, false, 1, Some(1)).unwrap()), [two]);
-        assert_eq!(last_vault(&conn).unwrap().map(|v| v.name()), Some("One".to_string()));
+        assert_eq!(known_vaults(&conn, false, 0, Some(1)).unwrap()[0].name(), "One");
 
         assert!(known_vaults(&conn, true, 0, None).unwrap().is_empty());
         assert!(set_vault_ai_allowed(&conn, two, true).unwrap());
         assert!(!set_vault_ai_allowed(&conn, Path::new("/v/Never"), true).unwrap());
         assert_eq!(paths(known_vaults(&conn, true, 0, None).unwrap()), [two]);
-        assert!(known_vault(&conn, two).unwrap().unwrap().ai_allowed);
-        assert!(!last_vault(&conn).unwrap().unwrap().ai_allowed);
+        let two = known_vault(&conn, two).unwrap().unwrap();
+        assert!(two.ai_allowed);
+        assert_eq!(two.drive, Some(7));
+        assert!(!known_vaults(&conn, false, 0, Some(1)).unwrap()[0].ai_allowed);
     }
 }

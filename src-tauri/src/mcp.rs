@@ -16,25 +16,12 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Map, Value, json};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-
-/// A vault AI apps have worked on, kept indexed while the server runs.
-struct Session {
-    vault: Arc<Vault>,
-    _watch: tools::index::Watch,
-}
-
-/// A vault's session, opened by the first call that needs it.
-type Slot = Arc<Mutex<Option<Session>>>;
+use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Clone)]
 struct Server {
     tools: Arc<Vec<Tool>>,
-    /// One slot per vault, so opening a big one doesn't hold up calls to
-    /// the others.
-    sessions: Arc<Mutex<HashMap<PathBuf, Slot>>>,
 }
 
 /// What a call can't go ahead without, said so the AI app can tell the user.
@@ -66,7 +53,6 @@ impl Server {
     fn new() -> Self {
         Self {
             tools: Arc::new(tools::all()),
-            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -80,24 +66,21 @@ impl Server {
     }
 
     /// The vault a call works on: `asked`, or the one opened last, if AI
-    /// apps may use it. It's indexed and watched from the first call to it.
-    fn vault(&self, asked: Option<&str>) -> Result<Arc<Vault>, String> {
+    /// apps may use it.
+    fn vault(&self, asked: Option<&str>) -> Result<Vault, String> {
         let conn = self.settings()?;
         let picked = |vault: Option<KnownVault>| vault.filter(|vault| vault.ai_allowed);
         let known = match asked {
             Some(asked) => {
                 let path = Path::new(asked);
                 picked(settings::known_vault(&conn, path).map_err(|e| e.to_string())?).ok_or_else(|| {
-                    // It may have been taken off the list since it was opened.
-                    self.close(path);
                     format!("'{}' isn't a vault Netherstone lets AI apps use. list_vaults gives the ones it does.", asked)
                 })?
             }
             None => {
-                let last = settings::last_vault(&conn).map_err(|e| e.to_string())?.ok_or(NO_VAULT)?;
+                let last = opened_last(&conn)?.ok_or(NO_VAULT)?;
                 if !last.ai_allowed {
                     let any = settings::known_vaults(&conn, true, 0, Some(1)).map_err(|e| e.to_string())?;
-                    self.close(&last.path);
                     return Err(if any.is_empty() {
                         NONE_PICKED.to_string()
                     } else {
@@ -113,30 +96,7 @@ impl Server {
         if !known.path.is_dir() {
             return Err(format!("The vault {} isn't at {} anymore", known.name(), known.path.display()));
         }
-
-        let slot = {
-            let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
-            sessions.entry(known.path.clone()).or_default().clone()
-        };
-        let mut session = slot.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(open) = session.as_ref() {
-            return Ok(open.vault.clone());
-        }
-        let vault = Arc::new(Vault {
-            root: known.path,
-            sync_root: crate::sync::sync_root()?,
-        });
-        let watch = tools::index::keep_indexed(&vault)?;
-        *session = Some(Session {
-            vault: vault.clone(),
-            _watch: watch,
-        });
-        Ok(vault)
-    }
-
-    /// Stops watching a vault AI apps may no longer use.
-    fn close(&self, path: &Path) {
-        self.sessions.lock().unwrap_or_else(|e| e.into_inner()).remove(path);
+        Ok(Vault::new(known.path, crate::sync::sync_root()?))
     }
 
     /// The vaults AI apps may use, a page at a time.
@@ -145,11 +105,14 @@ impl Server {
         let cursor = arguments.get("cursor").and_then(Value::as_str);
         let limit = arguments.get("limit").and_then(Value::as_u64).map(|limit| limit as usize);
         let page = Page::new(cursor, limit).map_err(|error| error.0)?;
-        let last = settings::last_vault(&conn).map_err(|e| e.to_string())?.map(|vault| vault.path);
+        let last = opened_last(&conn)?.map(|vault| vault.path);
         let vaults = settings::known_vaults(&conn, true, page.offset, Some(page.fetch())).map_err(|e| e.to_string())?;
         let (vaults, next_cursor) = page.finish(vaults);
+        // A page can come out short of a vault that's gone; the cursor still
+        // counts it.
         let vaults: Vec<Value> = vaults
             .into_iter()
+            .filter(|vault| !crate::gone_vaults::is_gone(&vault.path, vault.drive))
             .map(|vault| {
                 json!({
                     "name": vault.name(),
@@ -159,6 +122,20 @@ impl Server {
             })
             .collect();
         Ok(json!({ "vaults": vaults, "next_cursor": next_cursor }))
+    }
+}
+
+/// The vault the app opened last, of the ones whose folder isn't gone. The
+/// app forgets a gone vault the next time it starts; until then it's passed
+/// over here.
+fn opened_last(conn: &rusqlite::Connection) -> Result<Option<KnownVault>, String> {
+    let mut offset = 0;
+    loop {
+        let next = settings::known_vaults(conn, false, offset, Some(1)).map_err(|e| e.to_string())?.pop();
+        match next {
+            Some(vault) if crate::gone_vaults::is_gone(&vault.path, vault.drive) => offset += 1,
+            next => return Ok(next),
+        }
     }
 }
 

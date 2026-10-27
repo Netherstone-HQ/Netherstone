@@ -1,7 +1,7 @@
 use super::queries::locate_tags;
 use crate::markdown_text::text_blocks;
 use rusqlite::{Connection, params};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use urlencoding::decode;
@@ -172,37 +172,6 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
         return Ok(());
     }
     store_shard(conn, vault_path, file_path, read_shard(file_path)?)
-}
-
-/// Indexes the file at `file_path` unless the index already holds this
-/// content for it in the vault at `vault_path`, as when another process
-/// (the app, or another AI app's server) indexed the same save first.
-/// Returns whether it wrote anything. Like [`index_file`], it leaves out a
-/// shard in another vault inside this one.
-pub fn index_file_if_changed(
-    conn: &Connection,
-    vault_path: &Path,
-    file_path: &Path,
-) -> Result<bool, String> {
-    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
-        return Ok(false);
-    }
-    let path_str = file_path
-        .to_str()
-        .ok_or_else(|| "Invalid file path".to_string())?;
-    let shard = read_shard(file_path)?;
-    let indexed: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM files WHERE path = ?1 AND vault_path = ?2 AND content_hash = ?3)",
-            params![path_str, super::attachments::vault_key(vault_path), shard.content_hash],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("Failed to check the index: {}", e))?;
-    if indexed {
-        return Ok(false);
-    }
-    store_shard(conn, vault_path, file_path, shard)?;
-    Ok(true)
 }
 
 fn store_shard(
@@ -382,68 +351,45 @@ pub(super) fn insert_drawing_embeds(conn: &Connection, file_id: i64, content: &s
     Ok(())
 }
 
-/// Check if a file needs to be re-indexed.
-///
-/// Returns true if:
-/// - File doesn't exist in DB for the vault at `vault_path`
-/// - File's last_modified is newer than last_indexed
-pub fn needs_indexing(
-    conn: &Connection,
-    vault_path: &Path,
-    file_path: &Path,
-) -> Result<bool, String> {
-    let path_str = file_path
-        .to_str()
-        .ok_or_else(|| "Invalid file path".to_string())?;
-
+/// When the file at `file_path` last changed, in seconds, as the index keeps it.
+fn modified_secs(file_path: &Path) -> Result<i64, String> {
     let metadata =
         std::fs::metadata(file_path).map_err(|e| format!("Failed to read file metadata: {}", e))?;
-
-    let last_modified = metadata
+    Ok(metadata
         .modified()
         .map_err(|e| format!("Failed to get modified time: {}", e))?
         .duration_since(UNIX_EPOCH)
         .map_err(|e| format!("Invalid modified time: {}", e))?
-        .as_secs() as i64;
-
-    let result: Option<i64> = conn
-        .query_row(
-            "SELECT last_indexed FROM files WHERE path = ?1 AND last_modified >= ?2 AND vault_path = ?3",
-            params![path_str, last_modified, super::attachments::vault_key(vault_path)],
-            |row| row.get(0),
-        )
-        .ok();
-
-    // Needs indexing if not found or if last_modified is newer
-    Ok(result.is_none())
+        .as_secs() as i64)
 }
 
-/// Removes the files of the vault at `vault_path` that no longer exist on
-/// disk, with their search text. Other vaults' files stay, so opening one
-/// again doesn't index it from scratch.
-pub fn prune_deleted_files(
-    conn: &Connection,
-    vault_path: &Path,
-    existing_paths: &[String],
-) -> Result<usize, String> {
-    let vault = super::attachments::vault_key(vault_path);
-    let prune = || -> rusqlite::Result<usize> {
-        super::fill_kept_paths(conn, existing_paths)?;
-        // The search text isn't tied to its file, so it goes first.
-        conn.execute(
-            "DELETE FROM fts_search WHERE rowid IN (
-                 SELECT id FROM files
-                 WHERE vault_path = ?1 AND path NOT IN (SELECT path FROM kept_paths)
-             )",
-            params![vault],
-        )?;
-        conn.execute(
-            "DELETE FROM files WHERE vault_path = ?1 AND path NOT IN (SELECT path FROM kept_paths)",
-            params![vault],
-        )
-    };
+/// The shards of the vault at `vault_path` the index holds, by path, with
+/// their id and when each had last changed when it was indexed.
+fn indexed_shards(conn: &Connection, vault_path: &Path) -> rusqlite::Result<HashMap<String, (i64, i64)>> {
+    let mut stmt = conn.prepare("SELECT path, id, last_modified FROM files WHERE vault_path = ?1")?;
+    stmt.query_map(params![super::attachments::vault_key(vault_path)], |row| {
+        Ok((row.get(0)?, (row.get(1)?, row.get(2)?)))
+    })?
+    .collect()
+}
 
-    prune().map_err(|e| format!("Failed to prune deleted files: {}", e))
+/// Forgets the indexed shards with these ids, with their search text, all
+/// of them or none.
+fn forget_ids(conn: &Connection, ids: &[i64]) -> rusqlite::Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    {
+        // The search text isn't tied to its file, so it goes first.
+        let mut search = tx.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?;
+        let mut files = tx.prepare_cached("DELETE FROM files WHERE id = ?1")?;
+        for id in ids {
+            search.execute(params![id])?;
+            files.execute(params![id])?;
+        }
+    }
+    tx.commit()
 }
 
 /// What indexing a vault did.
@@ -463,23 +409,27 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
         return Err(format!("Vault path is not a directory: {}", vault_path.display()));
     }
 
-    let mut paths = Vec::new();
+    let mut on_disk = Vec::new();
     for node in &crate::vault::scan_own_dir(vault_path) {
-        crate::vault::collect_file_paths(node, &mut paths);
+        crate::vault::collect_shard_times(node, &mut on_disk);
     }
 
+    // Read once, so a pass over a vault where little changed checks each
+    // shard's time on disk only.
+    let mut shards = indexed_shards(conn, vault_path).map_err(|e| format!("Failed to read the index: {}", e))?;
     let (mut indexed, mut skipped, mut errors) = (0, 0, 0);
-    for path_str in &paths {
+    for (path_str, modified) in &on_disk {
         let path = Path::new(path_str);
-        match needs_indexing(conn, vault_path, path) {
-            Ok(true) => match index_file(conn, vault_path, path) {
+        let known = shards.remove(path_str).map(|(_, last_modified)| last_modified);
+        match modified.map_or_else(|| modified_secs(path), Ok) {
+            Ok(modified) if known.is_some_and(|known| known >= modified) => skipped += 1,
+            Ok(_) => match index_file(conn, vault_path, path) {
                 Ok(()) => indexed += 1,
                 Err(e) => {
                     eprintln!("[Netherstone] Failed to index {}: {}", path_str, e);
                     errors += 1;
                 }
             },
-            Ok(false) => skipped += 1,
             Err(e) => {
                 eprintln!("[Netherstone] Failed to check {}: {}", path_str, e);
                 errors += 1;
@@ -487,13 +437,14 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
         }
     }
 
-    // Prune this vault's deleted files only.
-    if let Err(e) = prune_deleted_files(conn, vault_path, &paths) {
+    // What's left is this vault's shards that are gone from disk.
+    let gone: Vec<i64> = shards.into_values().map(|(id, _)| id).collect();
+    if let Err(e) = forget_ids(conn, &gone) {
         eprintln!("[Netherstone] Failed to prune deleted files: {}", e);
     }
 
     Ok(VaultIndexed {
-        paths,
+        paths: on_disk.into_iter().map(|(path, _)| path).collect(),
         indexed,
         skipped,
         errors,
@@ -536,30 +487,6 @@ mod tests {
             .unwrap()
             .collect::<rusqlite::Result<_>>()
             .unwrap()
-    }
-
-    #[test]
-    fn an_unchanged_shard_is_not_written_again() {
-        let vault = crate::sync::state::tests::temp_dir("indexer-if-changed");
-        let conn = Connection::open_in_memory().unwrap();
-        crate::db::schema::init_schema(&conn).unwrap();
-        let shard = vault.join("Plan.md");
-        std::fs::write(&shard, "# Plan #work").unwrap();
-
-        assert!(index_file_if_changed(&conn, &vault, &shard).unwrap());
-        // Marks the stored row, so a write would show.
-        conn.execute("UPDATE files SET last_indexed = -1", []).unwrap();
-        assert!(!index_file_if_changed(&conn, &vault, &shard).unwrap());
-        let last_indexed: i64 = conn
-            .query_row("SELECT last_indexed FROM files", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(last_indexed, -1);
-
-        std::fs::write(&shard, "# Plan #ideas").unwrap();
-        assert!(index_file_if_changed(&conn, &vault, &shard).unwrap());
-        let tag: String = conn.query_row("SELECT tag FROM tags", [], |row| row.get(0)).unwrap();
-        assert_eq!(tag, "ideas");
-        std::fs::remove_dir_all(&vault).unwrap();
     }
 
     #[test]

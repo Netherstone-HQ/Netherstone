@@ -694,9 +694,9 @@ mod tests {
                 .collect()
         };
 
-        let plan = work.join("Plan.md").to_string_lossy().into_owned();
-        crate::db::indexer::prune_deleted_files(&conn, &work, &[plan]).unwrap();
-        crate::db::indexer::prune_deleted_files(&conn, &empty, &[]).unwrap();
+        std::fs::remove_file(work.join("Gone.md")).unwrap();
+        crate::db::indexer::index_vault(&conn, &work).unwrap();
+        crate::db::indexer::index_vault(&conn, &empty).unwrap();
 
         assert_eq!(names(&work), ["Plan.md"]);
         assert_eq!(names(&home), ["Trip.md"]);
@@ -709,8 +709,11 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM fts_search", [], |row| row.get(0))
             .unwrap();
         assert_eq!(searchable, 2);
-        let trip = home.join("Trip.md");
-        assert!(!crate::db::indexer::needs_indexing(&conn, &home, &trip).unwrap());
+        let trip = home.join("Trip.md").to_string_lossy().into_owned();
+        let indexed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM files WHERE path = ?1", [&trip], |row| row.get(0))
+            .unwrap();
+        assert_eq!(indexed, 1);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

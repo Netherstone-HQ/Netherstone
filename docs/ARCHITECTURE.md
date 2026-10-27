@@ -148,11 +148,14 @@ with no window (`src-tauri/src/mcp.rs`, on the official `rmcp` SDK). It
 does nothing while AI apps are turned off in Settings, and uses only the
 vaults picked there. Every vault the app opens goes in the `vaults` table,
 newest first, with whether AI apps may use it, which every Netherstone
-process reads (`db/settings.rs`).
+process reads (`db/settings.rs`). When the app starts it forgets what it
+can make again for each vault whose folder is gone, and keeps its history
+until it's deleted in Settings (`gone_vaults.rs`).
 
 - `list_vaults` gives the picked vaults. Every other tool takes an
-  optional `vault`, and works on the vault opened last without one. Each
-  vault is indexed and watched from the first call to it.
+  optional `vault`, and works on the vault opened last without one. A vault
+  whose folder is gone is passed over until the app next starts and forgets
+  it.
 
 - The tools live in `src-tauri/src/tools/`, apart from the server: they take
   a vault and JSON arguments and return JSON, so the in-app assistant can
@@ -161,9 +164,10 @@ process reads (`db/settings.rs`).
 - Every change saves versions around it in local history, only of the
   files it changed: the files as they were, then as the AI app left them,
   noted "Changed by" the app with its summary (`sync::save_app_change`).
-- The server indexes a vault once, then only what the file watcher
-  reports (`tools/index.rs`). Writes share the app's locks
-  (`locks.rs`), so the two never write at once.
+- Nothing watches a vault between calls, so the server holds no vault
+  folder open. A call that reads the index first indexes the shards that
+  changed since (`Vault::index` in `tools/mod.rs`). Writes share the app's
+  locks (`locks.rs`), so the two never write at once.
 - A drawing an AI app embeds has no picture yet; the app makes it when the
   shard is opened.
 

@@ -81,11 +81,6 @@ fn read_one(vault: &Vault, relative: &str, section: Option<&str>, outline: bool)
     let path = vault.shard(relative)?;
     let markdown = read_text(&path)?;
     let conn = vault.index()?;
-    // The watcher keeps the index up to date; this covers a change it hasn't
-    // caught yet.
-    if crate::db::indexer::needs_indexing(&conn, &vault.root, &path)? {
-        crate::db::indexer::index_file(&conn, &vault.root, &path)?;
-    }
     let file = path.to_string_lossy();
     let metadata = crate::db::queries::get_file_metadata(&conn, &file)?;
     let linked_from = crate::db::queries::backlink_sources(&conn, &vault.root, &file)?.len();

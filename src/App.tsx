@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { ThemeProvider } from "./components/theme/theme-provider";
 import { useVaultInit } from "./hooks/useVaultInit";
+import { useForgetGoneVaults } from "./hooks/useForgetGoneVaults";
 import { useDismissSplash } from "./hooks/useDismissSplash";
 import { useVaultWatcher } from "./hooks/useVaultWatcher";
 import { useAutosave } from "./hooks/useAutosave";
@@ -26,6 +27,7 @@ import { useWelcomeTour } from "@/components/onboarding/useWelcomeTour";
 
 function App() {
   useVaultInit();
+  useForgetGoneVaults();
   useDismissSplash();
   useVaultWatcher();
   useAutosave();

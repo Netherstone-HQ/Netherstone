@@ -5,6 +5,7 @@ mod copy_access;
 mod db;
 mod export;
 mod github;
+mod gone_vaults;
 mod import;
 mod integrations;
 pub mod launch;
@@ -119,7 +120,9 @@ fn open_vault(vault_path: String) -> Result<(), String> {
     let vault = Path::new(&vault_path);
     vault_access::get().open(&sync::sync_root()?, vault)?;
     let kept = db::open_connection()
-        .and_then(|conn| db::settings::record_opened_vault(&conn, vault).map_err(|e| e.to_string()));
+        .and_then(|conn| {
+            db::settings::record_opened_vault(&conn, vault, gone_vaults::drive_of(vault)).map_err(|e| e.to_string())
+        });
     if let Err(error) = kept {
         eprintln!("[Netherstone] Couldn't keep the vault in the vaults opened: {}", error);
     }
@@ -656,6 +659,32 @@ async fn history_free_up_space(
 ) -> Result<sync::space::Freed, String> {
     open_vault_only(&vault_path)?;
     sync::free_up_space(sync::sync_root()?, vault_path.into(), blobs).await
+}
+
+/// Forgets the vaults whose folder is gone, of the ones the app keeps
+/// something for and the `recent` ones the window lists, and returns them.
+#[tauri::command(async)]
+fn forget_gone_vaults(recent: Vec<String>) -> Result<Vec<String>, String> {
+    let recent: Vec<std::path::PathBuf> = recent.into_iter().map(Into::into).collect();
+    Ok(gone_vaults::forget(&recent)?
+        .into_iter()
+        .map(|vault| vault.to_string_lossy().into_owned())
+        .collect())
+}
+
+/// The histories of vaults whose folder is gone.
+#[tauri::command(async)]
+fn gone_vault_histories() -> Result<Vec<gone_vaults::GoneHistory>, String> {
+    gone_vaults::histories(&db::open_connection()?, &sync::sync_root()?)
+}
+
+/// Moves the history of a vault whose folder is gone to the OS trash.
+/// Resolves to the bytes freed.
+#[tauri::command(async)]
+fn delete_gone_vault_history(vault_id: String) -> Result<u64, String> {
+    gone_vaults::delete_history(&db::open_connection()?, &sync::sync_root()?, &vault_id, |path| {
+        trash::delete(path).map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -1743,6 +1772,7 @@ pub fn run() {
         }
     }));
     builder
+        .plugin(launch::plugin())
         .plugin(browser::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1756,11 +1786,6 @@ pub fn run() {
                 window_icon::apply(window);
             }
             splash::show_main_window_eventually(app.handle());
-            if let launch::Command::Open(paths) = launch::parse(std::env::args_os().skip(1))
-                && let Ok(cwd) = std::env::current_dir()
-            {
-                launch::get().add(&paths, &cwd);
-            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1828,6 +1853,9 @@ pub fn run() {
             history_restore,
             history_old_attachments,
             history_free_up_space,
+            forget_gone_vaults,
+            gone_vault_histories,
+            delete_gone_vault_history,
             sync_turn_on_backup,
             sync_now,
             sync_list_backups,

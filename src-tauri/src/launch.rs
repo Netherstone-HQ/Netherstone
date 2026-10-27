@@ -44,6 +44,32 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Command {
     )
 }
 
+/// Takes the folders and files the app was started with, then moves its
+/// current folder to its own data folder. Started from inside a folder, as
+/// by `netherstone .` or a folder's menu, the app, and the webview processes
+/// its window starts, would otherwise keep that folder as theirs for as long
+/// as it runs, so it couldn't be deleted or renamed. A plugin, so it runs
+/// before the window is made; registered after the single-instance plugin,
+/// which hands a second launch's folder to the first before this runs.
+pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::new("launch-folder")
+        .setup(|_app, _api| {
+            if let Command::Open(paths) = parse(std::env::args_os().skip(1))
+                && let Ok(cwd) = std::env::current_dir()
+            {
+                get().add(&paths, &cwd);
+            }
+            let own = crate::db::get_db_path().ok().and_then(|db| db.parent().map(Path::to_path_buf));
+            if let Some(own) = own
+                && let Err(error) = std::env::set_current_dir(&own)
+            {
+                eprintln!("[Netherstone] Couldn't leave the folder the app started in: {}", error);
+            }
+            Ok(())
+        })
+        .build()
+}
+
 /// The event the window listens for to take what came in.
 pub const EVENT: &str = "launch";
 

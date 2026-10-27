@@ -11,7 +11,6 @@ mod edits;
 mod find;
 pub mod guide;
 mod history;
-pub mod index;
 mod links;
 mod read;
 mod write;
@@ -22,12 +21,17 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
+use std::sync::OnceLock;
 
-/// The vault the tools work on.
+/// The vault the tools work on, for one call. Nothing watches the vault
+/// between calls, so nothing holds its folder open: the first time a call
+/// reads the index, the shards changed since are indexed (`Vault::index`).
 pub struct Vault {
     pub root: PathBuf,
     /// Where the vaults' histories are kept (`sync::sync_root`).
     pub sync_root: PathBuf,
+    /// How bringing the index up to date went, once this call has.
+    caught_up: OnceLock<Result<(), String>>,
 }
 
 /// Who asked for a change: the AI app, as it names itself. History notes
@@ -60,6 +64,10 @@ impl From<rusqlite::Error> for ToolError {
 pub type ToolResult<T> = Result<T, ToolError>;
 
 impl Vault {
+    pub fn new(root: PathBuf, sync_root: PathBuf) -> Self {
+        Self { root, sync_root, caught_up: OnceLock::new() }
+    }
+
     /// The file or folder at `relative` in the vault. Refuses paths that
     /// leave the vault, by `..`, from the root, or through a link, the
     /// folders the vault tree hides (`vault::is_scanned_name`), by any name
@@ -128,8 +136,33 @@ impl Vault {
             .unwrap_or_else(|_| path.to_string_lossy().replace('\\', "/"))
     }
 
+    /// The search index, with the vault's shards that changed since it was
+    /// last indexed, by the app or an earlier call, indexed first.
     pub fn index(&self) -> ToolResult<rusqlite::Connection> {
-        Ok(crate::db::open_connection()?)
+        self.index_caught_up().map(|(conn, _)| conn)
+    }
+
+    /// [`Vault::index`], and whether it was brought up to date just now, so
+    /// it holds what changed before this.
+    pub(crate) fn index_caught_up(&self) -> ToolResult<(rusqlite::Connection, bool)> {
+        let conn = crate::db::open_connection()?;
+        let mut now = false;
+        self.caught_up
+            .get_or_init(|| {
+                now = true;
+                let indexed = crate::db::indexer::index_vault(&conn, &self.root)?;
+                if indexed.indexed + indexed.errors > 0 {
+                    eprintln!(
+                        "[Netherstone] Indexed {}: {} changed, {} failed",
+                        self.root.display(),
+                        indexed.indexed,
+                        indexed.errors
+                    );
+                }
+                Ok(())
+            })
+            .clone()?;
+        Ok((conn, now))
     }
 }
 
@@ -264,10 +297,7 @@ pub(crate) mod tests {
         let dir = crate::sync::state::tests::temp_dir(name);
         let root = dir.join("vault");
         std::fs::create_dir_all(&root).unwrap();
-        Vault {
-            root,
-            sync_root: dir.join("sync"),
-        }
+        Vault::new(root, dir.join("sync"))
     }
 
     #[test]

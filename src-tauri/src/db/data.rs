@@ -162,6 +162,27 @@ pub fn start_writing_log(conn: &Connection, vault_path: &str, day: &str) -> rusq
     Ok(())
 }
 
+/// Drops the writing logged for the shards of `vault_path`, and the day it
+/// started counting, once the vault is gone with no history to keep it with.
+/// Run it in a transaction.
+pub fn forget_writing_log(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()> {
+    let paths: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT DISTINCT file_path FROM writing_log")?;
+        stmt.query_map([], |row| row.get::<_, String>(0))?
+            .filter(|path| path.as_ref().map_or(true, |path| Path::new(path).starts_with(vault_path)))
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let mut delete = conn.prepare_cached("DELETE FROM writing_log WHERE file_path = ?1")?;
+    for path in &paths {
+        delete.execute(params![path])?;
+    }
+    conn.execute(
+        "DELETE FROM writing_log_start WHERE vault_path = ?1",
+        params![vault_path.to_string_lossy()],
+    )?;
+    Ok(())
+}
+
 fn path_key(path: &str) -> String {
     path.replace('\\', "/").to_lowercase()
 }

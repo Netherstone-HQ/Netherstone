@@ -2,8 +2,9 @@
 // (the splash's own paths), so they follow the brand when it changes:
 //   node scripts/installer-images.mjs
 // Writes src-tauri/installer/: the Windows installer's sidebar and header
-// (BMP, the only format NSIS takes) and the macOS disk image background
-// (a TIFF holding a 1x and a 2x image; Finder picks one for the screen).
+// (BMP, the only format NSIS takes, one file per display scale) and the macOS
+// disk image background (a TIFF holding a 1x and a 2x image; Finder picks one
+// for the screen).
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -59,12 +60,15 @@ const lockup = (markSize, colour) => {
 };
 
 // NSIS sizes: https://nsis.sourceforge.io/Docs/Modern%20UI%202/Readme.html
-// NSIS resizes by dropping or repeating pixels, so they're drawn at exactly
-// that size, sharp at 100% scaling.
+// The installer grows with the display scale, and NSIS resizes by dropping or
+// repeating pixels, so each image is drawn once per scale, at that scale's
+// size; the installer loads the one for the screen (installer/windows/
+// hooks.nsh, which lists the same scales).
+const NSIS_SCALES = [1, 1.25, 1.5];
 const images = [
   {
     file: "nsis-sidebar.bmp",
-    scales: [1],
+    scales: NSIS_SCALES,
     width: 164,
     height: 314,
     body: `<div style="background:${INK};width:100%;height:100%;display:flex;align-items:center;justify-content:center">
@@ -72,7 +76,7 @@ const images = [
   },
   {
     file: "nsis-header.bmp",
-    scales: [1],
+    scales: NSIS_SCALES,
     width: 150,
     height: 57,
     body: `<div style="background:${WINDOW};width:100%;height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:12px;box-sizing:border-box">
@@ -103,6 +107,11 @@ function arrow(from, to) {
     <g stroke="${STONE}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
       <path d="M${x1} ${from.y}H${x2}M${x2 - head} ${from.y - head}L${x2} ${from.y}L${x2 - head} ${from.y + head}"/>
     </g></svg>`;
+}
+
+/** `nsis-sidebar.bmp` at 1x, `nsis-sidebar-125.bmp` at 125%. */
+function scaledName(file, scale) {
+  return scale === 1 ? file : file.replace(/\.bmp$/, `-${Math.round(scale * 100)}.bmp`);
 }
 
 /** 24-bit BMP, bottom row first, rows padded to 4 bytes. */
@@ -205,18 +214,24 @@ try {
       });
       await page.setContent(`<body style="margin:0;width:${image.width}px;height:${image.height}px">${image.body}</body>`);
       const png = await page.screenshot();
-      const rgba = await page.evaluate(async (data) => {
+      const { width, height, rgba } = await page.evaluate(async (data) => {
         const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
         const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
         const context = canvas.getContext("2d");
         context.drawImage(bitmap, 0, 0);
-        return Array.from(context.getImageData(0, 0, bitmap.width, bitmap.height).data);
+        const pixels = Array.from(context.getImageData(0, 0, bitmap.width, bitmap.height).data);
+        return { width: bitmap.width, height: bitmap.height, rgba: pixels };
       }, png.toString("base64"));
-      frames.push({ width: image.width * scale, height: image.height * scale, rgba: Buffer.from(rgba), scale });
+      frames.push({ width, height, rgba: Buffer.from(rgba), scale });
       await page.close();
     }
-    writeFileSync(join(out, image.file), image.file.endsWith(".tiff") ? tiff(frames) : bmp(frames[0]));
-    console.log(`Wrote src-tauri/installer/${image.file}`);
+    const written = image.file.endsWith(".tiff")
+      ? [[image.file, tiff(frames)]]
+      : frames.map((frame) => [scaledName(image.file, frame.scale), bmp(frame)]);
+    for (const [file, data] of written) {
+      writeFileSync(join(out, file), data);
+      console.log(`Wrote src-tauri/installer/${file}`);
+    }
   }
 } finally {
   await browser.close();

@@ -3,10 +3,14 @@
 //! one row in [`APPS`]: where it is installed, where it keeps its servers and
 //! in what shape, so adding an app is adding a row.
 
+use jsonc_parser::ParseOptions;
+use jsonc_parser::cst::{CstInputValue, CstRootNode};
 use serde::Serialize;
 use serde_json::{Value as Json, json};
 use serde_yaml_ng::{Mapping, Value as Yaml};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use yaml_edit::YamlFile;
 
 /// The name the server goes by in every app's list.
 const SERVER_NAME: &str = "netherstone";
@@ -169,45 +173,12 @@ fn add_server(format: Format, config: &Path, command: &str) -> Result<(), String
     // Write through a link to where the file really is, not over the link.
     let config = std::fs::canonicalize(config).unwrap_or_else(|_| config.to_path_buf());
     let existing = match std::fs::read_to_string(&config) {
-        Ok(text) => Some(text).filter(|text| !text.trim().is_empty()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(format!("Couldn't read {}: {error}", config.display())),
     };
-    let unreadable = || format!("Couldn't read {}, so it was left as it is", config.display());
-    let text = match format {
-        Format::Json { key, typed } => {
-            let mut root = match existing.as_deref() {
-                Some(text) => serde_json::from_str::<Json>(text).map_err(|_| unreadable())?,
-                None => json!({}),
-            };
-            let servers = root
-                .as_object_mut()
-                .ok_or_else(unreadable)?
-                .entry(key)
-                .or_insert_with(|| json!({}));
-            servers
-                .as_object_mut()
-                .ok_or_else(unreadable)?
-                .insert(SERVER_NAME.to_string(), json_entry(command, typed));
-            serde_json::to_string_pretty(&root).map_err(|e| e.to_string())? + "\n"
-        }
-        Format::GooseYaml => {
-            let mut root = match existing.as_deref() {
-                Some(text) => serde_yaml_ng::from_str::<Yaml>(text).map_err(|_| unreadable())?,
-                None => Yaml::Mapping(Mapping::new()),
-            };
-            let extensions = root
-                .as_mapping_mut()
-                .ok_or_else(unreadable)?
-                .entry("extensions".into())
-                .or_insert_with(|| Yaml::Mapping(Mapping::new()));
-            extensions
-                .as_mapping_mut()
-                .ok_or_else(unreadable)?
-                .insert(SERVER_NAME.into(), goose_entry(command));
-            serde_yaml_ng::to_string(&root).map_err(|e| e.to_string())?
-        }
-    };
+    let text = with_server(format, &existing, command)
+        .ok_or_else(|| format!("Couldn't read {}, so it was left as it is", config.display()))?;
     if let Some(folder) = config.parent() {
         std::fs::create_dir_all(folder)
             .map_err(|e| format!("Couldn't create {}: {e}", folder.display()))?;
@@ -215,6 +186,92 @@ fn add_server(format: Format, config: &Path, command: &str) -> Result<(), String
     crate::vault::replace_atomically(&config, |file| {
         std::io::Write::write_all(file, text.as_bytes())
     })
+}
+
+/// `text` with the server's entry added, or pointed back at `command`. Only
+/// that entry is written: the rest keeps its order, comments and layout. The
+/// edited text must read back as `text`'s settings with just that entry
+/// changed, or there's no edit (`None`), as there's none for text that
+/// isn't the app's settings.
+fn with_server(format: Format, text: &str, command: &str) -> Option<String> {
+    match format {
+        Format::Json { key, typed } => json_with_server(text, key, json_entry(command, typed)),
+        Format::GooseYaml => yaml_with_server(text, goose_entry(command)),
+    }
+}
+
+fn json_with_server(text: &str, key: &str, entry: Json) -> Option<String> {
+    let root = CstRootNode::parse(text, &ParseOptions::default()).ok()?;
+    let servers = root.object_value_or_create()?.object_value_or_create(key)?;
+    match servers.get(SERVER_NAME) {
+        Some(server) => server.set_value(cst_value(&entry)),
+        None => {
+            servers.append(SERVER_NAME, cst_value(&entry));
+        }
+    }
+    let edited = root.to_string();
+
+    let mut expected = match text.trim() {
+        "" => json!({}),
+        _ => read_json(text)?,
+    };
+    expected
+        .as_object_mut()?
+        .entry(key)
+        .or_insert_with(|| json!({}))
+        .as_object_mut()?
+        .insert(SERVER_NAME.to_string(), entry);
+    (read_json(&edited)? == expected).then_some(edited)
+}
+
+fn yaml_with_server(text: &str, entry: Yaml) -> Option<String> {
+    // The entry as the editor's own node, inside the list it goes in.
+    let mut servers = Mapping::new();
+    servers.insert(SERVER_NAME.into(), entry.clone());
+    let mut addition = Mapping::new();
+    addition.insert("extensions".into(), Yaml::Mapping(servers));
+    let addition = yaml_edit::Document::from_str(&serde_yaml_ng::to_string(&addition).ok()?)
+        .ok()?
+        .get_mapping("extensions")?;
+
+    let file = YamlFile::from_str(text).ok()?;
+    let root = file.ensure_document().as_mapping()?;
+    match root.get_mapping("extensions") {
+        Some(extensions) => extensions.set(SERVER_NAME, addition.get_mapping(SERVER_NAME)?),
+        None => root.set("extensions", addition),
+    }
+    let edited = file.to_string();
+
+    // A file with only comments, or nothing, has no settings yet.
+    let mut expected = match serde_yaml_ng::from_str::<Yaml>(text).ok()? {
+        Yaml::Null => Yaml::Mapping(Mapping::new()),
+        settings => settings,
+    };
+    expected
+        .as_mapping_mut()?
+        .entry("extensions".into())
+        .or_insert_with(|| Yaml::Mapping(Mapping::new()))
+        .as_mapping_mut()?
+        .insert(SERVER_NAME.into(), entry);
+    (serde_yaml_ng::from_str::<Yaml>(&edited).ok()? == expected).then_some(edited)
+}
+
+/// Settings in JSON, or the JSONC some apps (VS Code) keep them in.
+fn read_json(text: &str) -> Option<Json> {
+    jsonc_parser::parse_to_serde_value(text, &ParseOptions::default()).ok()
+}
+
+fn cst_value(value: &Json) -> CstInputValue {
+    match value {
+        Json::Null => CstInputValue::Null,
+        Json::Bool(value) => CstInputValue::Bool(*value),
+        Json::Number(number) => CstInputValue::Number(number.to_string()),
+        Json::String(text) => CstInputValue::String(text.clone()),
+        Json::Array(items) => CstInputValue::Array(items.iter().map(cst_value).collect()),
+        Json::Object(fields) => CstInputValue::Object(
+            fields.iter().map(|(name, value)| (name.clone(), cst_value(value))).collect(),
+        ),
+    }
 }
 
 /// What to paste into an app that isn't listed: the shape most apps take.
@@ -255,7 +312,7 @@ fn is_connected(format: Format, config: &Path, command: &str) -> bool {
         return false;
     };
     match format {
-        Format::Json { key, .. } => serde_json::from_str::<Json>(&text).is_ok_and(|root| {
+        Format::Json { key, .. } => read_json(&text).is_some_and(|root| {
             let entry = &root[key][SERVER_NAME];
             entry["command"] == command && entry["args"] == json!(SERVER_ARGS)
         }),
@@ -272,10 +329,13 @@ fn is_connected(format: Format, config: &Path, command: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// A config file in a folder of its own, as tests run side by side.
     fn temp_config(name: &str, text: Option<&str>) -> PathBuf {
+        static FOLDERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let folder = std::env::temp_dir().join(format!(
-            "netherstone-ai-apps-{}-{name}",
-            std::process::id()
+            "netherstone-ai-apps-{}-{}",
+            std::process::id(),
+            FOLDERS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).unwrap();
@@ -294,35 +354,91 @@ mod tests {
     }
 
     #[test]
-    fn json_keeps_other_servers_and_counts_as_connected_after() {
+    fn json_keeps_the_order_comments_and_layout_around_the_entry() {
+        let format = Format::Json { key: "servers", typed: true };
+        let path = temp_config(
+            "mcp.json",
+            Some(
+                "{\n    // Mine.\n    \"zeta\": 1,\n    \"servers\": {\n        \"other\": { \"command\": \"x\" }, // Keep.\n    },\n    \"alpha\": 2,\n}\n",
+            ),
+        );
+        add_server(format, &path, "/apps/Netherstone").unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "{\n    // Mine.\n    \"zeta\": 1,\n    \"servers\": {\n        \"other\": { \"command\": \"x\" }, // Keep.\n        \"netherstone\": {\n            \"args\": [\"mcp\"],\n            \"command\": \"/apps/Netherstone\",\n            \"type\": \"stdio\",\n        },\n    },\n    \"alpha\": 2,\n}\n"
+        );
+        assert!(is_connected(format, &path, "/apps/Netherstone"));
+    }
+
+    #[test]
+    fn json_points_the_entry_back_in_place() {
         let format = Format::Json { key: "mcpServers", typed: false };
         let path = temp_config(
-            "claude_desktop_config.json",
-            Some(r#"{"theme":"dark","mcpServers":{"other":{"command":"x"}}}"#),
+            "mcp.json",
+            Some(r#"{"mcpServers": {"a": 1, "netherstone": {"command": "/old", "args": ["mcp"]}, "b": 2}}"#),
         );
         assert!(!is_connected(format, &path, "/apps/Netherstone"));
         add_server(format, &path, "/apps/Netherstone").unwrap();
 
-        let root: Json = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(root["theme"], "dark");
-        assert_eq!(root["mcpServers"]["other"]["command"], "x");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("{\"mcpServers\": {\"a\": 1, \"netherstone\": {"));
+        assert!(text.ends_with("}, \"b\": 2}}"));
         assert!(is_connected(format, &path, "/apps/Netherstone"));
-        // Moved since: connect again.
-        assert!(!is_connected(format, &path, "/elsewhere/Netherstone"));
     }
 
     #[test]
-    fn goose_yaml_keeps_other_extensions() {
+    fn json_settings_that_arent_a_list_of_servers_are_left_as_they_are() {
+        let format = Format::Json { key: "mcpServers", typed: false };
+        for text in ["[1, 2]", r#"{"mcpServers": []}"#, r#"{"mcpServers": null}"#, "{ not json"] {
+            let path = temp_config("mcp.json", Some(text));
+            assert!(add_server(format, &path, "/apps/Netherstone").is_err());
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        }
+    }
+
+    #[test]
+    fn json_starts_a_missing_file() {
+        let format = Format::Json { key: "mcpServers", typed: false };
+        let path = temp_config("claude_desktop_config.json", None);
+        add_server(format, &path, "/apps/Netherstone").unwrap();
+        assert!(is_connected(format, &path, "/apps/Netherstone"));
+    }
+
+    #[test]
+    fn goose_yaml_keeps_comments_and_order_around_the_entry() {
         let path = temp_config(
             "config.yaml",
-            Some("GOOSE_PROVIDER: anthropic\nextensions:\n  developer:\n    enabled: true\n    type: builtin\n    name: developer\n"),
+            Some(
+                "# Goose.\nGOOSE_PROVIDER: anthropic # Inline.\nextensions:\n  developer:\n    enabled: true\n    type: builtin\n# End.\nGOOSE_MODEL: x\n",
+            ),
         );
         add_server(Format::GooseYaml, &path, "/apps/Netherstone").unwrap();
 
-        let root: Yaml = serde_yaml_ng::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(root["GOOSE_PROVIDER"].as_str(), Some("anthropic"));
-        assert_eq!(root["extensions"]["developer"]["type"].as_str(), Some("builtin"));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# Goose.\nGOOSE_PROVIDER: anthropic # Inline.\nextensions:\n  developer:\n    enabled: true\n    type: builtin\n  netherstone:\n"));
+        assert!(text.ends_with("# End.\nGOOSE_MODEL: x\n"));
         assert!(is_connected(Format::GooseYaml, &path, "/apps/Netherstone"));
+    }
+
+    #[test]
+    fn goose_yaml_starts_the_list_in_a_file_without_one() {
+        for text in [None, Some("# Only a comment.\n"), Some("GOOSE_PROVIDER: anthropic\n")] {
+            let path = temp_config("config.yaml", text);
+            add_server(Format::GooseYaml, &path, "/apps/Netherstone").unwrap();
+            let edited = std::fs::read_to_string(&path).unwrap();
+            assert!(edited.starts_with(text.unwrap_or_default()));
+            assert!(is_connected(Format::GooseYaml, &path, "/apps/Netherstone"));
+        }
+    }
+
+    #[test]
+    fn goose_yaml_that_isnt_a_list_of_extensions_is_left_as_it_is() {
+        for text in ["- a\n- b\n", "extensions:\n- developer\n", "extensions: [\n"] {
+            let path = temp_config("config.yaml", Some(text));
+            assert!(add_server(Format::GooseYaml, &path, "/apps/Netherstone").is_err());
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        }
     }
 
     #[test]

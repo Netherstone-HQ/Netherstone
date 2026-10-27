@@ -36,7 +36,7 @@ fn log(result: Result<(), String>) {
 fn index_change(conn: &rusqlite::Connection, root: &Path, folders: &mut FolderTracker, path: &Path) {
     if crate::vault::is_markdown_path(path) {
         log(if path.is_file() {
-            crate::db::indexer::index_file(conn, root, path)
+            crate::db::indexer::index_file_if_changed(conn, root, path).map(|_| ())
         } else {
             crate::db::indexer::forget_path(conn, root, path).map(|_| ())
         });
@@ -47,7 +47,7 @@ fn index_change(conn: &rusqlite::Connection, root: &Path, folders: &mut FolderTr
                 crate::vault::collect_file_paths(node, &mut shards);
             }
             for shard in shards {
-                log(crate::db::indexer::index_file(conn, root, Path::new(&shard)));
+                log(crate::db::indexer::index_file_if_changed(conn, root, Path::new(&shard)).map(|_| ()));
             }
         } else {
             log(crate::db::indexer::forget_path(conn, root, path).map(|_| ()));

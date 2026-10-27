@@ -13,6 +13,7 @@ use rusqlite::Connection;
 /// - `ast_cache_index`: Path-to-content index for the content-addressed AST cache
 /// - `ast_cache_blobs`: Content-addressed AST payload store keyed by hash + version
 /// - `charts`: The charts drawn from tables in each file
+/// - `drawing_embeds`: The drawings each file shows
 /// - `writing_log`: Words each shard started and ended a day with, from saves
 ///   in the editor on this device. Never synced.
 /// - `writing_log_start`: The day this device started counting for each vault
@@ -59,6 +60,8 @@ CREATE TABLE IF NOT EXISTS links (
 
 CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_file_id);
 CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_path);
+-- Backlinks match a target with case ignored.
+CREATE INDEX IF NOT EXISTS idx_links_target_nocase ON links(target_path COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_links_valid ON links(is_valid);
 
 -- ── Tags ────────────────────────────────────────────────────────────────────
@@ -76,7 +79,9 @@ CREATE TABLE IF NOT EXISTS tags (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tags_file_id ON tags(file_id);
-CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+-- Tags keep the case they were typed in and are found with case ignored.
+DROP INDEX IF EXISTS idx_tags_tag;
+CREATE INDEX IF NOT EXISTS idx_tags_tag_nocase ON tags(tag COLLATE NOCASE);
 
 -- ── Attachments ──────────────────────────────────────────────────────────────
 
@@ -161,6 +166,19 @@ CREATE TABLE IF NOT EXISTS charts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_charts_file_id ON charts(file_id);
+
+-- ── Drawing embeds ──────────────────────────────────────────────────────────
+
+-- The drawings each shard shows, by the vault-relative path its image tag
+-- names (`data-excalidraw`).
+CREATE TABLE IF NOT EXISTS drawing_embeds (
+    file_id INTEGER NOT NULL,
+    drawing_path TEXT NOT NULL,
+    PRIMARY KEY (file_id, drawing_path),
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_drawing_embeds_drawing_path ON drawing_embeds(drawing_path);
 
 -- ── Writing Log ─────────────────────────────────────────────────────────────
 
@@ -263,8 +281,40 @@ fn drop_index_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Er
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     drop_attachment_tables_without_vault(conn)?;
     drop_index_tables_without_vault(conn)?;
+    let fill_drawing_embeds = !table_exists(conn, "drawing_embeds")?;
     conn.execute_batch(SCHEMA)?;
+    if fill_drawing_embeds {
+        fill_drawing_embeds_from_index(conn)?;
+    }
     Ok(())
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool, rusqlite::Error> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+        [table],
+        |row| row.get(0),
+    )
+}
+
+/// Fills `drawing_embeds` for the shards indexed before it existed, from
+/// their indexed text, so they don't need indexing again.
+fn fill_drawing_embeds_from_index(conn: &Connection) -> Result<(), rusqlite::Error> {
+    // Immediate, so a shard indexed meanwhile by another process can't
+    // interleave with the read and the writes.
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    {
+        let mut stmt = tx.prepare(
+            "SELECT f.id, s.content FROM files f JOIN fts_search s ON s.rowid = f.id
+             WHERE instr(s.content, 'data-excalidraw') > 0",
+        )?;
+        let shards = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+        for shard in shards {
+            let (file_id, content) = shard?;
+            super::indexer::insert_drawing_embeds(&tx, file_id, &content)?;
+        }
+    }
+    tx.commit()
 }
 
 #[cfg(test)]

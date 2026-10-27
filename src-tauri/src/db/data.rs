@@ -285,9 +285,21 @@ fn is_shard_target(target: &str) -> bool {
 /// The @ links in the vault at `vault_path` that point to shards that don't
 /// exist, in the order of the shards holding them.
 pub fn get_broken_links(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Vec<BrokenLink>> {
+    find_broken_links(conn, vault_path, None, None)
+}
+
+/// [`get_broken_links`], only in the shard at `in_shard` when given, and
+/// stopping once it has found `wanted` when given.
+pub fn find_broken_links(
+    conn: &Connection,
+    vault_path: &Path,
+    in_shard: Option<&Path>,
+    wanted: Option<usize>,
+) -> rusqlite::Result<Vec<BrokenLink>> {
     let vault = vault_key(vault_path);
     let mut paths = HashSet::new();
     let mut names = HashSet::new();
+    let mut shard = None;
     {
         let mut stmt = conn.prepare("SELECT path FROM files WHERE vault_path = ?1")?;
         for path in stmt.query_map(params![vault], |row| row.get::<_, String>(0))? {
@@ -298,16 +310,23 @@ pub fn get_broken_links(conn: &Connection, vault_path: &Path) -> rusqlite::Resul
             }
             names.insert(name);
             paths.insert(path_key(&path));
+            if in_shard.is_some_and(|in_shard| Path::new(&path) == in_shard) {
+                shard = Some(path);
+            }
         }
     }
+    if in_shard.is_some() && shard.is_none() {
+        return Ok(Vec::new());
+    }
 
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT f.path, f.name, l.link_type, l.target_path, l.link_text
          FROM links l JOIN files f ON f.id = l.source_file_id
-         WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')
+         WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention'){}
          ORDER BY f.name COLLATE NOCASE, f.path, l.id",
-    )?;
-    let rows = stmt.query_map(params![vault], |row| {
+        if shard.is_some() { " AND f.path = ?2" } else { "" }
+    ))?;
+    let row = |row: &rusqlite::Row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
@@ -315,11 +334,18 @@ pub fn get_broken_links(conn: &Connection, vault_path: &Path) -> rusqlite::Resul
             row.get::<_, String>(3)?,
             row.get::<_, Option<String>>(4)?,
         ))
-    })?;
+    };
+    let rows = match &shard {
+        Some(shard) => stmt.query_map(params![vault, shard], row)?,
+        None => stmt.query_map(params![vault], row)?,
+    };
 
     let mut broken = Vec::new();
     let mut seen = HashSet::new();
     for row in rows {
+        if wanted.is_some_and(|wanted| broken.len() >= wanted) {
+            break;
+        }
         let (path, name, link_type, target, text) = row?;
         let exists = if link_type == LinkType::Mention.as_str() {
             target.is_empty()
@@ -521,13 +547,17 @@ mod tests {
         for name in ["Plan.md", "Notes/Ideas.md"] {
             crate::db::indexer::index_file(&conn, &dir, &dir.join(name)).unwrap();
         }
-        let broken = get_broken_links(&conn, &dir).unwrap();
+        let shown = |broken: Vec<BrokenLink>| -> Vec<(String, String)> {
+            broken.into_iter().map(|b| (b.text, b.name)).collect()
+        };
+        let all = [("Gone".to_string(), "Ideas.md".to_string()), ("Old".to_string(), "Ideas.md".to_string())];
+        assert_eq!(shown(get_broken_links(&conn, &dir).unwrap()), all);
+        // A page stops once it has what it wants.
+        assert_eq!(shown(find_broken_links(&conn, &dir, None, Some(1)).unwrap()), all[..1]);
+        // In one shard.
+        let ideas = dir.join("Notes").join("Ideas.md");
+        assert_eq!(shown(find_broken_links(&conn, &dir, Some(&ideas), None).unwrap()), all);
+        assert!(find_broken_links(&conn, &dir, Some(&dir.join("Plan.md")), None).unwrap().is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
-
-        let shown: Vec<_> = broken
-            .iter()
-            .map(|b| (b.text.as_str(), b.name.as_str()))
-            .collect();
-        assert_eq!(shown, [("Gone", "Ideas.md"), ("Old", "Ideas.md")]);
     }
 }

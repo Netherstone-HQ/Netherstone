@@ -377,32 +377,61 @@ impl LinkedShard {
     }
 }
 
+/// A file that links to or mentions a shard, before the text around the
+/// link is read.
+pub struct BacklinkSource {
+    id: i64,
+    path: String,
+    name: String,
+}
+
 /// Every file of the vault at `vault_path` that links to or mentions the
-/// shard at `file_path`, by name, with the text around its first link to it.
-pub fn get_backlinks(
+/// shard at `file_path`, by name.
+pub fn backlink_sources(
     conn: &Connection,
     vault_path: &Path,
     file_path: &str,
-) -> Result<Vec<Backlink>, String> {
+) -> Result<Vec<BacklinkSource>, String> {
     let shard = LinkedShard::new(file_path);
+    // Every target `is_target` can match, so the target index finds the
+    // links and `is_target` stays the rule.
+    let without_md = shard
+        .path
+        .len()
+        .checked_sub(".md".len())
+        .and_then(|end| Some((end, shard.path.get(end..)?)))
+        .filter(|(_, extension)| extension.eq_ignore_ascii_case(".md"))
+        .map(|(end, _)| &shard.path[..end]);
 
     let mut stmt = conn
         .prepare(
-            "SELECT l.source_file_id, l.link_type, l.target_path FROM links l
+            // Without INDEXED BY, SQLite may start from the vault's files
+            // and read all their links.
+            "SELECT f.id, f.path, f.name, l.link_type, l.target_path
+             FROM links l INDEXED BY idx_links_target_nocase
              JOIN files f ON f.id = l.source_file_id
-             WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')",
+             WHERE l.target_path COLLATE NOCASE IN (?2, ?3, ?4, ?5)
+               AND l.link_type IN ('internal', 'mention') AND f.vault_path = ?1",
         )
         .map_err(|e| format!("Failed to prepare links query: {}", e))?;
     let links = stmt
-        .query_map(params![vault_key(vault_path)], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })
+        .query_map(
+            params![vault_key(vault_path), shard.path, without_md, shard.stem, shard.name],
+            |row| {
+                Ok((
+                    BacklinkSource {
+                        id: row.get(0)?,
+                        path: row.get(1)?,
+                        name: row.get(2)?,
+                    },
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
         .map_err(|e| format!("Failed to query links: {}", e))?;
-    let mut sources = HashSet::new();
+    let mut seen = HashSet::new();
+    let mut sources = Vec::new();
     for link in links {
         let (source, link_type, target) =
             link.map_err(|e| format!("Failed to read link: {}", e))?;
@@ -411,36 +440,50 @@ pub fn get_backlinks(
         } else {
             LinkType::Internal
         };
-        if shard.is_target(link_type, &target) {
-            sources.insert(source);
+        if shard.is_target(link_type, &target) && seen.insert(source.id) {
+            sources.push(source);
         }
     }
+    sources.sort_by_cached_key(|source| (source.name.to_lowercase(), source.path.clone()));
+    Ok(sources)
+}
 
+/// The backlinks from `sources` (from [`backlink_sources`] for the shard at
+/// `file_path`), each with the text around its first link to the shard.
+pub fn backlinks_from(
+    conn: &Connection,
+    file_path: &str,
+    sources: Vec<BacklinkSource>,
+) -> Result<Vec<Backlink>, String> {
+    let shard = LinkedShard::new(file_path);
     let mut stmt = conn
-        .prepare(
-            "SELECT f.path, f.name, s.content
-             FROM files f
-             LEFT JOIN fts_search s ON s.rowid = f.id
-             WHERE f.id = ?1",
-        )
+        .prepare("SELECT content FROM fts_search WHERE rowid = ?1")
         .map_err(|e| format!("Failed to prepare backlinks query: {}", e))?;
-    let mut backlinks = sources
+    sources
         .into_iter()
         .map(|source| {
-            stmt.query_row(params![source], |row| {
-                let path: String = row.get(0)?;
-                let content: Option<String> = row.get(2)?;
-                Ok(Backlink {
-                    excerpt: link_excerpt(&shard, &path, content.as_deref().unwrap_or("")),
-                    name: row.get(1)?,
-                    path,
-                })
+            let content = stmt
+                .query_row(params![source.id], |row| row.get::<_, Option<String>>(0))
+                .optional()
+                .map_err(|e| format!("Failed to query backlinks: {}", e))?
+                .flatten();
+            Ok(Backlink {
+                excerpt: link_excerpt(&shard, &source.path, content.as_deref().unwrap_or("")),
+                name: source.name,
+                path: source.path,
             })
         })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to query backlinks: {}", e))?;
-    backlinks.sort_by_cached_key(|backlink| backlink.name.to_lowercase());
-    Ok(backlinks)
+        .collect()
+}
+
+/// Every file of the vault at `vault_path` that links to or mentions the
+/// shard at `file_path`, by name, with the text around its first link to it.
+pub fn get_backlinks(
+    conn: &Connection,
+    vault_path: &Path,
+    file_path: &str,
+) -> Result<Vec<Backlink>, String> {
+    backlinks_from(conn, file_path, backlink_sources(conn, vault_path, file_path)?)
 }
 
 /// The text around the first link to `shard` in `content`, the Markdown of

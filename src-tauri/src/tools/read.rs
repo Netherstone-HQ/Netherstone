@@ -88,7 +88,7 @@ fn read_one(vault: &Vault, relative: &str, section: Option<&str>, outline: bool)
     }
     let file = path.to_string_lossy();
     let metadata = crate::db::queries::get_file_metadata(&conn, &file)?;
-    let linked_from = crate::db::queries::get_backlinks(&conn, &vault.root, &file)?.len();
+    let linked_from = crate::db::queries::backlink_sources(&conn, &vault.root, &file)?.len();
 
     let content = match (outline, section) {
         (true, _) => None,

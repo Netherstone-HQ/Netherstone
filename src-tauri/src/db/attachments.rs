@@ -492,6 +492,38 @@ pub(super) fn parse_drawing_exports(content: &str) -> Vec<DrawingExport> {
     exports
 }
 
+/// The drawings `content` shows, as each image tag names its drawing
+/// (`data-excalidraw`, vault-relative), with the attribute's escapes undone.
+pub(super) fn parse_drawing_embeds(content: &str) -> Vec<String> {
+    let mut drawings = Vec::new();
+
+    for event in Parser::new(content) {
+        let (Event::Html(html) | Event::InlineHtml(html)) = event else {
+            continue;
+        };
+        for tag in html.split('<') {
+            let Some(value) = extract_html_attr_value(tag, "data-excalidraw") else {
+                continue;
+            };
+            let drawing = unescape_attribute(&value);
+            if !drawing.is_empty() && !drawings.contains(&drawing) {
+                drawings.push(drawing);
+            }
+        }
+    }
+
+    drawings
+}
+
+/// Undoes the escapes an attribute value is written with.
+fn unescape_attribute(value: &str) -> String {
+    value
+        .replace("&quot;", "\"")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+}
+
 /// Recounts the references to each `(vault key, asset path)` in `attachments`.
 fn refresh_attachment_counts(
     conn: &Connection,
@@ -1033,13 +1065,7 @@ fn parse_link_destinations(content: &str) -> Vec<String> {
             Event::Html(html) | Event::InlineHtml(html) => {
                 for attr_name in SOURCE_ATTRIBUTES {
                     if let Some(value) = extract_html_attr_value(&html, attr_name) {
-                        destinations.push(
-                            value
-                                .replace("&quot;", "\"")
-                                .replace("&lt;", "<")
-                                .replace("&gt;", ">")
-                                .replace("&amp;", "&"),
-                        );
+                        destinations.push(unescape_attribute(&value));
                     }
                 }
             }

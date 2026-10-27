@@ -178,6 +178,37 @@ export async function pickImportPaths(folder: boolean): Promise<string[]> {
   return invoke<string[]>("open_import_dialog", { folder });
 }
 
+/** What was opened from outside the app and not yet taken. */
+export interface Launched {
+  /** A folder to open as the vault. */
+  vault: string | null;
+  /** Files to import, which Rust now lets the import read. */
+  files: string[];
+  /** Names of files that wait until they can be imported. */
+  waiting: string[];
+}
+
+/**
+ * Takes the folders and files opened from outside the app (the terminal,
+ * Open with, the Dock). Files stay in Rust until `canImport`.
+ */
+export async function takeLaunch(canImport: boolean): Promise<Launched> {
+  assertTauri();
+  return invoke<Launched>("take_launch", { canImport });
+}
+
+/** Whether the `netherstone` terminal command is installed (macOS). */
+export async function shellCommandInstalled(): Promise<boolean> {
+  assertTauri();
+  return invoke<boolean>("shell_command_installed");
+}
+
+/** Installs or removes the `netherstone` terminal command (macOS). */
+export async function setShellCommand(install: boolean): Promise<void> {
+  assertTauri();
+  return invoke<void>("set_shell_command", { install });
+}
+
 /** Every file in the picked files and folders, hidden ones left out. */
 export async function listImportSources(
   paths: string[],

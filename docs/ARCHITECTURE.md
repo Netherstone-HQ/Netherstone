@@ -95,6 +95,23 @@ only the picked files and folders, and the `_attachments/` folders above
 them. A name taken between reserving and saving moves the shard to the next
 free name, and links to it from the same import are fixed.
 
+## Opening from outside the app
+
+Folders and files reach the app from the terminal (`netherstone .`,
+`netherstone notes.md`), Open with, the folder right-click menu on Windows
+and the Dock on macOS (`src-tauri/src/launch.rs`). The paths come only from
+the system: the command line, the one a second launch hands over through the
+single-instance plugin (release builds), and macOS's open event. Rust holds
+them until the window takes them (`src/lib/launch.ts`); a folder is then
+allowed like one picked in the folder dialog and opens as the vault, and
+files are allowed like ones picked for an import and open in the import
+window. Files wait while no vault is open or another import runs. The
+installers add the Open with entries without making Netherstone a default
+app, and put the `netherstone` command on the PATH; macOS gets it from a
+button in Settings (`shell_command.rs`). The installer images are drawn
+from the brand mark by `scripts/installer-images.mjs` into
+`src-tauri/installer/`.
+
 ## Exports
 
 A shard exports as a web page, a PDF or a Word document from the export

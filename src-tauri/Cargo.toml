@@ -51,6 +51,10 @@ serde_yaml_ng = "0.10"
 jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 yaml-edit = { version = "0.3", default-features = false }
 
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# Opening the app again hands what it opened to the window already open.
+tauri-plugin-single-instance = "2"
+
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"

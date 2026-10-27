@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "fileAssociations": [
+      { "ext": ["md"], "name": "Markdown", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["pdf"], "name": "PDF", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["docx"], "name": "Word document", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["html"], "name": "Web page", "role": "Viewer", "rank": "Alternate" },
+      { "ext": [], "contentTypes": ["public.folder"], "name": "Folder", "role": "Viewer", "rank": "Alternate" }
+    ]
+  }
+}

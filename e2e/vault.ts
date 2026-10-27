@@ -299,6 +299,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           window.__saves.push({ filePath, content: files[relative(filePath)] });
           return null;
         },
+        take_launch: () => ({ vault: null, files: [], waiting: [] }),
         choose_export_path: ({ defaultName, format }) =>
           `/home/me/${defaultName}.${format}`,
         write_export_file: (bytes) => {

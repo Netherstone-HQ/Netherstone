@@ -1,0 +1,4 @@
+#!/bin/sh
+# The terminal command: `netherstone .` opens this folder as a vault,
+# `netherstone notes.md` imports a file.
+exec /usr/bin/Netherstone "$@"

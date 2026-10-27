@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FilesIcon, FolderIcon, LoaderCircleIcon, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -51,9 +51,22 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
     } finally {
       setIsPicking(false);
     }
+    await importPaths(vaultPath, paths);
+  };
+
+  const importPaths = async (vaultPath: string, paths: string[]) => {
     if (!paths.length) return;
     await start(vaultPath, () => listImportSources(paths), appImportIO(vaultPath));
   };
+
+  // Files opened from outside the app start as soon as they come in.
+  const launched = useImportDialogStore((s) => s.files);
+  useEffect(() => {
+    const vaultPath = useVaultStore.getState().currentVaultPath;
+    if (!launched || !vaultPath) return;
+    useImportDialogStore.setState({ files: null });
+    void importPaths(vaultPath, launched);
+  }, [launched]);
 
   const drop = async (event: React.DragEvent) => {
     setIsDragOver(false);

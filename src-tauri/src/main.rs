@@ -2,9 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    // AI apps start the app as `Netherstone mcp` to use the vault.
-    if std::env::args().nth(1).as_deref() == Some("mcp") {
-        return netherstone_lib::run_mcp_server();
+    use netherstone_lib::launch::{Command, parse};
+    match parse(std::env::args_os().skip(1)) {
+        // AI apps start the app as `Netherstone mcp` to use the vault.
+        Command::Mcp => netherstone_lib::run_mcp_server(),
+        Command::Open(_) => netherstone_lib::run(),
     }
-    netherstone_lib::run()
 }

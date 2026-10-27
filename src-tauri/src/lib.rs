@@ -6,11 +6,13 @@ mod db;
 mod export;
 mod github;
 mod import;
+pub mod launch;
 mod locks;
 mod markdown_text;
 mod mcp;
 mod open_access;
 mod shard_links;
+mod shell_command;
 mod splash;
 mod sync;
 mod tools;
@@ -277,6 +279,14 @@ fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
         .into_iter()
         .map(|path| path.to_string_lossy().into_owned())
         .collect()
+}
+
+/// Hands the window the folders and files opened from outside the app: the
+/// folder may then open as the vault, and the files, once `can_import`, may
+/// be imported.
+#[tauri::command(async)]
+fn take_launch(can_import: bool) -> launch::Taken {
+    launch::get().take(can_import)
 }
 
 /// Lists the files in the picked files and folders.
@@ -1719,7 +1729,20 @@ pub fn run_mcp_server() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Opening the app again hands what it opened to the window already open.
+    // Dev builds run on their own, beside an installed app.
+    #[cfg(all(desktop, not(debug_assertions)))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        if let launch::Command::Open(paths) = launch::parse(args.into_iter().skip(1).map(Into::into)) {
+            launch::receive(app, &paths, Path::new(&cwd));
+        }
+        if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
         .plugin(browser::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1733,6 +1756,11 @@ pub fn run() {
                 window_icon::apply(window);
             }
             splash::show_main_window_eventually(app.handle());
+            if let launch::Command::Open(paths) = launch::parse(std::env::args_os().skip(1))
+                && let Ok(cwd) = std::env::current_dir()
+            {
+                launch::get().add(&paths, &cwd);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1766,6 +1794,9 @@ pub fn run() {
             create_vault,
             open_media_files_dialog,
             open_import_dialog,
+            take_launch,
+            shell_command::shell_command_installed,
+            shell_command::set_shell_command,
             list_import_sources,
             read_import_file,
             undo_import,
@@ -1841,8 +1872,17 @@ pub fn run() {
             export::fetch_export_asset,
             export::export_pdf
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, _event| {
+            // macOS hands over files and folders (Open With, a drop on the
+            // Dock, `open`) as an event, not on the command line.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let paths: Vec<_> = urls.iter().filter_map(|url| url.to_file_path().ok()).collect();
+                launch::receive(_app, &paths, Path::new("/"));
+            }
+        });
 }
 
 #[cfg(test)]

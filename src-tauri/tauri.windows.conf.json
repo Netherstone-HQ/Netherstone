@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": { "installer/windows/netherstone.cmd": "bin/netherstone.cmd" },
+    "windows": {
+      "nsis": {
+        "installerHooks": "installer/windows/hooks.nsh"
+      }
+    }
+  }
+}

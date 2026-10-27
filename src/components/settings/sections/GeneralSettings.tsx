@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -19,6 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { setShellCommand, shellCommandInstalled } from "@/lib/commands";
+import { IS_MAC } from "@/lib/platform";
 import {
   MAX_RECENT_FILES_LIMIT,
   MIN_RECENT_FILES_LIMIT,
@@ -59,6 +61,13 @@ export function GeneralSettings() {
         />
       </SettingsGroup>
 
+      {/* Windows and Linux get it from the installer. */}
+      {IS_MAC ? (
+        <SettingsGroup title="Terminal">
+          <ShellCommandRow />
+        </SettingsGroup>
+      ) : null}
+
       <SettingsGroup title="Reset">
         <ResetRow />
       </SettingsGroup>
@@ -90,6 +99,42 @@ function RecentShardsRows() {
         </SettingRow>
       ) : null}
     </>
+  );
+}
+
+function ShellCommandRow() {
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [isWorking, setIsWorking] = useState(false);
+
+  useEffect(() => {
+    shellCommandInstalled()
+      .then(setInstalled)
+      .catch(() => setInstalled(false));
+  }, []);
+
+  const toggle = async () => {
+    const install = !installed;
+    setIsWorking(true);
+    try {
+      await setShellCommand(install);
+      setInstalled(install);
+    } catch (error) {
+      console.error("[Netherstone] Couldn't change the shell command:", error);
+      toast.error(install ? "Couldn't install the shell command" : "Couldn't remove the shell command");
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  return (
+    <SettingRow
+      label="Shell command"
+      description="Open folders and files from the terminal with netherstone"
+    >
+      <Button variant="outline" size="sm" disabled={installed === null || isWorking} onClick={() => void toggle()}>
+        {installed ? "Remove" : "Install"}
+      </Button>
+    </SettingRow>
   );
 }
 

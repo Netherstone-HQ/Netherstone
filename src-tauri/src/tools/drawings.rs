@@ -122,25 +122,16 @@ fn shapes(scene: &mut Map<String, Value>) -> Vec<Shape> {
         .collect()
 }
 
-/// What a shard's image tag holds to name the drawing it shows.
-fn link_needles(relative: &str) -> [String; 2] {
-    [
-        format!("data-excalidraw=\"{}\"", relative),
-        format!("data-excalidraw=\"{}\"", escape_attribute(relative)),
-    ]
-}
-
 fn shown_in(vault: &Vault, relative: &str) -> ToolResult<Vec<String>> {
     let conn = vault.index()?;
-    let [raw, escaped] = link_needles(relative);
     let mut stmt = conn.prepare(
-        "SELECT f.path FROM files f JOIN fts_search s ON s.rowid = f.id
-         WHERE f.vault_path = ?1 AND (instr(s.content, ?2) > 0 OR instr(s.content, ?3) > 0)
+        "SELECT f.path FROM drawing_embeds d JOIN files f ON f.id = d.file_id
+         WHERE d.drawing_path = ?2 AND f.vault_path = ?1
          ORDER BY f.path",
     )?;
     let paths = stmt
         .query_map(
-            rusqlite::params![crate::db::attachments::vault_key(&vault.root), raw, escaped],
+            rusqlite::params![crate::db::attachments::vault_key(&vault.root), relative],
             |row| row.get::<_, String>(0),
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;

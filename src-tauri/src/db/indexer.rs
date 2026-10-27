@@ -117,26 +117,16 @@ pub fn resolve_link_target(link_type: LinkType, target: &str, file_path: &Path) 
 
 use super::parser::{LinkType, parse_markdown};
 
-/// Index a single markdown file of the vault at `vault_path` into the
-/// database.
-///
-/// Steps:
-/// 1. Read file metadata (created_at, last_modified, file_size, content)
-/// 2. Parse markdown to extract links, tags, and editor stats
-/// 3. Insert/update file record
-/// 4. Insert extracted metadata (links, tags)
-/// 5. Update FTS5 search index
-///
-/// A shard in another vault inside this one is that vault's, so it's left out.
-pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Result<(), String> {
-    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
-        return Ok(());
-    }
-    let path_str = file_path
-        .to_str()
-        .ok_or_else(|| "Invalid file path".to_string())?;
+/// A shard as read from disk, ready to index.
+struct ShardFile {
+    last_modified: i64,
+    created_at: i64,
+    file_size: i64,
+    content: String,
+    content_hash: String,
+}
 
-    // Read file metadata
+fn read_shard(file_path: &Path) -> Result<ShardFile, String> {
     let metadata =
         std::fs::metadata(file_path).map_err(|e| format!("Failed to read file metadata: {}", e))?;
 
@@ -153,14 +143,84 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(last_modified);
-    let file_size = metadata.len() as i64;
 
-    // Read file content
     let content = std::fs::read_to_string(file_path)
         .map_err(|e| format!("Failed to read file content: {}", e))?;
 
-    // Compute content hash for change detection
-    let content_hash = format!("{:x}", md5::compute(&content));
+    Ok(ShardFile {
+        last_modified,
+        created_at,
+        file_size: metadata.len() as i64,
+        content_hash: format!("{:x}", md5::compute(&content)),
+        content,
+    })
+}
+
+/// Index a single markdown file of the vault at `vault_path` into the
+/// database.
+///
+/// Steps:
+/// 1. Read file metadata (created_at, last_modified, file_size, content)
+/// 2. Parse markdown to extract links, tags, and editor stats
+/// 3. Insert/update file record
+/// 4. Insert extracted metadata (links, tags, drawing embeds)
+/// 5. Update FTS5 search index
+///
+/// A shard in another vault inside this one is that vault's, so it's left out.
+pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Result<(), String> {
+    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
+        return Ok(());
+    }
+    store_shard(conn, vault_path, file_path, read_shard(file_path)?)
+}
+
+/// Indexes the file at `file_path` unless the index already holds this
+/// content for it in the vault at `vault_path`, as when another process
+/// (the app, or another AI app's server) indexed the same save first.
+/// Returns whether it wrote anything. Like [`index_file`], it leaves out a
+/// shard in another vault inside this one.
+pub fn index_file_if_changed(
+    conn: &Connection,
+    vault_path: &Path,
+    file_path: &Path,
+) -> Result<bool, String> {
+    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
+        return Ok(false);
+    }
+    let path_str = file_path
+        .to_str()
+        .ok_or_else(|| "Invalid file path".to_string())?;
+    let shard = read_shard(file_path)?;
+    let indexed: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM files WHERE path = ?1 AND vault_path = ?2 AND content_hash = ?3)",
+            params![path_str, super::attachments::vault_key(vault_path), shard.content_hash],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to check the index: {}", e))?;
+    if indexed {
+        return Ok(false);
+    }
+    store_shard(conn, vault_path, file_path, shard)?;
+    Ok(true)
+}
+
+fn store_shard(
+    conn: &Connection,
+    vault_path: &Path,
+    file_path: &Path,
+    shard: ShardFile,
+) -> Result<(), String> {
+    let path_str = file_path
+        .to_str()
+        .ok_or_else(|| "Invalid file path".to_string())?;
+    let ShardFile {
+        last_modified,
+        created_at,
+        file_size,
+        content,
+        content_hash,
+    } = shard;
 
     // Parse markdown
     let parsed = parse_markdown(&content);
@@ -212,6 +272,8 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
             .map_err(|e| format!("Failed to delete old tags: {}", e))?;
         conn.execute("DELETE FROM charts WHERE file_id = ?1", params![id])
             .map_err(|e| format!("Failed to delete old charts: {}", e))?;
+        conn.execute("DELETE FROM drawing_embeds WHERE file_id = ?1", params![id])
+            .map_err(|e| format!("Failed to delete old drawing embeds: {}", e))?;
 
         id
     } else {
@@ -262,6 +324,9 @@ pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Res
         .map_err(|e| format!("Failed to insert chart: {}", e))?;
     }
 
+    insert_drawing_embeds(conn, file_id, &content)
+        .map_err(|e| format!("Failed to insert drawing embed: {}", e))?;
+
     super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
 
     // Update FTS5 search index
@@ -301,6 +366,18 @@ fn insert_tags(
             .transpose()
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         stmt.execute(params![file_id, tag.tag, position as i64, excerpt])?;
+    }
+    Ok(())
+}
+
+/// Stores which drawings the shard `file_id` shows, so finding the shards
+/// that show a drawing is a lookup.
+pub(super) fn insert_drawing_embeds(conn: &Connection, file_id: i64, content: &str) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare_cached(
+        "INSERT OR IGNORE INTO drawing_embeds (file_id, drawing_path) VALUES (?1, ?2)",
+    )?;
+    for drawing in super::attachments::parse_drawing_embeds(content) {
+        stmt.execute(params![file_id, drawing])?;
     }
     Ok(())
 }
@@ -442,4 +519,89 @@ pub fn forget_path(conn: &Connection, vault_path: &Path, path: &Path) -> Result<
         )
     };
     forget().map_err(|e| format!("Failed to forget {}: {}", path_str, e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shards_showing(conn: &Connection, drawing: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT f.name FROM drawing_embeds d JOIN files f ON f.id = d.file_id
+                 WHERE d.drawing_path = ?1 ORDER BY f.name",
+            )
+            .unwrap();
+        stmt.query_map([drawing], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn an_unchanged_shard_is_not_written_again() {
+        let vault = crate::sync::state::tests::temp_dir("indexer-if-changed");
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        let shard = vault.join("Plan.md");
+        std::fs::write(&shard, "# Plan #work").unwrap();
+
+        assert!(index_file_if_changed(&conn, &vault, &shard).unwrap());
+        // Marks the stored row, so a write would show.
+        conn.execute("UPDATE files SET last_indexed = -1", []).unwrap();
+        assert!(!index_file_if_changed(&conn, &vault, &shard).unwrap());
+        let last_indexed: i64 = conn
+            .query_row("SELECT last_indexed FROM files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(last_indexed, -1);
+
+        std::fs::write(&shard, "# Plan #ideas").unwrap();
+        assert!(index_file_if_changed(&conn, &vault, &shard).unwrap());
+        let tag: String = conn.query_row("SELECT tag FROM tags", [], |row| row.get(0)).unwrap();
+        assert_eq!(tag, "ideas");
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn drawing_embeds_follow_the_shard() {
+        let vault = crate::sync::state::tests::temp_dir("indexer-drawings");
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        let a = vault.join("a.md");
+        let b = vault.join("b.md");
+        std::fs::write(
+            &a,
+            "Before <img src=\"\" data-excalidraw=\"d/F &amp; co.excalidraw\" /> and \
+             <img src=\"x.png\" data-excalidraw=\"Flow.excalidraw\" />\n",
+        )
+        .unwrap();
+        std::fs::write(&b, "<img data-excalidraw=\"d/F & co.excalidraw\" />\n\n`data-excalidraw=\"Flow.excalidraw\"`\n").unwrap();
+        index_file(&conn, &vault, &a).unwrap();
+        index_file(&conn, &vault, &b).unwrap();
+
+        assert_eq!(shards_showing(&conn, "d/F & co.excalidraw"), ["a.md", "b.md"]);
+        assert_eq!(shards_showing(&conn, "Flow.excalidraw"), ["a.md"]);
+
+        std::fs::write(&a, "No drawings now.").unwrap();
+        index_file(&conn, &vault, &a).unwrap();
+        assert_eq!(shards_showing(&conn, "Flow.excalidraw"), Vec::<String>::new());
+        forget_path(&conn, &vault, &b).unwrap();
+        assert_eq!(shards_showing(&conn, "d/F & co.excalidraw"), Vec::<String>::new());
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn shards_indexed_before_drawing_embeds_get_theirs() {
+        let vault = crate::sync::state::tests::temp_dir("indexer-drawings-fill");
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        let shard = vault.join("a.md");
+        std::fs::write(&shard, "<img data-excalidraw=\"Flow.excalidraw\" />\n").unwrap();
+        index_file(&conn, &vault, &shard).unwrap();
+        conn.execute_batch("DROP TABLE drawing_embeds").unwrap();
+
+        crate::db::schema::init_schema(&conn).unwrap();
+        assert_eq!(shards_showing(&conn, "Flow.excalidraw"), ["a.md"]);
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
 }

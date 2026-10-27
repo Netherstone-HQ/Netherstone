@@ -84,9 +84,12 @@ pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkP
     let page = Page::new(params.cursor.as_deref(), params.limit)?;
     let shard = params.path.as_deref().map(|path| vault.shard(path)).transpose()?;
     let conn = vault.index()?;
-    let links = match (params.kind, &shard) {
+    let (links, next_cursor) = match (params.kind, &shard) {
         (LinksKind::Backlinks, Some(shard)) => {
-            crate::db::queries::get_backlinks(&conn, &vault.root, &shard.to_string_lossy())?
+            let file = shard.to_string_lossy();
+            let (sources, next_cursor) =
+                page.of(crate::db::queries::backlink_sources(&conn, &vault.root, &file)?);
+            let links = crate::db::queries::backlinks_from(&conn, &file, sources)?
                 .into_iter()
                 .map(|backlink| Link {
                     from: Some(vault.relative(Path::new(&backlink.path))),
@@ -94,7 +97,8 @@ pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkP
                     text: sentence(backlink.excerpt),
                     works: None,
                 })
-                .collect()
+                .collect();
+            (links, next_cursor)
         }
         (LinksKind::Outgoing, Some(shard)) => {
             let markdown = super::edits::read_text(shard)?;
@@ -113,21 +117,24 @@ pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkP
                     works,
                 });
             }
-            links
+            page.of(links)
         }
-        (LinksKind::Broken, _) => crate::db::data::get_broken_links(&conn, &vault.root)?
-            .into_iter()
-            .filter(|broken| shard.as_ref().is_none_or(|shard| Path::new(&broken.path) == shard.as_path()))
-            .map(|broken| Link {
-                from: Some(vault.relative(Path::new(&broken.path))),
-                to: Some(shown_target(vault, &broken.target)),
-                text: Some(broken.text),
-                works: Some(false),
-            })
-            .collect(),
+        (LinksKind::Broken, _) => {
+            // Stops at the end of the page, one past it to tell if there's more.
+            let wanted = page.offset + page.fetch();
+            let broken = crate::db::data::find_broken_links(&conn, &vault.root, shard.as_deref(), Some(wanted))?
+                .into_iter()
+                .map(|broken| Link {
+                    from: Some(vault.relative(Path::new(&broken.path))),
+                    to: Some(shown_target(vault, &broken.target)),
+                    text: Some(broken.text),
+                    works: Some(false),
+                })
+                .collect();
+            page.of(broken)
+        }
         (_, None) => return Err(ToolError("backlinks and outgoing need the shard's path".to_string())),
     };
-    let (links, next_cursor) = page.of(links);
     Ok(LinkPage { links, next_cursor })
 }
 

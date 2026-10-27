@@ -58,6 +58,7 @@
     ],
     "windows": {
       "nsis": {
+        "installerIcon": "icons/icon.ico",
         "sidebarImage": "installer/nsis-sidebar.bmp",
         "headerImage": "installer/nsis-header.bmp"
       }

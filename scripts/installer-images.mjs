@@ -59,13 +59,12 @@ const lockup = (markSize, colour) => {
 };
 
 // NSIS sizes: https://nsis.sourceforge.io/Docs/Modern%20UI%202/Readme.html
-// The installer stretches its images to fit, so they're drawn at twice that
-// for screens scaled up to 200%, and shrink on others.
-const NSIS_SCALE = 2;
+// NSIS resizes by dropping or repeating pixels, so they're drawn at exactly
+// that size, sharp at 100% scaling.
 const images = [
   {
     file: "nsis-sidebar.bmp",
-    scales: [NSIS_SCALE],
+    scales: [1],
     width: 164,
     height: 314,
     body: `<div style="background:${INK};width:100%;height:100%;display:flex;align-items:center;justify-content:center">
@@ -73,7 +72,7 @@ const images = [
   },
   {
     file: "nsis-header.bmp",
-    scales: [NSIS_SCALE],
+    scales: [1],
     width: 150,
     height: 57,
     body: `<div style="background:${WINDOW};width:100%;height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:12px;box-sizing:border-box">

@@ -16,15 +16,6 @@ pub struct Watch {
 /// How long changes settle before they're indexed, as the app's watcher waits.
 const SETTLE: Duration = Duration::from_millis(500);
 
-/// Whether `path` is somewhere the vault tree shows, not hidden or skipped.
-fn is_scanned(root: &Path, path: &Path) -> bool {
-    path.strip_prefix(root).is_ok_and(|relative| {
-        relative
-            .components()
-            .all(|part| crate::vault::is_scanned_name(&part.as_os_str().to_string_lossy()))
-    })
-}
-
 fn log(result: Result<(), String>) {
     if let Err(error) = result {
         eprintln!("[Netherstone] Couldn't index a change: {}", error);
@@ -77,7 +68,7 @@ pub fn keep_indexed(vault: &Vault) -> Result<Watch, String> {
         };
         match result {
             Ok(events) => {
-                for event in events.iter().filter(|event| is_scanned(&root, &event.path)) {
+                for event in events.iter().filter(|event| crate::vault::is_scanned_path(&root, &event.path)) {
                     index_change(&conn, &root, &mut folders, &event.path);
                 }
             }

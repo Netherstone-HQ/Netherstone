@@ -5,6 +5,10 @@ import { toast } from "sonner";
 
 import { FreeUpSpaceRow } from "@/components/settings/FreeUpSpaceRow";
 import {
+  GoneVaultsRow,
+  useGoneVaultHistories,
+} from "@/components/settings/GoneVaultsRow";
+import {
   PreferenceSegments,
   SettingRow,
   SettingsGroup,
@@ -19,6 +23,8 @@ import { useVaultStore } from "@/store/vault";
 
 export function VaultSettings() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
+  const [goneHistories, setGoneHistories] = useGoneVaultHistories();
+  const hasGoneHistories = (goneHistories?.length ?? 0) > 0;
 
   return (
     <>
@@ -71,9 +77,15 @@ export function VaultSettings() {
         </SettingsGroup>
       ) : null}
 
-      {vaultPath ? (
+      {vaultPath || hasGoneHistories ? (
         <SettingsGroup title="History">
-          <FreeUpSpaceRow vaultPath={vaultPath} />
+          {vaultPath ? <FreeUpSpaceRow vaultPath={vaultPath} /> : null}
+          {goneHistories && hasGoneHistories ? (
+            <GoneVaultsRow
+              histories={goneHistories}
+              onChange={setGoneHistories}
+            />
+          ) : null}
         </SettingsGroup>
       ) : null}
     </>

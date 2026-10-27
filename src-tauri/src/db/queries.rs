@@ -694,9 +694,9 @@ mod tests {
                 .collect()
         };
 
-        let plan = work.join("Plan.md").to_string_lossy().into_owned();
-        crate::db::indexer::prune_deleted_files(&conn, &work, &[plan]).unwrap();
-        crate::db::indexer::prune_deleted_files(&conn, &empty, &[]).unwrap();
+        std::fs::remove_file(work.join("Gone.md")).unwrap();
+        crate::db::indexer::index_vault(&conn, &work).unwrap();
+        crate::db::indexer::index_vault(&conn, &empty).unwrap();
 
         assert_eq!(names(&work), ["Plan.md"]);
         assert_eq!(names(&home), ["Trip.md"]);

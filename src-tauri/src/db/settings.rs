@@ -108,6 +108,12 @@ pub fn known_vaults(
         .collect()
 }
 
+/// Forgets the vault at `vault_path`, once its folder is gone.
+pub fn forget_vault(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM vaults WHERE path = ?1", params![vault_path.to_string_lossy()])
+        .map(|_| ())
+}
+
 /// Lets AI apps use the vault at `vault_path`, or stops them. False when
 /// the app has never opened it.
 pub fn set_vault_ai_allowed(conn: &Connection, vault_path: &Path, allowed: bool) -> rusqlite::Result<bool> {

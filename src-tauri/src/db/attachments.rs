@@ -259,6 +259,15 @@ pub(crate) fn vault_key(vault_path: &Path) -> String {
     vault_path.to_string_lossy().into_owned()
 }
 
+/// Forgets every attachment of the vault at `vault_path`, with what refers
+/// to them, once its folder is gone.
+pub fn forget_vault_attachments(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()> {
+    let vault = vault_key(vault_path);
+    conn.execute("DELETE FROM attachment_references WHERE vault_path = ?1", params![vault])?;
+    conn.execute("DELETE FROM attachments WHERE vault_path = ?1", params![vault])?;
+    Ok(())
+}
+
 fn upsert_attachment_record(
     conn: &Connection,
     vault_path: &Path,

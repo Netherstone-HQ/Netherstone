@@ -5,6 +5,7 @@ mod copy_access;
 mod db;
 mod export;
 mod github;
+mod gone_vaults;
 mod import;
 mod integrations;
 pub mod launch;
@@ -656,6 +657,32 @@ async fn history_free_up_space(
 ) -> Result<sync::space::Freed, String> {
     open_vault_only(&vault_path)?;
     sync::free_up_space(sync::sync_root()?, vault_path.into(), blobs).await
+}
+
+/// Forgets the vaults whose folder is gone, of the ones the app keeps
+/// something for and the `recent` ones the window lists, and returns them.
+#[tauri::command(async)]
+fn forget_gone_vaults(recent: Vec<String>) -> Result<Vec<String>, String> {
+    let recent: Vec<std::path::PathBuf> = recent.into_iter().map(Into::into).collect();
+    Ok(gone_vaults::forget(&recent)?
+        .into_iter()
+        .map(|vault| vault.to_string_lossy().into_owned())
+        .collect())
+}
+
+/// The histories of vaults whose folder is gone.
+#[tauri::command(async)]
+fn gone_vault_histories() -> Result<Vec<gone_vaults::GoneHistory>, String> {
+    Ok(gone_vaults::histories(&sync::sync_root()?))
+}
+
+/// Moves the history of a vault whose folder is gone to the OS trash.
+/// Resolves to the bytes freed.
+#[tauri::command(async)]
+fn delete_gone_vault_history(vault_id: String) -> Result<u64, String> {
+    gone_vaults::delete_history(&sync::sync_root()?, &vault_id, |path| {
+        trash::delete(path).map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -1761,6 +1788,7 @@ pub fn run() {
             {
                 launch::get().add(&paths, &cwd);
             }
+            launch::leave_current_folder();
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1828,6 +1856,9 @@ pub fn run() {
             history_restore,
             history_old_attachments,
             history_free_up_space,
+            forget_gone_vaults,
+            gone_vault_histories,
+            delete_gone_vault_history,
             sync_turn_on_backup,
             sync_now,
             sync_list_backups,

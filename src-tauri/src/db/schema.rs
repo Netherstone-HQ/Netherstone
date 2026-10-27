@@ -209,7 +209,10 @@ CREATE TABLE IF NOT EXISTS vaults (
     path TEXT PRIMARY KEY,
     -- Higher for a vault opened more recently.
     open_order INTEGER NOT NULL,
-    ai_allowed INTEGER NOT NULL DEFAULT 0
+    ai_allowed INTEGER NOT NULL DEFAULT 0,
+    -- The id of the drive it was on when last opened, to tell a vault
+    -- that's gone from one whose drive isn't there (`gone_vaults`).
+    drive INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_vaults_open_order ON vaults(open_order DESC);
@@ -283,6 +286,9 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     drop_index_tables_without_vault(conn)?;
     let fill_drawing_embeds = !table_exists(conn, "drawing_embeds")?;
     conn.execute_batch(SCHEMA)?;
+    if !column_exists(conn, "vaults", "drive")? {
+        conn.execute_batch("ALTER TABLE vaults ADD COLUMN drive INTEGER")?;
+    }
     if fill_drawing_embeds {
         fill_drawing_embeds_from_index(conn)?;
     }

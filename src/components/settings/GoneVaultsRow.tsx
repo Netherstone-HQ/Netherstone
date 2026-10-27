@@ -117,7 +117,9 @@ export function GoneVaultsRow({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {formatBytes(sumBytes(chosen))} of history?
+              {chosen.length === 0
+                ? "Delete history?"
+                : `Delete ${formatBytes(sumBytes(chosen))} of history?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               The history of the vaults you pick goes to the trash. If you
@@ -129,7 +131,7 @@ export function GoneVaultsRow({
             className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm"
           >
             {histories.map((history) => (
-              <li key={history.vaultId} title={history.path}>
+              <li key={history.vaultId}>
                 <label className="flex items-center gap-3">
                   <Checkbox
                     checked={picked.has(history.vaultId)}
@@ -138,8 +140,14 @@ export function GoneVaultsRow({
                       toggle(history.vaultId, checked === true)
                     }
                   />
-                  <span className="min-w-0 flex-1 truncate">
-                    {history.name}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate">{history.name}</span>
+                    <span
+                      className="truncate font-mono text-muted-foreground"
+                      title={history.path}
+                    >
+                      {history.path}
+                    </span>
                   </span>
                   <span className="shrink-0 text-muted-foreground">
                     {formatBytes(history.sizeBytes)}

@@ -11,6 +11,12 @@ pub struct FileNode {
     pub kind: FileNodeKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FileNode>>,
+    /// When a file last changed, in seconds, as the index keeps it. Only a
+    /// scan for indexing ([`scan_own_dir`]) reads it, from the folder's own
+    /// listing: on Windows that comes with the listing, so it costs no extra
+    /// call per file.
+    #[serde(skip)]
+    pub modified: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -311,14 +317,21 @@ fn scan(dir: &Path, own_only: bool) -> Vec<FileNode> {
                     path: path.to_string_lossy().to_string(),
                     kind: FileNodeKind::Directory,
                     children: Some(children),
+                    modified: None,
                 });
             }
         } else if file_type.is_file() && is_vault_document_path(&path) {
+            let modified = own_only
+                .then(|| entry.metadata().ok()?.modified().ok())
+                .flatten()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|since| since.as_secs() as i64);
             nodes.push(FileNode {
                 name,
                 path: path.to_string_lossy().to_string(),
                 kind: FileNodeKind::File,
                 children: None,
+                modified,
             });
         }
     }
@@ -328,6 +341,23 @@ fn scan(dir: &Path, own_only: bool) -> Vec<FileNode> {
 
 fn is_empty_dir(path: &Path) -> bool {
     std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
+}
+
+/// Adds the shards in `node` and below to `shards`, with when each last
+/// changed where the scan read it.
+pub fn collect_shard_times(node: &FileNode, shards: &mut Vec<(String, Option<i64>)>) {
+    match node.kind {
+        FileNodeKind::File => {
+            if is_markdown_path(Path::new(&node.path)) {
+                shards.push((node.path.clone(), node.modified));
+            }
+        }
+        FileNodeKind::Directory => {
+            for child in node.children.iter().flatten() {
+                collect_shard_times(child, shards);
+            }
+        }
+    }
 }
 
 /// Adds the shards in `node` and below to `paths`. Drawings appear in the

@@ -709,8 +709,11 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM fts_search", [], |row| row.get(0))
             .unwrap();
         assert_eq!(searchable, 2);
-        let trip = home.join("Trip.md");
-        assert!(!crate::db::indexer::needs_indexing(&conn, &home, &trip).unwrap());
+        let trip = home.join("Trip.md").to_string_lossy().into_owned();
+        let indexed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM files WHERE path = ?1", [&trip], |row| row.get(0))
+            .unwrap();
+        assert_eq!(indexed, 1);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

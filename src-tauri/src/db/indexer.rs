@@ -363,33 +363,6 @@ fn modified_secs(file_path: &Path) -> Result<i64, String> {
         .as_secs() as i64)
 }
 
-/// Check if a file needs to be re-indexed.
-///
-/// Returns true if:
-/// - File doesn't exist in DB for the vault at `vault_path`
-/// - File's last_modified is newer than last_indexed
-pub fn needs_indexing(
-    conn: &Connection,
-    vault_path: &Path,
-    file_path: &Path,
-) -> Result<bool, String> {
-    let path_str = file_path
-        .to_str()
-        .ok_or_else(|| "Invalid file path".to_string())?;
-    let last_modified = modified_secs(file_path)?;
-
-    let result: Option<i64> = conn
-        .query_row(
-            "SELECT last_indexed FROM files WHERE path = ?1 AND last_modified >= ?2 AND vault_path = ?3",
-            params![path_str, last_modified, super::attachments::vault_key(vault_path)],
-            |row| row.get(0),
-        )
-        .ok();
-
-    // Needs indexing if not found or if last_modified is newer
-    Ok(result.is_none())
-}
-
 /// The shards of the vault at `vault_path` the index holds, by path, with
 /// their id and when each had last changed when it was indexed.
 fn indexed_shards(conn: &Connection, vault_path: &Path) -> rusqlite::Result<HashMap<String, (i64, i64)>> {
@@ -400,16 +373,23 @@ fn indexed_shards(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Hash
     .collect()
 }
 
-/// Forgets the indexed shards with these ids, with their search text.
+/// Forgets the indexed shards with these ids, with their search text, all
+/// of them or none.
 fn forget_ids(conn: &Connection, ids: &[i64]) -> rusqlite::Result<()> {
-    // The search text isn't tied to its file, so it goes first.
-    let mut search = conn.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?;
-    let mut files = conn.prepare_cached("DELETE FROM files WHERE id = ?1")?;
-    for id in ids {
-        search.execute(params![id])?;
-        files.execute(params![id])?;
+    if ids.is_empty() {
+        return Ok(());
     }
-    Ok(())
+    let tx = conn.unchecked_transaction()?;
+    {
+        // The search text isn't tied to its file, so it goes first.
+        let mut search = tx.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?;
+        let mut files = tx.prepare_cached("DELETE FROM files WHERE id = ?1")?;
+        for id in ids {
+            search.execute(params![id])?;
+            files.execute(params![id])?;
+        }
+    }
+    tx.commit()
 }
 
 /// What indexing a vault did.
@@ -429,19 +409,19 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
         return Err(format!("Vault path is not a directory: {}", vault_path.display()));
     }
 
-    let mut paths = Vec::new();
+    let mut on_disk = Vec::new();
     for node in &crate::vault::scan_own_dir(vault_path) {
-        crate::vault::collect_file_paths(node, &mut paths);
+        crate::vault::collect_shard_times(node, &mut on_disk);
     }
 
     // Read once, so a pass over a vault where little changed checks each
     // shard's time on disk only.
     let mut shards = indexed_shards(conn, vault_path).map_err(|e| format!("Failed to read the index: {}", e))?;
     let (mut indexed, mut skipped, mut errors) = (0, 0, 0);
-    for path_str in &paths {
+    for (path_str, modified) in &on_disk {
         let path = Path::new(path_str);
         let known = shards.remove(path_str).map(|(_, last_modified)| last_modified);
-        match modified_secs(path) {
+        match modified.map_or_else(|| modified_secs(path), Ok) {
             Ok(modified) if known.is_some_and(|known| known >= modified) => skipped += 1,
             Ok(_) => match index_file(conn, vault_path, path) {
                 Ok(()) => indexed += 1,
@@ -464,7 +444,7 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
     }
 
     Ok(VaultIndexed {
-        paths,
+        paths: on_disk.into_iter().map(|(path, _)| path).collect(),
         indexed,
         skipped,
         errors,

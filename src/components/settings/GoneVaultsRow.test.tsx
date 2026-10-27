@@ -46,6 +46,9 @@ describe("GoneVaultsRow", () => {
     )!;
     // Nothing is picked until the person picks it.
     expect(confirm.disabled).toBe(true);
+    expect(screen.getByText("Delete history?")).toBeTruthy();
+    // Vaults with the same name are told apart by where they were.
+    expect(screen.getByText("C:/Old")).toBeTruthy();
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
     expect(screen.getByText("Delete 1.0 MB of history?")).toBeTruthy();
 

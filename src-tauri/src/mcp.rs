@@ -78,7 +78,7 @@ impl Server {
                 })?
             }
             None => {
-                let last = settings::last_vault(&conn).map_err(|e| e.to_string())?.ok_or(NO_VAULT)?;
+                let last = opened_last(&conn)?.ok_or(NO_VAULT)?;
                 if !last.ai_allowed {
                     let any = settings::known_vaults(&conn, true, 0, Some(1)).map_err(|e| e.to_string())?;
                     return Err(if any.is_empty() {
@@ -105,11 +105,14 @@ impl Server {
         let cursor = arguments.get("cursor").and_then(Value::as_str);
         let limit = arguments.get("limit").and_then(Value::as_u64).map(|limit| limit as usize);
         let page = Page::new(cursor, limit).map_err(|error| error.0)?;
-        let last = settings::last_vault(&conn).map_err(|e| e.to_string())?.map(|vault| vault.path);
+        let last = opened_last(&conn)?.map(|vault| vault.path);
         let vaults = settings::known_vaults(&conn, true, page.offset, Some(page.fetch())).map_err(|e| e.to_string())?;
         let (vaults, next_cursor) = page.finish(vaults);
+        // A page can come out short of a vault that's gone; the cursor still
+        // counts it.
         let vaults: Vec<Value> = vaults
             .into_iter()
+            .filter(|vault| !crate::gone_vaults::is_gone(&vault.path, vault.drive))
             .map(|vault| {
                 json!({
                     "name": vault.name(),
@@ -119,6 +122,20 @@ impl Server {
             })
             .collect();
         Ok(json!({ "vaults": vaults, "next_cursor": next_cursor }))
+    }
+}
+
+/// The vault the app opened last, of the ones whose folder isn't gone. The
+/// app forgets a gone vault the next time it starts; until then it's passed
+/// over here.
+fn opened_last(conn: &rusqlite::Connection) -> Result<Option<KnownVault>, String> {
+    let mut offset = 0;
+    loop {
+        let next = settings::known_vaults(conn, false, offset, Some(1)).map_err(|e| e.to_string())?.pop();
+        match next {
+            Some(vault) if crate::gone_vaults::is_gone(&vault.path, vault.drive) => offset += 1,
+            next => return Ok(next),
+        }
     }
 }
 

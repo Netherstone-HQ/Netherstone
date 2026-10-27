@@ -139,9 +139,17 @@ impl Vault {
     /// The search index, with the vault's shards that changed since it was
     /// last indexed, by the app or an earlier call, indexed first.
     pub fn index(&self) -> ToolResult<rusqlite::Connection> {
+        self.index_caught_up().map(|(conn, _)| conn)
+    }
+
+    /// [`Vault::index`], and whether it was brought up to date just now, so
+    /// it holds what changed before this.
+    pub(crate) fn index_caught_up(&self) -> ToolResult<(rusqlite::Connection, bool)> {
         let conn = crate::db::open_connection()?;
+        let mut now = false;
         self.caught_up
             .get_or_init(|| {
+                now = true;
                 let indexed = crate::db::indexer::index_vault(&conn, &self.root)?;
                 if indexed.indexed + indexed.errors > 0 {
                     eprintln!(
@@ -154,7 +162,7 @@ impl Vault {
                 Ok(())
             })
             .clone()?;
-        Ok(conn)
+        Ok((conn, now))
     }
 }
 

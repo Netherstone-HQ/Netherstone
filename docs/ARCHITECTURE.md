@@ -53,6 +53,17 @@ Netherstone is a Tauri v2 desktop app: a React 19 + TypeScript front end in
   power loss never leaves a half-written file. Pending saves are flushed
   before the window closes.
 
+## Shortcuts
+
+Every keyboard shortcut is listed once, in `src/lib/shortcuts.ts`: its id,
+label, default keys and where it works (the whole app, the editor or the
+canvas). That list runs the app's shortcuts (`src/hooks/useAppShortcuts.ts`)
+and the editor's (`src/components/editor/kits/shortcuts-kit.tsx`, with
+Plate's own key handling off), and fills Settings › Shortcuts, tooltips and
+menus. Letters match the character typed and other keys their place on the
+keyboard. Only the shortcuts someone changed are saved, keyed by id, so new
+defaults reach everyone else. Excalidraw's keys are listed but can't change.
+
 ## Index and search
 
 `src-tauri/src/db/` holds the schema (`schema.rs`), indexer and parser. On

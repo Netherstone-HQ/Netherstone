@@ -30,8 +30,13 @@ import {
 import { HrElement } from '@/components/ui/hr-node';
 import { ParagraphElement } from '@/components/ui/paragraph-node';
 
+// Shortcuts come from the shortcut list (`src/lib/shortcuts.ts`, run by the
+// shortcuts kit), so Plate's own keys are off.
 export const BasicBlocksKit = [
-  ParagraphPlugin.withComponent(ParagraphElement),
+  // A function, so it runs after Plate's own, which adds the keys.
+  ParagraphPlugin.withComponent(ParagraphElement).extend(() => ({
+    shortcuts: { toggleParagraph: null },
+  })),
   H1Plugin.configure({
     inputRules: [HeadingRules.markdown()],
     node: {
@@ -40,7 +45,6 @@ export const BasicBlocksKit = [
     rules: {
       break: { empty: 'reset' },
     },
-    shortcuts: { toggle: { keys: 'mod+alt+1' } },
   }),
   H2Plugin.configure({
     inputRules: [HeadingRules.markdown()],
@@ -50,7 +54,6 @@ export const BasicBlocksKit = [
     rules: {
       break: { empty: 'reset' },
     },
-    shortcuts: { toggle: { keys: 'mod+alt+2' } },
   }),
   H3Plugin.configure({
     inputRules: [HeadingRules.markdown()],
@@ -60,7 +63,6 @@ export const BasicBlocksKit = [
     rules: {
       break: { empty: 'reset' },
     },
-    shortcuts: { toggle: { keys: 'mod+alt+3' } },
   }),
   H4Plugin.configure({
     inputRules: [HeadingRules.markdown()],
@@ -70,7 +72,6 @@ export const BasicBlocksKit = [
     rules: {
       break: { empty: 'reset' },
     },
-    shortcuts: { toggle: { keys: 'mod+alt+4' } },
   }),
   H5Plugin.configure({
     inputRules: [HeadingRules.markdown()],
@@ -80,7 +81,6 @@ export const BasicBlocksKit = [
     rules: {
       break: { empty: 'reset' },
     },
-    shortcuts: { toggle: { keys: 'mod+alt+5' } },
   }),
   H6Plugin.configure({
     inputRules: [HeadingRules.markdown()],
@@ -90,12 +90,10 @@ export const BasicBlocksKit = [
     rules: {
       break: { empty: 'reset' },
     },
-    shortcuts: { toggle: { keys: 'mod+alt+6' } },
   }),
   BlockquotePlugin.configure({
     inputRules: [BlockquoteRules.markdown()],
     node: { component: BlockquoteElement },
-    shortcuts: { toggle: { keys: 'mod+shift+period' } },
   }).overrideEditor(({ editor, tf: { normalizeNode }, type }) => ({
     transforms: {
       /**

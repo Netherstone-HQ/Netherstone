@@ -27,8 +27,11 @@ import { CodeLeaf } from '@/components/ui/code-node';
 import { HighlightLeaf } from '@/components/ui/highlight-node';
 import { KbdLeaf } from '@/components/ui/kbd-node';
 
+// Shortcuts come from the shortcut list (`src/lib/shortcuts.ts`, run by the
+// shortcuts kit), so Plate's own keys are off.
 export const BasicMarksKit = [
   BoldPlugin.configure({
+    shortcuts: { toggle: null },
     inputRules: [
       BoldRules.markdown({ variant: '*' }),
       MarkComboRules.markdown({ variant: 'boldItalic' }),
@@ -38,30 +41,28 @@ export const BasicMarksKit = [
     ],
   }),
   ItalicPlugin.configure({
+    shortcuts: { toggle: null },
     inputRules: [
       ItalicRules.markdown({ variant: '*' }),
       ItalicRules.markdown({ variant: '_' }),
     ],
   }),
   UnderlinePlugin.configure({
+    shortcuts: { toggle: null },
     inputRules: [UnderlineRules.markdown()],
   }),
   CodePlugin.configure({
     inputRules: [CodeRules.markdown()],
     node: { component: CodeLeaf },
-    shortcuts: { toggle: { keys: 'mod+e' } },
   }),
   StrikethroughPlugin.configure({
     inputRules: [StrikethroughRules.markdown()],
-    shortcuts: { toggle: { keys: 'mod+shift+x' } },
   }),
   SubscriptPlugin.configure({
     inputRules: [SubscriptRules.markdown()],
-    shortcuts: { toggle: { keys: 'mod+comma' } },
   }),
   SuperscriptPlugin.configure({
     inputRules: [SuperscriptRules.markdown()],
-    shortcuts: { toggle: { keys: 'mod+period' } },
   }),
   HighlightPlugin.configure({
     inputRules: [
@@ -69,7 +70,6 @@ export const BasicMarksKit = [
       HighlightRules.markdown({ variant: '≡' }),
     ],
     node: { component: HighlightLeaf },
-    shortcuts: { toggle: { keys: 'mod+shift+h' } },
   }),
   KbdPlugin.withComponent(KbdLeaf),
 ];

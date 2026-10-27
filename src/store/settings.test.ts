@@ -158,6 +158,22 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().theme).toBe(DEFAULT_PREFERENCES.theme);
   });
 
+  it("remembers changed shortcuts and drops malformed ones", async () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({
+        state: { shortcuts: { bold: ["mod+alt+b"], italic: "mod+i" } },
+        version: 3,
+      }),
+    );
+    const { useSettingsStore } = await loadStore();
+    expect(useSettingsStore.getState().shortcuts).toEqual({
+      bold: ["mod+alt+b"],
+    });
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().shortcuts).toEqual({});
+  });
+
   it("resets preferences without showing onboarding again", async () => {
     const { useSettingsStore, DEFAULT_PREFERENCES } = await loadStore();
     const state = useSettingsStore.getState();

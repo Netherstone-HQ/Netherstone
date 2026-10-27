@@ -37,7 +37,9 @@ import {
   registerDrawingSaver,
 } from "@/lib/drawing-files";
 import { isChangedOnDiskError } from "@/lib/outside-changes";
-import { IS_MAC } from "@/lib/platform";
+import { useShortcutKeys } from "@/hooks/useShortcut";
+import { keysText } from "@/lib/platform";
+import { getShortcut } from "@/lib/shortcuts";
 import { saveOutsideChangeVersion } from "@/lib/sync";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
@@ -104,9 +106,7 @@ const UI_OPTIONS: ExcalidrawProps["UIOptions"] = {
 };
 
 /** Excalidraw's own shortcut for the grid. */
-const GRID_SHORTCUT = IS_MAC ? "⌘'" : "Ctrl+'";
-/** The app's shortcut for the left sidebar (see `SidebarProvider`). */
-const SIDEBAR_SHORTCUT = IS_MAC ? "⌘B" : "Ctrl+B";
+const GRID_SHORTCUT = keysText(getShortcut("drawingGrid").keys[0]);
 
 const showDrawings = () => useUIStore.getState().setSidebarOpen(true);
 
@@ -500,6 +500,7 @@ export function ExcalidrawCanvas({
     excalidrawAPI,
   );
   const [isGridShown, setIsGridShown] = useState(false);
+  const sidebarKeys = useShortcutKeys("toggleSidebar");
 
   useHandleLibrary({ excalidrawAPI });
 
@@ -578,7 +579,7 @@ export function ExcalidrawCanvas({
               <WelcomeScreen.Center.Menu>
                 <WelcomeScreen.Center.MenuItem
                   icon={<FolderOpenIcon />}
-                  shortcut={SIDEBAR_SHORTCUT}
+                  shortcut={sidebarKeys ? keysText(sidebarKeys) : undefined}
                   onSelect={showDrawings}
                 >
                   Open an existing drawing

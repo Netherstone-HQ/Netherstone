@@ -17,39 +17,82 @@ export function hasModKey(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
   return IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }
 
+/** Names for keys whose name isn't the key itself, the same on every system. */
+const SHARED_KEY_NAMES: Record<string, string> = {
+  period: ".",
+  comma: ",",
+  minus: "−",
+  "-": "−",
+  equal: "=",
+  plus: "+",
+  slash: "/",
+  backslash: "\\",
+  semicolon: ";",
+  quote: "'",
+  backquote: "`",
+  bracketleft: "[",
+  bracketright: "]",
+  intlbackslash: "<",
+  tab: "Tab",
+  space: "Space",
+  escape: "Esc",
+  arrowup: "↑",
+  arrowdown: "↓",
+  arrowleft: "←",
+  arrowright: "→",
+  pageup: "Page Up",
+  pagedown: "Page Down",
+  numpadadd: "Num +",
+  numpadsubtract: "Num −",
+  numpadmultiply: "Num *",
+  numpaddivide: "Num /",
+  numpaddecimal: "Num .",
+  click: "Click",
+};
+
 const KEY_NAMES: Record<string, string> = IS_MAC
   ? {
+      ...SHARED_KEY_NAMES,
       mod: "⌘",
       ctrl: "⌃",
       alt: "⌥",
       shift: "⇧",
       enter: "↩",
-      period: ".",
-      comma: ",",
-      minus: "−",
-      tab: "Tab",
+      backspace: "⌫",
+      delete: "⌦",
     }
   : {
+      ...SHARED_KEY_NAMES,
       mod: "Ctrl",
       ctrl: "Ctrl",
       alt: "Alt",
       shift: "Shift",
       enter: "Enter",
-      period: ".",
-      comma: ",",
-      minus: "−",
-      tab: "Tab",
     };
 
+function keyName(key: string): string {
+  const name = KEY_NAMES[key];
+  if (name) return name;
+  return key.length === 1 ? key.toUpperCase() : key[0].toUpperCase() + key.slice(1);
+}
+
 /**
- * A shortcut's keys, written as in Plate's config ("mod+shift+x"),
+ * A shortcut's keys, written as in the shortcut list ("mod+shift+x"),
  * named for this system.
  */
 export function formatKeys(keys: string): string[] {
-  return keys.split("+").map((key) => KEY_NAMES[key] ?? key.toUpperCase());
+  return keys.split("+").map(keyName);
 }
 
-/** A button's tooltip with its shortcut: "Bold (Ctrl+B)", or "Bold (⌘+B)". */
-export function withShortcut(label: string, keys: string): string {
-  return `${label} (${formatKeys(keys).join("+")})`;
+/** A shortcut's keys as one line: "Ctrl+Shift+X", or "⌘+⇧+X". */
+export function keysText(keys: string): string {
+  return formatKeys(keys).join("+");
+}
+
+/**
+ * A button's tooltip with its shortcut: "Bold (Ctrl+B)", or "Bold (⌘+B)".
+ * Just the label when the shortcut has no keys.
+ */
+export function withShortcut(label: string, keys: string | null): string {
+  return keys ? `${label} (${keysText(keys)})` : label;
 }

@@ -5,7 +5,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { IS_MAC } from "@/lib/platform";
+import { useShortcutKeys } from "@/hooks/useShortcut";
+import { keysText } from "@/lib/platform";
 import { copy } from "./copy";
 import { Step } from "./StepLayout";
 import type { VaultChoice } from "./VaultStep";
@@ -31,8 +32,12 @@ export function ReadyStep({
   const body =
     vault.kind === "restored" ? copy.ready.bodyRestored : copy.ready.body;
 
+  const searchKeys = useShortcutKeys("search");
   const tips = [
-    { icon: SearchIcon, text: copy.ready.tips.search(IS_MAC ? "⌘K" : "Ctrl+K") },
+    // Left out when search has no keys.
+    ...(searchKeys
+      ? [{ icon: SearchIcon, text: copy.ready.tips.search(keysText(searchKeys)) }]
+      : []),
     { icon: TypeIcon, text: copy.ready.tips.blocks },
     { icon: DrawingIcon, text: copy.ready.tips.canvas },
   ];

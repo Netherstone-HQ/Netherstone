@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { type ShortcutOverrides, sanitizeOverrides } from "@/lib/shortcuts";
 import { renamedLocalStorage } from "./renamed-storage";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -40,6 +41,10 @@ export interface Preferences {
   textSize: TextSize;
   contentWidth: ContentWidth;
   zoom: Zoom;
+
+  // ── Shortcuts ───────────────────────────────────────────────────────────────
+  /** Only the shortcuts someone changed, so new defaults reach the rest. */
+  shortcuts: ShortcutOverrides;
 
   // ── Editor ──────────────────────────────────────────────────────────────────
   spellcheck: boolean;
@@ -131,6 +136,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   contentWidth: "default",
   zoom: 100,
 
+  shortcuts: {},
+
   spellcheck: true,
   newShardLocation: "current-folder",
   showWordCount: false,
@@ -177,6 +184,9 @@ function normalize<K extends keyof Preferences>(
   }
   if (key === "zoom" && !ZOOM_LEVELS.includes(value as Zoom)) {
     return DEFAULT_PREFERENCES.zoom as Preferences[K];
+  }
+  if (key === "shortcuts") {
+    return sanitizeOverrides(value) as Preferences[K];
   }
   return value;
 }
@@ -275,6 +285,9 @@ export const useSettingsStore = create<SettingsState>()(
         // A theme this version doesn't know falls back to the default.
         if (saved.theme !== undefined && !isThemePreference(saved.theme)) {
           delete saved.theme;
+        }
+        if (saved.shortcuts !== undefined) {
+          saved.shortcuts = sanitizeOverrides(saved.shortcuts);
         }
         const theme =
           saved.theme ?? (persisted ? undefined : readLegacyTheme());

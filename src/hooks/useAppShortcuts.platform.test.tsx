@@ -2,6 +2,9 @@
 import { cleanup, fireEvent, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Recent pulls in the vault, which this doesn't need.
+vi.mock("@/lib/recent-files", () => ({ stepRecentFile: vi.fn() }));
+
 const MAC =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15";
 const LINUX = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15";

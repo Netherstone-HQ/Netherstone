@@ -1,29 +1,26 @@
 import { useEffect } from "react";
-import { endRecentCycle, stepRecentFile } from "@/lib/recent-files";
+import { endRecentCycle } from "@/lib/recent-files";
+import { getShortcut, releasesShortcut } from "@/lib/shortcuts";
+import { useSettingsStore } from "@/store/settings";
+
+const STEPS = [getShortcut("nextRecent"), getShortcut("previousRecent")];
 
 /**
- * Ctrl+Tab and Ctrl+Shift+Tab step through Recent. Ctrl on every system, as
- * in browsers, since ⌘+Tab switches apps on a Mac. Listed in
- * Settings › Shortcuts.
+ * Ends a walk through Recent (Ctrl+Tab, see `useAppShortcuts`) when its
+ * modifier is let go or the window loses focus.
  */
 export function useRecentSwitching() {
   useEffect(() => {
-    // Caught before the editor, which indents on Tab.
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Tab" || !e.ctrlKey || e.metaKey || e.altKey) return;
-      e.preventDefault();
-      e.stopPropagation();
-      stepRecentFile(e.shiftKey ? -1 : 1);
-    };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Control") endRecentCycle();
+      const { shortcuts } = useSettingsStore.getState();
+      if (STEPS.some((step) => releasesShortcut(e, step, shortcuts))) {
+        endRecentCycle();
+      }
     };
 
-    window.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("blur", endRecentCycle);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", endRecentCycle);
     };

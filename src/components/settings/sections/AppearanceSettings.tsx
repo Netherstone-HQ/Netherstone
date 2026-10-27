@@ -16,7 +16,10 @@ export function AppearanceSettings() {
     <>
       <SettingsGroup title="Theme">
         {/* As many themes to a row as fit, so wide windows don't blow them up. */}
-        <ThemePicker className="grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] p-4" />
+        <ThemePicker
+          className="p-4"
+          columns="grid-cols-[repeat(auto-fill,minmax(11rem,1fr))]"
+        />
       </SettingsGroup>
 
       <SettingsGroup>

@@ -29,9 +29,7 @@ import { parseArgs } from "node:util";
 
 import {
   KEYWORDS,
-  cargoVersion,
-  jsonVersion,
-  lockVersion,
+  VERSION_FILES,
   nextVersion,
   releaseNoteSubjects,
   setCargoVersion,
@@ -41,13 +39,9 @@ import {
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BRANCH = "main";
 const REMOTE = "origin";
-const CARGO_PACKAGE = "Netherstone";
-const FILES = {
-  package: "package.json",
-  tauri: "src-tauri/tauri.conf.json",
-  cargo: "src-tauri/Cargo.toml",
-  lock: "src-tauri/Cargo.lock",
-};
+const FILES = Object.fromEntries(
+  Object.entries(VERSION_FILES).map(([key, file]) => [key, file.path]),
+);
 
 // ── Output ──────────────────────────────────────────────────────────────────
 
@@ -93,12 +87,9 @@ const write = (file, text) => writeFileSync(join(ROOT, file), text);
 // ── Checks ──────────────────────────────────────────────────────────────────
 
 function readVersions() {
-  return {
-    [FILES.package]: jsonVersion(read(FILES.package)),
-    [FILES.tauri]: jsonVersion(read(FILES.tauri)),
-    [FILES.cargo]: cargoVersion(read(FILES.cargo)),
-    [FILES.lock]: lockVersion(read(FILES.lock), CARGO_PACKAGE),
-  };
+  return Object.fromEntries(
+    Object.values(VERSION_FILES).map((file) => [file.path, file.read(read(file.path))]),
+  );
 }
 
 function checkRepository({ pull = false } = {}) {

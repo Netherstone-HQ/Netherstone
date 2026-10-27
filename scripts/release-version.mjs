@@ -155,3 +155,61 @@ export function setCargoVersion(text, from, to) {
   }
   return next;
 }
+
+/** Replaces the version Cargo.lock records for the `name` package. */
+export function setLockVersion(text, name, from, to) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const next = text.replace(
+    new RegExp(`^(name = "${escaped}"\\r?\\nversion = ")(.*)(")`, "m"),
+    (whole, open, found, close) => (found === from ? `${open}${to}${close}` : whole),
+  );
+  if (lockVersion(next, name) !== to) {
+    throw new Error(`Couldn't find ${name} ${from} in Cargo.lock.`);
+  }
+  return next;
+}
+
+export const CARGO_PACKAGE = "Netherstone";
+
+/** The files that hold the app's version, with how each one reads and sets it. */
+export const VERSION_FILES = {
+  package: { path: "package.json", read: jsonVersion, set: setJsonVersion },
+  tauri: { path: "src-tauri/tauri.conf.json", read: jsonVersion, set: setJsonVersion },
+  cargo: { path: "src-tauri/Cargo.toml", read: cargoVersion, set: setCargoVersion },
+  lock: {
+    path: "src-tauri/Cargo.lock",
+    read: (text) => lockVersion(text, CARGO_PACKAGE),
+    set: (text, from, to) => setLockVersion(text, CARGO_PACKAGE, from, to),
+  },
+};
+
+/**
+ * Whether a change only moves the app to a new version: every changed file is
+ * a version file whose app version changed, all to the same value, and the
+ * file is otherwise the same. A dependency's version doesn't count.
+ * `changes` maps each changed path to its text `before` and `after`, null
+ * where the file doesn't exist.
+ */
+export function isVersionBump(changes) {
+  const files = Object.values(VERSION_FILES);
+  const entries = Object.entries(changes);
+  if (entries.length === 0) return false;
+  const targets = new Set();
+  for (const [path, { before, after }] of entries) {
+    const file = files.find((f) => f.path === path);
+    if (!file || before === null || after === null) return false;
+    try {
+      const from = file.read(before);
+      const to = file.read(after);
+      if (!from || !to || from === to) return false;
+      targets.add(to);
+      // The same text once each side's version is set to one placeholder.
+      if (file.set(before, from, "0.0.0") !== file.set(after, to, "0.0.0")) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return targets.size === 1;
+}

@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   cargoVersion,
   compareVersions,
+  isVersionBump,
   lockVersion,
   nextVersion,
   parseVersion,
   releaseNoteSubjects,
   setCargoVersion,
   setJsonVersion,
+  setLockVersion,
 } from "./release-version.mjs";
 
 describe("nextVersion", () => {
@@ -117,5 +119,49 @@ describe("file edits", () => {
       '[[package]]\nname = "Netherstone"\r\nversion = "0.2.0-beta.2"\n\n[[package]]\nname = "serde"\nversion = "1.0.0"\n';
     expect(lockVersion(lock, "Netherstone")).toBe("0.2.0-beta.2");
     expect(lockVersion(lock, "serde")).toBe("1.0.0");
+  });
+});
+
+describe("isVersionBump", () => {
+  const json = (version) => `{\n  "name": "x",\n  "version": "${version}"\n}\n`;
+  const toml = (version, serde = "1") =>
+    `[package]\nname = "Netherstone"\nversion = "${version}"\n\n[dependencies.serde]\nversion = "${serde}"\n`;
+  const lock = (version, serde = "1.0.0") =>
+    `version = 4\n\n[[package]]\nname = "Netherstone"\nversion = "${version}"\n\n[[package]]\nname = "serde"\nversion = "${serde}"\n`;
+  const bump = (make, ...rest) => ({ before: make("0.5.0", ...rest), after: make("0.6.0-beta.1", ...rest) });
+  const release = {
+    "package.json": bump(json),
+    "src-tauri/tauri.conf.json": bump(json),
+    "src-tauri/Cargo.toml": bump(toml),
+    "src-tauri/Cargo.lock": bump(lock),
+  };
+
+  it("accepts a release bump", () => {
+    expect(isVersionBump(release)).toBe(true);
+  });
+
+  it("refuses a dependency version change, alone or with a bump", () => {
+    const dep = { before: toml("0.5.0", "1"), after: toml("0.5.0", "2") };
+    expect(isVersionBump({ "src-tauri/Cargo.toml": dep })).toBe(false);
+    const both = { before: toml("0.5.0", "1"), after: toml("0.6.0-beta.1", "2") };
+    expect(isVersionBump({ ...release, "src-tauri/Cargo.toml": both })).toBe(false);
+    const locked = { before: lock("0.5.0", "1.0.0"), after: lock("0.6.0-beta.1", "1.0.1") };
+    expect(isVersionBump({ ...release, "src-tauri/Cargo.lock": locked })).toBe(false);
+  });
+
+  it("refuses files set to different versions", () => {
+    const other = { before: json("0.5.0"), after: json("0.6.0") };
+    expect(isVersionBump({ ...release, "package.json": other })).toBe(false);
+  });
+
+  it("refuses other files, new files and no changes", () => {
+    expect(isVersionBump({ ...release, "src/main.tsx": { before: "a", after: "b" } })).toBe(false);
+    expect(isVersionBump({ "package.json": { before: null, after: json("0.6.0") } })).toBe(false);
+    expect(isVersionBump({})).toBe(false);
+  });
+
+  it("sets the package's version in Cargo.lock only", () => {
+    expect(setLockVersion(lock("0.5.0"), "Netherstone", "0.5.0", "0.6.0")).toBe(lock("0.6.0"));
+    expect(() => setLockVersion(lock("0.5.0"), "Netherstone", "0.4.0", "0.6.0")).toThrow();
   });
 });

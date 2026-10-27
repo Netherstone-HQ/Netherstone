@@ -19,7 +19,13 @@ use crate::vault_access::is_within;
 
 /// The files and folders picked for the import running now.
 pub struct PickedSources {
-    picked: Mutex<Vec<PathBuf>>,
+    picked: Mutex<Vec<Picked>>,
+}
+
+struct Picked {
+    path: PathBuf,
+    /// Whether the `_attachments` folders above it may be read too.
+    attachments: bool,
 }
 
 static PICKED: PickedSources = PickedSources::new();
@@ -38,20 +44,37 @@ impl PickedSources {
     /// Notes what the person just picked in the import dialog, in place of
     /// what they picked before.
     pub fn allow(&self, paths: &[PathBuf]) {
-        *self.picked.lock().unwrap_or_else(|e| e.into_inner()) = paths.to_vec();
+        self.replace(paths, true);
+    }
+
+    /// Like `allow`, for files handed to the app from outside it. Only the
+    /// files themselves may be read: the folders they sit in weren't picked,
+    /// so neither were the attachment folders above them.
+    pub fn allow_files(&self, paths: &[PathBuf]) {
+        self.replace(paths, false);
+    }
+
+    fn replace(&self, paths: &[PathBuf], attachments: bool) {
+        *self.picked.lock().unwrap_or_else(|e| e.into_inner()) = paths
+            .iter()
+            .map(|path| Picked { path: path.clone(), attachments })
+            .collect();
     }
 
     /// Checks that an import may read `path`: a picked file, a file in a
-    /// picked folder, or a file in an `_attachments` folder above one, where
-    /// shards from another vault keep their pictures.
+    /// picked folder, or, for what was picked in the import dialog, a file in
+    /// an `_attachments` folder above one, where shards from another vault
+    /// keep their pictures.
     pub fn check(&self, path: &Path) -> Result<(), String> {
         let picked = self.picked.lock().unwrap_or_else(|e| e.into_inner());
         let allowed = picked.iter().any(|source| {
-            is_within(source, path)
-                || source
-                    .ancestors()
-                    .skip(1)
-                    .any(|folder| is_within(&folder.join(ATTACHMENTS_DIR_NAME), path))
+            is_within(&source.path, path)
+                || source.attachments
+                    && source
+                        .path
+                        .ancestors()
+                        .skip(1)
+                        .any(|folder| is_within(&folder.join(ATTACHMENTS_DIR_NAME), path))
         });
         if allowed {
             Ok(())
@@ -361,6 +384,10 @@ mod tests {
 
         picked.allow(&[root.join("Single.docx")]);
         assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_err());
+
+        picked.allow_files(&[vault.join("Notes/Plans/Q3.md")]);
+        assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_ok());
+        assert!(picked.check(&vault.join("_attachments/photo.png")).is_err());
     }
 
     #[test]

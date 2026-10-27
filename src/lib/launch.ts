@@ -4,8 +4,10 @@ import { toast } from "sonner";
 
 import { takeLaunch } from "@/lib/commands";
 import { isImporting, openImportDialog, useImportDialogStore } from "@/lib/import";
+import { DRAWING_EXTENSION, isPathWithin } from "@/lib/drawing-files";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, openVault } from "@/lib/open-vault";
+import { openVaultFile } from "@/lib/open-vault-file";
 import { useVaultStore } from "@/store";
 
 /** Sent by Rust (launch.rs) when something is opened from outside the app. */
@@ -68,13 +70,24 @@ async function takeOnce() {
   const vaultPath = useVaultStore.getState().currentVaultPath;
   if (files.length && vaultPath) {
     toast.dismiss(WAITING_TOAST_ID);
-    openImportDialog(vaultPath, files);
+    // A shard or drawing already in the vault opens; importing it would copy it.
+    const inVault = files.filter((path) => isPathWithin(path, vaultPath) && isVaultFile(path));
+    const outside = files.filter((path) => !inVault.includes(path));
+    const last = inVault.at(-1);
+    if (last) await openVaultFile(last);
+    if (outside.length) openImportDialog(vaultPath, outside);
   } else if (waiting.length && !vaultPath) {
     toast(`Open or create a vault to import ${waitingText(waiting)}`, {
       id: WAITING_TOAST_ID,
       duration: Infinity,
     });
   }
+}
+
+/** A file the vault opens itself: a shard or a drawing. */
+function isVaultFile(path: string) {
+  const name = path.toLowerCase();
+  return name.endsWith(".md") || name.endsWith(DRAWING_EXTENSION);
 }
 
 /** `Report.md`, `Report.md and Plan.docx`, or `3 files`. */

@@ -5,6 +5,7 @@ import { takeLaunch, type Launched } from "@/lib/commands";
 import { useImportDialogStore } from "@/lib/import";
 import { openLaunched, waitingText } from "@/lib/launch";
 import { openVault } from "@/lib/open-vault";
+import { openVaultFile } from "@/lib/open-vault-file";
 import { useVaultStore } from "@/store";
 import { toast } from "sonner";
 
@@ -14,6 +15,7 @@ vi.mock("@/lib/open-vault", () => ({
   folderName: (path: string) => path.split("/").pop(),
   openVault: vi.fn(async (path: string) => useVaultStore.setState({ currentVaultPath: path })),
 }));
+vi.mock("@/lib/open-vault-file", () => ({ openVaultFile: vi.fn() }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn(), error: vi.fn() }) }));
 
 const launched = (taken: Partial<Launched>) =>
@@ -31,6 +33,13 @@ describe("opening from outside the app", () => {
     await openLaunched();
     expect(takeLaunch).toHaveBeenCalledWith(true);
     expect(useImportDialogStore.getState()).toMatchObject({ targetDir: "/Vault", files: ["/Downloads/Report.md"] });
+  });
+
+  it("opens a shard already in the vault instead of copying it", async () => {
+    launched({ files: ["/Vault/README.md", "/Vault/_attachments/Report.pdf"] });
+    await openLaunched();
+    expect(openVaultFile).toHaveBeenCalledWith("/Vault/README.md");
+    expect(useImportDialogStore.getState().files).toEqual(["/Vault/_attachments/Report.pdf"]);
   });
 
   it("opens a folder as the vault, then imports into it", async () => {

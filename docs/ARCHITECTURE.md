@@ -105,10 +105,19 @@ single-instance plugin (release builds), and macOS's open event. Rust holds
 them until the window takes them (`src/lib/launch.ts`); a folder is then
 allowed like one picked in the folder dialog and opens as the vault, and
 files are allowed like ones picked for an import and open in the import
-window. Files wait while no vault is open or another import runs. The
-installers add the Open with entries without making Netherstone a default
-app, and put the `netherstone` command on the PATH; macOS gets it from a
-button in Settings (`shell_command.rs`). The installer images are drawn
+window. Files wait while no vault is open or another import runs. Once the
+page runs it could cause a launch itself (opening a file in its own app hands
+it back when Netherstone is that app), so anything arriving after the
+window's first take waits for a yes in a native dialog. Launched files are
+readable on their own, without the `_attachments` folders above them.
+
+macOS and Linux list Netherstone in Open with from the bundle, at a rank that
+never makes it the default app. On Windows, Open with, the folder menu and
+the `netherstone` command on the PATH are off until turned on in Settings
+(`integrations.rs`), which writes them for the user only; the uninstaller
+takes them back. macOS gets the command from the same setting, asking for an
+administrator only when `/usr/local/bin` isn't the user's to write. Linux
+packages ship it in `/usr/bin`. The installer images are drawn
 from the brand mark by `scripts/installer-images.mjs` into
 `src-tauri/installer/`.
 

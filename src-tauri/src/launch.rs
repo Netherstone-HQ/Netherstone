@@ -6,14 +6,20 @@
 //! started with, the one a second launch passed on, or macOS's open event),
 //! never from the window. A folder becomes a vault the way one picked in the
 //! folder dialog does, and a file is imported the way one picked in the import
-//! dialog is, so a script that got into the page can't use this to reach
-//! anything.
+//! dialog is.
+//!
+//! Once the page runs, it can cause a launch itself: opening a file in its own
+//! app (`open_file`) hands it back here when Netherstone is that app. So what
+//! arrives after the window first took anything waits for the person to say
+//! yes in a native dialog, which a script in the page can't click.
 
 use serde::Serialize;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 /// What the app was started to do.
 #[derive(Debug, PartialEq)]
@@ -55,6 +61,8 @@ pub struct Taken {
 pub struct Launches {
     vault: Mutex<Option<PathBuf>>,
     files: Mutex<Vec<PathBuf>>,
+    /// Set on the window's first take, once the page runs.
+    page_running: AtomicBool,
 }
 
 static LAUNCHES: Launches = Launches::new();
@@ -68,14 +76,24 @@ impl Launches {
         Self {
             vault: Mutex::new(None),
             files: Mutex::new(Vec::new()),
+            page_running: AtomicBool::new(false),
         }
     }
 
     /// Notes `paths`, as written relative to `cwd`. Ones that aren't there
     /// are left out. The last folder wins: only one vault is open at a time.
     pub fn add(&self, paths: &[PathBuf], cwd: &Path) -> bool {
+        self.keep(resolve_all(paths, cwd))
+    }
+
+    /// Whether what arrives now needs the person's yes first.
+    fn needs_confirming(&self) -> bool {
+        self.page_running.load(Ordering::SeqCst)
+    }
+
+    fn keep(&self, paths: Vec<PathBuf>) -> bool {
         let mut added = false;
-        for path in paths.iter().filter_map(|path| resolve(path, cwd)) {
+        for path in paths {
             if path.is_dir() {
                 *lock(&self.vault) = Some(path);
             } else {
@@ -93,6 +111,7 @@ impl Launches {
     /// and the files, when `can_import`, may be read by the import; files
     /// that can't be imported yet stay for the next take.
     pub fn take(&self, can_import: bool) -> Taken {
+        self.page_running.store(true, Ordering::SeqCst);
         let vault = lock(&self.vault).take();
         if let Some(vault) = &vault {
             crate::vault_access::get().allow(vault);
@@ -100,7 +119,7 @@ impl Launches {
         let mut files = lock(&self.files);
         let (files, waiting) = if can_import {
             let files = std::mem::take(&mut *files);
-            crate::import::picked().allow(&files);
+            crate::import::picked().allow_files(&files);
             (files, Vec::new())
         } else {
             (Vec::new(), files.iter().map(|path| name(path)).collect())
@@ -113,13 +132,61 @@ impl Launches {
     }
 }
 
-/// Notes what a launch handed the app and tells the window.
+/// Notes what a launch handed the app and tells the window, once the person
+/// says yes when the page is already running.
 pub fn receive(app: &tauri::AppHandle, paths: &[PathBuf], cwd: &Path) {
-    if get().add(paths, cwd)
+    let paths = resolve_all(paths, cwd);
+    if paths.is_empty() {
+        return;
+    }
+    if !get().needs_confirming() {
+        keep_and_tell(app, paths);
+        return;
+    }
+    let (message, button) = question(&paths);
+    let handle = app.clone();
+    app.dialog()
+        .message(message)
+        .title("Open in Netherstone")
+        .buttons(MessageDialogButtons::OkCancelCustom(button.into(), "Cancel".into()))
+        .show(move |yes| {
+            if yes {
+                keep_and_tell(&handle, paths);
+            }
+        });
+}
+
+fn keep_and_tell(app: &tauri::AppHandle, paths: Vec<PathBuf>) {
+    if get().keep(paths)
         && let Err(error) = app.emit(EVENT, ())
     {
         eprintln!("[Netherstone] Couldn't tell the window about opened files: {}", error);
     }
+}
+
+/// The question for opening `paths`, and the button that says yes. Only the
+/// last folder opens, as in `keep`.
+fn question(paths: &[PathBuf]) -> (String, &'static str) {
+    let folder = paths.iter().rev().find(|path| path.is_dir()).map(|path| name(path));
+    let files: Vec<String> = paths.iter().filter(|path| !path.is_dir()).map(|path| name(path)).collect();
+    match (folder, files.is_empty()) {
+        (Some(folder), true) => (format!("Open {folder} as a vault?"), "Open"),
+        (Some(folder), false) => (format!("Open {folder} as a vault and import {}?", names(&files)), "Open"),
+        (None, _) => (format!("Import {}?", names(&files)), "Import"),
+    }
+}
+
+/// `Report.md`, `Report.md and Plan.docx`, or `3 files`.
+fn names(names: &[String]) -> String {
+    match names {
+        [one] => one.clone(),
+        [first, second] => format!("{first} and {second}"),
+        _ => format!("{} files", names.len()),
+    }
+}
+
+fn resolve_all(paths: &[PathBuf], cwd: &Path) -> Vec<PathBuf> {
+    paths.iter().filter_map(|path| resolve(path, cwd)).collect()
 }
 
 /// `path` made absolute against `cwd`, with `.` and `..` worked out, if it's
@@ -193,5 +260,32 @@ mod tests {
         assert_eq!(taken, Taken { vault: None, files: vec![text(&report)], waiting: vec![] });
         assert!(crate::import::picked().check(&report).is_ok());
         assert_eq!(launches.take(true), Taken::default());
+    }
+
+    #[test]
+    fn asks_once_the_page_runs() {
+        let launches = Launches::new();
+        assert!(!launches.needs_confirming());
+        launches.take(false);
+        assert!(launches.needs_confirming());
+    }
+
+    #[test]
+    fn asks_about_what_came_in() {
+        let dir = temp_dir("launch-question");
+        let folder = dir.join("Notes");
+        std::fs::create_dir_all(&folder).unwrap();
+        let files: Vec<PathBuf> = ["Report.md", "Plan.docx", "Scan.pdf"].iter().map(|name| dir.join(name)).collect();
+        for file in &files {
+            std::fs::write(file, b"x").unwrap();
+        }
+
+        assert_eq!(question(&[folder.clone()]), ("Open Notes as a vault?".into(), "Open"));
+        assert_eq!(question(&files[..1]), ("Import Report.md?".into(), "Import"));
+        assert_eq!(question(&files[..2]), ("Import Report.md and Plan.docx?".into(), "Import"));
+        assert_eq!(
+            question(&[folder, files[0].clone(), files[1].clone(), files[2].clone()]),
+            ("Open Notes as a vault and import 3 files?".into(), "Open")
+        );
     }
 }

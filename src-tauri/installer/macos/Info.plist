@@ -21,6 +21,18 @@
     </dict>
     <dict>
       <key>CFBundleTypeName</key>
+      <string>Text</string>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>txt</string>
+      </array>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key>
       <string>PDF</string>
       <key>CFBundleTypeExtensions</key>
       <array>

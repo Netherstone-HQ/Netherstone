@@ -6,13 +6,13 @@ mod db;
 mod export;
 mod github;
 mod import;
+mod integrations;
 pub mod launch;
 mod locks;
 mod markdown_text;
 mod mcp;
 mod open_access;
 mod shard_links;
-mod shell_command;
 mod splash;
 mod sync;
 mod tools;
@@ -1795,8 +1795,8 @@ pub fn run() {
             open_media_files_dialog,
             open_import_dialog,
             take_launch,
-            shell_command::shell_command_installed,
-            shell_command::set_shell_command,
+            integrations::integrations_get,
+            integrations::integrations_set,
             list_import_sources,
             read_import_file,
             undo_import,

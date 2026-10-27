@@ -3,6 +3,7 @@
   "bundle": {
     "fileAssociations": [
       { "ext": ["md"], "mimeType": "text/markdown" },
+      { "ext": ["txt"], "mimeType": "text/plain" },
       { "ext": ["pdf"], "mimeType": "application/pdf" },
       { "ext": ["docx"], "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
       { "ext": ["html"], "mimeType": "text/html" }

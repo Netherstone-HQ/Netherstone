@@ -300,6 +300,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           return null;
         },
         take_launch: () => ({ vault: null, files: [], waiting: [] }),
+        integrations_get: () => ({ openWith: null, folderMenu: null, terminal: null }),
         choose_export_path: ({ defaultName, format }) =>
           `/home/me/${defaultName}.${format}`,
         write_export_file: (bytes) => {

@@ -58,7 +58,9 @@ tauri-plugin-single-instance = "2"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
-windows = { version = "0.61", features = ["Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Open with, the folder menu and the PATH, turned on in Settings.
+windows-registry = "0.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Builds OpenSSL into the app: macOS has no system OpenSSL to link against at

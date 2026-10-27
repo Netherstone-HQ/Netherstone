@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -19,8 +19,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { setShellCommand, shellCommandInstalled } from "@/lib/commands";
-import { IS_MAC } from "@/lib/platform";
+import { Switch } from "@/components/ui/switch";
+import {
+  getIntegrations,
+  setIntegration,
+  type Integration,
+  type Integrations,
+} from "@/lib/commands";
 import {
   MAX_RECENT_FILES_LIMIT,
   MIN_RECENT_FILES_LIMIT,
@@ -61,12 +66,7 @@ export function GeneralSettings() {
         />
       </SettingsGroup>
 
-      {/* Windows and Linux get it from the installer. */}
-      {IS_MAC ? (
-        <SettingsGroup title="Terminal">
-          <ShellCommandRow />
-        </SettingsGroup>
-      ) : null}
+      <SystemRows />
 
       <SettingsGroup title="Reset">
         <ResetRow />
@@ -102,38 +102,83 @@ function RecentShardsRows() {
   );
 }
 
-function ShellCommandRow() {
-  const [installed, setInstalled] = useState<boolean | null>(null);
-  const [isWorking, setIsWorking] = useState(false);
+const INTEGRATIONS: { integration: Integration; label: string; description: string }[] = [
+  {
+    integration: "openWith",
+    label: "Show in Open with",
+    description: "List Netherstone when opening Markdown, text, PDF, Word and web pages",
+  },
+  {
+    integration: "folderMenu",
+    label: "Open folders as vaults",
+    description: "Add Open as Netherstone vault to the folder menu",
+  },
+  {
+    integration: "terminal",
+    label: "Terminal command",
+    description: "Open folders and files from the terminal with netherstone",
+  },
+];
+
+/** What the system offers: none on Linux, where the package sets them up. */
+function SystemRows() {
+  const [on, setOn] = useState<Integrations | null>(null);
 
   useEffect(() => {
-    shellCommandInstalled()
-      .then(setInstalled)
-      .catch(() => setInstalled(false));
+    getIntegrations()
+      .then(setOn)
+      .catch(() => setOn(null));
   }, []);
 
-  const toggle = async () => {
-    const install = !installed;
+  const offered = INTEGRATIONS.filter(({ integration }) => on?.[integration] != null);
+  if (!on || !offered.length) return null;
+
+  return (
+    <SettingsGroup title="System">
+      {offered.map((row) => (
+        <IntegrationRow
+          key={row.integration}
+          {...row}
+          on={!!on[row.integration]}
+          onChange={(next) => setOn((now) => now && { ...now, [row.integration]: next })}
+        />
+      ))}
+    </SettingsGroup>
+  );
+}
+
+function IntegrationRow({
+  integration,
+  label,
+  description,
+  on,
+  onChange,
+}: {
+  integration: Integration;
+  label: string;
+  description: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const id = useId();
+  const [isWorking, setIsWorking] = useState(false);
+
+  const change = async (next: boolean) => {
     setIsWorking(true);
     try {
-      await setShellCommand(install);
-      setInstalled(install);
+      await setIntegration(integration, next);
+      onChange(next);
     } catch (error) {
-      console.error("[Netherstone] Couldn't change the shell command:", error);
-      toast.error(install ? "Couldn't install the shell command" : "Couldn't remove the shell command");
+      console.error(`[Netherstone] Couldn't change ${integration}:`, error);
+      toast.error(`Couldn't change ${label.toLowerCase()}`);
     } finally {
       setIsWorking(false);
     }
   };
 
   return (
-    <SettingRow
-      label="Shell command"
-      description="Open folders and files from the terminal with netherstone"
-    >
-      <Button variant="outline" size="sm" disabled={installed === null || isWorking} onClick={() => void toggle()}>
-        {installed ? "Remove" : "Install"}
-      </Button>
+    <SettingRow label={label} description={description} htmlFor={id}>
+      <Switch id={id} checked={on} disabled={isWorking} onCheckedChange={(next) => void change(next)} />
     </SettingRow>
   );
 }

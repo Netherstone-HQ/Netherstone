@@ -212,7 +212,8 @@ fn add_server(format: Format, config: &Path, command: &str) -> Result<(), String
         std::fs::create_dir_all(folder)
             .map_err(|e| format!("Couldn't create {}: {e}", folder.display()))?;
     }
-    crate::vault::replace_atomically(&config, |file| {
+    // Settings files can hold keys for other servers.
+    crate::vault::replace_atomically(&config, crate::vault::NewFile::OwnerOnly, |file| {
         std::io::Write::write_all(file, text.as_bytes())
     })
 }

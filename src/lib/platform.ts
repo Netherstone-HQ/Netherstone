@@ -76,21 +76,35 @@ function keyName(key: string): string {
   return key.length === 1 ? key.toUpperCase() : key[0].toUpperCase() + key.slice(1);
 }
 
+/** Apple's order for modifiers: ⌃⌥⇧⌘. */
+const MAC_MODIFIER_ORDER = ["ctrl", "alt", "shift", "mod"];
+
 /**
  * A shortcut's keys, written as in the shortcut list ("mod+shift+x"),
- * named for this system.
+ * named for this system. On a Mac the modifiers come in Apple's order.
  */
 export function formatKeys(keys: string): string[] {
-  return keys.split("+").map(keyName);
-}
-
-/** A shortcut's keys as one line: "Ctrl+Shift+X", or "⌘+⇧+X". */
-export function keysText(keys: string): string {
-  return formatKeys(keys).join("+");
+  const parts = keys.split("+");
+  if (IS_MAC) {
+    const key = parts.pop()!;
+    parts.sort(
+      (a, b) => MAC_MODIFIER_ORDER.indexOf(a) - MAC_MODIFIER_ORDER.indexOf(b),
+    );
+    parts.push(key);
+  }
+  return parts.map(keyName);
 }
 
 /**
- * A button's tooltip with its shortcut: "Bold (Ctrl+B)", or "Bold (⌘+B)".
+ * A shortcut's keys as one line, as the system writes them: "Ctrl+Shift+X",
+ * or "⇧⌘X" on a Mac.
+ */
+export function keysText(keys: string): string {
+  return formatKeys(keys).join(IS_MAC ? "" : "+");
+}
+
+/**
+ * A button's tooltip with its shortcut: "Bold (Ctrl+B)", or "Bold (⌘B)".
  * Just the label when the shortcut has no keys.
  */
 export function withShortcut(label: string, keys: string | null): string {

@@ -110,8 +110,8 @@ function ResetRow() {
           <AlertDialogHeader>
             <AlertDialogTitle>Restore default settings?</AlertDialogTitle>
             <AlertDialogDescription>
-              Every setting goes back to default. Your vault, shards and sync
-              aren't affected.
+              Every setting goes back to default, and your vault, shards and
+              sync stay as they are
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -119,7 +119,7 @@ function ResetRow() {
             <AlertDialogAction
               onClick={() => {
                 resetSettings();
-                toast("Settings restored to their defaults.");
+                toast("Settings restored to their defaults");
               }}
             >
               Restore defaults

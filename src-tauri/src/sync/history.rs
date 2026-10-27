@@ -186,6 +186,24 @@ struct Change {
     device: Option<String>,
 }
 
+/// Whether `bytes` is a version of the vault file `path`, one this device's
+/// History lists, looking back from the newest until it's found.
+pub(super) fn has_version(repository: &Repository, path: &str, bytes: &[u8]) -> Result<bool, String> {
+    let Some(head) = repo::head_commit(repository)? else {
+        return Ok(false);
+    };
+    let blob = Oid::hash_object(ObjectType::Blob, bytes)
+        .map_err(|e| git_error("Failed to read history", e))?;
+    let found = std::cell::Cell::new(false);
+    super::changes::first_parent_line(repository, head.id(), |version| {
+        found.set(version.changes.iter().any(|change| {
+            change.path == path && (change.after == Some(blob) || change.before == Some(blob))
+        }));
+        !found.get()
+    })?;
+    Ok(found.get())
+}
+
 /// The versions of `file_path`, newest first, following renames, which are
 /// versions too. The newest is `current` when it matches the file on disk:
 /// that's the file as it is now.

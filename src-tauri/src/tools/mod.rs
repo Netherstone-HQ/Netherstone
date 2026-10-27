@@ -62,33 +62,38 @@ pub type ToolResult<T> = Result<T, ToolError>;
 impl Vault {
     /// The file or folder at `relative` in the vault. Refuses paths that
     /// leave the vault, by `..`, from the root, or through a link, the
-    /// hidden folders Netherstone and other apps keep there, and other
-    /// vaults inside this one.
+    /// folders the vault tree hides (`vault::is_scanned_name`), by any name
+    /// that leads there, and other vaults inside this one.
     pub fn resolve(&self, relative: &str) -> ToolResult<PathBuf> {
         let trimmed = relative.trim().trim_start_matches("./");
         let path = Path::new(trimmed);
-        let escapes = path.is_absolute()
-            || path.components().any(|part| match part {
-                Component::Normal(name) => name.to_string_lossy().starts_with('.'),
-                Component::CurDir => false,
-                _ => true,
-            });
-        if escapes {
-            return Err(ToolError(format!(
+        let not_in_vault = || {
+            ToolError(format!(
                 "'{}' isn't a path in the vault. Use one relative to the vault, like Folder/Shard.md.",
                 relative
-            )));
+            ))
+        };
+        let shown = !path.is_absolute()
+            && path.components().all(|part| match part {
+                Component::Normal(name) => crate::vault::is_scanned_name(&name.to_string_lossy()),
+                Component::CurDir => true,
+                _ => false,
+            });
+        if !shown {
+            return Err(not_in_vault());
         }
         let full = self.root.join(path);
 
-        // Through links, too: the nearest part that exists must be inside.
-        // Only folders that exist can hold another vault's marker.
+        // The nearest part that exists, by its real name: a link, or another
+        // name for the same folder (like a Windows short name), must still
+        // lead inside the vault and somewhere the tree shows.
         let existing = full.ancestors().find(|part| part.exists()).unwrap_or(&self.root);
-        let Some((root, real)) = self.root.canonicalize().ok().zip(existing.canonicalize().ok()) else {
+        let real = self.root.canonicalize().ok().zip(existing.canonicalize().ok());
+        let Some((root, real)) = real.filter(|(root, real)| crate::vault_access::is_within(root, real)) else {
             return Err(ToolError(format!("'{}' leads outside the vault", relative)));
         };
-        if !crate::vault_access::is_within(&root, &real) {
-            return Err(ToolError(format!("'{}' leads outside the vault", relative)));
+        if !crate::vault::is_scanned_path(&root, &real) {
+            return Err(not_in_vault());
         }
         if crate::sync::state::crosses_into_another_vault(&root, &real) {
             return Err(ToolError(format!("'{}' is in another vault inside this one", relative)));
@@ -270,8 +275,31 @@ pub(crate) mod tests {
         let vault = vault("tools-resolve");
         assert_eq!(vault.resolve("Notes/Plan.md").unwrap(), vault.root.join("Notes/Plan.md"));
         assert_eq!(vault.resolve("./Plan.md").unwrap(), vault.root.join("Plan.md"));
-        for outside in ["../secret.md", "Notes/../../x.md", "/etc/passwd", ".netherstone/vault-id", "Notes/.git/config"] {
+        for outside in [
+            "../secret.md",
+            "Notes/../../x.md",
+            "/etc/passwd",
+            ".netherstone/vault-id",
+            "Notes/.git/config",
+            "_attachments/Trip.jpg",
+            "Code/node_modules",
+        ] {
             assert!(vault.resolve(outside).is_err(), "{outside}");
+        }
+    }
+
+    /// Another name for a hidden folder, like a link here or a short name
+    /// (GIT~1) on Windows, doesn't get past the rule.
+    #[cfg(unix)]
+    #[test]
+    fn hidden_folders_stay_hidden_by_any_name() {
+        let vault = vault("tools-resolve-hidden");
+        std::fs::create_dir_all(vault.root.join(".git")).unwrap();
+        std::fs::create_dir_all(vault.root.join("_attachments")).unwrap();
+        std::os::unix::fs::symlink(vault.root.join(".git"), vault.root.join("GIT~1")).unwrap();
+        std::os::unix::fs::symlink(vault.root.join("_attachments"), vault.root.join("Pictures")).unwrap();
+        for hidden in ["GIT~1", "GIT~1/config", "Pictures/Trip.jpg"] {
+            assert!(vault.resolve(hidden).is_err(), "{hidden}");
         }
     }
 

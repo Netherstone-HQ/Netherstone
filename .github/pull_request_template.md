@@ -1,10 +1,11 @@
 <!--
-Title: say what changes for the user, in plain words ("Keep focus in the
-rename field after choosing Rename from a menu").
--->
+Title: say what changes for the user, in plain words ("Show a shard's
+backlinks in the side panel").
 
 Before:
 
 After:
 
 How:
+
+-->

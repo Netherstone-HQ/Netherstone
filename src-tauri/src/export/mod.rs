@@ -279,7 +279,7 @@ fn temp_path_for(path: &Path) -> Result<PathBuf, String> {
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let temp_path = temp_path_for(path)?;
 
-    crate::vault::create_temp(&temp_path)
+    crate::vault::create_temp(&temp_path, path, crate::vault::NewFile::Default)
         .and_then(|mut file| std::io::Write::write_all(&mut file, bytes))
         .map_err(|error| describe_write_error(path, error))?;
 

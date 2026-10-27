@@ -72,7 +72,7 @@ pub fn write_atomically(
 ) -> Result<(), String> {
     use std::io::Write;
 
-    replace_atomically(path, |file| file.write_all(bytes))
+    replace_atomically(path, NewFile::Default, |file| file.write_all(bytes))
 }
 
 /// A file written and flushed to disk under a hidden name in the folder it
@@ -134,15 +134,27 @@ impl Drop for StagedFile {
     }
 }
 
+/// Who may read a file written where none was. A file that's replaced keeps
+/// the permissions it had.
+#[derive(Clone, Copy)]
+pub(crate) enum NewFile {
+    /// What the system gives any new file.
+    Default,
+    /// Only its owner, for files that can hold secrets. Unix-like systems
+    /// only; on Windows a new file takes its folder's access.
+    OwnerOnly,
+}
+
 pub(crate) fn replace_atomically(
     path: &Path,
+    new_file: NewFile,
     fill: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
 ) -> Result<(), String> {
     let name = path
         .file_name()
         .ok_or_else(|| format!("Not a file: {}", path.display()))?;
     let temp = path.with_file_name(format!(".{}.netherstone-tmp", name.to_string_lossy()));
-    let written = create_temp(&temp)
+    let written = create_temp(&temp, path, new_file)
         .and_then(|mut file| {
             fill(&mut file)?;
             file.sync_all()
@@ -156,18 +168,46 @@ pub(crate) fn replace_atomically(
     Ok(())
 }
 
-/// Creates the temporary file `temp`, removing whatever is there first (left
-/// by a write cut short, or put there), so a write never goes through a link
-/// to somewhere else.
-pub(crate) fn create_temp(temp: &Path) -> std::io::Result<std::fs::File> {
+/// Creates the temporary file `temp` that will be renamed over `target`,
+/// removing whatever is there first (left by a write cut short, or put
+/// there), so a write never goes through a link to somewhere else. It gets
+/// `target`'s permissions, or `new_file`'s when there's no `target` yet, so
+/// the rename never opens up a file only its owner could read.
+pub(crate) fn create_temp(
+    temp: &Path,
+    target: &Path,
+    new_file: NewFile,
+) -> std::io::Result<std::fs::File> {
     match std::fs::remove_file(temp) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
         _ => {}
     }
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(temp)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        let kept = std::fs::metadata(target).ok().map(|meta| meta.permissions());
+        // Created no wider than it will end up, so it's never readable by
+        // more people than that, even for a moment.
+        match (&kept, new_file) {
+            (Some(kept), _) => options.mode(kept.mode()),
+            (None, NewFile::OwnerOnly) => options.mode(0o600),
+            (None, NewFile::Default) => &mut options,
+        };
+        let file = options.open(temp)?;
+        // Creating takes away what the umask says; put it back.
+        if let Some(kept) = kept {
+            file.set_permissions(kept)?;
+        }
+        Ok(file)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (target, new_file);
+        options.open(temp)
+    }
 }
 
 /// Like [`write_atomically`], creating the folders `path` needs first.
@@ -571,6 +611,35 @@ mod tests {
             "other"
         );
         assert_eq!(names, ["Deep", "Note.md"]);
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_a_file_keeps_its_permissions() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        let vault = temp_vault("permissions");
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let private = vault.join("Private.md");
+        let shared = vault.join("Shared.md");
+        std::fs::write(&private, "old").unwrap();
+        std::fs::write(&shared, "old").unwrap();
+        std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o600)).unwrap();
+        // Wider than a usual umask lets a new file be.
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o666)).unwrap();
+
+        let writes = crate::locks::vault_writes().unwrap();
+        write_atomically(&writes, &private, b"new").unwrap();
+        write_atomically(&writes, &shared, b"new").unwrap();
+        drop(writes);
+        let secret = vault.join("secret.json");
+        replace_atomically(&secret, NewFile::OwnerOnly, |file| file.write_all(b"{}")).unwrap();
+
+        assert_eq!(mode(&private), 0o600);
+        assert_eq!(mode(&shared), 0o666);
+        assert_eq!(mode(&secret), 0o600);
         std::fs::remove_dir_all(&vault).unwrap();
     }
 }

@@ -10,7 +10,7 @@ import { copy } from "./copy";
 import { Step } from "./StepLayout";
 
 // The basics up front; the named themes wait behind "More themes".
-const BASIC_THEMES: ThemePreference[] = ["light", "dark", "system"];
+const BASIC_THEMES: ThemePreference[] = ["dark", "light", "system"];
 
 export function AppearanceStep({
   onBack,

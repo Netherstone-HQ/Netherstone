@@ -38,8 +38,8 @@ export const DARK_SWATCH: ThemeSwatchColors = {
  * themes: each recolors Basalt's dark tokens (App.css) under `data-theme`.
  */
 export const THEMES: ThemeOption[] = [
-  { value: "light", label: "Light", swatch: LIGHT_SWATCH, mode: "light" },
   { value: "dark", label: "Dark", swatch: DARK_SWATCH, mode: "dark" },
+  { value: "light", label: "Light", swatch: LIGHT_SWATCH, mode: "light" },
   { value: "system", label: "Match system" },
   {
     value: "tyrant",

@@ -77,6 +77,11 @@ export function AiAppsSettings() {
   }
 
   const off = enabled !== true;
+  // Apps on this computer first, then the ones to download.
+  const appGroups = [
+    apps.filter((app) => app.installed || app.connected),
+    apps.filter((app) => !app.installed && !app.connected),
+  ].filter((group) => group.length > 0);
 
   return (
     <>
@@ -119,16 +124,21 @@ export function AiAppsSettings() {
         </SettingsGroup>
       ) : null}
 
-      <SettingsGroup title="Apps">
-        {apps.map((app) => (
-          <SettingRow key={app.id} label={app.name}>
-            <AppButton
-              app={app}
-              disabled={off}
-              onConnect={() => connect(app)}
-            />
-          </SettingRow>
-        ))}
+      {appGroups.map((group, i) => (
+        <SettingsGroup key={group[0].id} title={i === 0 ? "Apps" : undefined}>
+          {group.map((app) => (
+            <SettingRow key={app.id} label={app.name}>
+              <AppButton
+                app={app}
+                disabled={off}
+                onConnect={() => connect(app)}
+              />
+            </SettingRow>
+          ))}
+        </SettingsGroup>
+      ))}
+
+      <SettingsGroup title={appGroups.length === 0 ? "Apps" : undefined}>
         <SettingRow label="Other apps">
           <Button
             variant="outline"

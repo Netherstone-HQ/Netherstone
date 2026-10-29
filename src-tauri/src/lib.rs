@@ -17,6 +17,7 @@ mod shard_links;
 mod splash;
 mod sync;
 mod tools;
+#[cfg(feature = "updater")]
 mod updater;
 mod vault;
 mod vault_access;
@@ -1771,16 +1772,19 @@ pub fn run() {
             let _ = window.set_focus();
         }
     }));
-    builder
+    let builder = builder
         .plugin(launch::plugin())
         .plugin(browser::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .register_asynchronous_uri_scheme_protocol(export::pdf::SCHEME, export::pdf::serve)
+        .register_asynchronous_uri_scheme_protocol(export::pdf::SCHEME, export::pdf::serve);
+    #[cfg(feature = "updater")]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::PendingUpdate::default());
+    builder
         .manage(browser::BrowserState::default())
         .manage(watcher::WatcherState::new())
-        .manage(updater::PendingUpdate::default())
         .setup(|app| {
             for window in tauri::Manager::windows(app).values() {
                 window_icon::apply(window);
@@ -1795,7 +1799,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             splash::show_main_window,
+            #[cfg(feature = "updater")]
             updater::updater_check,
+            #[cfg(feature = "updater")]
             updater::updater_install,
             browser::browser_reset_state,
             browser::browser_get_state,

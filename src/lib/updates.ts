@@ -6,9 +6,17 @@ export interface AvailableUpdate {
   notes: string | null;
 }
 
-/** Whether this build can update itself: the installed app, not `tauri dev`. */
-export function canUpdate(): boolean {
+/** Whether this is the installed app, not `tauri dev` or a browser. */
+export function isInstalledApp(): boolean {
   return isTauri() && !import.meta.env.DEV;
+}
+
+/**
+ * Whether this build can update itself. Builds for package managers leave the
+ * updater out, since the package manager updates them.
+ */
+export function canUpdate(): boolean {
+  return __SELF_UPDATE__ && isInstalledApp();
 }
 
 /** Looks for a newer version on the stable or beta channel. */

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useKeySequence } from "@/hooks/useKeySequence";
 import { installUpdateWithToast } from "@/hooks/useUpdateCheck";
 import { bugReportUrl, versionDetails } from "@/lib/bug-report";
-import { canUpdate } from "@/lib/updates";
+import { canUpdate, isInstalledApp } from "@/lib/updates";
 import { useSettingsStore } from "@/store/settings";
 import { type UpdateStatus, useUpdatesStore } from "@/store/updates";
 
@@ -88,11 +88,13 @@ export function AboutSettings() {
           </div>
         </SettingRow>
         <UpdateRow />
-        <PreferenceSwitch
-          name="betaUpdates"
-          label="Get beta updates"
-          description="New features early, with a few rough edges"
-        />
+        {canUpdate() ? (
+          <PreferenceSwitch
+            name="betaUpdates"
+            label="Get beta updates"
+            description="New features early, with a few rough edges"
+          />
+        ) : null}
         {companionUnlocked ? (
           <PreferenceSwitch
             name="showCompanion"
@@ -165,7 +167,11 @@ function UpdateRow() {
     return (
       <SettingRow
         label="Updates"
-        description="Updates are turned off in development builds"
+        description={
+          isInstalledApp()
+            ? "Updates come from the package manager you installed Netherstone with"
+            : "Updates are turned off in development builds"
+        }
       />
     );
   }

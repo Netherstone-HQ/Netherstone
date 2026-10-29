@@ -28,6 +28,20 @@ isn't code-signed yet. We plan to sign it in a future version.
 
 ![Netherstone with a shard open in the editor](docs/screenshot.png)
 
+## AI apps
+
+Netherstone has a built-in MCP server, so your AI apps can search your vault,
+read and write shards, fix links, edit drawings and tables, and go back through
+History. It's off until you turn it on:
+
+1. Open **Settings > AI apps** and turn on **Connect your AI apps**.
+2. Pick the vaults AI apps may use.
+3. Click **Connect** next to your app, then restart it. For any other app,
+   click **Copy setup** and paste it into that app's MCP settings.
+
+AI apps can't delete anything, and every change they make is saved in History
+first, so you can undo it.
+
 ## Building from source
 
 You need [Node.js](https://nodejs.org/) 22+, [pnpm](https://pnpm.io/) 11,

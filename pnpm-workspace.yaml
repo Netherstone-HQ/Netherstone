@@ -4,3 +4,4 @@ allowBuilds:
 
 patchedDependencies:
   '@excalidraw/excalidraw': patches/@excalidraw__excalidraw.patch
+  '@platejs/selection': patches/@platejs__selection.patch

@@ -84,3 +84,39 @@ test("text pasted from a web page drops the page's colour, font and size", async
   expect(saved).toContain("**The Alchemist** represents your drive for transformation.");
   expect(saved).not.toContain("<span");
 });
+
+const selectAllBlocks = async (page: import("@playwright/test").Page) => {
+  await caretAfter(page, "Paste below:");
+  // The first select all takes the block's text, the second every block.
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("ControlOrMeta+a");
+  await expect(page.locator(".slate-shadow-input")).toBeFocused();
+};
+
+test("copying every selected block puts them all on the clipboard", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await selectAllBlocks(page);
+
+  await page.keyboard.press("ControlOrMeta+c");
+
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("Note");
+  expect(copied).toContain("Paste below:");
+});
+
+test("pasting over selected blocks replaces them, and undo brings them back", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await selectAllBlocks(page);
+
+  await paste(page, { text: "Replacement" });
+
+  await expect(editor(page)).toContainText("Replacement");
+  await expect(editor(page)).not.toContainText("Paste below:");
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toContain("Replacement");
+  expect(saved).not.toContain("# Note");
+
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(editor(page)).toContainText("Paste below:");
+  await expect(editor(page)).not.toContainText("Replacement");
+});

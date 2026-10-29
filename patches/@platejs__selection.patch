@@ -1,0 +1,35 @@
+diff --git a/dist/react/index.js b/dist/react/index.js
+index 34768daa495810924ce94318f929307b35b68bd3..2ab3717849731d10a7ea046f0c883fe189947a5f 100644
+--- a/dist/react/index.js
++++ b/dist/react/index.js
+@@ -1372,7 +1372,7 @@ const writeSelectedBlocksToDataTransfer = (editor, data) => {
+ 			});
+ 			const isEmpty = editor.api.isEmpty(path);
+ 			if (isEmpty) {
+-				const after = editor.api.after(editor.selection);
++				const after = editor.api.after(editor.selection) ?? editor.api.end(path);
+ 				editor.tf.select({
+ 					anchor: editor.api.start(path),
+ 					focus: after
+@@ -1420,16 +1420,16 @@ const selectInsertedBlocks = (editor) => {
+ //#region src/react/utils/pasteSelectedBlocks.ts
+ const pasteSelectedBlocks = (editor, e) => {
+ 	const { api } = getEditorPlugin(editor, BlockSelectionPlugin);
+-	const entries = api.blockSelection.getNodes();
++	const entries = api.blockSelection.getNodes({ sort: true });
+ 	if (entries.length > 0) {
+-		const [node, path] = entries.at(-1);
+-		if (!editor.api.isEmpty(node)) {
+-			const at = PathApi.next(path);
++		const at = entries[0][1];
++		editor.tf.withoutNormalizing(() => {
++			for (const [, path] of [...entries].reverse()) editor.tf.removeNodes({ at: path });
+ 			editor.tf.insertNodes(editor.api.create.block({}, at), {
+ 				at,
+ 				select: true
+ 			});
+-		}
++		});
+ 		editor.tf.insertData(e.clipboardData);
+ 		selectInsertedBlocks(editor);
+ 	}

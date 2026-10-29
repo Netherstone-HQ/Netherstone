@@ -6,6 +6,7 @@ settings:
 
 patchedDependencies:
   '@excalidraw/excalidraw': 63daa2f5f2caf687f5bad39b38924c737c19a1af3875c01427a44deb970e8aa5
+  '@platejs/selection': c26a23055a79845e12802fe77e148868d2321368fc4ef06b5819ab38c7039274
 
 importers:
 
@@ -97,7 +98,7 @@ importers:
         version: 53.0.0(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@platejs/selection':
         specifier: ^53.1.6
-        version: 53.1.6(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        version: 53.1.6(patch_hash=c26a23055a79845e12802fe77e148868d2321368fc4ef06b5819ab38c7039274)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@platejs/slash-command':
         specifier: ^53.0.0
         version: 53.0.0(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -6643,7 +6644,7 @@ snapshots:
   '@platejs/ai@53.3.12(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@5.8.3)':
     dependencies:
       '@platejs/markdown': 53.3.12(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@5.8.3)
-      '@platejs/selection': 53.1.6(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@platejs/selection': 53.1.6(patch_hash=c26a23055a79845e12802fe77e148868d2321368fc4ef06b5819ab38c7039274)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@platejs/suggestion': 53.2.3(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@platejs/table': 53.0.9(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       fastest-levenshtein: 1.0.16
@@ -6914,7 +6915,7 @@ snapshots:
       react-compiler-runtime: 1.0.0(react@19.2.5)
       react-dom: 19.2.5(react@19.2.5)
 
-  '@platejs/selection@53.1.6(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@platejs/selection@53.1.6(patch_hash=c26a23055a79845e12802fe77e148868d2321368fc4ef06b5819ab38c7039274)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       copy-to-clipboard: 3.3.3
       platejs: 53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))

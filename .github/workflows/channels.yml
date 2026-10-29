@@ -1,0 +1,198 @@
+name: Channels
+
+# Publishes a release to the package managers. The release workflow runs this
+# once a release is published; run it by hand to publish an existing release.
+#
+#   winget     opens a pull request on microsoft/winget-pkgs from wSoltani's fork
+#   Homebrew   commits the cask to Netherstone-HQ/homebrew-tap
+#   AUR        pushes netherstone-bin
+#
+# Each channel is skipped, with a warning, until its secret is set. Their
+# files are in packaging/<channel>/, filled in by scripts/channels.mjs.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.6.0-beta.2
+        type: string
+        required: true
+
+concurrency:
+  group: channels-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_REPO: ${{ github.repository }}
+  # Commits to the tap and the AUR are Wassim's.
+  COMMIT_NAME: Wassim Soltani
+  COMMIT_EMAIL: 56431363+wSoltani@users.noreply.github.com
+
+jobs:
+  check:
+    name: Check which channels are set up
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      winget: ${{ steps.secrets.outputs.winget }}
+      homebrew: ${{ steps.secrets.outputs.homebrew }}
+      aur: ${{ steps.secrets.outputs.aur }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Drafts aren't found by tag, so a release that isn't out yet stops here.
+      - id: release
+        name: Check the release is published
+        run: |
+          gh api "repos/$GH_REPO/releases/tags/$TAG" --silent
+          version=$(node scripts/channels.mjs version "$TAG")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - id: secrets
+        name: Check the secrets
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          ready() {
+            if [ -n "$3" ]; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::$2 is not set, so $1 is skipped."
+            fi
+          }
+          ready winget WINGET_TOKEN "$WINGET_TOKEN"
+          ready homebrew PACKAGES_TOKEN "$PACKAGES_TOKEN"
+          ready aur AUR_SSH_PRIVATE_KEY "$AUR_SSH_PRIVATE_KEY"
+
+  winget:
+    name: winget
+    needs: check
+    if: needs.check.outputs.winget == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      # Komac makes the manifests from the installer and opens the pull request.
+      KOMAC_VERSION: 2.16.0
+      KOMAC_SHA256: 7d2707fa6210f2789a3702de49fbd150b736dbf426ee0b9bc8e098736f9fd82d
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Komac
+        run: |
+          archive="komac-$KOMAC_VERSION-x86_64-unknown-linux-gnu.tar.gz"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/russellbanks/Komac/releases/download/v$KOMAC_VERSION/$archive"
+          echo "$KOMAC_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check
+          mkdir "$RUNNER_TEMP/komac"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/komac"
+          sudo install "$(find "$RUNNER_TEMP/komac" -type f -name komac)" /usr/local/bin/komac
+          komac --version
+
+      # The first version of the package was submitted by hand; Komac only
+      # updates packages that exist.
+      - name: Open the winget pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          KOMAC_FORK_OWNER: wSoltani
+        run: |
+          komac update NetherstoneHQ.Netherstone --version "$VERSION" --submit \
+            --urls "$(node scripts/channels.mjs url windowsSetup "$VERSION")"
+
+  homebrew:
+    name: Homebrew
+    needs: check
+    if: needs.check.outputs.homebrew == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Netherstone-HQ/homebrew-tap
+          token: ${{ secrets.PACKAGES_TOKEN }}
+          path: tap
+
+      - name: Write the cask
+        run: |
+          gh api "repos/$GH_REPO/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          node scripts/channels.mjs render homebrew "$RUNNER_TEMP/release.json" tap/Casks
+
+      - name: Commit the cask
+        working-directory: tap
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          git add Casks
+          if git diff --cached --quiet; then
+            echo "The tap already has Netherstone $VERSION."
+            exit 0
+          fi
+          git -c user.name="$COMMIT_NAME" -c user.email="$COMMIT_EMAIL" \
+            commit --message "Netherstone $VERSION"
+          git push
+
+  aur:
+    name: AUR
+    needs: check
+    if: needs.check.outputs.aur == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Releases before the package manager builds have no Linux tarball.
+      - id: package
+        name: Write the PKGBUILD
+        run: |
+          gh api "repos/$GH_REPO/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          tarball=$(node scripts/channels.mjs asset linuxTarball "$VERSION")
+          if ! jq -e --arg name "$tarball" '.assets | any(.name == $name)' "$RUNNER_TEMP/release.json" > /dev/null; then
+            echo "::warning::$TAG has no $tarball, so it can't go on the AUR."
+            exit 0
+          fi
+          node scripts/channels.mjs render aur "$RUNNER_TEMP/release.json" "$RUNNER_TEMP/aur"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # makepkg writes .SRCINFO from the PKGBUILD, and only runs on Arch, as a
+      # user other than root.
+      - name: Write .SRCINFO
+        if: steps.package.outputs.ready == 'true'
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/aur:/pkg" archlinux:base-devel bash -c \
+            'useradd --create-home builder && cd /pkg && su builder -c "makepkg --printsrcinfo" > .SRCINFO'
+          cat "$RUNNER_TEMP/aur/.SRCINFO"
+
+      - name: Push to the AUR
+        if: steps.package.outputs.ready == 'true'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          git clone ssh://aur@aur.archlinux.org/netherstone-bin.git "$RUNNER_TEMP/repo"
+          cp "$RUNNER_TEMP/aur/PKGBUILD" "$RUNNER_TEMP/aur/.SRCINFO" "$RUNNER_TEMP/repo/"
+          cd "$RUNNER_TEMP/repo"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "The AUR already has Netherstone $VERSION."
+            exit 0
+          fi
+          git -c user.name="$COMMIT_NAME" -c user.email="$COMMIT_EMAIL" \
+            commit --message "Netherstone $VERSION"
+          git push origin HEAD:master

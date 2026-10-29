@@ -87,8 +87,6 @@ test("text pasted from a web page drops the page's colour, font and size", async
 
 const selectAllBlocks = async (page: import("@playwright/test").Page) => {
   await caretAfter(page, "Paste below:");
-  // The first select all takes the block's text, the second every block.
-  await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("ControlOrMeta+a");
   await expect(page.locator(".slate-shadow-input")).toBeFocused();
 };

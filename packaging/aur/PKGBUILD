@@ -1,0 +1,23 @@
+# Maintainer: Wassim Soltani <56431363+wSoltani@users.noreply.github.com>
+#
+# The release workflow fills this in and pushes it to the AUR as netherstone-bin.
+# Change it here, not on the AUR.
+
+pkgname=netherstone-bin
+pkgver={{pkgver}}
+pkgrel=1
+pkgdesc="Local-first app for notes, documents and drawings, kept as Markdown"
+arch=('x86_64')
+url="https://netherstone.app"
+license=('GPL-3.0-only')
+depends=('gtk3' 'openssl' 'webkit2gtk-4.1')
+provides=('netherstone')
+conflicts=('netherstone')
+options=('!strip' '!debug')
+# The Linux app without its updater: pacman updates it.
+source=("{{url.linuxTarball}}")
+sha256sums=('{{sha256.linuxTarball}}')
+
+package() {
+  cp -a usr "$pkgdir/"
+}

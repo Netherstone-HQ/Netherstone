@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import { whenSplashLeaves } from "@/lib/splash";
-import { canUpdate } from "@/lib/updates";
+import { isInstalledApp } from "@/lib/updates";
 import { useUIStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
 
@@ -37,7 +37,7 @@ export function useWhatsNew() {
   const checked = useRef(false);
 
   useEffect(() => {
-    if (checked.current || !canUpdate()) return;
+    if (checked.current || !isInstalledApp()) return;
     checked.current = true;
 
     const version = __APP_VERSION__;

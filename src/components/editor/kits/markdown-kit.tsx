@@ -15,6 +15,7 @@ import {
   DRAWING_LINK_ATTRIBUTE,
 } from "@/lib/drawing-files";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
+import { fontStyleRules } from "@/lib/markdown-font-styles";
 import { textHandler } from "@/lib/markdown-escapes";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
 import { listGroupRules } from "@/lib/markdown-list-blocks";
@@ -75,6 +76,7 @@ export const MarkdownKit = [
         img: imageRule,
         ...toggleRules,
         ...emptyLineRules,
+        ...fontStyleRules,
         ...listGroupRules,
         ...rawBlockRules,
         ...shardLinkRules,

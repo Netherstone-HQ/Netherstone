@@ -22,6 +22,7 @@ import {
   BaseAudioPlugin,
   BaseFilePlugin,
   BaseImagePlugin,
+  BaseMediaEmbedPlugin,
   BasePlaceholderPlugin,
   BaseVideoPlugin,
 } from "@platejs/media";
@@ -124,6 +125,7 @@ export const SerializationKit = [
   BaseVideoPlugin.configure({ options: { disableUploadInsert: true } }),
   BaseAudioPlugin.configure({ options: { disableUploadInsert: true } }),
   BaseFilePlugin.configure({ options: { disableUploadInsert: true } }),
+  BaseMediaEmbedPlugin,
   BasePlaceholderPlugin,
   BaseCaptionPlugin.configure({
     options: {

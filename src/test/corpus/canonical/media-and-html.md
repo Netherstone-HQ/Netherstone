@@ -6,7 +6,9 @@
 
 <file name="doc.pdf" src="attachments/doc.pdf" />
 
-<media_embed src="https://example.com/embed" />
+<!-- netherstone embed -->
+
+https://example.com/embed
 
 <!-- a comment another tool left here -->
 

@@ -14,6 +14,7 @@ import {
   reloadOpenShardIfChanged,
   rememberSavedValue,
 } from "@/lib/outside-changes";
+import { syncBeforeQuit } from "@/lib/sync-before-quit";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 
 const AUTOSAVE_DELAY_MS = 1800;
@@ -324,7 +325,10 @@ export function useAutosave() {
         cacheWrites !== null ||
         hasPendingDrawingSave();
 
-      if (!hasPendingPersistenceWork) {
+      // Asked before saving, since unsaved edits need the sync too.
+      const sync = syncBeforeQuit();
+
+      if (!hasPendingPersistenceWork && !sync) {
         return;
       }
 
@@ -341,6 +345,12 @@ export function useAutosave() {
         await finishDrawingSession();
       } catch (error) {
         console.error("Failed to save drawing on shutdown:", error);
+      }
+
+      try {
+        await sync?.();
+      } catch (error) {
+        console.error("Failed to sync on shutdown:", error);
       } finally {
         try {
           bypassCloseRequestRef.current = true;

@@ -23,7 +23,7 @@ export type NewShardLocation = "vault-root" | "current-folder";
 export type LinkOpener = "browser-panel" | "your-browser";
 /** How much bigger or smaller the whole interface is, in percent. */
 export type Zoom = 80 | 90 | 100 | 110 | 125 | 150;
-/** Minutes between automatic syncs. */
+/** The fewest minutes between automatic syncs. */
 export type SyncInterval = 5 | 15 | 30 | 60;
 
 /** Everything the user can change in Settings (and onboarding). */
@@ -145,7 +145,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   mediaInsertionPreference: DEFAULT_MEDIA_INSERTION_PREFERENCE,
 
   autoSync: true,
-  autoSyncInterval: 5,
+  autoSyncInterval: 30,
 
   // Someone who installed a beta wants the next beta too.
   betaUpdates: isPrerelease(__APP_VERSION__),
@@ -242,7 +242,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "netherstone-settings",
       storage: renamedLocalStorage("netherite-settings"),
-      version: 3,
+      version: 4,
       partialize: (state) => {
         const saved: Partial<Preferences> &
           Pick<
@@ -277,6 +277,8 @@ export const useSettingsStore = create<SettingsState>()(
             state.recentFilesLimit,
           );
         }
+        // Version 3 synced every 5 minutes; free sync now waits 30 between.
+        if (version < 4) delete state.autoSyncInterval;
         return state as SettingsState;
       },
       // First launch with no saved settings at all: still honor the old key.

@@ -44,7 +44,7 @@ describe("settings store", () => {
     setPreference("autoSyncInterval", 7 as never);
     setPreference("zoom", 175 as never);
     expect(useSettingsStore.getState().recentFilesLimit).toBe(20);
-    expect(useSettingsStore.getState().autoSyncInterval).toBe(5);
+    expect(useSettingsStore.getState().autoSyncInterval).toBe(30);
     expect(useSettingsStore.getState().zoom).toBe(100);
   });
 
@@ -96,6 +96,15 @@ describe("settings store", () => {
     expect(useSettingsStore.getState().recentFilesLimit).toBe(2);
     useSettingsStore.getState().setPreference("recentFilesLimit", 1);
     expect(useSettingsStore.getState().recentFilesLimit).toBe(2);
+  });
+
+  it("moves the old five minute sync interval to the new default", async () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ state: { autoSyncInterval: 5 }, version: 3 }),
+    );
+    const { useSettingsStore } = await loadStore();
+    expect(useSettingsStore.getState().autoSyncInterval).toBe(30);
   });
 
   it("moves settings saved under the old Netherite key", async () => {
@@ -191,7 +200,7 @@ describe("settings store", () => {
     const { useSettingsStore } = await loadStore();
     useSettingsStore.getState().completeOnboarding();
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) ?? "{}");
-    expect(saved.version).toBe(3);
+    expect(saved.version).toBe(4);
     expect(saved.state.onboardingCompletedAt).toEqual(expect.any(String));
     expect(saved.state.theme).toBe("dark");
     expect(saved.state.setTheme).toBeUndefined();

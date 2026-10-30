@@ -52,8 +52,11 @@ between, the cycle retries. Edits made while a sync runs are never
 overwritten.
 
 Triggers (`src/hooks/useBackgroundSync.ts`): a few seconds after a vault
-opens, five minutes after edits stop, every five minutes, on "Sync now", and
-when the connection comes back. Network failures show "Offline".
+opens, on "Sync now", and before quitting with edits that haven't synced.
+Leaving the window with edits, coming back to it, edits waiting, and the
+connection coming back also sync, but at most once per interval (30 minutes
+by default): a sync asked for sooner runs when the interval ends. Network
+failures show "Offline".
 
 ## Local history
 

@@ -15,7 +15,8 @@ test("editing a shard with a callout keeps the callout", async ({ page }) => {
 
   const saved = await lastSave(page, "Callout.md");
   expect(saved).toContain("# Callout");
-  expect(saved).toContain('<callout icon="💡">\n  Body\n</callout>');
+  // A callout saved as a tag before is written in the Markdown form.
+  expect(saved).toContain("> [!tip]\n> Body\n");
   expect(saved).not.toContain("id=");
   expect(saved).toContain("End edited");
 });

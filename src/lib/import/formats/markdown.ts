@@ -14,8 +14,9 @@ import { decodeText } from "./decode-text";
  *   attachments; `![[Note]]` becomes a link to that note.
  * - Links to other imported files point at their new shards; links to notes
  *   that weren't imported become plain text.
- * - Obsidian callouts (`> [!tip] Title`) become callouts, `==text==` is
- *   highlighted, `%%comments%%` and `^block-ids` are dropped.
+ * - Obsidian callouts (`> [!tip] Title`) keep their form, which the editor
+ *   reads as callouts; links inside them are rewritten like any other.
+ * - `==text==` is highlighted, `%%comments%%` and `^block-ids` are dropped.
  *
  * Code blocks and inline code are never touched.
  */
@@ -32,36 +33,6 @@ const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "s
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 /** The `src` of a media tag Netherstone or another app wrote, `<img src="…"`. */
 const MEDIA_SRC = /(<(?:img|audio|video|source|file)\b[^>]*?\ssrc=)("[^"]*"|'[^']*')/gi;
-
-const CALLOUT_ICONS: Record<string, string> = {
-  note: "📝",
-  info: "ℹ️",
-  todo: "☑️",
-  abstract: "📌",
-  summary: "📌",
-  tldr: "📌",
-  tip: "💡",
-  hint: "💡",
-  important: "💡",
-  success: "✅",
-  check: "✅",
-  done: "✅",
-  question: "❓",
-  help: "❓",
-  faq: "❓",
-  warning: "⚠️",
-  caution: "⚠️",
-  attention: "⚠️",
-  failure: "❌",
-  fail: "❌",
-  missing: "❌",
-  danger: "🚫",
-  error: "🚫",
-  bug: "🐞",
-  example: "📋",
-  quote: "💬",
-  cite: "💬",
-};
 
 function extension(target: string) {
   const clean = target.split(/[?#]/)[0];
@@ -197,16 +168,12 @@ export async function convertMarkdown(source: string, context: ImportContext): P
     return value;
   };
 
-  let callout: { indent: string; lines: string[]; icon: string; title: string } | null = null;
+  let callout: { indent: string; lines: string[]; type: string; title: string } | null = null;
   const flushCallout = () => {
     if (!callout) return;
-    const body = [
-      ...(callout.title ? [`**${callout.title}**`, ""] : []),
-      ...callout.lines,
-    ];
-    out.push(`${callout.indent}<callout icon="${callout.icon}">`);
-    for (const line of body) out.push(line ? `${callout.indent}  ${line}` : "");
-    out.push(`${callout.indent}</callout>`);
+    const { indent, type, title } = callout;
+    out.push(`${indent}> [!${type}]${title ? ` ${title}` : ""}`);
+    for (const line of callout.lines) out.push(line ? `${indent}> ${line}` : `${indent}>`);
     callout = null;
   };
 
@@ -253,7 +220,7 @@ export async function convertMarkdown(source: string, context: ImportContext): P
       callout = {
         indent: calloutStart[1],
         lines: [],
-        icon: CALLOUT_ICONS[calloutStart[2].toLowerCase()] ?? "💡",
+        type: calloutStart[2],
         title: await outsideCode(calloutStart[3].trim(), (part) => rewrite(part, calloutStart[3])),
       };
       continue;

@@ -167,7 +167,7 @@ describe("code and empty notes", () => {
       },
       { type: "video", id: "static-0003", url: "clip.mp4", children: [{ text: "" }] },
     ]);
-    expect(saved).toBe('<callout icon="💡">\n  Body\n</callout>\n\n<video src="clip.mp4" />\n');
+    expect(saved).toBe('> [!tip]\n> Body\n\n<video src="clip.mp4" />\n');
   });
 
   // The editor always ends a shard with an empty line to type into.
@@ -251,6 +251,81 @@ describe("conversions by design", () => {
     expect(roundTrip("On <date>Sat Apr 18 2026</date> it ran.\n")).toBe(
       'On <date value="2026-04-18" /> it ran.\n',
     );
+  });
+});
+
+describe("callouts", () => {
+  it("saves a callout as a [!type] blockquote", () => {
+    expect(roundTrip("> [!warning]\n> Mind the gap.\n")).toBe("> [!warning]\n> Mind the gap.\n");
+  });
+
+  it("reads the type as the emoji and a title as a bold first line", () => {
+    const [callout] = loadMarkdown("> [!Caution]- Careful\n> Mind the gap.\n");
+    expect(callout.type).toBe("callout");
+    expect(callout.icon).toBe("⚠️");
+    expect(callout.children.map((p: any) => p.children)).toEqual([
+      [{ text: "Careful", bold: true }],
+      [{ text: "Mind the gap." }],
+    ]);
+    expect(roundTrip("> [!Caution]- Careful\n> Mind the gap.\n")).toBe(
+      "> [!warning] Careful\n>\n> Mind the gap.\n",
+    );
+  });
+
+  it("keeps an emoji that has no type of its own", () => {
+    const saved = saveValue([
+      { type: "callout", icon: "🔥", children: [{ type: "p", children: [{ text: "Hot" }] }] },
+    ]);
+    expect(saved).toBe("> [!🔥]\n> Hot\n");
+    const inserted = saveValue([
+      { type: "callout", icon: "💡", variant: undefined, children: [{ type: "p", children: [{ text: "New" }] }] },
+    ]);
+    expect(inserted).toBe("> [!tip]\n> New\n");
+    expect(loadMarkdown(saved)[0].icon).toBe("🔥");
+  });
+
+  it("keeps lists and line starts in the body as written", () => {
+    const markdown = "> [!note]\n> 1\\. not a list\n>\n> - one\n> - two\n";
+    expect(roundTrip(markdown)).toBe(markdown);
+    expect(roundTrip("> [!note]\n>\n> - one\n")).toBe("> [!note]\n>\n> - one\n");
+  });
+
+  it("saves an empty callout as its marker", () => {
+    expect(roundTrip("> [!tip]\n")).toBe("> [!tip]\n");
+  });
+
+  it("opens callouts saved as tags and saves them in the new form", () => {
+    expect(roundTrip('<callout icon="📝">\n  Body\n</callout>\n')).toBe("> [!note]\n> Body\n");
+  });
+
+  it("leaves plain blockquotes alone", () => {
+    expect(roundTrip("> Just a quote.\n")).toBe("> Just a quote.\n");
+  });
+});
+
+describe("columns", () => {
+  const COLUMNS =
+    "<!-- netherstone columns: 30%, 70% -->\n\nLeft\n\n<!-- netherstone column -->\n\n- one\n- two\n\n<!-- netherstone /columns -->\n";
+
+  it("saves columns as their blocks between hidden comments", () => {
+    const [group] = loadMarkdown(COLUMNS);
+    expect(group.type).toBe("column_group");
+    expect(group.children.map((column: any) => column.width)).toEqual(["30%", "70%"]);
+    expect(readableText(saveValue([group.children[0].children[0]]))).toBe("Left");
+    expect(roundTrip(COLUMNS)).toBe(COLUMNS);
+  });
+
+  it("opens columns saved as tags and saves them in the new form", () => {
+    const tags =
+      '<column_group>\n  <column width="50%">\n    Left\n  </column>\n\n  <column width="50%">\n    Right\n  </column>\n</column_group>\n';
+    expect(roundTrip(tags)).toBe(
+      "<!-- netherstone columns: 50%, 50% -->\n\nLeft\n\n<!-- netherstone column -->\n\nRight\n\n<!-- netherstone /columns -->\n",
+    );
+  });
+
+  it("leaves a start comment with no end as it is", () => {
+    const markdown = "<!-- netherstone columns -->\n\nText\n";
+    expect(roundTrip(markdown)).toBe(markdown);
   });
 });
 

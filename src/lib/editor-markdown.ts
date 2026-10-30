@@ -14,6 +14,7 @@ import {
   applyBlockFormatting,
   wrapFormattedBlocks,
 } from "@/lib/markdown-block-formatting";
+import { applyColumns, columnGroupBlocks } from "@/lib/markdown-columns";
 import { BLANK_LINE_PROP, isEmptyParagraph } from "@/lib/markdown-empty-lines";
 import { applyEmbeds, embedBlocks } from "@/lib/markdown-embeds";
 import {
@@ -281,10 +282,12 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const unmask = <T,>(value: T): T =>
     applyEmbeds(
       applyBlockFormatting(
-        applyTableMeta(
-          restoreRawBlocks(
-            masked ? (restoreVerbatimLessThan(value) as T) : value,
-            rawBlocks,
+        applyColumns(
+          applyTableMeta(
+            restoreRawBlocks(
+              masked ? (restoreVerbatimLessThan(value) as T) : value,
+              rawBlocks,
+            ),
           ),
         ),
       ),
@@ -471,6 +474,20 @@ export function prepareSerializableMarkdownValue(
         if (!next) {
           next = value.slice(0, index);
         }
+        continue;
+      }
+
+      // A column group saves as its blocks between hidden comments.
+      if (type === KEYS.columnGroup) {
+        if (!next) {
+          next = value.slice(0, index);
+        }
+        next.push(
+          ...columnGroupBlocks(
+            record as TElement,
+            (children) => walk(children, inCell).value as unknown[],
+          ),
+        );
         continue;
       }
 

@@ -6,6 +6,6 @@ fn main() {
     match parse(std::env::args_os().skip(1)) {
         // AI apps start the app as `Netherstone mcp` to use the vault.
         Command::Mcp => netherstone_lib::run_mcp_server(),
-        Command::Open(_) => netherstone_lib::run(),
+        Command::Open { .. } => netherstone_lib::run(),
     }
 }

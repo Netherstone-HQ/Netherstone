@@ -13,6 +13,7 @@ mod locks;
 mod markdown_text;
 mod mcp;
 mod open_access;
+mod open_source;
 mod shard_links;
 mod splash;
 mod sync;
@@ -284,12 +285,12 @@ fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
         .collect()
 }
 
-/// Hands the window the folders and files opened from outside the app: the
-/// folder may then open as the vault, and the files, once `can_import`, may
-/// be imported.
+/// Hands the window the folders, files and links opened from outside the
+/// app: the folder may then open as the vault, the files, once `can_import`,
+/// may be imported, and the link, once `can_open_link`, may be opened.
 #[tauri::command(async)]
-fn take_launch(can_import: bool) -> launch::Taken {
-    launch::get().take(can_import)
+fn take_launch(can_import: bool, can_open_link: bool) -> launch::Taken {
+    launch::get().take(can_import, can_open_link)
 }
 
 /// Lists the files in the picked files and folders.
@@ -1756,15 +1757,31 @@ pub fn run_mcp_server() {
     }
 }
 
+/// Makes Netherstone the app for its links where the installer didn't: a
+/// dev build, so links can be tried from it (until the app is installed
+/// again), and an AppImage, which has no installer. The installers register
+/// the link for everything else.
+fn register_links(_app: &tauri::App) {
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        use tauri::Manager;
+        use tauri_plugin_deep_link::DeepLinkExt;
+        let without_installer = cfg!(debug_assertions) || _app.env().appimage.is_some();
+        if without_installer && let Err(error) = _app.deep_link().register_all() {
+            eprintln!("[Netherstone] Couldn't register Netherstone links: {}", error);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
-    // Opening the app again hands what it opened to the window already open.
-    // Dev builds run on their own, beside an installed app.
+    // Opening the app again, or a link, hands what it opened to the window
+    // already open. Dev builds run on their own, beside an installed app.
     #[cfg(all(desktop, not(debug_assertions)))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-        if let launch::Command::Open(paths) = launch::parse(args.into_iter().skip(1).map(Into::into)) {
-            launch::receive(app, &paths, Path::new(&cwd));
+        if let launch::Command::Open { paths, links } = launch::parse(args.into_iter().skip(1).map(Into::into)) {
+            launch::receive(app, &paths, links, Path::new(&cwd));
         }
         if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
             let _ = window.unminimize();
@@ -1773,6 +1790,7 @@ pub fn run() {
     }));
     builder
         .plugin(launch::plugin())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(browser::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1786,6 +1804,8 @@ pub fn run() {
                 window_icon::apply(window);
             }
             splash::show_main_window_eventually(app.handle());
+            register_links(app);
+            std::thread::spawn(open_source::remove_leftovers);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1820,6 +1840,10 @@ pub fn run() {
             open_media_files_dialog,
             open_import_dialog,
             take_launch,
+            open_source::open_link_list,
+            open_source::open_link_create,
+            open_source::open_link_cancel,
+            open_source::open_link_done,
             integrations::integrations_get,
             integrations::integrations_set,
             list_import_sources,
@@ -1904,11 +1928,12 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|_app, _event| {
             // macOS hands over files and folders (Open With, a drop on the
-            // Dock, `open`) as an event, not on the command line.
+            // Dock, `open`) and links as an event, not on the command line.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = _event {
                 let paths: Vec<_> = urls.iter().filter_map(|url| url.to_file_path().ok()).collect();
-                launch::receive(_app, &paths, Path::new("/"));
+                let links = urls.iter().filter_map(|url| open_source::Address::parse(url.as_str())).collect();
+                launch::receive(_app, &paths, links, Path::new("/"));
             }
         });
 }

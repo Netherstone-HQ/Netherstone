@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { takeLaunch, type Launched } from "@/lib/commands";
 import { useImportDialogStore } from "@/lib/import";
 import { openLaunched, waitingText } from "@/lib/launch";
+import { openLink } from "@/lib/open-link";
 import { openVault } from "@/lib/open-vault";
 import { openVaultFile } from "@/lib/open-vault-file";
 import { useVaultStore } from "@/store";
@@ -16,10 +17,11 @@ vi.mock("@/lib/open-vault", () => ({
   openVault: vi.fn(async (path: string) => useVaultStore.setState({ currentVaultPath: path })),
 }));
 vi.mock("@/lib/open-vault-file", () => ({ openVaultFile: vi.fn() }));
+vi.mock("@/lib/open-link", () => ({ openLink: vi.fn(), isOpeningLink: () => false, useOpenLink: { subscribe: vi.fn() } }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { dismiss: vi.fn(), error: vi.fn() }) }));
 
 const launched = (taken: Partial<Launched>) =>
-  vi.mocked(takeLaunch).mockResolvedValueOnce({ vault: null, files: [], waiting: [], ...taken });
+  vi.mocked(takeLaunch).mockResolvedValueOnce({ vault: null, files: [], waiting: [], link: null, ...taken });
 
 describe("opening from outside the app", () => {
   beforeEach(() => {
@@ -31,7 +33,7 @@ describe("opening from outside the app", () => {
   it("imports files into the open vault", async () => {
     launched({ files: ["/Downloads/Report.md"] });
     await openLaunched();
-    expect(takeLaunch).toHaveBeenCalledWith(true);
+    expect(takeLaunch).toHaveBeenCalledWith(true, true);
     expect(useImportDialogStore.getState()).toMatchObject({ targetDir: "/Vault", files: ["/Downloads/Report.md"] });
   });
 
@@ -53,7 +55,7 @@ describe("opening from outside the app", () => {
     useVaultStore.setState({ currentVaultPath: null });
     launched({ waiting: ["Report.md"] });
     await openLaunched();
-    expect(takeLaunch).toHaveBeenCalledWith(false);
+    expect(takeLaunch).toHaveBeenCalledWith(false, true);
     expect(toast).toHaveBeenCalledWith("Open or create a vault to import Report.md", expect.anything());
     expect(useImportDialogStore.getState().targetDir).toBeNull();
   });
@@ -65,8 +67,15 @@ describe("opening from outside the app", () => {
     });
     launched({ waiting: ["Report.md"] });
     await openLaunched();
-    expect(takeLaunch).toHaveBeenCalledWith(false);
+    expect(takeLaunch).toHaveBeenCalledWith(false, false);
     expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("opens a link's dialog, with or without a vault", async () => {
+    useVaultStore.setState({ currentVaultPath: null });
+    launched({ link: "netherstone.app/templates/worldbuilding" });
+    await openLaunched();
+    expect(openLink).toHaveBeenCalledWith("netherstone.app/templates/worldbuilding");
   });
 
   it("names what waits", () => {

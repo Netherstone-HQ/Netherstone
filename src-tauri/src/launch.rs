@@ -1,6 +1,8 @@
 //! Files and folders handed to the app from outside it: the terminal
 //! (`netherstone .`, `netherstone notes.md`), the system's Open with menu, the
-//! folder right-click menu on Windows and a drop on the Dock on macOS.
+//! folder right-click menu on Windows and a drop on the Dock on macOS. Also
+//! Netherstone links (`netherstone://open/<address>`), which open a template
+//! or a folder from the web as a new vault (see `open_source`).
 //!
 //! The paths only ever come from the system (the command line the app was
 //! started with, the one a second launch passed on, or macOS's open event),
@@ -13,6 +15,7 @@
 //! arrives after the window first took anything waits for the person to say
 //! yes in a native dialog, which a script in the page can't click.
 
+use crate::open_source::Address;
 use serde::Serialize;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -26,22 +29,44 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 pub enum Command {
     /// `Netherstone mcp`: the MCP server AI apps start, with no window.
     Mcp,
-    /// The app, with any files and folders to open, as written.
-    Open(Vec<PathBuf>),
+    /// The app, with any files and folders to open, as written, and the
+    /// links it was opened with.
+    Open { paths: Vec<PathBuf>, links: Vec<Address> },
 }
 
-/// Reads the command line, without the program's own path.
+/// Reads the command line, without the program's own path. Links are read
+/// before anything is taken as a path; ones that aren't Netherstone's are
+/// left out.
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Command {
     let mut args = args.into_iter().peekable();
     if args.peek().is_some_and(|first| first == "mcp") {
         return Command::Mcp;
     }
-    // Flags are left for the system and the webview.
-    Command::Open(
-        args.filter(|arg| !arg.to_string_lossy().starts_with('-'))
-            .map(PathBuf::from)
-            .collect(),
-    )
+    let (mut paths, mut links) = (Vec::new(), Vec::new());
+    for arg in args {
+        let text = arg.to_string_lossy();
+        if let Some(url) = url_of(&text) {
+            match url.scheme() {
+                // Linux hands files over as URLs too.
+                "file" => paths.extend(url.to_file_path().ok()),
+                _ => links.extend(Address::parse(&text)),
+            }
+        } else if !text.starts_with('-') {
+            // Flags are left for the system and the webview.
+            paths.push(PathBuf::from(arg));
+        }
+    }
+    Command::Open { paths, links }
+}
+
+/// `text` as a URL, when it's one: `file:` or `netherstone:`. Anything else,
+/// a Windows path like `C:\Notes` included, is a path.
+fn url_of(text: &str) -> Option<tauri::Url> {
+    let (scheme, _) = text.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("file") && !scheme.eq_ignore_ascii_case("netherstone") {
+        return None;
+    }
+    tauri::Url::parse(text).ok()
 }
 
 /// Takes the folders and files the app was started with, then moves its
@@ -54,10 +79,11 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Command {
 pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("launch-folder")
         .setup(|_app, _api| {
-            if let Command::Open(paths) = parse(std::env::args_os().skip(1))
-                && let Ok(cwd) = std::env::current_dir()
-            {
-                get().add(&paths, &cwd);
+            if let Command::Open { paths, links } = parse(std::env::args_os().skip(1)) {
+                if let Ok(cwd) = std::env::current_dir() {
+                    get().add(&paths, &cwd);
+                }
+                get().keep_links(links);
             }
             let own = crate::db::get_db_path().ok().and_then(|db| db.parent().map(Path::to_path_buf));
             if let Some(own) = own
@@ -74,19 +100,23 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 pub const EVENT: &str = "launch";
 
 /// What the window takes: a folder to open as the vault, files to import
-/// into it, and the names of files waiting until it can import.
+/// into it, the names of files waiting until it can import, and the address
+/// of a link to open.
 #[derive(Debug, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Taken {
     pub vault: Option<String>,
     pub files: Vec<String>,
     pub waiting: Vec<String>,
+    pub link: Option<String>,
 }
 
-/// Folders and files handed to the app and not yet taken by the window.
+/// Folders, files and links handed to the app and not yet taken by the
+/// window.
 pub struct Launches {
     vault: Mutex<Option<PathBuf>>,
     files: Mutex<Vec<PathBuf>>,
+    link: Mutex<Option<Address>>,
     /// Set on the window's first take, once the page runs.
     page_running: AtomicBool,
 }
@@ -102,6 +132,7 @@ impl Launches {
         Self {
             vault: Mutex::new(None),
             files: Mutex::new(Vec::new()),
+            link: Mutex::new(None),
             page_running: AtomicBool::new(false),
         }
     }
@@ -110,6 +141,15 @@ impl Launches {
     /// are left out. The last folder wins: only one vault is open at a time.
     pub fn add(&self, paths: &[PathBuf], cwd: &Path) -> bool {
         self.keep(resolve_all(paths, cwd))
+    }
+
+    /// Notes links. The last wins: one opens at a time.
+    fn keep_links(&self, links: Vec<Address>) -> bool {
+        let Some(link) = links.into_iter().last() else {
+            return false;
+        };
+        *lock(&self.link) = Some(link);
+        true
     }
 
     /// Whether what arrives now needs the person's yes first.
@@ -134,9 +174,10 @@ impl Launches {
     }
 
     /// Hands the window what came in. The folder may then open as a vault,
-    /// and the files, when `can_import`, may be read by the import; files
-    /// that can't be imported yet stay for the next take.
-    pub fn take(&self, can_import: bool) -> Taken {
+    /// the files, when `can_import`, may be read by the import, and the link,
+    /// when `can_open_link`, may be opened; what can't be taken yet stays for
+    /// the next take.
+    pub fn take(&self, can_import: bool, can_open_link: bool) -> Taken {
         self.page_running.store(true, Ordering::SeqCst);
         let vault = lock(&self.vault).take();
         if let Some(vault) = &vault {
@@ -150,26 +191,39 @@ impl Launches {
         } else {
             (Vec::new(), files.iter().map(|path| name(path)).collect())
         };
+        let link = if can_open_link { lock(&self.link).take() } else { None };
+        if let Some(link) = &link {
+            crate::open_source::allow(link.clone());
+        }
         Taken {
             vault: vault.map(|path| text(&path)),
             files: files.iter().map(|path| text(path)).collect(),
             waiting,
+            link: link.map(|link| link.text()),
         }
     }
 }
 
 /// Notes what a launch handed the app and tells the window, once the person
 /// says yes when the page is already running.
-pub fn receive(app: &tauri::AppHandle, paths: &[PathBuf], cwd: &Path) {
+pub fn receive(app: &tauri::AppHandle, paths: &[PathBuf], links: Vec<Address>, cwd: &Path) {
     let paths = resolve_all(paths, cwd);
-    if paths.is_empty() {
-        return;
+    if !paths.is_empty() {
+        let (message, button) = question(&paths);
+        ask(app, message, button, move || get().keep(paths));
     }
+    if let Some(link) = links.into_iter().last() {
+        ask(app, format!("Open {}?", link.text()), "Open", move || get().keep_links(vec![link]));
+    }
+}
+
+/// Keeps what came in and tells the window, first asking when the page is
+/// already running.
+fn ask(app: &tauri::AppHandle, message: String, button: &str, keep: impl FnOnce() -> bool + Send + 'static) {
     if !get().needs_confirming() {
-        keep_and_tell(app, paths);
+        keep_and_tell(app, keep);
         return;
     }
-    let (message, button) = question(&paths);
     let handle = app.clone();
     app.dialog()
         .message(message)
@@ -177,16 +231,16 @@ pub fn receive(app: &tauri::AppHandle, paths: &[PathBuf], cwd: &Path) {
         .buttons(MessageDialogButtons::OkCancelCustom(button.into(), "Cancel".into()))
         .show(move |yes| {
             if yes {
-                keep_and_tell(&handle, paths);
+                keep_and_tell(&handle, keep);
             }
         });
 }
 
-fn keep_and_tell(app: &tauri::AppHandle, paths: Vec<PathBuf>) {
-    if get().keep(paths)
+fn keep_and_tell(app: &tauri::AppHandle, keep: impl FnOnce() -> bool) {
+    if keep()
         && let Err(error) = app.emit(EVENT, ())
     {
-        eprintln!("[Netherstone] Couldn't tell the window about opened files: {}", error);
+        eprintln!("[Netherstone] Couldn't tell the window about what was opened: {}", error);
     }
 }
 
@@ -252,10 +306,32 @@ mod tests {
     #[test]
     fn reads_the_command_line() {
         assert_eq!(parse(args(&["mcp"])), Command::Mcp);
-        assert_eq!(parse(args(&[])), Command::Open(vec![]));
+        assert_eq!(parse(args(&[])), Command::Open { paths: vec![], links: vec![] });
         assert_eq!(
             parse(args(&[".", "-psn_0_123", "notes.md", "mcp"])),
-            Command::Open(vec![PathBuf::from("."), PathBuf::from("notes.md"), PathBuf::from("mcp")])
+            Command::Open {
+                paths: vec![PathBuf::from("."), PathBuf::from("notes.md"), PathBuf::from("mcp")],
+                links: vec![]
+            }
+        );
+    }
+
+    #[test]
+    fn reads_links_before_paths() {
+        let template = Address::parse("netherstone.app/templates/worldbuilding").unwrap();
+        let file = if cfg!(windows) { "file:///C:/Notes/Plan%20B.md" } else { "file:///home/lena/Plan%20B.md" };
+        let path = if cfg!(windows) { r"C:\Notes\Plan B.md" } else { "/home/lena/Plan B.md" };
+        assert_eq!(
+            parse(args(&[
+                "netherstone://open/netherstone.app/templates/worldbuilding",
+                "netherstone://open/example.com/x",
+                file,
+                "notes.md",
+            ])),
+            Command::Open {
+                paths: vec![PathBuf::from(path), PathBuf::from("notes.md")],
+                links: vec![template]
+            }
         );
     }
 
@@ -277,22 +353,33 @@ mod tests {
 
         let vault = vault.canonicalize().unwrap();
         let report = vault.join("Report.md");
-        let taken = launches.take(false);
+        let taken = launches.take(false, false);
         assert_eq!(taken.vault, Some(text(&vault)));
         assert_eq!(taken.files, Vec::<String>::new());
         assert_eq!(taken.waiting, vec!["Report.md".to_string()]);
 
-        let taken = launches.take(true);
-        assert_eq!(taken, Taken { vault: None, files: vec![text(&report)], waiting: vec![] });
+        let taken = launches.take(true, false);
+        assert_eq!(taken, Taken { vault: None, files: vec![text(&report)], waiting: vec![], link: None });
         assert!(crate::import::picked().check(&report).is_ok());
-        assert_eq!(launches.take(true), Taken::default());
+        assert_eq!(launches.take(true, false), Taken::default());
+    }
+
+    #[test]
+    fn links_wait_until_one_can_open() {
+        let launches = Launches::new();
+        let first = Address::parse("github.com/lena-k/field-guide").unwrap();
+        let last = Address::parse("netherstone.app/templates/worldbuilding").unwrap();
+        assert!(launches.keep_links(vec![first, last.clone()]));
+        assert_eq!(launches.take(true, false).link, None);
+        assert_eq!(launches.take(true, true).link, Some(last.text()));
+        assert_eq!(launches.take(true, true).link, None);
     }
 
     #[test]
     fn asks_once_the_page_runs() {
         let launches = Launches::new();
         assert!(!launches.needs_confirming());
-        launches.take(false);
+        launches.take(false, false);
         assert!(launches.needs_confirming());
     }
 

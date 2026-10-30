@@ -18,6 +18,7 @@ import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useWhatsNew } from "./hooks/useWhatsNew";
 import { SearchModal } from "./components/SearchModal";
 import { OutsideChangeDialog } from "@/components/editor/OutsideChangeDialog";
+import { OpenLinkDialog } from "@/components/open-link/OpenLinkDialog";
 import { NestedVaultDialog } from "@/components/vault/NestedVaultDialog";
 import { Toaster } from "@/components/ui/sonner";
 import { CompanionHost } from "@/components/brand/CompanionHost";
@@ -63,6 +64,7 @@ function App() {
           />
           <OutsideChangeDialog />
           <NestedVaultDialog />
+          <OpenLinkDialog />
           <CompanionHost />
           <Toaster />
         </TooltipProvider>

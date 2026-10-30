@@ -17,6 +17,7 @@ import {
   Square,
   Table,
   TableOfContentsIcon,
+  WorkflowIcon,
 } from "lucide-react";
 import * as React from "react";
 import { filterWords } from "@platejs/combobox";
@@ -24,7 +25,11 @@ import { KEYS, type TComboboxInputElement } from "platejs";
 import type { PlateEditor, PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
 
-import { insertBlock, insertInlineElement } from "@/components/transforms";
+import {
+  ACTION_DIAGRAM,
+  insertBlock,
+  insertInlineElement,
+} from "@/components/transforms";
 
 import {
   InlineCombobox,
@@ -140,6 +145,12 @@ const groups: Group[] = [
         value: "action_three_columns",
       },
       { icon: <RadicalIcon />, label: "Equation", value: KEYS.equation },
+      {
+        icon: <WorkflowIcon />,
+        keywords: ["mermaid", "flowchart"],
+        label: "Diagram",
+        value: ACTION_DIAGRAM,
+      },
     ].map((item) => ({
       ...item,
       onSelect: (editor, value) => insertBlock(editor, value, { upsert: true }),

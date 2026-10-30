@@ -30,7 +30,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 // Bump whenever the persisted Plate value shape changes, so older cached
 // trees are dropped.
-const AST_CACHE_VERSION: i64 = 3;
+const AST_CACHE_VERSION: i64 = 4;
 
 // Commands here are marked `async` so Tauri runs them on its async runtime.
 // Plain sync commands run on the main thread, where file IO, SQLite and vault

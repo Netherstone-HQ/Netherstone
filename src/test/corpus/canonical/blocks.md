@@ -50,9 +50,18 @@ $$
 E = mc^2
 $$
 
-<callout icon="💡">
-  A callout body.
-</callout>
+> [!tip]
+> A callout body.
+
+<!-- netherstone columns: 50%, 50% -->
+
+Left column.
+
+<!-- netherstone column -->
+
+Right column.
+
+<!-- netherstone /columns -->
 
 <toc />
 

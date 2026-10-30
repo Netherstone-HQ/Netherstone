@@ -299,6 +299,32 @@ describe("callouts", () => {
   });
 });
 
+describe("columns", () => {
+  const COLUMNS =
+    "<!-- netherstone columns: 30%, 70% -->\n\nLeft\n\n<!-- netherstone column -->\n\n- one\n- two\n\n<!-- netherstone /columns -->\n";
+
+  it("saves columns as their blocks between hidden comments", () => {
+    const [group] = loadMarkdown(COLUMNS);
+    expect(group.type).toBe("column_group");
+    expect(group.children.map((column: any) => column.width)).toEqual(["30%", "70%"]);
+    expect(readableText(saveValue([group.children[0].children[0]]))).toBe("Left");
+    expect(roundTrip(COLUMNS)).toBe(COLUMNS);
+  });
+
+  it("opens columns saved as tags and saves them in the new form", () => {
+    const tags =
+      '<column_group>\n  <column width="50%">\n    Left\n  </column>\n\n  <column width="50%">\n    Right\n  </column>\n</column_group>\n';
+    expect(roundTrip(tags)).toBe(
+      "<!-- netherstone columns: 50%, 50% -->\n\nLeft\n\n<!-- netherstone column -->\n\nRight\n\n<!-- netherstone /columns -->\n",
+    );
+  });
+
+  it("leaves a start comment with no end as it is", () => {
+    const markdown = "<!-- netherstone columns -->\n\nText\n";
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+});
+
 describe("autolinks", () => {
   // MDX reads `<https://…>` as a tag and fails, which used to make the whole
   // shard load through the plain parser, turning custom blocks into text.

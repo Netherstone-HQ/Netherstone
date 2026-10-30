@@ -1,5 +1,5 @@
 import { MarkdownPlugin } from "@platejs/markdown";
-import type { Descendant, SlateEditor, TElement } from "platejs";
+import { KEYS, type Descendant, type SlateEditor, type TElement } from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
@@ -14,6 +14,7 @@ import {
   applyBlockFormatting,
   wrapFormattedBlocks,
 } from "@/lib/markdown-block-formatting";
+import { applyColumns, columnGroupBlocks } from "@/lib/markdown-columns";
 import { BLANK_LINE_PROP, isEmptyParagraph } from "@/lib/markdown-empty-lines";
 import {
   isRawHtmlBlock,
@@ -277,10 +278,12 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const masked = maskVerbatim && sanitized.includes(VERBATIM_LESS_THAN);
   const unmask = <T,>(value: T): T =>
     applyBlockFormatting(
-      applyTableMeta(
-        restoreRawBlocks(
-          masked ? (restoreVerbatimLessThan(value) as T) : value,
-          rawBlocks,
+      applyColumns(
+        applyTableMeta(
+          restoreRawBlocks(
+            masked ? (restoreVerbatimLessThan(value) as T) : value,
+            rawBlocks,
+          ),
         ),
       ),
     );
@@ -466,6 +469,20 @@ export function prepareSerializableMarkdownValue(
         if (!next) {
           next = value.slice(0, index);
         }
+        continue;
+      }
+
+      // A column group saves as its blocks between hidden comments.
+      if (type === KEYS.columnGroup) {
+        if (!next) {
+          next = value.slice(0, index);
+        }
+        next.push(
+          ...columnGroupBlocks(
+            record as TElement,
+            (children) => walk(children, inCell).value as unknown[],
+          ),
+        );
         continue;
       }
 

@@ -83,7 +83,7 @@ describe("Word import", () => {
     expect(markdown).toContain("- Second point with a nested list\n  - Nested once\n    - Nested twice");
     expect(markdown).toContain("2. Write the shard\n   1. Draft\n   2. Revise\n3. Export it");
     expect(markdown).toContain("- [ ] Check every page");
-    expect(markdown).toContain('<callout icon="💡">');
+    expect(markdown).toContain("> [!tip]\n> Callouts keep");
     expect(markdown).toContain("```typescript\n// Greets someone by name.\nexport function greet(name: string): string {\n  const message");
     expect(markdown).toContain("$\\int_{- \\infty}^{\\infty} e^{- x^{2}}dx=\\sqrt{\\pi}$");
     expect(markdown).toContain("fill A1=#f7f5f2 B1=#f7f5f2 C1=#f7f5f2");

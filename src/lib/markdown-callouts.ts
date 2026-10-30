@@ -157,8 +157,9 @@ export const calloutRules: MdRules = {
     serialize: (node, options) => {
       const { children, type: _type, id: _id, icon, ...rest } = node as TElement;
       // Anything besides the emoji has no place in the marker, so such a
-      // callout keeps the tag form rather than lose it.
-      if (Object.keys(rest).length > 0) {
+      // callout keeps the tag form rather than lose it. A new callout comes
+      // with `variant: undefined`, which isn't anything.
+      if (Object.values(rest).some((prop) => prop !== undefined)) {
         return defaultRules.callout!.serialize!(node, options);
       }
 

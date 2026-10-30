@@ -277,6 +277,10 @@ describe("callouts", () => {
       { type: "callout", icon: "🔥", children: [{ type: "p", children: [{ text: "Hot" }] }] },
     ]);
     expect(saved).toBe("> [!🔥]\n> Hot\n");
+    const inserted = saveValue([
+      { type: "callout", icon: "💡", variant: undefined, children: [{ type: "p", children: [{ text: "New" }] }] },
+    ]);
+    expect(inserted).toBe("> [!tip]\n> New\n");
     expect(loadMarkdown(saved)[0].icon).toBe("🔥");
   });
 

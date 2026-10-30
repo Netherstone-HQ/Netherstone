@@ -157,7 +157,7 @@ describe("formats", () => {
     const markdown = vault.shards.get("/vault/Note.md")!;
 
     expect(markdown).toMatch(/^---\ntags: \[a\]\n---\n/);
-    expect(markdown).toContain('<callout icon="⚠️">\n  **Careful**\n\n  Mind the gap.\n</callout>');
+    expect(markdown).toContain("> [!warning] Careful\n> Mind the gap.\n");
     expect(markdown).toContain("<mark>marked</mark> text\n");
   });
 

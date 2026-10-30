@@ -14,6 +14,7 @@ import {
   DARK_SOURCE_ATTRIBUTE,
   DRAWING_LINK_ATTRIBUTE,
 } from "@/lib/drawing-files";
+import { calloutRules } from "@/lib/markdown-callouts";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
 import { textHandler } from "@/lib/markdown-escapes";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
@@ -73,6 +74,7 @@ export const MarkdownKit = [
       },
       rules: {
         img: imageRule,
+        ...calloutRules,
         ...toggleRules,
         ...emptyLineRules,
         ...listGroupRules,

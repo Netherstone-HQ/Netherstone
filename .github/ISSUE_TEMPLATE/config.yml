@@ -2,4 +2,4 @@ blank_issues_enabled: false
 contact_links:
   - name: Report a security problem
     url: https://github.com/Netherstone-HQ/Netherstone/security/advisories/new
-    about: Report it privately, so it can be fixed before anyone else knows about it.
+    about: Report it privately so it's fixed before it's public.

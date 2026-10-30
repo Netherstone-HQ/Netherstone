@@ -80,4 +80,4 @@ under this policy. That means not touching other people's data, not
 disrupting services, and giving us reasonable time to fix the problem before
 you disclose it.
 
-There is no bug bounty, but we are grateful for every report.
+There is no bug bounty.

@@ -9,9 +9,9 @@ devices. Git is the transport and the history; the user never sees Git terms.
   local editing, and the app works fully offline.
 - **No Git in the vault.** Git data lives in the app data folder with the
   vault as its work tree, so no `.git` folder appears in the vault.
-- **Selective, never `git add .`.** A planner decides exactly which files go
+- **Only planned files are synced.** A planner decides exactly which files go
   up, using the attachment policy.
-- **Never lose work.** Sync never writes conflict markers, and a file is only
+- **Overwrites need a matching snapshot.** Sync never writes conflict markers, and a file is only
   overwritten if it still matches the last snapshot.
 - **Plain language.** The UI says "Synced", "Offline" and "Choose which
   version to keep", not commit, push or merge.

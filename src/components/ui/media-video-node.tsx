@@ -55,6 +55,9 @@ export const youtubeEmbedClassName = cn(
   "[&.lyt-activated]:cursor-[unset]",
   "[&.lyt-activated]:before:pointer-events-none [&.lyt-activated]:before:opacity-0",
   "[&.lyt-activated_>_.lty-playbtn]:pointer-events-none [&.lyt-activated_>_.lty-playbtn]:opacity-0!",
+  // The play button's label is for screen readers; the package's own CSS,
+  // which hides it, isn't loaded.
+  "[&_.lty-visually-hidden]:sr-only",
 );
 
 function getVideoSource(

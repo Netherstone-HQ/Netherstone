@@ -8,7 +8,7 @@ How Netherstone stores the images, files, audio and video that shards link to.
   in use. The database is an index that can be rebuilt from disk.
 - **Attachments live in the vault,** so they travel with the folder and with
   sync.
-- **Nothing is deleted behind the user's back.** Unused files are removed only
+- **Deletes need the user's OK.** Unused files are removed only
   after a grace period, when the user confirms, and they go to the system
   Trash.
 

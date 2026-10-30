@@ -1,8 +1,8 @@
 <a href="https://netherstone.app"><img src="docs/banner.png" alt="Netherstone. Your knowledge, set in stone." width="100%" /></a>
 
-[Netherstone](https://netherstone.app) is a free, open-source desktop app for your
-knowledge. Every shard is a plain Markdown file in a folder you choose, and it
-all works offline.
+[Netherstone](https://netherstone.app) is a free, open-source desktop app for
+documents and drawings. Each document, called a shard, is a Markdown file in a
+folder you pick.
 
 ## Download
 
@@ -15,13 +15,13 @@ isn't code-signed yet. We plan to sign it in a future version.
 
 ## Features
 
-- An editor with rich formatting and no syntax in the way
-- Instant search, `@` links and `#tags`
+- An editor that formats Markdown as you type
+- Search, `@` links and `#tags`
 - Drawings, images, PDFs, audio and video
 - A Gallery of every attachment in your vault
 - Charts from tables, and an Overview of your vault
 - Every version of a shard or drawing in History
-- Import from Word, PDF, HTML and more, and export to PDF, Word or HTML
+- Import from Word, PDF, HTML, Markdown and CSV, and export to PDF, Word or HTML
 - Open folders and files from the terminal (`netherstone .`) or your file manager
 - Free sync through your own GitHub account
 - Light, Dark and three more themes
@@ -74,7 +74,7 @@ pnpm test:e2e
 
 Questions, ideas and feedback are welcome in
 [Discussions](https://github.com/Netherstone-HQ/Netherstone/discussions).
-Found a bug? [Open an issue](https://github.com/Netherstone-HQ/Netherstone/issues).
+To report a bug, [open an issue](https://github.com/Netherstone-HQ/Netherstone/issues).
 
 ## License
 

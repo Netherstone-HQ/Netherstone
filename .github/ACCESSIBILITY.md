@@ -1,8 +1,7 @@
 # Accessibility
 
-Netherstone should work for everyone who wants to use it, with a mouse, a
-keyboard or assistive technology. If something gets in your way, we treat
-it as a bug.
+Netherstone should work for everyone, with a mouse, a keyboard or assistive
+technology. If something gets in your way, we treat it as a bug.
 
 ## What you can adjust
 

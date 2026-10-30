@@ -130,10 +130,12 @@ function LocationRow({
   label,
   location,
   onChange,
+  disabled,
 }: {
   label: string;
   location: string | null;
   onChange: (location: string) => void;
+  disabled?: boolean;
 }) {
   async function change() {
     const path = await openVaultDialog();
@@ -150,24 +152,45 @@ function LocationRow({
         >
           {location ?? copy.vault.create.chooseLocation}
         </span>
-        <Button type="button" variant="outline" onClick={() => void change()}>
-          {location ? copy.vault.create.change : copy.vault.create.choose}
-        </Button>
+        {disabled ? null : (
+          <Button type="button" variant="outline" onClick={() => void change()}>
+            {location ? copy.vault.create.change : copy.vault.create.choose}
+          </Button>
+        )}
       </div>
     </div>
   );
+}
+
+/** Makes an empty vault with the Start here guide. */
+async function createEmptyVault(location: string, name: string): Promise<VaultChoice> {
+  const path = await createVault(location, name);
+  await openVault(path);
+  const startHerePath = await addStartHere(path);
+  return { path, kind: "created", startHerePath };
 }
 
 export function CreateVaultForm({
   location,
   onLocationChange,
   onCreated,
+  defaultName = copy.vault.create.defaultName,
+  create: createIn = createEmptyVault,
+  busyLabel,
 }: {
   location: string | null;
   onLocationChange: (location: string) => void;
   onCreated: (choice: VaultChoice) => void;
+  defaultName?: string;
+  /**
+   * Makes the vault `location/name` and opens it: an empty one by default.
+   * Null when it didn't, having said why itself.
+   */
+  create?: (location: string, name: string) => Promise<VaultChoice | null>;
+  /** Shown on the button while `create` runs, with the fields locked. */
+  busyLabel?: string;
 }) {
-  const [name, setName] = useState<string>(copy.vault.create.defaultName);
+  const [name, setName] = useState<string>(defaultName);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,15 +210,16 @@ export function CreateVaultForm({
         }
         return;
       }
-      const path = await createVault(location, name);
-      await openVault(path);
-      const startHerePath = await addStartHere(path);
-      onCreated({ path, kind: "created", startHerePath });
+      const created = await createIn(location, name);
+      if (created) onCreated(created);
+      else setBusy(false);
     } catch (e) {
       setError(vaultErrorText(e));
       setBusy(false);
     }
   }
+
+  const locked = busy && !!busyLabel;
 
   return (
     <form
@@ -205,10 +229,11 @@ export function CreateVaultForm({
         void create();
       }}
     >
-      <label className="block space-y-1.5">
+      <label className={cn("block space-y-1.5", locked && "opacity-50")}>
         <FieldLabel>{copy.vault.create.nameLabel}</FieldLabel>
         <Input
           value={name}
+          disabled={locked}
           onChange={(event) => {
             setName(event.target.value);
             setError(null);
@@ -217,18 +242,21 @@ export function CreateVaultForm({
           autoFocus
         />
       </label>
-      <LocationRow
-        label={copy.vault.create.locationLabel}
-        location={location}
-        onChange={(next) => {
-          onLocationChange(next);
-          setError(null);
-        }}
-      />
+      <div className={cn(locked && "opacity-50")}>
+        <LocationRow
+          label={copy.vault.create.locationLabel}
+          location={location}
+          disabled={locked}
+          onChange={(next) => {
+            onLocationChange(next);
+            setError(null);
+          }}
+        />
+      </div>
       {error ? <Hint tone="error">{error}</Hint> : null}
       <Button type="submit" disabled={busy || !location}>
         {busy ? <LoaderCircleIcon className="animate-spin" /> : null}
-        {copy.vault.create.submit}
+        {locked ? busyLabel : copy.vault.create.submit}
       </Button>
     </form>
   );

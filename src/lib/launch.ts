@@ -6,6 +6,7 @@ import { takeLaunch } from "@/lib/commands";
 import { isImporting, openImportDialog, useImportDialogStore } from "@/lib/import";
 import { DRAWING_EXTENSION, isPathWithin } from "@/lib/drawing-files";
 import { chooseVaultFolder } from "@/lib/nested-vault";
+import { isOpeningLink, openLink, useOpenLink } from "@/lib/open-link";
 import { folderName, openVault } from "@/lib/open-vault";
 import { openVaultFile } from "@/lib/open-vault-file";
 import { useVaultStore } from "@/store";
@@ -16,9 +17,10 @@ const WAITING_TOAST_ID = "launch-waiting";
 
 /**
  * Opens what came in from outside the app: the terminal (`netherstone .`),
- * Open with, a folder's right-click menu, the Dock. A folder opens as the
- * vault, files open in the import window. Files wait while no vault is open
- * or another import runs, and go in once that's over.
+ * Open with, a folder's right-click menu, the Dock, a Netherstone link. A
+ * folder opens as the vault, files open in the import window, a link opens
+ * its dialog. Files wait while no vault is open or another import runs, and
+ * go in once that's over; a link waits while an import or another link runs.
  *
  * Rust holds the paths; this only asks for them, so the window never says
  * which files may be read.
@@ -33,11 +35,15 @@ export function useLaunches() {
     const stopImport = useImportDialogStore.subscribe((state, previous) => {
       if (previous.job?.step.kind === "importing" && state.job?.step.kind !== "importing") take();
     });
+    const stopLink = useOpenLink.subscribe((state, previous) => {
+      if (previous.step && !state.step) take();
+    });
     take();
     return () => {
       void unlisten.then((stop) => stop());
       stopVault();
       stopImport();
+      stopLink();
     };
   }, []);
 }
@@ -55,7 +61,8 @@ export function openLaunched() {
 
 async function takeOnce() {
   const canImport = () => !!useVaultStore.getState().currentVaultPath && !isImporting();
-  const { vault, files, waiting } = await takeLaunch(canImport());
+  const { vault, files, waiting, link } = await takeLaunch(canImport(), !isImporting() && !isOpeningLink());
+  if (link) void openLink(link);
 
   if (vault && vault !== useVaultStore.getState().currentVaultPath) {
     const chosen = await chooseVaultFolder(vault, "open");

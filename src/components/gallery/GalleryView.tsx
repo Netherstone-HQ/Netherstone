@@ -7,6 +7,7 @@ import { LeftSidebarToggle } from "@/components/PanelToggles";
 import { openShardAt } from "@/components/data/rows";
 import { formatBytes, getFileName } from "@/components/settings/attachment-format";
 import { useThemeMode } from "@/components/theme/theme-provider";
+import { Dot } from "@/components/ui/dot";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,16 +48,6 @@ function usedIn(file: GalleryFile) {
   if (count === 0) return "Not used";
   if (count === 1) return `in ${shardName(file.shardPaths[0])}`;
   return `in ${count} shards`;
-}
-
-/** A separator drawn as a dot. */
-function Dot() {
-  return (
-    <span
-      aria-hidden="true"
-      className="mx-1.5 inline-block size-[3px] translate-y-[-2px] rounded-full bg-muted-foreground/70 align-middle"
-    />
-  );
 }
 
 /**

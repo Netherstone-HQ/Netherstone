@@ -430,7 +430,7 @@ pub const VAULT_FOLDER_NOT_EMPTY: &str = "vault-folder-not-empty";
 pub const VAULT_LOCATION_MISSING: &str = "vault-location-missing";
 
 /// Whether `name` (already trimmed) can name a folder on every platform.
-fn is_valid_folder_name(name: &str) -> bool {
+pub fn is_valid_folder_name(name: &str) -> bool {
     // Characters no folder name may hold on Windows, which is the strictest.
     name != "."
         && name != ".."
@@ -444,6 +444,15 @@ fn is_valid_folder_name(name: &str) -> bool {
 /// An empty folder that is already there is reused; one with anything in it
 /// is refused, so a new vault never takes over someone's existing files.
 pub fn create_vault_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
+    let folder = check_vault_folder(parent, name)?;
+    if !folder.exists() {
+        std::fs::create_dir(&folder).map_err(|e| e.to_string())?;
+    }
+    Ok(folder)
+}
+
+/// The folder `create_vault_folder` would make or reuse, without making it.
+pub fn check_vault_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err(VAULT_NAME_EMPTY.to_string());
@@ -463,10 +472,7 @@ pub fn create_vault_folder(parent: &Path, name: &str) -> Result<PathBuf, String>
         if has_entries || !folder.is_dir() {
             return Err(VAULT_FOLDER_NOT_EMPTY.to_string());
         }
-        return Ok(folder);
     }
-
-    std::fs::create_dir(&folder).map_err(|e| e.to_string())?;
     Ok(folder)
 }
 

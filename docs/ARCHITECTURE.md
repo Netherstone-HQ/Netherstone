@@ -121,6 +121,22 @@ packages ship it in `/usr/bin`. The installer images are drawn
 from the brand mark by `scripts/installer-images.mjs` into
 `src-tauri/installer/`.
 
+Netherstone links (`netherstone://open/<address>`) arrive the same way, and
+are read before any argument is taken as a path. The address is a template
+(`netherstone.app/templates/<id>`) or a public folder
+(`github.com/<owner>/<repo>[/tree/<branch>/<folder>]`); anything else is
+refused. `src-tauri/src/open_source/` has one reader per kind: the site's
+`templates.json`, or one GitHub listing with every file's size. The dialog
+(`src/components/open-link/`) shows what's there before anything downloads,
+and the window can only open the address a launch handed it. Create vault
+checks the name and the free space, downloads into a scratch folder in the
+app's data (each file at its listed size, a template's zip at its sha256),
+then unpacks a template into the new vault as it is, or brings any other
+folder in through the Markdown import. Only shards, drawings and pictures
+are written, never a path that climbs out or a `.git` or `.netherstone`
+folder, so the vault is a copy with its own id. The scratch folder goes
+after, on failure or Cancel, and at the next start if the app stopped.
+
 ## Exports
 
 A shard exports as a web page, a PDF or a Word document from the export

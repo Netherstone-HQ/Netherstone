@@ -10,8 +10,9 @@ const ESSENTIALS: &str = "\
 Shards are plain Markdown (GitHub flavored). Link another shard with a normal \
 Markdown link to its path relative to this shard's folder, spaces as %20: \
 [Plan](../Projects/Plan.md). Tags are #words in the text. Keep the hidden \
-<!-- netherstone: ... --> and <!-- netherstone chart: ... --> comments and any \
-HTML as they are. The full guide is the resource netherstone://guide/shard-format.";
+<!-- netherstone: ... -->, <!-- netherstone chart: ... --> and \
+<!-- netherstone embed --> comments and any HTML as they are. The full guide \
+is the resource netherstone://guide/shard-format.";
 
 /// `description` with the rules for writing shards after it.
 pub fn with_format(description: &str) -> String {
@@ -99,6 +100,16 @@ A drawing shows in a shard as an image tag with a data-excalidraw attribute \
 naming the drawing. Don't write one by hand: create the drawing with \
 edit_drawing, then use its embed action, and Netherstone makes the picture \
 the next time the shard is opened.
+
+## Embeds
+
+An embed (a video or page shown in the shard) is a link on its own line \
+with a hidden comment right above it. The link's text is the caption, and \
+the comment may hold the width in pixels:
+
+    <!-- netherstone embed: width 480 -->
+
+    [Launch talk](https://www.youtube.com/watch?v=abc)
 
 ## Front matter
 

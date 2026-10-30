@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CODE_LANGUAGES as languages } from "@/components/editor/lib/code-languages";
+import { DiagramPreview } from "@/components/ui/diagram-preview";
+import { DIAGRAM_LANG } from "@/lib/mermaid-diagram";
 
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
   const { editor, element } = props;
@@ -68,6 +70,12 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
             value={() => NodeApi.string(element)}
           />
         </div>
+
+        {element.lang === DIAGRAM_LANG && (
+          <DiagramPreview
+            code={element.children.map((line) => NodeApi.string(line)).join("\n")}
+          />
+        )}
       </div>
     </PlateElement>
   );

@@ -16,6 +16,7 @@ import {
 } from "@/lib/drawing-files";
 import { calloutRules } from "@/lib/markdown-callouts";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
+import { fontStyleRules } from "@/lib/markdown-font-styles";
 import { textHandler } from "@/lib/markdown-escapes";
 import { rawBlockRules } from "@/lib/markdown-raw-blocks";
 import { listGroupRules } from "@/lib/markdown-list-blocks";
@@ -77,6 +78,7 @@ export const MarkdownKit = [
         ...calloutRules,
         ...toggleRules,
         ...emptyLineRules,
+        ...fontStyleRules,
         ...listGroupRules,
         ...rawBlockRules,
         ...shardLinkRules,

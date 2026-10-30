@@ -5,10 +5,14 @@ import type { SlateEditor } from 'platejs';
 import {
   createSlatePlugin,
   createTextSubstitutionInputRule,
+  defineInputRule,
   KEYS,
+  NodeApi,
 } from 'platejs';
 
+// Code is kept as typed, both in code blocks and in inline code.
 const isTextSubstitutionBlocked = (editor: SlateEditor) =>
+  !!editor.api.marks()?.[editor.getType(KEYS.code)] ||
   editor.api.some({
     match: {
       type: [editor.getType(KEYS.codeBlock)],
@@ -30,7 +34,7 @@ const arrowsRule = createAutoformatTextSubstitutionRule({
     { format: '→', match: '->' },
     { format: '←', match: '<-' },
     { format: '⇒', match: '=>' },
-    { format: '⇐', match: ['<=', '≤='] },
+    { format: '⇐', match: '≤=' },
   ],
 });
 
@@ -40,8 +44,8 @@ const comparisonsRule = createAutoformatTextSubstitutionRule({
     { format: '≮', match: '!<' },
     { format: '≥', match: '>=' },
     { format: '≤', match: '<=' },
-    { format: '≱', match: '!>=' },
-    { format: '≰', match: '!<=' },
+    { format: '≱', match: ['!>=', '≯='] },
+    { format: '≰', match: ['!<=', '≮='] },
   ],
 });
 
@@ -50,32 +54,57 @@ const equalityRule = createAutoformatTextSubstitutionRule({
     { format: '≠', match: '!=' },
     { format: '≡', match: '==' },
     { format: '≢', match: ['!==', '≠='] },
-    { format: '≈', match: '~=' },
     { format: '≉', match: '!~=' },
+    { format: '≈', match: '~=' },
   ],
 });
 
-const fractionsRule = createAutoformatTextSubstitutionRule({
-  patterns: [
-    { format: '½', match: '1/2' },
-    { format: '⅓', match: '1/3' },
-    { format: '¼', match: '1/4' },
-    { format: '⅕', match: '1/5' },
-    { format: '⅙', match: '1/6' },
-    { format: '⅐', match: '1/7' },
-    { format: '⅛', match: '1/8' },
-    { format: '⅑', match: '1/9' },
-    { format: '⅒', match: '1/10' },
-    { format: '⅔', match: '2/3' },
-    { format: '⅖', match: '2/5' },
-    { format: '¾', match: '3/4' },
-    { format: '⅗', match: '3/5' },
-    { format: '⅜', match: '3/8' },
-    { format: '⅘', match: '4/5' },
-    { format: '⅚', match: '5/6' },
-    { format: '⅝', match: '5/8' },
-    { format: '⅞', match: '7/8' },
-  ],
+const fractions = new Map([
+  ['1/2', '½'],
+  ['1/3', '⅓'],
+  ['1/4', '¼'],
+  ['1/5', '⅕'],
+  ['1/6', '⅙'],
+  ['1/7', '⅐'],
+  ['1/8', '⅛'],
+  ['1/9', '⅑'],
+  ['1/10', '⅒'],
+  ['2/3', '⅔'],
+  ['2/5', '⅖'],
+  ['3/4', '¾'],
+  ['3/5', '⅗'],
+  ['3/8', '⅜'],
+  ['4/5', '⅘'],
+  ['5/6', '⅚'],
+  ['5/8', '⅝'],
+  ['7/8', '⅞'],
+]);
+const longestFraction = Math.max(...[...fractions.keys()].map((match) => match.length));
+
+// A fraction is only known once the number ends, so it is replaced when a
+// space or punctuation follows it, and only when it stands on its own:
+// 1/2 inside 1/2/2026, 11/2 or 1/25 stays as typed.
+const fractionsRule = defineInputRule({
+  target: 'insertText',
+  trigger: [' ', ',', ';', ':', '!', '?', ')'],
+  enabled: ({ editor }) => !isTextSubstitutionBlocked(editor),
+  resolve: ({ editor }) => {
+    const anchor = editor.selection?.anchor;
+    if (!anchor || !editor.api.isCollapsed()) return;
+    const text = NodeApi.string(NodeApi.get(editor, anchor.path)!);
+    const before = text.slice(Math.max(0, anchor.offset - longestFraction - 1), anchor.offset);
+    for (const [match, format] of fractions) {
+      if (!before.endsWith(match)) continue;
+      const previous = before.at(-match.length - 1);
+      if (previous && /[\p{L}\p{N}/.]/u.test(previous)) return;
+      return { format, match };
+    }
+  },
+  apply: ({ editor, options, text }, { format, match }) => {
+    editor.tf.delete({ distance: match.length, reverse: true, unit: 'character' });
+    editor.tf.insertText(format);
+    editor.tf.insertText(text, options);
+  },
 });
 
 const legalRule = createAutoformatTextSubstitutionRule({

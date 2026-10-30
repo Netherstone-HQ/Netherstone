@@ -439,6 +439,59 @@ describe("formatting the editor has no Markdown for", () => {
   });
 });
 
+describe("embeds", () => {
+  const url = "https://www.youtube.com/watch?v=abc_d";
+
+  it("saves an embed as a link under a hidden comment, and reads it back", () => {
+    const value = [
+      { type: "media_embed", url, children: [{ text: "" }] },
+      {
+        type: "media_embed",
+        url,
+        width: 480.4,
+        align: "center",
+        caption: [{ text: "Launch [talk]" }],
+        children: [{ text: "" }],
+      },
+    ];
+    const markdown = saveValue(value);
+    expect(markdown).toBe(
+      `<!-- netherstone embed -->\n\n${url}\n\n<!-- netherstone embed: width 480 -->\n\n<div align="center">\n\n[Launch \\[talk\\]](${url})\n\n</div>\n`,
+    );
+    expect(loadMarkdown(markdown).map(({ id: _id, ...block }) => block)).toEqual([
+      value[0],
+      { ...value[1], width: 480 },
+    ]);
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("reads a link written right under the comment", () => {
+    expect(loadMarkdown(`<!-- netherstone embed -->\n${url}\n`)[0]).toMatchObject({
+      type: "media_embed",
+      url,
+    });
+  });
+
+  it("upgrades the old media_embed tag", () => {
+    expect(roundTrip(`<media_embed src="${url}" />\n`)).toBe(
+      `<!-- netherstone embed -->\n\n${url}\n`,
+    );
+  });
+
+  it("keeps the comment as written when no web link follows it", () => {
+    const markdown = "<!-- netherstone embed -->\n\nJust text\n";
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+});
+
+describe("HTML comments", () => {
+  it("keeps a line written right under a comment", () => {
+    expect(roundTrip("<!-- note -->\nText under it\n")).toBe(
+      "<!-- note -->\n\nText under it\n",
+    );
+  });
+});
+
 describe("shard links", () => {
   const FILE = "C:/Vault/Daily/Today.md";
   const load = (markdown: string) =>

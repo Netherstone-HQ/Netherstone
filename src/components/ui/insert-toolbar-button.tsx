@@ -23,12 +23,17 @@ import {
   SquareIcon,
   TableIcon,
   TableOfContentsIcon,
+  WorkflowIcon,
 } from "lucide-react";
 import { KEYS } from "platejs";
 import { type PlateEditor, useEditorRef } from "platejs/react";
 
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { insertBlock, insertInlineElement } from "@/components/transforms";
+import {
+  ACTION_DIAGRAM,
+  insertBlock,
+  insertInlineElement,
+} from "@/components/transforms";
 
 import { ToolbarButton, ToolbarDropdown, ToolbarMenuGroup } from "./toolbar";
 
@@ -164,6 +169,11 @@ const groups: Group[] = [
         icon: <RadicalIcon />,
         label: "Equation",
         value: KEYS.equation,
+      },
+      {
+        icon: <WorkflowIcon />,
+        label: "Diagram",
+        value: ACTION_DIAGRAM,
       },
     ].map((item) => ({
       ...item,

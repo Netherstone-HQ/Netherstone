@@ -16,6 +16,7 @@ import {
 } from "@/lib/markdown-block-formatting";
 import { applyColumns, columnGroupBlocks } from "@/lib/markdown-columns";
 import { BLANK_LINE_PROP, isEmptyParagraph } from "@/lib/markdown-empty-lines";
+import { applyEmbeds, embedBlocks } from "@/lib/markdown-embeds";
 import {
   isRawHtmlBlock,
   rawBlockPlaceholder,
@@ -225,6 +226,8 @@ function prepareMarkdownInput(
       // text that would carry them on, so it gets a line of its own.
       if (/[^\n]\n$/.test(sanitized)) sanitized += "\n";
       sanitized += rawBlockPlaceholder(rawBlocks.length - 1);
+      // The same goes for a line right under it (an embed's link).
+      if (/^\n[^\n]/.test(markdown.slice(end))) sanitized += "\n";
     } else if (kind === "indented-code") {
       sanitized += `\`\`\`\n${codeValues.get(start) ?? source}\n\`\`\``;
     } else if (kind === "autolink") {
@@ -277,12 +280,14 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   const sanitized = prepareMarkdownInput(markdown, { maskVerbatim, rawBlocks });
   const masked = maskVerbatim && sanitized.includes(VERBATIM_LESS_THAN);
   const unmask = <T,>(value: T): T =>
-    applyBlockFormatting(
-      applyColumns(
-        applyTableMeta(
-          restoreRawBlocks(
-            masked ? (restoreVerbatimLessThan(value) as T) : value,
-            rawBlocks,
+    applyEmbeds(
+      applyBlockFormatting(
+        applyColumns(
+          applyTableMeta(
+            restoreRawBlocks(
+              masked ? (restoreVerbatimLessThan(value) as T) : value,
+              rawBlocks,
+            ),
           ),
         ),
       ),
@@ -500,6 +505,15 @@ export function prepareSerializableMarkdownValue(
           ...tableRest,
           children: inner.changed ? inner.value : table.children,
         });
+        continue;
+      }
+
+      // An embed saves as a link, with its width in a hidden comment above.
+      if (type === KEYS.mediaEmbed) {
+        if (!next) {
+          next = value.slice(0, index);
+        }
+        next.push(...embedBlocks(record as never));
         continue;
       }
 

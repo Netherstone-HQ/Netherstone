@@ -28,7 +28,10 @@ import {
   PathApi,
 } from "platejs";
 
+import { DIAGRAM_LANG, DIAGRAM_STARTER } from "@/lib/mermaid-diagram";
+
 const ACTION_THREE_COLUMNS = "action_three_columns";
+export const ACTION_DIAGRAM = "action_diagram";
 
 const LIST_PROPS = [KEYS.listType, KEYS.listStart, KEYS.listChecked];
 
@@ -42,6 +45,24 @@ const insertList = (editor: PlateEditor, type: string) => {
   );
 };
 
+/** A Mermaid code block with a starter diagram, the code selected at its end. */
+const insertDiagram = (editor: PlateEditor) => {
+  insertCodeBlock(editor, { select: true });
+  const block = editor.api.above({ match: { type: KEYS.codeBlock } });
+  if (!block) return;
+
+  const [, path] = block;
+  editor.tf.setNodes({ lang: DIAGRAM_LANG }, { at: path });
+  editor.tf.replaceNodes(
+    DIAGRAM_STARTER.split("\n").map((line) => ({
+      children: [{ text: line }],
+      type: KEYS.codeLine,
+    })),
+    { at: path, children: true },
+  );
+  editor.tf.select(path, { edge: "end" });
+};
+
 const insertBlockMap: Record<
   string,
   (editor: PlateEditor, type: string) => void
@@ -51,6 +72,7 @@ const insertBlockMap: Record<
   [KEYS.ul]: insertList,
   [ACTION_THREE_COLUMNS]: (editor) =>
     insertColumnGroup(editor, { columns: 3, select: true }),
+  [ACTION_DIAGRAM]: insertDiagram,
   [KEYS.audio]: (editor) => insertAudioPlaceholder(editor, { select: true }),
   [KEYS.callout]: (editor) => insertCallout(editor, { select: true }),
   [KEYS.codeBlock]: (editor) => insertCodeBlock(editor, { select: true }),

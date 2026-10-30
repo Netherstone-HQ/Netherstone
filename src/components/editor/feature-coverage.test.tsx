@@ -263,6 +263,20 @@ describe("every mark the toolbar offers survives a save", () => {
       mark.value ?? true,
     );
   });
+
+  it("keeps every style when one piece of text has several", () => {
+    const styles = MARKS.filter((mark) => mark.value !== undefined);
+    const editor = createEditor();
+    editor.tf.insertText("before ");
+    for (const mark of styles) editor.tf.addMark(mark.key, mark.value);
+    editor.tf.insertText(PROBE);
+
+    const { markdown, value } = reload(editor);
+    const leaf = findText(value, PROBE);
+    for (const mark of styles) {
+      expect(leaf?.[mark.key], `the ${mark.key} mark came back from:\n${markdown}`).toBe(mark.value);
+    }
+  });
 });
 
 describe("menu coverage guard", () => {

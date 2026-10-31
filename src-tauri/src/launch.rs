@@ -186,7 +186,7 @@ impl Launches {
         let mut files = lock(&self.files);
         let (files, waiting) = if can_import {
             let files = std::mem::take(&mut *files);
-            crate::import::picked().allow_files(&files);
+            crate::import::picked().allow_only(&files);
             (files, Vec::new())
         } else {
             (Vec::new(), files.iter().map(|path| name(path)).collect())

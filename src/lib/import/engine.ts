@@ -46,6 +46,8 @@ export interface ImportIO {
    * disk (dropped in), so files they use can't be looked for there.
    */
   exists?(path: string): Promise<boolean>;
+  /** Free space, in bytes, on the disk the vault is on. */
+  freeSpace(): Promise<number>;
   /** Writes a Plate value as the Markdown of the shard at `filePath`. */
   serialize(nodes: PlateNode[], filePath: string): Promise<string>;
   /** Lets the window paint between steps. */

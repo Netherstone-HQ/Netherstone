@@ -13,8 +13,10 @@ import { ImportError } from "./types";
  * the import needs it, one at a time, and never past the size the zip
  * file gives for it. Zip files whose files share data, which a
  * well-formed one never does and zip bombs do to unpack far bigger than
- * they are, aren't opened at all. Files whose names climb out of the zip
- * file (`../`) or start at a drive or the root are left out.
+ * they are, aren't opened at all. Nor are zip files that unpack bigger
+ * than the free space on the vault's disk, together with the zip files
+ * opened before them. Files whose names climb out of the zip file (`../`)
+ * or start at a drive or the root are left out.
  */
 
 /** Paths of files inside a zip file start with this, then the zip file's number. */
@@ -26,6 +28,7 @@ const UNSAFE = "Its path in the zip file leads outside it, so it was left out.";
 const BIGGER = "This file unpacks bigger than its zip file says, so it wasn't read.";
 const SMALLER = "This file is cut short in its zip file, so it wasn't read.";
 const TOO_BIG = "This file is too big to unpack, so it wasn't read.";
+const NO_SPACE = "This zip file unpacks bigger than the free space on your vault's disk, so it wasn't opened.";
 
 /** The part of JSZip's entry state that isn't in its types. */
 interface ZipEntry extends JSZip.JSZipObject {
@@ -51,6 +54,9 @@ export async function openArchives(sources: ImportSource[], io: ImportIO): Promi
   if (!sources.some((source) => isArchive(source.relativePath))) return { sources, io, failed: [] };
 
   let archives = 0;
+  /** What the zip files opened so far unpack to, in bytes. */
+  let unpacked = 0;
+  let free: Promise<number> | undefined;
   const entries = new Map<string, ZipEntry>();
   const opened: ImportSource[] = [];
   const failed: OpenedArchives["failed"] = [];
@@ -82,14 +88,30 @@ export async function openArchives(sources: ImportSource[], io: ImportIO): Promi
       continue;
     }
 
-    const number = archives++;
     const kept: { path: string[]; entry: ZipEntry }[] = [];
+    const unsafe: string[] = [];
     for (const entry of files) {
       const path = safePath(entry.unsafeOriginalName ?? entry.name);
-      if (!path) failed.push({ source: `${source.relativePath}/${entry.unsafeOriginalName ?? entry.name}`, error: UNSAFE });
+      if (!path) unsafe.push(entry.unsafeOriginalName ?? entry.name);
       else if (!path.some(isNoise)) kept.push({ path, entry });
     }
     kept.sort((a, b) => compareSegments(a.path, b.path));
+
+    const size = kept.reduce((total, { entry }) => total + entry._data.uncompressedSize, 0);
+    try {
+      free ??= io.freeSpace();
+      if (unpacked + size > (await free)) {
+        failed.push({ source: source.relativePath, error: NO_SPACE });
+        continue;
+      }
+    } catch (error) {
+      failed.push({ source: source.relativePath, error: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    unpacked += size;
+    for (const name of unsafe) failed.push({ source: `${source.relativePath}/${name}`, error: UNSAFE });
+
+    const number = archives++;
 
     // A zipped folder imports as that folder; anything else as one named after the zip file.
     const name = baseName(source.relativePath).replace(/\.zip$/i, "");

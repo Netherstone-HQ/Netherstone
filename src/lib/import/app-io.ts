@@ -8,6 +8,7 @@ import {
   readImportFile,
   reserveImportPaths,
   saveImportedShard,
+  vaultFreeSpace,
 } from "@/lib/commands";
 
 import type { ImportIO } from "./engine";
@@ -75,6 +76,7 @@ export function appImportIO(vaultPath: string): ImportIO {
     copyAttachment: async (path) => (await importAttachment(path, vaultPath)).assetPath,
     fixLinks: fixImportedLinks,
     exists: fileExists,
+    freeSpace: () => vaultFreeSpace(vaultPath),
     serialize: (nodes, filePath) =>
       typeof Worker === "undefined" ? serializeHere(nodes, filePath) : serializeInImportWorker(nodes, filePath),
     yield: () => new Promise((resolve) => setTimeout(resolve, 0)),

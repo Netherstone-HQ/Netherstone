@@ -105,6 +105,18 @@ describe("zip import", () => {
     ]);
   });
 
+  it("doesn't open zip files that unpack bigger than the vault disk's free space", async () => {
+    const first = await zipOf({ "Home.md": `# Home\n\n${"words ".repeat(100)}\n` });
+    const second = await zipOf({ "Plans.md": `# Plans\n\n${"words ".repeat(100)}\n` });
+    const vault = memoryImport({ "First.zip": first, "Second.zip": second, "Loose.md": "# Loose\n" }, { freeSpace: 1000 });
+    const report = await vault.run();
+
+    expect(report.created.map((shard) => shard.path)).toEqual(["/vault/First/Home.md", "/vault/Loose.md"]);
+    expect(report.failed).toEqual([
+      { source: "Second.zip", error: "This zip file unpacks bigger than the free space on your vault's disk, so it wasn't opened." },
+    ]);
+  });
+
   it("reports a damaged zip file", async () => {
     const vault = memoryImport({ "Broken.zip": "not a zip" });
     const report = await vault.run();

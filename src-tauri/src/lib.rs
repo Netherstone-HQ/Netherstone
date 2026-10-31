@@ -312,6 +312,13 @@ fn read_import_file(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| format!("Could not read {}: {}", path, e))
 }
 
+/// Free space, in bytes, on the disk the open vault is on.
+#[tauri::command(async)]
+fn vault_free_space(vault_path: String) -> Result<u64, String> {
+    open_vault_only(&vault_path)?;
+    fs4::available_space(&vault_path).map_err(|e| format!("Could not read the free space for {}: {}", vault_path, e))
+}
+
 /// Copies a file an imported shard uses into the vault's attachments.
 #[tauri::command(async)]
 fn import_attachment(
@@ -1848,6 +1855,7 @@ pub fn run() {
             integrations::integrations_set,
             list_import_sources,
             read_import_file,
+            vault_free_space,
             undo_import,
             reserve_import_paths,
             save_imported_shard,

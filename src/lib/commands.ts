@@ -306,6 +306,12 @@ export async function readImportFile(path: string): Promise<Uint8Array> {
   return new Uint8Array(await invoke<ArrayBuffer>("read_import_file", { path }));
 }
 
+/** Free space, in bytes, on the disk the open vault is on. */
+export async function vaultFreeSpace(vaultPath: string): Promise<number> {
+  assertTauri();
+  return invoke<number>("vault_free_space", { vaultPath });
+}
+
 /**
  * Takes an import back: its shards go to the trash like deleted ones, then
  * the attachments it brought in that nothing else links to. `since` is when

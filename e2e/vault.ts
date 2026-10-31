@@ -316,6 +316,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             relativePath: relative(path),
             size: atob(binaries[relative(path)]).length,
           })),
+        vault_free_space: () => Number.MAX_SAFE_INTEGER,
         read_import_file: ({ path }) =>
           Uint8Array.from(atob(binaries[relative(path)]), (c) => c.charCodeAt(0)).buffer,
         reserve_import_paths: ({ targetDir, relativePaths }) =>

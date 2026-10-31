@@ -504,7 +504,9 @@ async fn make(
     std::fs::create_dir_all(folder).map_err(|error| Refusal::Vault { error: error.to_string() })?;
     let vault_path = folder.to_string_lossy().into_owned();
     if !listing.template {
-        import::picked().allow(&[scratch.to_path_buf()]);
+        // The download only: the folders above it are the app's data and
+        // the person's, so not the `_attachments` folders there either.
+        import::picked().allow_only(&[scratch.to_path_buf()]);
         let mut entries: Vec<PathBuf> = std::fs::read_dir(scratch)
             .map_err(|_| Refusal::DownloadFailed)?
             .filter_map(|entry| entry.ok().map(|entry| entry.path()))
@@ -514,10 +516,9 @@ async fn make(
     }
     let zip = listing.downloads.first().map(|download| scratch.join(&download.path)).ok_or(Refusal::DownloadFailed)?;
     if let Err(refusal) = unpack(&zip, folder) {
-        // Takes back only what this made: the folder was new or empty.
-        let _ = std::fs::remove_dir_all(folder);
-        if existed {
-            let _ = std::fs::create_dir(folder);
+        // The folder goes too when this made it and nothing else is in it.
+        if !existed {
+            let _ = std::fs::remove_dir(folder);
         }
         return Err(refusal);
     }
@@ -572,7 +573,31 @@ async fn download_all(
 
 /// Unpacks a template's zip into the new vault: its shards, drawings and
 /// pictures, as they are. Every entry is checked before anything is written.
+/// When it fails part way, it takes back the files and folders it wrote and
+/// leaves anything else, such as files put in the folder while it downloaded.
 fn unpack(zip: &Path, vault_folder: &Path) -> Result<(), Refusal> {
+    let mut written = Vec::new();
+    let unpacked = unpack_into(zip, vault_folder, &mut written);
+    if unpacked.is_err() {
+        // Newest first, so a folder's files go before it; a folder goes
+        // only when nothing else was put in it.
+        for path in written.iter().rev() {
+            let _ = match path {
+                Written::File(path) => std::fs::remove_file(path),
+                Written::Folder(path) => std::fs::remove_dir(path),
+            };
+        }
+    }
+    unpacked
+}
+
+/// A file or folder `unpack` made.
+enum Written {
+    File(PathBuf),
+    Folder(PathBuf),
+}
+
+fn unpack_into(zip: &Path, vault_folder: &Path, written: &mut Vec<Written>) -> Result<(), Refusal> {
     fn failed<E>(_: E) -> Refusal {
         Refusal::DownloadFailed
     }
@@ -595,14 +620,32 @@ fn unpack(zip: &Path, vault_folder: &Path) -> Result<(), Refusal> {
     for (index, name, size) in keep {
         let target = name.split('/').fold(vault_folder.to_path_buf(), |path, segment| path.join(segment));
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent).map_err(failed)?;
+            create_folders(parent, vault_folder, written).map_err(failed)?;
         }
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(failed)?;
+        written.push(Written::File(target));
         let entry = archive.by_index(index).map_err(failed)?;
-        let written = std::io::copy(&mut entry.take(size + 1), &mut file).map_err(failed)?;
-        if written != size {
+        let copied = std::io::copy(&mut entry.take(size + 1), &mut file).map_err(failed)?;
+        if copied != size {
             return Err(Refusal::DownloadFailed);
         }
+    }
+    Ok(())
+}
+
+/// Makes `folder` and the folders above it, up to `vault_folder`, noting
+/// the ones it made.
+fn create_folders(folder: &Path, vault_folder: &Path, written: &mut Vec<Written>) -> std::io::Result<()> {
+    if folder == vault_folder {
+        return Ok(());
+    }
+    if let Some(parent) = folder.parent() {
+        create_folders(parent, vault_folder, written)?;
+    }
+    match std::fs::create_dir(folder) {
+        Ok(()) => written.push(Written::Folder(folder.to_path_buf())),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && folder.is_dir() => {}
+        Err(error) => return Err(error),
     }
     Ok(())
 }
@@ -782,6 +825,24 @@ mod tests {
         assert_eq!(unpack(&climbing, &other), Err(Refusal::DownloadFailed));
         assert!(!dir.join("outside.md").exists());
         assert!(!other.join("Start here.md").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_failed_unpack_takes_back_only_what_it_wrote() {
+        let dir = temp_dir("open-source-unpack-failed");
+        let zip = zip_of(&dir, &[("Start here.md", b"# Start"), ("World/Places.md", b"x"), ("Mine/Map.md", b"x"), ("Notes.md", b"x")]);
+        let vault_folder = dir.join("Worldbuilding");
+        // Put in the folder while the template downloaded.
+        std::fs::create_dir_all(vault_folder.join("Mine")).unwrap();
+        std::fs::write(vault_folder.join("Notes.md"), "mine").unwrap();
+
+        assert_eq!(unpack(&zip, &vault_folder), Err(Refusal::DownloadFailed));
+        assert_eq!(std::fs::read_to_string(vault_folder.join("Notes.md")).unwrap(), "mine");
+        assert!(vault_folder.join("Mine").is_dir());
+        assert!(!vault_folder.join("Mine").join("Map.md").exists());
+        assert!(!vault_folder.join("Start here.md").exists());
+        assert!(!vault_folder.join("World").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

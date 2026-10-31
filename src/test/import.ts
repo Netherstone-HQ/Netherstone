@@ -12,7 +12,7 @@ import type { PlateNode } from "@/lib/import/types";
  * `disk` holds other files on disk, by absolute path, that weren't picked.
  * `dropped` imports without paths on disk, like files dropped in.
  * `takenOnSave` are shard paths something else takes between reserving
- * and saving them.
+ * and saving them. `freeSpace` is the vault disk's, in bytes.
  */
 export function memoryImport(
   files: Record<string, Uint8Array | string>,
@@ -21,6 +21,7 @@ export function memoryImport(
     disk?: Record<string, Uint8Array | string>;
     dropped?: boolean;
     takenOnSave?: string[];
+    freeSpace?: number;
   } = {},
 ) {
   const encoder = new TextEncoder();
@@ -81,6 +82,7 @@ export function memoryImport(
     exists: options.dropped
       ? undefined
       : async (path) => [...disk.keys()].some((file) => file === path || file.startsWith(`${path}/`)),
+    freeSpace: async () => options.freeSpace ?? Number.MAX_SAFE_INTEGER,
     serialize: async (nodes: PlateNode[], filePath) =>
       serializeMarkdownValue(createSlateEditor({ plugins: SerializationKit }), nodes, { filePath }),
     yield: async () => {},

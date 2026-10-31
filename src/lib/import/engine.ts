@@ -11,6 +11,7 @@ import {
   type Importer,
   type PlateNode,
 } from "./types";
+import { openArchives } from "./zip";
 
 /** A file the person picked, as the backend lists it. */
 export interface ImportSource {
@@ -237,13 +238,15 @@ function closest(matches: ImportSource[], fromPath: string) {
  * the vault is ever overwritten.
  */
 export async function runImport(options: RunImportOptions): Promise<ImportReport> {
-  const { io, signal, onProgress } = options;
+  const { signal, onProgress } = options;
   const lookup = options.importerFor ?? importerFor;
   const bringAttachments = options.bringAttachments ?? true;
-  const report: ImportReport = { created: [], attachments: [], skipped: [], failed: [], cancelled: false };
+  // Zip files import like the folders in them.
+  const { sources, io, failed } = await openArchives(options.sources, options.io);
+  const report: ImportReport = { created: [], attachments: [], skipped: [], failed, cancelled: false };
 
   const documents: { source: ImportSource; importer: Importer }[] = [];
-  for (const source of options.sources) {
+  for (const source of sources) {
     const importer = lookup(baseName(POSIX(source.relativePath)));
     if (importer) documents.push({ source, importer });
     else report.skipped.push(source.relativePath);
@@ -265,7 +268,7 @@ export async function runImport(options: RunImportOptions): Promise<ImportReport
   const linkedFrom = new Map<ImportSource, Set<ImportSource>>();
   const saved = new Set<ImportSource>();
 
-  const index = new SourceIndex(options.sources);
+  const index = new SourceIndex(sources);
   const attachments = new Map<string, Promise<string | null>>();
   const linked = new Set<string>();
   const used = new Set<string>();

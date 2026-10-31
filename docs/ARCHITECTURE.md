@@ -97,6 +97,13 @@ only the picked files and folders, and the `_attachments/` folders above
 them. A name taken between reserving and saving moves the shard to the next
 free name, and links to it from the same import are fixed.
 
+A picked or dropped `.zip` file imports like a folder named after it
+(`src/lib/import/zip.ts`): the engine lists the files in it and reads each
+one out of it only when needed, never unpacking to disk. Files whose paths
+leave the zip file are left out, a zip file whose files share data (how zip
+bombs grow) isn't opened, and no file is unpacked past the size the zip
+file gives for it. Zip files inside a zip file stay closed.
+
 ## Opening from outside the app
 
 Folders and files reach the app from the terminal (`netherstone .`,

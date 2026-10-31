@@ -134,7 +134,7 @@ function progressLine(step: Extract<LinkStep, { kind: "downloading" } | { kind: 
   const progress = step.progress;
   if (!progress) return null;
   const value = progress.totalBytes ? (progress.bytes / progress.totalBytes) * 100 : 0;
-  const line = progress.stage === "pictures" ? copy.folder.downloading.pictures : copy.folder.downloading.shards;
+  const line = progress.stage === "template" ? copy.folder.downloading.shards : copy.folder.downloading[progress.stage];
   return { value, text: line(progress.done, progress.total) };
 }
 
@@ -144,6 +144,12 @@ function FolderContents({ listing }: { listing: LinkListing }) {
       <div className="space-y-2 rounded-lg border px-3.5 py-3">
         <div>
           {copy.folder.shards(listing.shards)}
+          {listing.drawings ? (
+            <>
+              <Dot />
+              {copy.folder.drawings(listing.drawings)}
+            </>
+          ) : null}
           {listing.pictures ? (
             <>
               <Dot />

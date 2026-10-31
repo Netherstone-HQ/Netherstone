@@ -9,6 +9,7 @@ import type { ImportSource } from "./engine";
 export interface DroppedFiles {
   sources: ImportSource[];
   read(path: string): Promise<Uint8Array>;
+  readRange(path: string, offset: number, length: number): Promise<Uint8Array>;
 }
 
 type Entry = FileSystemEntry | File;
@@ -67,13 +68,17 @@ async function collect(entries: Entry[]): Promise<DroppedFiles> {
     else await walk(entry, entry.name);
   }
 
+  const fileAt = (path: string) => {
+    const file = files.get(path);
+    if (!file) throw new Error(`Not a dropped file: ${path}`);
+    return file;
+  };
+
   return {
     sources,
-    read: async (path) => {
-      const file = files.get(path);
-      if (!file) throw new Error(`Not a dropped file: ${path}`);
-      return new Uint8Array(await file.arrayBuffer());
-    },
+    read: async (path) => new Uint8Array(await fileAt(path).arrayBuffer()),
+    readRange: async (path, offset, length) =>
+      new Uint8Array(await fileAt(path).slice(offset, offset + length).arrayBuffer()),
   };
 }
 

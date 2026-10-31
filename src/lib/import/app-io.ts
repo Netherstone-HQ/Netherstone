@@ -6,6 +6,7 @@ import {
   importAttachment,
   persistAttachmentBytes,
   readImportFile,
+  readImportFileRange,
   reserveImportPaths,
   saveImportedShard,
   vaultFreeSpace,
@@ -69,6 +70,7 @@ async function serializeHere(nodes: PlateNode[], filePath: string) {
 export function appImportIO(vaultPath: string): ImportIO {
   return {
     readFile: readImportFile,
+    readRange: readImportFileRange,
     reservePaths: reserveImportPaths,
     saveShard: (path, markdown) => saveImportedShard(vaultPath, path, markdown),
     saveAttachment: async (name, bytes) =>

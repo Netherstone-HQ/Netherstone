@@ -48,7 +48,7 @@ urlencoding = "2.1"
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 keyring = "4.2"
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "native-tls"] }
-tokio = { version = "1", features = ["time", "sync", "rt", "macros", "io-std"] }
+tokio = { version = "1", features = ["time", "sync", "rt", "macros", "io-std", "io-util", "fs"] }
 # The MCP server (`Netherstone mcp`), which AI apps start over stdio.
 rmcp = { version = "3.7", default-features = false, features = ["server", "transport-io"] }
 schemars = "1"

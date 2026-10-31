@@ -87,6 +87,7 @@ fn entry_listing(entry: Entry, app_version: &str) -> Result<Listing, Refusal> {
         name: entry.name,
         files: entry.files,
         shards: 0,
+        drawings: 0,
         pictures: 0,
         left_out: 0,
         size: entry.size,

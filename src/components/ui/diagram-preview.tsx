@@ -4,47 +4,73 @@ import * as React from "react";
 
 import { useThemeMode } from "@/components/theme/theme-provider";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useNearScreen } from "@/hooks/useNearScreen";
 import { renderDiagram } from "@/lib/mermaid-diagram";
+import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/store/settings";
 
 type Drawn = { svg: string; error?: undefined } | { svg?: undefined; error: string };
 
 /**
- * The diagram a Mermaid code block's code draws, shown under the code and
- * redrawn as it is typed and when the theme changes.
+ * The diagram a Mermaid code block's code draws, redrawn as it is typed and
+ * when the theme changes. It's drawn only once it's near the screen, and a
+ * change while it's away is drawn when it comes back, so a shard with many
+ * diagrams doesn't draw them all on open.
  */
-export function DiagramPreview({ code }: { code: string }) {
+export function DiagramPreview({
+  code,
+  belowCode,
+}: {
+  code: string;
+  /** Whether the code shows above it. */
+  belowCode: boolean;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const isNear = useNearScreen(ref);
   const debouncedCode = useDebounce(code);
   const mode = useThemeMode();
   const theme = useSettingsStore((s) => s.theme);
   const [drawn, setDrawn] = React.useState<Drawn | null>(null);
+  /** What the drawing on show was drawn from. */
+  const drawnFrom = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     if (!debouncedCode.trim()) {
+      drawnFrom.current = null;
       setDrawn(null);
       return;
     }
+    const from = `${mode}\n${theme}\n${debouncedCode}`;
+    if (!isNear || drawnFrom.current === from) return;
 
     let current = true;
     renderDiagram(debouncedCode, mode === "dark").then(
-      (svg) => current && setDrawn({ svg }),
-      (error: unknown) =>
-        current &&
-        setDrawn({ error: error instanceof Error ? error.message : String(error) }),
+      (svg) => {
+        if (!current) return;
+        drawnFrom.current = from;
+        setDrawn({ svg });
+      },
+      (error: unknown) => {
+        if (!current) return;
+        drawnFrom.current = from;
+        setDrawn({ error: error instanceof Error ? error.message : String(error) });
+      },
     );
     return () => {
       current = false;
     };
-  }, [debouncedCode, mode, theme]);
-
-  if (!code.trim() || !drawn) return null;
+  }, [debouncedCode, isNear, mode, theme]);
 
   return (
     <div
-      className="border-t border-border/60 p-4 select-none"
+      ref={ref}
+      className={cn(
+        "select-none",
+        code.trim() && drawn && ["p-4", belowCode ? "border-t border-border/60" : "pt-9"],
+      )}
       contentEditable={false}
     >
-      {drawn.svg !== undefined ? (
+      {!code.trim() || !drawn ? null : drawn.svg !== undefined ? (
         <div
           role="img"
           aria-label="Diagram"

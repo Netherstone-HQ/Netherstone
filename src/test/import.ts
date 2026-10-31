@@ -42,12 +42,15 @@ export function memoryImport(
     return assetPath;
   };
 
+  const fileAt = (path: string) => {
+    const bytes = (options.dropped ? inputs : disk).get(path);
+    if (!bytes) throw new Error(`No such file: ${path}`);
+    return bytes;
+  };
+
   const io: ImportIO = {
-    readFile: async (path) => {
-      const bytes = (options.dropped ? inputs : disk).get(path);
-      if (!bytes) throw new Error(`No such file: ${path}`);
-      return bytes;
-    },
+    readFile: async (path) => fileAt(path),
+    readRange: async (path, offset, length) => fileAt(path).slice(offset, offset + length),
     reservePaths: async (targetDir, relativePaths) => {
       const taken = new Set(shards.keys());
       return relativePaths.map((relative) => {

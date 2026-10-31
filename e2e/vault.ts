@@ -319,6 +319,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         vault_free_space: () => Number.MAX_SAFE_INTEGER,
         read_import_file: ({ path }) =>
           Uint8Array.from(atob(binaries[relative(path)]), (c) => c.charCodeAt(0)).buffer,
+        read_import_file_range: ({ path, offset, length }) =>
+          Uint8Array.from(atob(binaries[relative(path)]), (c) => c.charCodeAt(0)).slice(
+            Number(offset),
+            Number(offset) + Number(length),
+          ).buffer,
         reserve_import_paths: ({ targetDir, relativePaths }) =>
           (relativePaths as unknown as string[]).map(
             (path) => `${targetDir}/${path.replace(/\.[^./]+$/, "")}.md`,

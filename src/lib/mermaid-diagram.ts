@@ -6,6 +6,29 @@ export const DIAGRAM_STARTER = "flowchart LR\n  A --> B";
 
 let nextId = 0;
 
+/** How a diagram block shows: its code, its diagram, or both. */
+export type DiagramView = "code" | "both" | "diagram";
+
+/** Ids of diagram blocks just added, which open showing both. */
+const newDiagrams = new Set<string>();
+
+/** Notes the block `id` as a diagram just added. */
+export function markNewDiagram(id: string) {
+  newDiagrams.add(id);
+}
+
+/**
+ * How the diagram block `id` shows when it appears: both for one just
+ * added, so its code can be typed with the diagram drawn under it, and the
+ * diagram alone for any other.
+ */
+export function takeFirstView(id: string | undefined): DiagramView {
+  return id !== undefined && newDiagrams.delete(id) ? "both" : "diagram";
+}
+
+/** The settings Mermaid was last given, so it's only set up again when they change. */
+let lastConfig: string | undefined;
+
 /** Reads a color token of the current theme, as set in App.css. */
 const token = (styles: CSSStyleDeclaration, name: string) =>
   styles.getPropertyValue(`--${name}`).trim();
@@ -19,7 +42,7 @@ export async function renderDiagram(code: string, dark: boolean) {
   const { default: mermaid } = await import("mermaid");
   const styles = getComputedStyle(document.documentElement);
 
-  mermaid.initialize({
+  const config = {
     startOnLoad: false,
     securityLevel: "strict",
     theme: "base",
@@ -34,7 +57,12 @@ export async function renderDiagram(code: string, dark: boolean) {
       textColor: token(styles, "foreground"),
       edgeLabelBackground: token(styles, "muted"),
     },
-  });
+  } as const;
+  const key = JSON.stringify(config);
+  if (key !== lastConfig) {
+    mermaid.initialize(config);
+    lastConfig = key;
+  }
 
   // Checked first, so a mistake throws here instead of drawing Mermaid's
   // error picture.

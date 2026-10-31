@@ -25,7 +25,8 @@ use futures_util::StreamExt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::future::Future;
-use std::io::{Read, Write};
+use std::io::Read;
+use tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -172,6 +173,7 @@ pub struct Listing {
     /// Every file the vault gets.
     pub files: usize,
     pub shards: usize,
+    pub drawings: usize,
     pub pictures: usize,
     /// Other files there, which aren't downloaded.
     pub left_out: usize,
@@ -182,6 +184,13 @@ pub struct Listing {
     /// A template's first shard, opened once the vault is made.
     #[serde(skip)]
     first_shard: Option<String>,
+}
+
+impl Listing {
+    /// What the downloads take in the scratch folder.
+    fn download_size(&self) -> u64 {
+        self.downloads.iter().map(|download| download.size).sum()
+    }
 }
 
 /// One file to download into the scratch folder.
@@ -201,6 +210,7 @@ struct Download {
 pub enum Stage {
     Template,
     Shards,
+    Drawings,
     Pictures,
 }
 
@@ -277,17 +287,18 @@ trait Source: Send + Sync {
                 return Err(Refusal::DownloadFailed);
             }
             if let Some(parent) = to.parent() {
-                std::fs::create_dir_all(parent).map_err(|_| Refusal::DownloadFailed)?;
+                tokio::fs::create_dir_all(parent).await.map_err(|_| Refusal::DownloadFailed)?;
             }
-            let mut file = std::fs::File::create(to).map_err(|_| Refusal::DownloadFailed)?;
+            let mut file = tokio::fs::File::create(to).await.map_err(|_| Refusal::DownloadFailed)?;
             let mut received = Received::new(download);
             while let Some(chunk) = response.chunk().await.map_err(|_| Refusal::DownloadFailed)? {
                 if cancel.load(Ordering::SeqCst) {
                     return Err(Refusal::Cancelled);
                 }
                 received.push(&chunk)?;
-                file.write_all(&chunk).map_err(|_| Refusal::DownloadFailed)?;
+                file.write_all(&chunk).await.map_err(|_| Refusal::DownloadFailed)?;
             }
+            file.flush().await.map_err(|_| Refusal::DownloadFailed)?;
             received.finish()
         })
     }
@@ -387,7 +398,9 @@ pub fn allow(address: Address) {
     });
     if let Some(previous) = previous {
         previous.cancel.store(true, Ordering::SeqCst);
-        remove_scratch(previous.scratch.as_deref());
+        if let Some(scratch) = previous.scratch {
+            tauri::async_runtime::spawn_blocking(move || remove_scratch(Some(&scratch)));
+        }
     }
 }
 
@@ -464,18 +477,13 @@ pub async fn open_link_create(
     let documents = app.path().document_dir().ok();
     crate::vault_access::get().check_new_vault_parent(parent, documents.as_deref()).map_err(vault_error)?;
     let folder = vault::check_vault_folder(parent, &name).map_err(vault_error)?;
-    let free = fs4::available_space(parent).map_err(|error| vault_error(error.to_string()))?;
-    if free < listing.size {
-        return Err(Refusal::NotEnoughSpace {
-            needed: listing.size,
-            free,
-            folder: parent.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| parent.display().to_string()),
-        });
-    }
+    let scratch_root = scratch_root().ok_or(Refusal::DownloadFailed)?;
+    // The downloads land in the app's data first, maybe on another disk.
+    std::fs::create_dir_all(&scratch_root).map_err(|_| Refusal::DownloadFailed)?;
+    check_space(&scratch_root, listing.download_size())?;
+    check_space(parent, listing.size)?;
 
-    let scratch = scratch_root()
-        .ok_or(Refusal::DownloadFailed)?
-        .join(format!("{}", chrono::Utc::now().timestamp_millis()));
+    let scratch = scratch_root.join(format!("{}", chrono::Utc::now().timestamp_millis()));
     if let Some(opening) = opening().as_mut() {
         opening.scratch = Some(scratch.clone());
     }
@@ -500,10 +508,26 @@ async fn make(
     if cancel.load(Ordering::SeqCst) {
         return Err(Refusal::Cancelled);
     }
+    // Checked again now the downloads take their space, in case they share
+    // the vault's disk.
+    if let Some(parent) = folder.parent() {
+        check_space(parent, listing.size)?;
+    }
     let existed = folder.exists();
     std::fs::create_dir_all(folder).map_err(|error| Refusal::Vault { error: error.to_string() })?;
     let vault_path = folder.to_string_lossy().into_owned();
     if !listing.template {
+        // Drawings go in as they are; the Markdown import takes the rest.
+        let drawings: Vec<PathBuf> = listing
+            .downloads
+            .iter()
+            .filter(|download| download.stage == Stage::Drawings)
+            .map(|download| PathBuf::from(&download.path))
+            .collect();
+        let (scratch_dir, folder_dir) = (scratch.to_path_buf(), folder.to_path_buf());
+        tauri::async_runtime::spawn_blocking(move || move_drawings(&scratch_dir, &folder_dir, &drawings))
+            .await
+            .map_err(|_| Refusal::DownloadFailed)??;
         // The download only: the folders above it are the app's data and
         // the person's, so not the `_attachments` folders there either.
         import::picked().allow_only(&[scratch.to_path_buf()]);
@@ -515,7 +539,11 @@ async fn make(
         return Ok(Created { vault: vault_path, first_shard: None, sources: import::list_sources(&entries) });
     }
     let zip = listing.downloads.first().map(|download| scratch.join(&download.path)).ok_or(Refusal::DownloadFailed)?;
-    if let Err(refusal) = unpack(&zip, folder) {
+    let target = folder.to_path_buf();
+    let unpacked = tauri::async_runtime::spawn_blocking(move || unpack(&zip, &target))
+        .await
+        .map_err(|_| Refusal::DownloadFailed)?;
+    if let Err(refusal) = unpacked {
         // The folder goes too when this made it and nothing else is in it.
         if !existed {
             let _ = std::fs::remove_dir(folder);
@@ -539,9 +567,9 @@ async fn download_all(
     cancel: &AtomicBool,
     progress: &Channel<Progress>,
 ) -> Result<(), Refusal> {
-    let total_bytes = listing.downloads.iter().map(|download| download.size).sum();
+    let total_bytes = listing.download_size();
     let mut bytes = 0;
-    for stage in [Stage::Template, Stage::Shards, Stage::Pictures] {
+    for stage in [Stage::Template, Stage::Shards, Stage::Drawings, Stage::Pictures] {
         let downloads: Vec<&Download> = listing.downloads.iter().filter(|download| download.stage == stage).collect();
         if downloads.is_empty() {
             continue;
@@ -566,6 +594,39 @@ async fn download_all(
             bytes += fetched?;
             done += 1;
             report(done, bytes);
+        }
+    }
+    Ok(())
+}
+
+/// Refuses when the disk holding `folder` has less than `needed` free.
+fn check_space(folder: &Path, needed: u64) -> Result<(), Refusal> {
+    let free = fs4::available_space(folder).map_err(|error| Refusal::Vault { error: error.to_string() })?;
+    if free < needed {
+        return Err(Refusal::NotEnoughSpace {
+            needed,
+            free,
+            folder: folder.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| folder.display().to_string()),
+        });
+    }
+    Ok(())
+}
+
+/// Moves the downloaded `drawings` (scratch-relative, `/`-separated and
+/// checked) from `scratch` into the vault `folder`, at the same paths.
+fn move_drawings(scratch: &Path, folder: &Path, drawings: &[PathBuf]) -> Result<(), Refusal> {
+    let join = |root: &Path, path: &Path| {
+        path.to_string_lossy().split('/').fold(root.to_path_buf(), |path, segment| path.join(segment))
+    };
+    for drawing in drawings {
+        let (from, to) = (join(scratch, drawing), join(folder, drawing));
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent).map_err(|_| Refusal::DownloadFailed)?;
+        }
+        // The scratch folder can be on another disk, where a rename fails.
+        if std::fs::rename(&from, &to).is_err() {
+            std::fs::copy(&from, &to).map_err(|_| Refusal::DownloadFailed)?;
+            std::fs::remove_file(&from).map_err(|_| Refusal::DownloadFailed)?;
         }
     }
     Ok(())
@@ -698,6 +759,7 @@ fn version(text: &str) -> Option<semver::Version> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use crate::sync::state::tests::temp_dir;
 
     fn github(owner: &str, repo: &str, tree: &[&str]) -> Address {
@@ -843,6 +905,23 @@ mod tests {
         assert!(!vault_folder.join("Mine").join("Map.md").exists());
         assert!(!vault_folder.join("Start here.md").exists());
         assert!(!vault_folder.join("World").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn moves_drawings_into_the_vault_as_they_are() {
+        let dir = temp_dir("open-source-drawings");
+        let (scratch, vault_folder) = (dir.join("scratch"), dir.join("Field guide"));
+        std::fs::create_dir_all(scratch.join("Field notes")).unwrap();
+        std::fs::create_dir_all(&vault_folder).unwrap();
+        std::fs::write(scratch.join("Field notes").join("Wings.excalidraw"), "{}").unwrap();
+        std::fs::write(scratch.join("Birds.md"), "# Birds").unwrap();
+
+        move_drawings(&scratch, &vault_folder, &[PathBuf::from("Field notes/Wings.excalidraw")]).unwrap();
+        assert_eq!(std::fs::read_to_string(vault_folder.join("Field notes").join("Wings.excalidraw")).unwrap(), "{}");
+        assert!(!scratch.join("Field notes").join("Wings.excalidraw").exists());
+        // The rest stays for the Markdown import.
+        assert!(scratch.join("Birds.md").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

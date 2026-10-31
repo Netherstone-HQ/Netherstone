@@ -208,6 +208,7 @@ export interface LinkListing {
   address: string;
   files: number;
   shards: number;
+  drawings: number;
   pictures: number;
   /** Other files there, which aren't downloaded. */
   leftOut: number;
@@ -228,7 +229,7 @@ export type LinkRefusal =
   | { code: "vault"; error: string };
 
 export interface LinkProgress {
-  stage: "template" | "shards" | "pictures";
+  stage: "template" | "shards" | "drawings" | "pictures";
   /** Files of this stage downloaded, of `total`. */
   done: number;
   total: number;
@@ -304,6 +305,12 @@ export async function listImportSources(
 export async function readImportFile(path: string): Promise<Uint8Array> {
   assertTauri();
   return new Uint8Array(await invoke<ArrayBuffer>("read_import_file", { path }));
+}
+
+/** Reads part of a file being imported, as raw bytes. */
+export async function readImportFileRange(path: string, offset: number, length: number): Promise<Uint8Array> {
+  assertTauri();
+  return new Uint8Array(await invoke<ArrayBuffer>("read_import_file_range", { path, offset, length }));
 }
 
 /** Free space, in bytes, on the disk the open vault is on. */

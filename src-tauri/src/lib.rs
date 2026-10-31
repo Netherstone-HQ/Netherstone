@@ -312,6 +312,24 @@ fn read_import_file(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| format!("Could not read {}: {}", path, e))
 }
 
+/// Reads up to `length` bytes of a file being imported from `offset`, as raw
+/// bytes, so a big file such as a zip is never read whole.
+#[tauri::command(async)]
+fn read_import_file_range(path: String, offset: u64, length: u64) -> Result<tauri::ipc::Response, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    import::picked().check(Path::new(&path))?;
+    let read = || -> std::io::Result<Vec<u8>> {
+        let mut file = std::fs::File::open(&path)?;
+        file.seek(SeekFrom::Start(offset))?;
+        let mut bytes = Vec::new();
+        file.take(length).read_to_end(&mut bytes)?;
+        Ok(bytes)
+    };
+    read()
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("Could not read {}: {}", path, e))
+}
+
 /// Free space, in bytes, on the disk the open vault is on.
 #[tauri::command(async)]
 fn vault_free_space(vault_path: String) -> Result<u64, String> {
@@ -1855,6 +1873,7 @@ pub fn run() {
             integrations::integrations_set,
             list_import_sources,
             read_import_file,
+            read_import_file_range,
             vault_free_space,
             undo_import,
             reserve_import_paths,

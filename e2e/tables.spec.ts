@@ -269,6 +269,25 @@ test("the table toolbar and resize handles exist only for the table in use", asy
   await expect(handles).toHaveCount(4);
 });
 
+test("the table toolbar aligns the whole column, and the alignment is saved", async ({
+  page,
+}) => {
+  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+
+  await caretAfter(page, "Short");
+  await page.getByRole("button", { name: "Align column" }).click();
+  await page.getByRole("menuitemradio", { name: "Right" }).click();
+
+  const table = editor(page).locator("table");
+  for (const text of ["Description", "Short"]) {
+    await expect(table.getByText(text, { exact: true })).toHaveCSS("text-align", "right");
+  }
+  await expect(table.getByText("Beta", { exact: true })).not.toHaveCSS("text-align", "right");
+
+  const saved = await lastSave(page, "Tables.md");
+  expect(saved).toMatch(/\| :?-+ +\| -+: +\| :?-+ +\|/);
+});
+
 test("the table toolbar waits while Settings covers the shard", async ({ page }) => {
   await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
   const popover = page.locator("[data-slot='popover-content']");

@@ -15,6 +15,9 @@ export default defineConfig({
 
   define: {
     __APP_VERSION__: JSON.stringify(version),
+    // Builds for package managers set NETHERSTONE_UPDATER=off, together with
+    // cargo's --no-default-features, which leaves the updater out of the app.
+    __SELF_UPDATE__: JSON.stringify(process.env.NETHERSTONE_UPDATER !== "off"),
   },
 
   worker: {

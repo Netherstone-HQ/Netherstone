@@ -4,11 +4,11 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUIStore } from "@/store";
 import { useSettingsStore } from "@/store/settings";
-import { canUpdate } from "@/lib/updates";
+import { isInstalledApp } from "@/lib/updates";
 import { changelogUrl, useWhatsNew } from "./useWhatsNew";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
-vi.mock("@/lib/updates", () => ({ canUpdate: vi.fn(() => true) }));
+vi.mock("@/lib/updates", () => ({ isInstalledApp: vi.fn(() => true) }));
 
 const version = __APP_VERSION__;
 
@@ -72,8 +72,8 @@ describe("useWhatsNew", () => {
     expect(useSettingsStore.getState().lastSeenVersion).toBe(version);
   });
 
-  it("stays quiet in builds that can't update", async () => {
-    vi.mocked(canUpdate).mockReturnValueOnce(false);
+  it("stays quiet in development builds", async () => {
+    vi.mocked(isInstalledApp).mockReturnValueOnce(false);
     await launch();
 
     expect(toast).not.toHaveBeenCalled();

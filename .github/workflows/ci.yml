@@ -14,7 +14,8 @@ permissions:
 
 jobs:
   # The front-end and browser jobs skip a run that only changes docs or bumps
-  # the version, like the Rust job below.
+  # the version, like the Rust job below, and a pull request that only changes
+  # the Rust code.
   frontend:
     name: Typecheck and test
     needs: changes
@@ -43,7 +44,7 @@ jobs:
   # The slowest job, so its tests are split across two runners.
   # A matrix job skipped as a whole reports one check with the matrix left
   # unexpanded, so the required "(1/2)" and "(2/2)" checks would never report.
-  # A docs-only or version bump run still starts both shards and skips their
+  # A run with nothing for them to test still starts both shards and skips their
   # steps instead.
   # The tests run in Playwright's image, which already has Chromium and the
   # system libraries it needs, so no packages come from the Ubuntu mirror. Its
@@ -109,8 +110,9 @@ jobs:
   # What this run needs to test. A run that only changes docs (Markdown at the
   # root or in .github/, or docs/) tests nothing. A pull request that only
   # bumps the app's version (scripts/version-bump.mjs) only checks Cargo.lock.
-  # Otherwise a push to main tests everything, and a pull request runs the Rust
-  # tests only when it changes src-tauri/ or this file.
+  # Otherwise a push to main tests everything, a pull request runs the Rust
+  # tests only when it changes src-tauri/ or this file, and the other tests
+  # only when it changes something outside src-tauri/.
   changes:
     name: Changed files
     runs-on: ubuntu-24.04
@@ -151,7 +153,15 @@ jobs:
           else
             files=everything
           fi
-          if [ "$bump" != "true" ] && grep -qvE '^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)' <<< "$files"; then
+          # A pull request that only changes the Rust code skips the
+          # front-end and browser tests, which mock the Rust side. Those tests
+          # read tauri.conf.json, so a change to it still runs them.
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            skip='^(docs/|[^/]+\.md$|\.github/[^/]+\.md$|src-tauri/(?!tauri\.conf\.json$))'
+          else
+            skip='^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)'
+          fi
+          if [ "$bump" != "true" ] && grep -qvP "$skip" <<< "$files"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,88 @@
+name: Converter
+
+# The Markdown converter on netherstone.app runs the app's own import and
+# export code (src/lib/convert/web.ts). This builds it from main and keeps it
+# on the fixed `converter` release, where the website's build downloads it.
+#
+# Most pushes don't change what the converter is made of. The build runs on
+# any push to the front end, and the release and website change only when the
+# built files differ from the ones already there.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - package.json
+      - pnpm-lock.yaml
+      - vite.convert.config.ts
+      - .github/workflows/converter.yml
+  workflow_dispatch:
+
+concurrency:
+  group: converter
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  converter:
+    name: Converter
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Reads the pnpm version from packageManager in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:convert
+
+      # A digest of the built files by name and content. The archive itself
+      # carries file times, so two builds of the same code never match.
+      - name: Compare with the converter release
+        id: compare
+        run: |
+          digest=$(cd dist-convert && find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+          echo "$digest" > convert.sha256
+          current=$(gh release download converter --pattern convert.sha256 --output - 2>/dev/null || true)
+          if [ "$current" = "$digest" ]; then
+            echo "The converter hasn't changed."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update the converter release
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          tar -czf netherstone-convert.tgz -C dist-convert .
+          if ! gh release view converter >/dev/null 2>&1; then
+            gh release create converter --prerelease --latest=false \
+              --title "Website converter" \
+              --notes "Used by netherstone.app for its Markdown converter. Nothing to download here."
+          fi
+          gh release upload converter netherstone-convert.tgz convert.sha256 --clobber
+
+      # The website downloads the converter when it builds.
+      - name: Update the website
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          SITE_DEPLOY_HOOK: ${{ secrets.SITE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$SITE_DEPLOY_HOOK" ]; then
+            echo "::warning::SITE_DEPLOY_HOOK is not set, so the website was not rebuilt."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$SITE_DEPLOY_HOOK"

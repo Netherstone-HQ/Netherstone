@@ -16,6 +16,8 @@ import { isSamePath } from "@/lib/drawing-files";
 import { shardNameOf, useExportDialogStore, type ExportFormat } from "@/lib/export";
 import {
   defaultExportOptions,
+  EXPORT_CHOICES,
+  FORMAT_LABELS,
   loadExportOptions,
   saveExportOptions,
   type ExportOptions,
@@ -25,13 +27,7 @@ import { saveExport } from "@/lib/export/save";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useSettingsStore, useVaultStore } from "@/store";
 
-const FORMATS: ExportFormat[] = ["pdf", "docx", "html"];
-
-const FORMAT_LABELS: Record<ExportFormat, string> = {
-  pdf: "PDF",
-  docx: "Word",
-  html: "Web page",
-};
+const FORMATS = EXPORT_CHOICES.format.map(({ value }) => value);
 
 const FORMAT_ICONS: Record<ExportFormat, LucideIcon> = {
   pdf: FileTextIcon,
@@ -43,6 +39,11 @@ const EXPORT_LABELS: Record<ExportFormat, string> = {
   pdf: "Export PDF",
   docx: "Export Word document",
   html: "Export web page",
+};
+
+const TYPEFACE_CLASSES: Record<ExportOptions["typeface"], string> = {
+  newsreader: "[font-family:'Newsreader_Variable',serif] text-[13px]",
+  geist: "font-sans",
 };
 
 type Choice<T extends string> = { value: T; label: string; className?: string };
@@ -309,21 +310,14 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
             label="Typeface"
             value={options.typeface}
             onChange={(value) => update("typeface", value)}
-            choices={[
-              { value: "newsreader", label: "Newsreader", className: "[font-family:'Newsreader_Variable',serif] text-[13px]" },
-              { value: "geist", label: "Geist", className: "font-sans" },
-            ]}
+            choices={EXPORT_CHOICES.typeface.map((choice) => ({ ...choice, className: TYPEFACE_CLASSES[choice.value] }))}
           />
 
           <Segments
             label="Text size"
             value={options.textSize}
             onChange={(value) => update("textSize", value)}
-            choices={[
-              { value: "small", label: "Small" },
-              { value: "default", label: "Default" },
-              { value: "large", label: "Large" },
-            ]}
+            choices={[...EXPORT_CHOICES.textSize]}
           />
 
           {isPaged ? (
@@ -332,21 +326,14 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
                 label="Paper"
                 value={options.pageSize}
                 onChange={(value) => update("pageSize", value)}
-                choices={[
-                  { value: "a4", label: "A4" },
-                  { value: "letter", label: "US Letter" },
-                ]}
+                choices={[...EXPORT_CHOICES.pageSize]}
               />
 
               <Segments
                 label="Margins"
                 value={options.margins}
                 onChange={(value) => update("margins", value)}
-                choices={[
-                  { value: "narrow", label: "Narrow" },
-                  { value: "normal", label: "Normal" },
-                  { value: "wide", label: "Wide" },
-                ]}
+                choices={[...EXPORT_CHOICES.margins]}
               />
 
               <label className="flex cursor-pointer items-center justify-between gap-3">
@@ -362,10 +349,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
               label="Appearance"
               value={options.theme}
               onChange={(value) => update("theme", value)}
-              choices={[
-                  { value: "light", label: "Light" },
-                { value: "dark", label: "Dark" },
-              ]}
+              choices={[...EXPORT_CHOICES.theme]}
             />
           )}
 

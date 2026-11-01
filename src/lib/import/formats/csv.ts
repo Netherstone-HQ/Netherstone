@@ -1,6 +1,7 @@
 import { ImportError, type Importer } from "../types";
 import { paragraph, table, text } from "../nodes";
 import { decodeText } from "./decode-text";
+import { IMPORT_FORMATS } from "./list";
 
 /** Rows of a CSV (or TSV) file, quotes and line breaks in quotes included. */
 export function parseDelimited(source: string, delimiter: string): string[][] {
@@ -56,8 +57,7 @@ function sniffDelimiter(source: string, extension: string) {
 
 /** A spreadsheet export becomes a table, its first row the header. */
 export const csvImporter: Importer = {
-  label: "CSV",
-  extensions: ["csv", "tsv"],
+  ...IMPORT_FORMATS.csv,
   async convert(file) {
     const source = decodeText(await file.read());
     const rows = parseDelimited(source, sniffDelimiter(source, file.extension));

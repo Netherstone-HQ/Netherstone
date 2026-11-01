@@ -2,6 +2,7 @@ import { encodeShardLinkPath } from "@/lib/markdown-shard-links";
 
 import type { ImportContext, Importer } from "../types";
 import { decodeText } from "./decode-text";
+import { IMPORT_FORMATS } from "./list";
 
 /**
  * Markdown from other apps stays Markdown; only what Netherstone writes
@@ -21,8 +22,7 @@ import { decodeText } from "./decode-text";
  * Code blocks and inline code are never touched.
  */
 export const markdownImporter: Importer = {
-  label: "Markdown",
-  extensions: ["md", "markdown", "mdown", "mkd"],
+  ...IMPORT_FORMATS.markdown,
   async convert(file, context) {
     const source = decodeText(await file.read()).replace(/\r\n?/g, "\n");
     return { markdown: await convertMarkdown(source, context) };

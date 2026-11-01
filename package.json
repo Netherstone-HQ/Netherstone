@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:convert": "vite build -c vite.convert.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

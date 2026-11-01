@@ -6,6 +6,11 @@ import { loadMarkdown } from "@/test/markdown";
 
 import type { ImageMap } from "../assets";
 import { buildExportDocument } from "../build";
+import { loadHighlighter } from "../highlight";
+import { loadMath } from "../math";
+
+// The fixture has code and math, which the app loads on demand before building.
+await Promise.all([loadHighlighter(), loadMath()]);
 
 export const ROOT = path.resolve(__dirname, "../../../..");
 const FIXTURE = fs.readFileSync(path.join(__dirname, "everything.md"), "utf8");

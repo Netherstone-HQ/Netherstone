@@ -56,6 +56,7 @@ async function moveEverything(page: Page) {
 }
 
 test("an outside change shows in the open drawing without a save", async ({ page }) => {
+  await page.clock.install();
   await mockVault(page, {
     files: { "Plan.excalidraw": drawing(shape("a", 100)) },
     drawing: "Plan.excalidraw",
@@ -63,7 +64,7 @@ test("an outside change shows in the open drawing without a save", async ({ page
   await expect(page.locator("canvas.interactive")).toBeVisible();
 
   await changeOutside(page, "Plan.excalidraw", drawing(shape("a", 100), shape("b", 400)));
-  await page.waitForTimeout(2500);
+  await page.clock.runFor(2500);
   expect(await savesFor(page, "Plan.excalidraw")).toEqual([]);
 
   // Selecting everything picks up the new shape, and the save keeps it.

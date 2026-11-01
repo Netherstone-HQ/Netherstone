@@ -35,10 +35,11 @@ test("keyboard formatting shortcuts save as marks", async ({ page }) => {
 });
 
 test("opening a shard without editing it writes nothing", async ({ page }) => {
+  await page.clock.install();
   await mockVault(page, { files: FILES, open: "Note.md" });
 
   await expect(editor(page)).toContainText("Start here.");
-  await page.waitForTimeout(4000);
+  await page.clock.runFor(4000);
 
   expect(await savesFor(page, "Note.md")).toEqual([]);
 });

@@ -14,7 +14,6 @@ import type { ExportOptions } from "@/lib/export/options";
 import {
   parseMarkdown,
   prepareValue,
-  renderPreview,
   renderPrintPage,
   renderWebPage,
   renderWord,
@@ -22,10 +21,9 @@ import {
 } from "@/lib/export/render";
 import type { ImportProgress } from "@/lib/import/engine";
 
-export { previewLook } from "@/lib/export/html";
 export { defaultExportOptions, EXPORT_CHOICES, FORMAT_LABELS } from "@/lib/export/options";
 export { getDefaultPageSize } from "@/lib/export/theme";
-export { renderPreview, renderPrintPage, type PreparedExport };
+export { renderPrintPage, type PreparedExport };
 export type { ExportFormat, ExportOptions, ImportProgress };
 
 // ── To Markdown ─────────────────────────────────────────────────────────────
@@ -80,9 +78,9 @@ async function fetchPicture(url: string) {
 }
 
 /**
- * Reads Markdown and loads the pictures it shows, ready for the preview and
- * any number of downloads. Pictures come from `pictures`; pictures on the
- * web are fetched, and ones their site won't share count as missing.
+ * Reads Markdown and loads the pictures it shows, ready for any number of
+ * downloads. Pictures come from `pictures`; pictures on the web are fetched,
+ * and ones their site won't share are left out.
  */
 export async function prepareMarkdown(
   markdown: string,
@@ -101,11 +99,6 @@ export async function prepareMarkdown(
     context: { vaultPath: null, shardPath },
     io,
   });
-}
-
-/** The picture paths in a prepared document that weren't found. */
-export function missingPictures(prepared: PreparedExport): string[] {
-  return prepared.doc.images.filter((image) => !prepared.images.has(image.id)).map((image) => image.source);
 }
 
 const MIME: Record<Exclude<ExportFormat, "pdf">, string> = {

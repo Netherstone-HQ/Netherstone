@@ -161,13 +161,61 @@ jobs:
           tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
 
+  # Package managers that update the app themselves get it without the
+  # updater: the Linux .deb's files in a tarball, for the AUR.
+  build-packages:
+    name: Build (Linux, for package managers)
+    needs: check-version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      # With cargo's --no-default-features below, leaves the updater out.
+      NETHERSTONE_UPDATER: "off"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # The Linux build's cache: only the app itself builds again.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: release-ubuntu-22.04-
+          save-if: false
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the app without the updater
+        run: pnpm tauri build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --no-default-features
+
+      - name: Upload the tarball
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          name=$(node scripts/channels.mjs asset linuxTarball "${GITHUB_REF_NAME#v}")
+          dpkg-deb --extract src-tauri/target/release/bundle/deb/*.deb "$RUNNER_TEMP/root"
+          tar -C "$RUNNER_TEMP/root" -czf "$name" usr
+          gh release upload "$GITHUB_REF_NAME" "$name" --clobber
+
   # The release stays a draft until every platform has uploaded its installer,
   # so a failed build never leaves a half-empty public release. Then the
   # update channels move to it: beta follows every release, stable only
   # releases without a pre-release suffix.
   publish:
     name: Publish release
-    needs: [check-version, build]
+    needs: [check-version, build, build-packages]
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -278,3 +326,14 @@ jobs:
             exit 0
           fi
           curl --fail --silent --show-error -X POST "$SITE_DEPLOY_HOOK"
+
+  # Then the package managers get it.
+  channels:
+    name: Channels
+    needs: publish
+    permissions:
+      contents: read
+    uses: ./.github/workflows/channels.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

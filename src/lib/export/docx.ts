@@ -35,11 +35,11 @@ import {
   type ParagraphChild,
 } from "docx";
 import JSZip from "jszip";
-import katex from "katex";
 import { mml2omml } from "mathml2omml";
 
 import type { AssetIO, ImageMap, LoadedImage } from "./assets";
 import type { Block, ExportDocument, Inline, ListItem, TableCell as ModelCell, TextMarks } from "./model";
+import { mathEngine } from "./math";
 import type { ExportOptions } from "./options";
 import { PALETTE, WORD_FONTS, pageGeometry, printType, type PrintType } from "./theme";
 
@@ -192,6 +192,8 @@ function wordShapedOmml(omml: string) {
  * puts the limits of sums under and over them, as Word does.
  */
 export function latexToOmml(tex: string, display = false): string | null {
+  const katex = mathEngine();
+  if (!katex) return null;
   try {
     const html = katex.renderToString(tex, { output: "mathml", displayMode: display, throwOnError: true, strict: "ignore" });
     const math = /<math[\s\S]*<\/math>/.exec(html)?.[0];

@@ -4,11 +4,11 @@
  * printed from, and the export window's preview.
  */
 
-import katex from "katex";
 
 import { cachedBase64, toBase64, type ImageMap } from "./assets";
 import { HTML_FONT_FACES, type HtmlFontFace } from "./html-fonts";
 import { KATEX_FONT_URLS, katexCss } from "./katex-assets";
+import { mathEngine } from "./math";
 import type { Block, ExportDocument, Inline, ListItem, TableCell, TextMarks } from "./model";
 import type { ExportOptions } from "./options";
 import { PREVIEW_SCRIPT, PRINT_READY_SCRIPT } from "./html-scripts";
@@ -66,6 +66,8 @@ function renderText(text: string, marks: TextMarks): string {
 }
 
 function renderMath(tex: string, displayMode: boolean): string {
+  const katex = mathEngine();
+  if (!katex) return `<code class="math-source">${escapeHtml(tex)}</code>`;
   try {
     return katex.renderToString(tex, { displayMode, output: "htmlAndMathml", throwOnError: true, strict: "ignore" });
   } catch {

@@ -24,14 +24,56 @@ export interface ExportOptions {
 
 const STORAGE_KEY = "netherstone-export-options";
 
+export const FORMAT_LABELS: Record<ExportFormat, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  html: "Web page",
+};
+
+type Choices<T extends string> = readonly { value: T; label: string }[];
+
+/** The choices the export window offers, with their labels, in order. */
+export const EXPORT_CHOICES: {
+  format: Choices<ExportFormat>;
+  typeface: Choices<Typeface>;
+  textSize: Choices<TextSize>;
+  pageSize: Choices<PageSize>;
+  margins: Choices<Margins>;
+  theme: Choices<HtmlTheme>;
+} = {
+  format: (["pdf", "docx", "html"] as const).map((value) => ({ value, label: FORMAT_LABELS[value] })),
+  typeface: [
+    { value: "newsreader", label: "Newsreader" },
+    { value: "geist", label: "Geist" },
+  ],
+  textSize: [
+    { value: "small", label: "Small" },
+    { value: "default", label: "Default" },
+    { value: "large", label: "Large" },
+  ],
+  pageSize: [
+    { value: "a4", label: "A4" },
+    { value: "letter", label: "US Letter" },
+  ],
+  margins: [
+    { value: "narrow", label: "Narrow" },
+    { value: "normal", label: "Normal" },
+    { value: "wide", label: "Wide" },
+  ],
+  theme: [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ],
+};
+
 const CHOICES: { [K in keyof ExportOptions]: readonly ExportOptions[K][] } = {
-  format: ["pdf", "docx", "html"],
-  typeface: ["newsreader", "geist"],
-  textSize: ["small", "default", "large"],
-  pageSize: ["a4", "letter"],
-  margins: ["narrow", "normal", "wide"],
+  format: EXPORT_CHOICES.format.map(({ value }) => value),
+  typeface: EXPORT_CHOICES.typeface.map(({ value }) => value),
+  textSize: EXPORT_CHOICES.textSize.map(({ value }) => value),
+  pageSize: EXPORT_CHOICES.pageSize.map(({ value }) => value),
+  margins: EXPORT_CHOICES.margins.map(({ value }) => value),
   pageNumbers: [true, false],
-  theme: ["light", "dark"],
+  theme: EXPORT_CHOICES.theme.map(({ value }) => value),
 };
 
 export function defaultExportOptions(reading: { readingFont: ReadingFont; textSize: ReadingTextSize }): ExportOptions {

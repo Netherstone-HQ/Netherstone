@@ -1,5 +1,6 @@
 import { ImportError, type Importer } from "../../types";
 import { extractPages } from "./extract";
+import { IMPORT_FORMATS } from "../list";
 import { layoutPages } from "./layout";
 
 /**
@@ -9,8 +10,7 @@ import { layoutPages } from "./layout";
  * as pictures, and the summary says so.
  */
 export const pdfImporter: Importer = {
-  label: "PDF",
-  extensions: ["pdf"],
+  ...IMPORT_FORMATS.pdf,
   async convert(file, context) {
     const { pages, failedPictures } = await extractPages(await file.read(), context, (page, total) =>
       context.report(`Page ${page} of ${total}`),

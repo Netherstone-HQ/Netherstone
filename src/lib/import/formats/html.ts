@@ -20,6 +20,7 @@ import {
 } from "../nodes";
 import type { ImportContext, Importer, PlateNode } from "../types";
 import { decodeText } from "./decode-text";
+import { IMPORT_FORMATS } from "./list";
 
 /**
  * Web pages and HTML exports (Notion, Google Docs, Evernote, browsers'
@@ -28,8 +29,7 @@ import { decodeText } from "./decode-text";
  * page furniture are left out.
  */
 export const htmlImporter: Importer = {
-  label: "Web page",
-  extensions: ["html", "htm", "xhtml"],
+  ...IMPORT_FORMATS.html,
   async convert(file, context) {
     const source = decodeText(await file.read());
     const document = new DOMParser().parseFromString(source, "text/html");

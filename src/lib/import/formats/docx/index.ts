@@ -1,4 +1,5 @@
 import { ImportError, type Importer } from "../../types";
+import { IMPORT_FORMATS } from "../list";
 import type { FromWorker, ToWorker } from "./protocol";
 
 /** How often a cancel is looked for while the worker reads. */
@@ -46,8 +47,7 @@ function keepWorker(worker: Worker, read: number) {
  * as the import is cancelled.
  */
 export const docxImporter: Importer = {
-  label: "Word",
-  extensions: ["docx", "docm", "dotx"],
+  ...IMPORT_FORMATS.docx,
   async convert(file, context) {
     const bytes = await file.read();
     const { worker, read } = takeWorker();

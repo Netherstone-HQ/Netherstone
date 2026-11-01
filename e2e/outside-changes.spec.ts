@@ -17,6 +17,7 @@ import {
  */
 
 test("an outside change shows in the open shard without a save", async ({ page }) => {
+  await page.clock.install();
   await mockVault(page, {
     files: { "Note.md": "# Note\n\nFirst.\n\nSecond.\n" },
     open: "Note.md",
@@ -26,7 +27,7 @@ test("an outside change shows in the open shard without a save", async ({ page }
   await changeOutside(page, "Note.md", "# Note\n\nFirst.\n\nSecond, from elsewhere.\n");
   await expect(editor(page)).toContainText("Second, from elsewhere.");
 
-  await page.waitForTimeout(2500);
+  await page.clock.runFor(2500);
   expect(await savesFor(page, "Note.md")).toEqual([]);
 });
 
@@ -98,6 +99,7 @@ test("undo after an outside change takes back your typing, not the change", asyn
 });
 
 test("typing and an outside change to the same paragraph asks which to keep", async ({ page }) => {
+  await page.clock.install();
   await mockVault(page, {
     files: { "Note.md": "# Note\n\nFirst.\n" },
     open: "Note.md",
@@ -107,7 +109,7 @@ test("typing and an outside change to the same paragraph asks which to keep", as
   await changeOutside(page, "Note.md", "# Note\n\nFirst, from elsewhere.\n");
 
   await expect(page.getByText("Choose which version to keep")).toBeVisible();
-  await page.waitForTimeout(2500);
+  await page.clock.runFor(2500);
   expect(await savesFor(page, "Note.md")).toEqual([]);
 
   await page.getByRole("button", { name: "Keep your version" }).click();

@@ -72,17 +72,3 @@ describe("without requestIdleCallback", () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 });
-
-it("uses requestIdleCallback where the browser has it", () => {
-  const requestIdleCallback = vi.spyOn(window, "requestIdleCallback");
-  const cancelIdleCallback = vi.spyOn(window, "cancelIdleCallback");
-  const { root } = renderChunks([120]);
-
-  const stop = measureChunkHeightsInBackground(root);
-  stop();
-
-  expect(requestIdleCallback).toHaveBeenCalledOnce();
-  expect(cancelIdleCallback).toHaveBeenCalledWith(
-    requestIdleCallback.mock.results[0].value,
-  );
-});

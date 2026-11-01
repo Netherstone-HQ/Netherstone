@@ -1792,7 +1792,12 @@ fn register_links(_app: &tauri::App) {
     {
         use tauri::Manager;
         use tauri_plugin_deep_link::DeepLinkExt;
-        let without_installer = cfg!(debug_assertions) || _app.env().appimage.is_some();
+        // Only Linux has AppImages, and only there does Env have the field.
+        #[cfg(target_os = "linux")]
+        let appimage = _app.env().appimage.is_some();
+        #[cfg(not(target_os = "linux"))]
+        let appimage = false;
+        let without_installer = cfg!(debug_assertions) || appimage;
         if without_installer && let Err(error) = _app.deep_link().register_all() {
             eprintln!("[Netherstone] Couldn't register Netherstone links: {}", error);
         }

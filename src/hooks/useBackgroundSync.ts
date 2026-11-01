@@ -51,12 +51,17 @@ export function useBackgroundSync() {
       useEditorStore.getState().isDirty ||
       hasPendingDrawingSave();
 
-    const sync = () => {
+    const sync = async () => {
       window.clearTimeout(timer);
       timer = undefined;
       dueAt = undefined;
+      const since = pendingSince;
       pendingSince = undefined;
-      return useSyncStore.getState().sync(path);
+      const synced = await useSyncStore.getState().sync(path);
+      // Edits a sync didn't take still wait, for quitting and the next try.
+      if (!synced && since !== undefined) {
+        pendingSince = Math.min(pendingSince ?? since, since);
+      }
     };
 
     /** Syncs at `at`, or when the interval since the last sync ends. */
@@ -79,7 +84,10 @@ export function useBackgroundSync() {
     let unlistenFocus: (() => void) | undefined;
     let cancelled = false;
 
-    void listen("vault:changed", () => {
+    void listen<{ paths?: string[] }>("vault:changed", ({ payload }) => {
+      // No paths asks for a rescan, which may hold edits.
+      const paths = payload?.paths ?? [];
+      if (paths.length && !useSyncStore.getState().notWrittenBySync(paths).length) return;
       pendingSince ??= Date.now();
       syncBy(pendingSince + intervalMs);
     }).then((fn) => {

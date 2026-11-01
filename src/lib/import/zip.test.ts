@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { memoryImport } from "@/test/import";
 
@@ -102,6 +102,43 @@ describe("zip import", () => {
     expect(report.created).toEqual([]);
     expect(report.failed).toEqual([
       { source: "Archive/Home.md", error: "This file unpacks bigger than its zip file says, so it wasn't read." },
+    ]);
+  });
+
+  it("doesn't open zip files that unpack bigger than the vault disk's free space", async () => {
+    const first = await zipOf({ "Home.md": `# Home\n\n${"words ".repeat(100)}\n` });
+    const second = await zipOf({ "Plans.md": `# Plans\n\n${"words ".repeat(100)}\n` });
+    const vault = memoryImport({ "First.zip": first, "Second.zip": second, "Loose.md": "# Loose\n" }, { freeSpace: 1000 });
+    const report = await vault.run();
+
+    expect(report.created.map((shard) => shard.path)).toEqual(["/vault/First/Home.md", "/vault/Loose.md"]);
+    expect(report.failed).toEqual([
+      { source: "Second.zip", error: "This zip file unpacks bigger than the free space on your vault's disk, so it wasn't opened." },
+    ]);
+  });
+
+  it("reads zip files in pieces, never whole", async () => {
+    const zip = await zipOf({ "Home.md": "# Home\n", "_attachments/cat.png": PNG, "Sub/Plans.md": "# Plans\n" });
+    const vault = memoryImport({ "Archive.zip": zip });
+    const readWhole = vi.spyOn(vault.io, "readFile");
+    const readPart = vi.spyOn(vault.io, "readRange");
+    const report = await vault.run();
+
+    expect(report.created).toHaveLength(2);
+    expect(readWhole).not.toHaveBeenCalledWith("/in/Archive.zip");
+    expect(readPart).toHaveBeenCalledWith("/in/Archive.zip", expect.any(Number), expect.any(Number));
+  });
+
+  it("doesn't trust a file's size until its data is read", async () => {
+    const zip = await zipOf({ "Home.md": "# Home\n" });
+    const { view, offsets } = centralEntries(zip);
+    // Says it unpacks to 4 GB.
+    view.setUint32(offsets[0] + 24, 0xfffffff0, true);
+    const vault = memoryImport({ "Archive.zip": zip });
+    const report = await vault.run();
+
+    expect(report.failed).toEqual([
+      { source: "Archive/Home.md", error: "This file is cut short in its zip file, so it wasn't read." },
     ]);
   });
 

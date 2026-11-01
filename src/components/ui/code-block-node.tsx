@@ -11,7 +11,12 @@ import {
   PlateElement,
   PlateLeaf,
 } from "platejs/react";
-import { useEditorRef, useElement, useReadOnly } from "platejs/react";
+import {
+  useEditorRef,
+  useElement,
+  useReadOnly,
+  useSelected,
+} from "platejs/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,18 +35,70 @@ import {
 import { cn } from "@/lib/utils";
 import { CODE_LANGUAGES as languages } from "@/components/editor/lib/code-languages";
 import { DiagramPreview } from "@/components/ui/diagram-preview";
-import { DIAGRAM_LANG } from "@/lib/mermaid-diagram";
+import {
+  DIAGRAM_LANG,
+  type DiagramView,
+  takeFirstView,
+} from "@/lib/mermaid-diagram";
+
+const DIAGRAM_VIEWS: { view: DiagramView; label: string }[] = [
+  { view: "code", label: "Code" },
+  { view: "both", label: "Both" },
+  { view: "diagram", label: "Diagram" },
+];
+
+/**
+ * How a Mermaid block shows, switched per block and not saved: a diagram
+ * opens on its picture, one just added on both. Moving the cursor into the
+ * hidden code shows it, and hiding the code takes the cursor out, so nothing
+ * is typed out of sight.
+ */
+function useDiagramView(element: TCodeBlockElement, isDiagram: boolean) {
+  const editor = useEditorRef();
+  const [view, setView] = React.useState<DiagramView>(() =>
+    takeFirstView(typeof element.id === "string" ? element.id : undefined),
+  );
+  const selected = useSelected();
+  const wasSelected = React.useRef(selected);
+
+  React.useEffect(() => {
+    if (isDiagram && selected && !wasSelected.current && view === "diagram") {
+      setView("both");
+    }
+    wasSelected.current = selected;
+  }, [isDiagram, selected, view]);
+
+  const choose = (next: DiagramView) => {
+    if (next === "diagram" && selected) editor.tf.deselect();
+    setView(next);
+  };
+
+  return [view, choose] as const;
+}
 
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
   const { editor, element } = props;
+  const isDiagram = element.lang === DIAGRAM_LANG;
+  const [view, chooseView] = useDiagramView(element, isDiagram);
+  const code = isDiagram
+    ? element.children.map((line) => NodeApi.string(line)).join("\n")
+    : "";
+  // An empty diagram has nothing to show but its code.
+  const showsCode = !isDiagram || view !== "diagram" || !code.trim();
+  const showsDiagram = isDiagram && view !== "code";
 
   return (
     <PlateElement
       className="py-1 **:[.hljs-addition]:bg-[#f0fff4] **:[.hljs-addition]:text-[#22863a] dark:**:[.hljs-addition]:bg-[#3c5743] dark:**:[.hljs-addition]:text-[#ceead5] **:[.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable]:text-[#005cc5] dark:**:[.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable]:text-[#6596cf] **:[.hljs-built\\\\_in,.hljs-symbol]:text-[#e36209] dark:**:[.hljs-built\\\\_in,.hljs-symbol]:text-[#c3854e] **:[.hljs-bullet]:text-[#735c0f] **:[.hljs-comment,.hljs-code,.hljs-formula]:text-[#6a737d] dark:**:[.hljs-comment,.hljs-code,.hljs-formula]:text-[#6a737d] **:[.hljs-deletion]:bg-[#ffeef0] **:[.hljs-deletion]:text-[#b31d28] dark:**:[.hljs-deletion]:bg-[#473235] dark:**:[.hljs-deletion]:text-[#e7c7cb] **:[.hljs-emphasis]:italic **:[.hljs-keyword,.hljs-doctag,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language\\\\_]:text-[#d73a49] dark:**:[.hljs-keyword,.hljs-doctag,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language\\\\_]:text-[#ee6960] **:[.hljs-name,.hljs-quote,.hljs-selector-tag,.hljs-selector-pseudo]:text-[#22863a] dark:**:[.hljs-name,.hljs-quote,.hljs-selector-tag,.hljs-selector-pseudo]:text-[#36a84f] **:[.hljs-regexp,.hljs-string,.hljs-meta_.hljs-string]:text-[#032f62] dark:**:[.hljs-regexp,.hljs-string,.hljs-meta_.hljs-string]:text-[#3593ff] **:[.hljs-section]:font-bold **:[.hljs-section]:text-[#005cc5] dark:**:[.hljs-section]:text-[#61a5f2] **:[.hljs-strong]:font-bold **:[.hljs-title,.hljs-title.class\\\\_,.hljs-title.class\\\\_.inherited\\\\_\\\\_,.hljs-title.function\\\\_]:text-[#6f42c1] dark:**:[.hljs-title,.hljs-title.class\\\\_,.hljs-title.class\\\\_.inherited\\\\_\\\\_,.hljs-title.function\\\\_]:text-[#a77bfa]"
       {...props}
     >
-      <div className="relative rounded-md bg-muted/50">
-        <pre className="overflow-x-auto p-8 pr-4 font-mono text-sm leading-[normal] [tab-size:2] print:break-inside-avoid">
+      <div className={cn("relative rounded-md bg-muted/50", !showsCode && "min-h-9")}>
+        <pre
+          className={cn(
+            "overflow-x-auto p-8 pr-4 font-mono text-sm leading-[normal] [tab-size:2] print:break-inside-avoid",
+            !showsCode && "hidden",
+          )}
+        >
           <code>{props.children}</code>
         </pre>
 
@@ -49,7 +106,29 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
           className="absolute top-1 right-1 z-10 flex select-none gap-0.5"
           contentEditable={false}
         >
-          {isLangSupported(element.lang) && (
+          {isDiagram && (
+            <div
+              role="radiogroup"
+              aria-label="Show"
+              className="mr-0.5 inline-flex h-6 gap-0.5 rounded-md border p-0.5"
+            >
+              {DIAGRAM_VIEWS.map((option) => (
+                <button
+                  key={option.view}
+                  type="button"
+                  role="radio"
+                  aria-checked={view === option.view}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => chooseView(option.view)}
+                  className="rounded-sm px-1.5 text-muted-foreground text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-accent aria-checked:text-foreground"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {showsCode && isLangSupported(element.lang) && (
             <Button
               size="icon"
               variant="ghost"
@@ -71,11 +150,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
           />
         </div>
 
-        {element.lang === DIAGRAM_LANG && (
-          <DiagramPreview
-            code={element.children.map((line) => NodeApi.string(line)).join("\n")}
-          />
-        )}
+        {showsDiagram && <DiagramPreview code={code} belowCode={showsCode} />}
       </div>
     </PlateElement>
   );

@@ -100,6 +100,7 @@ export const MediaEmbedElement = withHOC(
                     className="aspect-video w-full rounded-sm"
                     src={playerUrl}
                     title={siteOf(url)}
+                    loading="lazy"
                     allowFullScreen
                   />
                 )}

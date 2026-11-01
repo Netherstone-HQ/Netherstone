@@ -24,6 +24,8 @@ export interface ImportSource {
 /** What the engine needs from the outside world; `app-io.ts` is the app's. */
 export interface ImportIO {
   readFile(path: string): Promise<Uint8Array>;
+  /** Reads `length` bytes of the file at `path` from `offset`, fewer past its end. */
+  readRange(path: string, offset: number, length: number): Promise<Uint8Array>;
   /** Free `.md` paths in `targetDir`, one per `Folder/Name`, in order. */
   reservePaths(targetDir: string, relativePaths: string[]): Promise<string[]>;
   /**
@@ -46,6 +48,8 @@ export interface ImportIO {
    * disk (dropped in), so files they use can't be looked for there.
    */
   exists?(path: string): Promise<boolean>;
+  /** Free space, in bytes, on the disk the vault is on. */
+  freeSpace(): Promise<number>;
   /** Writes a Plate value as the Markdown of the shard at `filePath`. */
   serialize(nodes: PlateNode[], filePath: string): Promise<string>;
   /** Lets the window paint between steps. */

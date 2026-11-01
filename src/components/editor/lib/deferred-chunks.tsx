@@ -15,7 +15,7 @@ import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 const UNDRAWN_BLOCK_HEIGHT_PX = 40;
 
 /** How far outside the window an undrawn chunk gets drawn early. */
-const DRAW_AHEAD_MARGIN = "1500px 0px";
+export const DRAW_AHEAD_MARGIN = "1500px 0px";
 
 const DRAW_IDLE_TIMEOUT_MS = 500;
 

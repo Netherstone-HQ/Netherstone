@@ -47,10 +47,11 @@ impl PickedSources {
         self.replace(paths, true);
     }
 
-    /// Like `allow`, for files handed to the app from outside it. Only the
-    /// files themselves may be read: the folders they sit in weren't picked,
-    /// so neither were the attachment folders above them.
-    pub fn allow_files(&self, paths: &[PathBuf]) {
+    /// Like `allow`, for files and folders the person didn't pick in the
+    /// import dialog: files handed to the app from outside it, or a link's
+    /// download. Only they may be read: the folders they sit in weren't
+    /// picked, so neither were the attachment folders above them.
+    pub fn allow_only(&self, paths: &[PathBuf]) {
         self.replace(paths, false);
     }
 
@@ -385,9 +386,15 @@ mod tests {
         picked.allow(&[root.join("Single.docx")]);
         assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_err());
 
-        picked.allow_files(&[vault.join("Notes/Plans/Q3.md")]);
+        picked.allow_only(&[vault.join("Notes/Plans/Q3.md")]);
         assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_ok());
         assert!(picked.check(&vault.join("_attachments/photo.png")).is_err());
+
+        // A link's download: what's in it, but not the attachments above it.
+        picked.allow_only(&[vault.join("Notes")]);
+        assert!(picked.check(&vault.join("Notes/_attachments/photo.png")).is_ok());
+        assert!(picked.check(&vault.join("_attachments/photo.png")).is_err());
+        assert!(picked.check(&root.join("_attachments/scan.pdf")).is_err());
     }
 
     #[test]

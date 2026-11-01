@@ -14,12 +14,14 @@ export const copy = {
   folder: {
     title: (name: string) => `Open ${name}`,
     shards: (count: number) => (count === 1 ? "1 shard" : `${count} shards`),
+    drawings: (count: number) => (count === 1 ? "1 drawing" : `${count} drawings`),
     pictures: (count: number) => (count === 1 ? "1 picture" : `${count} pictures`),
     leftOut: (count: number) =>
       count === 1 ? "1 other file left out" : `${count} other files left out`,
     warning: "Not a Netherstone template. Open it if you trust where it came from",
     downloading: {
       shards: (done: number, total: number) => `Downloading ${done} of ${total} shards…`,
+      drawings: (done: number, total: number) => `Downloading ${done} of ${total} drawings…`,
       pictures: (done: number, total: number) => `Downloading ${done} of ${total} pictures…`,
     },
     adding: (done: number, total: number) => `Adding ${done} of ${total} shards…`,

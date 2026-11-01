@@ -28,7 +28,11 @@ import {
   PathApi,
 } from "platejs";
 
-import { DIAGRAM_LANG, DIAGRAM_STARTER } from "@/lib/mermaid-diagram";
+import {
+  DIAGRAM_LANG,
+  DIAGRAM_STARTER,
+  markNewDiagram,
+} from "@/lib/mermaid-diagram";
 
 const ACTION_THREE_COLUMNS = "action_three_columns";
 export const ACTION_DIAGRAM = "action_diagram";
@@ -51,7 +55,8 @@ const insertDiagram = (editor: PlateEditor) => {
   const block = editor.api.above({ match: { type: KEYS.codeBlock } });
   if (!block) return;
 
-  const [, path] = block;
+  const [node, path] = block;
+  if (typeof node.id === "string") markNewDiagram(node.id);
   editor.tf.setNodes({ lang: DIAGRAM_LANG }, { at: path });
   editor.tf.replaceNodes(
     DIAGRAM_STARTER.split("\n").map((line) => ({

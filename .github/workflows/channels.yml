@@ -31,7 +31,8 @@ permissions:
   contents: read
 
 env:
-  TAG: ${{ inputs.tag }}
+  # The tag with its leading v, which a manual run may leave out.
+  TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GH_REPO: ${{ github.repository }}
   # Commits to the tap and the AUR are Wassim's.

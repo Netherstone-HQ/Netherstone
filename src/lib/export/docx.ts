@@ -708,10 +708,9 @@ class DocxWriter {
         rowSpan: model.rowSpan > 1 ? model.rowSpan : undefined,
         width: { size: cellWidth, type: WidthType.DXA },
         verticalAlign: VerticalAlignTable.TOP,
-        shading:
-          model.background || model.header
-            ? { type: ShadingType.CLEAR, color: "auto", fill: hex(model.background ?? PALETTE.tableHeader) }
-            : undefined,
+        // The header shade comes from the table style, so only a colour the
+        // cell was given is written on the cell itself.
+        shading: model.background ? { type: ShadingType.CLEAR, color: "auto", fill: hex(model.background) } : undefined,
         margins: { top: 100, bottom: 60, left: 140, right: 140 },
         children: content.length ? content : [new Paragraph({ children: [] })],
       });
@@ -723,7 +722,8 @@ class DocxWriter {
       layout: TableLayoutType.FIXED,
       indent: context.listLevel ? { size: LIST_INDENT * context.listLevel, type: WidthType.DXA } : undefined,
       borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
-      style: "ShardTable",
+      style: TABLE_STYLE_ID,
+      tableLook: { firstRow: headerRows > 0, noVBand: true, noHBand: true },
       rows: block.rows.map((row, rowIndex) => {
         let columnIndex = 0;
         return new TableRow({
@@ -813,6 +813,17 @@ function wordFonts(options: ExportOptions): WordFonts {
   };
 }
 
+const TABLE_STYLE_ID = "ShardTable";
+
+/**
+ * Tables shade their header rows through the table style, as Word's own
+ * table styles do, so the shade stays the table's look: it isn't a colour
+ * on each cell, and reading the file back doesn't turn it into one.
+ */
+const TABLE_STYLE =
+  `<w:style w:type="table" w:styleId="${TABLE_STYLE_ID}"><w:name w:val="Shard Table"/><w:tblPr/>` +
+  `<w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${hex(PALETTE.tableHeader)}"/></w:tcPr></w:tblStylePr></w:style>`;
+
 function documentStyles(fonts: WordFonts, type: PrintType, lang: string) {
   const ink = hex(PALETTE.ink);
   const paragraphStyles = HEADING_STYLE_IDS.map((id, index) => {
@@ -890,13 +901,15 @@ const MATH_SETTINGS =
  * Word substitutes fonts that aren't installed. The font table tells it what
  * kind each one is and a close stand-in, so Newsreader falls back to a serif
  * and Geist to a sans, not to Word's default. Cambria Math, Word's equation
- * font, is named and set in the settings as Word's own files do.
+ * font, is named and set in the settings as Word's own files do. The table
+ * style goes into the styles.
  */
 async function finishPackage(docx: Uint8Array): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(docx);
   const table = await zip.file("word/fontTable.xml")?.async("string");
   const settings = await zip.file("word/settings.xml")?.async("string");
-  if (!table || !settings) return docx;
+  const styles = await zip.file("word/styles.xml")?.async("string");
+  if (!table || !settings || !styles) return docx;
 
   const entries = [
     ...Object.values(WORD_FONTS)
@@ -914,6 +927,8 @@ async function finishPackage(docx: Uint8Array): Promise<Uint8Array> {
     ? table.replace("</w:fonts>", `${entries}</w:fonts>`)
     : table.replace(/<w:fonts\b([^>]*?)\s*\/>/, `<w:fonts$1>${entries}</w:fonts>`);
   zip.file("word/fontTable.xml", updated);
+  // The writer has no table styles, so the tables' own is added here.
+  zip.file("word/styles.xml", styles.replace("</w:styles>", `${TABLE_STYLE}</w:styles>`));
   // The math settings follow the compatibility settings.
   if (!settings.includes("<m:mathPr>")) zip.file("word/settings.xml", settings.replace("</w:compat>", `</w:compat>${MATH_SETTINGS}`));
 

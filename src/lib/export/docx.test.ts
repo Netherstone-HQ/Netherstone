@@ -41,6 +41,12 @@ describe("Word export", () => {
       expect(part.getElementsByTagName("parsererror"), name).toHaveLength(0);
     }
     expect(xml).toContain("<w:tblHeader/>");
+    // Header rows are shaded by the table style, not by their cells.
+    expect(xml).toContain('<w:tblStyle w:val="ShardTable"/>');
+    expect(xml).toMatch(/<w:tblLook [^>]*w:firstRow="(1|true)"/);
+    expect(xml.match(/<w:tblHeader\/>.*?<\/w:tr>/)![0]).not.toContain("<w:shd ");
+    const styles = await zip.file("word/styles.xml")!.async("string");
+    expect(styles).toMatch(/<w:style w:type="table" w:styleId="ShardTable">.*<w:tblStylePr w:type="firstRow"><w:tcPr><w:shd [^>]*w:fill="F7F5F2"/);
     expect(xml).toContain('<w:pStyle w:val="Quote"/>');
     expect(xml).toContain("<pic:pic");
     expect(xml).toContain('w:fill="F1EEE9"');

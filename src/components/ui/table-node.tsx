@@ -30,6 +30,9 @@ import {
   useTableValue,
 } from "@platejs/table/react";
 import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
@@ -69,6 +72,11 @@ import {
 } from "platejs/react";
 import { useElementSelector } from "platejs/react";
 
+import {
+  type ColumnAlign,
+  columnAlignAt,
+  setColumnAlign,
+} from "@/components/editor/lib/table-align";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -77,6 +85,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -1113,6 +1123,7 @@ function TableFloatingToolbarContent({
           <ColorDropdownMenu tooltip="Background color">
             <PaintBucketIcon />
           </ColorDropdownMenu>
+          <ColumnAlignDropdownMenu />
           {canMerge && onMerge && (
             <ToolbarButton
               onClick={onMerge}
@@ -1347,6 +1358,52 @@ function ColorDropdownMenu({
             <span>Clear</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+const COLUMN_ALIGNS: {
+  value: ColumnAlign;
+  label: string;
+  icon: typeof AlignLeftIcon;
+}[] = [
+  { value: "left", label: "Left", icon: AlignLeftIcon },
+  { value: "center", label: "Center", icon: AlignCenterIcon },
+  { value: "right", label: "Right", icon: AlignRightIcon },
+];
+
+/** Aligns the columns the selection touches, as the saved table does. */
+function ColumnAlignDropdownMenu() {
+  const [open, setOpen] = React.useState(false);
+  const editor = useEditorRef();
+  const value = useEditorSelector((editor) => columnAlignAt(editor), []);
+  const Icon =
+    COLUMN_ALIGNS.find((item) => item.value === value)?.icon ?? AlignLeftIcon;
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <ToolbarButton tooltip="Align column" aria-label="Align column">
+          <Icon />
+        </ToolbarButton>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="start">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => {
+            setColumnAlign(editor, next as ColumnAlign);
+            editor.tf.focus();
+          }}
+        >
+          {COLUMN_ALIGNS.map(({ value: itemValue, label, icon: ItemIcon }) => (
+            <DropdownMenuRadioItem key={itemValue} value={itemValue}>
+              <ItemIcon />
+              <span>{label}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -86,7 +86,8 @@ describe("Word import", () => {
     expect(markdown).toContain("> [!tip]\n> Callouts keep");
     expect(markdown).toContain("```typescript\n// Greets someone by name.\nexport function greet(name: string): string {\n  const message");
     expect(markdown).toContain("$\\int_{- \\infty}^{\\infty} e^{- x^{2}}dx=\\sqrt{\\pi}$");
-    expect(markdown).toContain("fill A1=#f7f5f2 B1=#f7f5f2 C1=#f7f5f2");
+    // The header shade is the table's look, not a colour on its cells.
+    expect(markdown).not.toMatch(/<!-- netherstone:[^>]*\bfill\b/);
     expect(markdown).toContain("| PDF        | System webview | The app's own, **shared** |");
     expect(markdown).toContain('<img src="_attachments/Doc 1.png" width="480" />');
     expect(markdown).toContain("Привет, 日本語のテキスト, and an emoji 🎉.");

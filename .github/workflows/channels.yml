@@ -4,7 +4,7 @@ name: Channels
 # once a release is published; run it by hand to publish an existing release.
 #
 #   winget     opens a pull request on microsoft/winget-pkgs from wSoltani's fork
-#   Homebrew   commits the cask to Netherstone-HQ/homebrew-tap
+#   Homebrew   commits the cask to Netherstone-HQ/homebrew-tap, then installs it
 #   AUR        pushes netherstone-bin
 #
 # Each channel is skipped, with a warning, until its secret is set. Their
@@ -143,6 +143,28 @@ jobs:
           git -c user.name="$COMMIT_NAME" -c user.email="$COMMIT_EMAIL" \
             commit --message "Netherstone $VERSION"
           git push
+
+  # Installs the cask the way people do, on an Apple Silicon runner.
+  homebrew-check:
+    name: Homebrew install check
+    needs: [check, homebrew]
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Install from the tap
+        run: |
+          brew install --cask netherstone-hq/tap/netherstone
+          installed=$(brew list --cask --versions netherstone)
+          echo "$installed"
+          if [ "$installed" != "netherstone $VERSION" ]; then
+            echo "::error::The tap installed $installed, not Netherstone $VERSION."
+            exit 1
+          fi
+          test -x /Applications/Netherstone.app/Contents/MacOS/Netherstone
+
+      - name: Uninstall
+        run: brew uninstall --cask --zap netherstone
 
   aur:
     name: AUR

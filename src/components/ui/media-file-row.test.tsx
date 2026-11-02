@@ -24,6 +24,13 @@ function vaultFile(info: Awaited<ReturnType<typeof attachmentSyncInfo>>) {
   vi.mocked(attachmentSyncInfo).mockResolvedValue(info);
 }
 
+/** The innermost element whose text, dots included, is `text`. */
+function wholeText(text: string) {
+  return (_: string, element: Element | null) =>
+    element?.textContent === text &&
+    Array.from(element.children).every((child) => child.textContent !== text);
+}
+
 function renderRow(row: React.ReactNode) {
   return render(<TooltipProvider>{row}</TooltipProvider>);
 }
@@ -53,7 +60,7 @@ describe("MediaFileRow", () => {
       />,
     );
 
-    expect(await screen.findByText("PDF · 1.2 MB")).toBeTruthy();
+    expect(await screen.findByText(wholeText("PDF 1.2 MB"))).toBeTruthy();
     expect(attachmentSyncInfo).toHaveBeenCalledWith(
       "C:/Vault",
       "_attachments/Kitchen quote.pdf",
@@ -102,7 +109,7 @@ describe("MediaFileRow", () => {
       />,
     );
 
-    expect(await screen.findByText("MP3 · 4.0 MB")).toBeTruthy();
+    expect(await screen.findByText(wholeText("MP3 4.0 MB"))).toBeTruthy();
     expect(screen.queryByText("Won't sync")).toBeNull();
   });
 

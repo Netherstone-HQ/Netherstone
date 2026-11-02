@@ -118,7 +118,7 @@ describe("Opening a Netherstone link", () => {
 
     expect(screen.getByRole("heading", { name: copy.folder.title("field-guide") })).toBeTruthy();
     expect(screen.getByText(FOLDER)).toBeTruthy();
-    expect(screen.getByText(/142 shards/).textContent).toBe("142 shards38 pictures41 MB");
+    expect(screen.getByText(/142 shards/).textContent).toBe("142 shards 38 pictures 41 MB");
     expect(screen.getByText(copy.folder.leftOut(12))).toBeTruthy();
     expect(screen.getByText(copy.folder.warning)).toBeTruthy();
     expect(screen.getByRole("textbox")).toHaveProperty("value", "field-guide");

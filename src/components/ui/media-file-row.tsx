@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Dot } from "@/components/ui/dot";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -227,11 +228,19 @@ function UnsyncedLabel({
   );
 }
 
-/** A file's type and size, as "PDF · 1.2 MB". */
+/** A file's type and size, with a dot between them. */
 function describeFile(info: AttachmentSyncInfo) {
-  return [info.extension.toUpperCase(), formatBytes(info.sizeBytes)]
-    .filter(Boolean)
-    .join(" · ");
+  return [info.extension.toUpperCase(), formatBytes(info.sizeBytes)].filter(Boolean);
+}
+
+/** Parts of a line with a drawn dot between each two. */
+function withDots(parts: React.ReactNode[]) {
+  return parts.map((part, index) => (
+    <React.Fragment key={index}>
+      {index > 0 ? <Dot className="mx-0.5 translate-y-0" /> : null}
+      {part}
+    </React.Fragment>
+  ));
 }
 
 /** Details for a file copied into the vault: type, size and whether it syncs. */
@@ -239,18 +248,9 @@ export function VaultFileDetails({ metadata }: { metadata: MediaSource }) {
   const info = useAttachmentSyncInfo(metadata);
   if (!info) return null;
 
-  const described = describeFile(info);
-  return (
-    <>
-      {described}
-      {info.syncStatus === "syncable" ? null : (
-        <>
-          {described ? " · " : null}
-          <UnsyncedLabel info={info} />
-        </>
-      )}
-    </>
-  );
+  const parts: React.ReactNode[] = describeFile(info);
+  if (info.syncStatus !== "syncable") parts.push(<UnsyncedLabel info={info} />);
+  return <>{withDots(parts)}</>;
 }
 
 /** Details for a file linked from this computer: other devices won't have it. */

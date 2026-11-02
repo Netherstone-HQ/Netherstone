@@ -5,13 +5,11 @@ cask "netherstone" do
 
   on_arm do
     sha256 "{{sha256.macArm}}"
-    url "{{url.macArm}}",
-        verified: "github.com/Netherstone-HQ/Netherstone/"
+    url "{{url.macArm}}"
   end
   on_intel do
     sha256 "{{sha256.macIntel}}"
-    url "{{url.macIntel}}",
-        verified: "github.com/Netherstone-HQ/Netherstone/"
+    url "{{url.macIntel}}"
   end
 
   name "Netherstone"

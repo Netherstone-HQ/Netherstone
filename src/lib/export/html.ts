@@ -181,7 +181,7 @@ function renderBlock(block: Block, images: ImageMap): string {
       return `<figure class="image${align}"><img src="${source}" alt="${escapeHtml(block.alt)}" width="${Math.round(width)}" height="${Math.round((width * image.height) / image.width)}" style="width:min(100%,${Math.round(width)}px)">${caption}</figure>`;
     }
     case "media": {
-      const body = `<span class="media-icon">${MEDIA_ICONS[block.kind]}</span><span class="media-text"><span class="media-name">${escapeHtml(block.name)}</span><span class="media-meta">${MEDIA_LABELS[block.kind]}${block.isRemote ? ` · ${escapeHtml(block.url)}` : ""}</span></span>`;
+      const body = `<span class="media-icon">${MEDIA_ICONS[block.kind]}</span><span class="media-text"><span class="media-name">${escapeHtml(block.name)}</span><span class="media-meta">${MEDIA_LABELS[block.kind]}${block.isRemote ? `<span class="dot"> </span>${escapeHtml(block.url)}` : ""}</span></span>`;
       return block.isRemote
         ? `<a class="media-card" href="${escapeHtml(safeHref(block.url))}">${body}</a>`
         : `<div class="media-card">${body}</div>`;
@@ -361,6 +361,7 @@ ${code.light}
 .media-text{display:flex;flex-direction:column;min-width:0}
 .media-name{font-size:.88em;font-weight:500}
 .media-meta{font-size:.76em;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{display:inline-block;width:3px;height:3px;margin:0 .375rem;border-radius:50%;background:currentColor;vertical-align:middle;overflow:hidden;white-space:pre;font-size:0}
 .table-wrap{margin:.75em 0;overflow-x:auto}
 .shard table{width:100%;border-collapse:collapse;font-size:.88em;line-height:1.5}
 .shard th,.shard td{border:1px solid var(--rule);padding:.5em .75em;vertical-align:top;text-align:start}

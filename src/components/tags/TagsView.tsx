@@ -4,6 +4,7 @@ import { TagIcon } from "lucide-react";
 import { Highlight, HighlightedText } from "@/components/HighlightedText";
 import { NextPageTrigger } from "@/components/NextPageTrigger";
 import { LeftSidebarToggle } from "@/components/PanelToggles";
+import { Dot } from "@/components/ui/dot";
 import { Separator } from "@/components/ui/separator";
 import {
   getFolderInVault,
@@ -149,7 +150,12 @@ export function TagsView() {
           </h1>
           <p className="mt-1 mb-5 text-muted-foreground text-ui-sm">
             {results.length} {results.length === 1 ? "shard" : "shards"}
-            {activeTag ? null : " · newest first"}
+            {activeTag ? null : (
+              <>
+                <Dot />
+                newest first
+              </>
+            )}
           </p>
           <ul className="-mx-3.5 flex flex-col gap-1">
             {shown.map((file) => (

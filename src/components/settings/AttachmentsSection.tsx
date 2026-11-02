@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Dot } from "@/components/ui/dot";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
 import { useAttachmentReportStore, useVaultStore } from "@/store";
 import { formatBytes, plural } from "@/components/settings/attachment-format";
@@ -40,9 +41,15 @@ export function AttachmentsSection() {
     >
       <SettingRow
         label={
-          currentReport
-            ? `${plural(currentReport.fileCount, "file")} · ${formatBytes(currentReport.totalBytes)}`
-            : "Files copied into this vault"
+          currentReport ? (
+            <>
+              {plural(currentReport.fileCount, "file")}
+              <Dot />
+              {formatBytes(currentReport.totalBytes)}
+            </>
+          ) : (
+            "Files copied into this vault"
+          )
         }
       >
         <Button

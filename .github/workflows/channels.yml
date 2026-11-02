@@ -51,6 +51,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
       # Drafts aren't found by tag, so a release that isn't out yet stops here.
       - id: release
         name: Check the release is published
@@ -90,6 +94,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
       - name: Install Komac
         run: |
           archive="komac-$KOMAC_VERSION-x86_64-unknown-linux-gnu.tar.gz"
@@ -118,6 +126,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
 
       - uses: actions/checkout@v7
         with:
@@ -153,6 +165,10 @@ jobs:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
 
       # Releases before the package manager builds have no Linux tarball.
       - id: package

@@ -69,12 +69,7 @@ export function WritingCalendar({
         <Fragment key={w}>
           <span
             aria-hidden="true"
-            className={cn(
-              "overflow-visible whitespace-nowrap pb-1 text-[11px] text-muted-foreground leading-3",
-              // The newest week's month runs left from the card's edge
-              // instead of past it.
-              w === weeks.length - 1 && "flex justify-end",
-            )}
+            className="overflow-visible whitespace-nowrap pb-1 text-[11px] text-muted-foreground leading-3"
             style={{ gridColumn: w + 2, gridRow: 1 }}
           >
             {week.label}

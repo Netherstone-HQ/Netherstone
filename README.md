@@ -44,7 +44,7 @@ first, so you can undo it.
 
 ## Building from source
 
-You need [Node.js](https://nodejs.org/) 22+, [pnpm](https://pnpm.io/) 11,
+You need [Node.js](https://nodejs.org/) 24.22.2+, [pnpm](https://pnpm.io/) 12,
 [Rust](https://www.rust-lang.org/tools/install) and the
 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
 

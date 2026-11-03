@@ -316,7 +316,7 @@ function useDrawingPersistence(
       }
 
       const content = serializeScene(scene);
-      suppressVaultChangePath(path, { reason: "autosave" });
+      suppressVaultChangePath(path);
       try {
         await saveDrawingFile(
           path,

@@ -1,5 +1,3 @@
-"use client";
-
 import { DndPlugin } from "@platejs/dnd";
 
 import { toast } from "sonner";

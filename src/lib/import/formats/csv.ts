@@ -4,7 +4,7 @@ import { decodeText } from "./decode-text";
 import { IMPORT_FORMATS } from "./list";
 
 /** Rows of a CSV (or TSV) file, quotes and line breaks in quotes included. */
-export function parseDelimited(source: string, delimiter: string): string[][] {
+function parseDelimited(source: string, delimiter: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";

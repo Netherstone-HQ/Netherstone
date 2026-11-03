@@ -259,7 +259,7 @@ pub fn edit_shard(vault: &Vault, caller: &Caller, params: EditShardParams) -> To
         vault,
         caller,
         params.summary.as_deref(),
-        &[path.clone()],
+        std::slice::from_ref(&path),
         || {
             edit_under_lock(vault, &path, |markdown| edit(markdown, &params))?;
             Ok((

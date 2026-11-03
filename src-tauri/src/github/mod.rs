@@ -206,10 +206,10 @@ pub fn cancel_sign_in() {
 /// Clears the pending sign-in only if it is still the one with `id`, so a
 /// finishing poll loop never cancels a newer sign-in.
 fn clear_sign_in(id: u64) {
-    if let Ok(mut pending) = PENDING.lock() {
-        if pending.as_ref().is_some_and(|p| p.id == id) {
-            *pending = None;
-        }
+    if let Ok(mut pending) = PENDING.lock()
+        && pending.as_ref().is_some_and(|p| p.id == id)
+    {
+        *pending = None;
     }
 }
 

@@ -38,6 +38,10 @@ jobs:
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
+      # Unused files, dependencies and exports (knip.json).
+      - name: Unused code
+        run: pnpm exec knip
+
       - name: Test
         run: pnpm test
 
@@ -222,7 +226,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: clippy, rustfmt
 
       - name: Format
         if: env.BUMP != 'true'
@@ -237,6 +241,11 @@ jobs:
       # tauri::generate_context! needs the frontend output folder to exist.
       - if: env.BUMP != 'true'
         run: mkdir -p dist
+
+      - name: Lint
+        if: env.BUMP != 'true'
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
         if: env.BUMP != 'true'

@@ -36,7 +36,7 @@ export function captureOpenEditorSessionPathChangeSnapshot(
   };
 }
 
-export function restoreOpenEditorSessionAfterPathChange(
+function restoreOpenEditorSessionAfterPathChange(
   snapshot: OpenEditorSessionPathChangeSnapshot,
 ): void {
   window.requestAnimationFrame(() => {
@@ -76,12 +76,3 @@ export function applyOpenEditorSessionPathChange(
   restoreOpenEditorSessionAfterPathChange(snapshot);
 }
 
-export function preserveOpenEditorSessionPathChange(options: {
-  nextPath: string;
-  content: string;
-  editor?: PlateEditorLike;
-}): OpenEditorSessionPathChangeSnapshot {
-  const snapshot = captureOpenEditorSessionPathChangeSnapshot(options.editor);
-  applyOpenEditorSessionPathChange(options.nextPath, options.content, snapshot);
-  return snapshot;
-}

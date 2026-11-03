@@ -211,7 +211,7 @@ pub fn fix_link(vault: &Vault, caller: &Caller, params: FixLinkParams) -> ToolRe
         vault,
         caller,
         params.summary.as_deref(),
-        &[shard.clone()],
+        std::slice::from_ref(&shard),
         || {
             edit_shard(vault, &shard, |markdown| {
                 crate::shard_links::rewrite_moved_links(&markdown, &file, &file, &moved).ok_or_else(

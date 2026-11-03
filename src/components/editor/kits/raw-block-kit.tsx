@@ -1,5 +1,3 @@
-"use client";
-
 import { toPlatePlugin } from "platejs/react";
 
 import { RawBlockElement } from "@/components/ui/raw-block-node";

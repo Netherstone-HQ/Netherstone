@@ -126,7 +126,7 @@ mod tests {
             &vault,
             &caller,
             Some("Added a line"),
-            &[shard.clone()],
+            std::slice::from_ref(&shard),
             || {
                 std::fs::write(&shard, "Typed by hand\n\nAdded").unwrap();
                 Ok(((), Vec::new()))
@@ -145,7 +145,7 @@ mod tests {
         );
 
         // Nothing changed, nothing saved.
-        change(&vault, &caller, None, &[shard.clone()], || {
+        change(&vault, &caller, None, std::slice::from_ref(&shard), || {
             Ok(((), Vec::new()))
         })
         .unwrap();

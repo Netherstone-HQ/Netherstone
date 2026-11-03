@@ -10,7 +10,7 @@ export const REMOVED_MARK = "historyRemoved";
 /** On a top-level block that comes back or goes away as a whole. */
 export const BLOCK_CHANGE_KEY = "historyDiff";
 
-export type BlockChange = "added" | "removed";
+type BlockChange = "added" | "removed";
 
 type Node = Record<string, any>;
 

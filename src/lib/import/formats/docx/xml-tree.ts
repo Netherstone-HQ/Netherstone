@@ -13,7 +13,7 @@ const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
 
 export type XmlNode = XmlElement | XmlText;
 
-export class XmlText {
+class XmlText {
   nextSibling: XmlNode | null = null;
 
   constructor(

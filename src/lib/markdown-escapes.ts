@@ -20,7 +20,7 @@ const NEEDLESS_ESCAPES: [RegExp, string][] = [
   [/(?<=\S[^\n]*[ \t])\\\*(?=[ \t])/g, "*"],
 ];
 
-export function removeNeedlessEscapes(markdown: string): string {
+function removeNeedlessEscapes(markdown: string): string {
   return NEEDLESS_ESCAPES.reduce(
     (text, [pattern, replacement]) => text.replace(pattern, replacement),
     markdown,

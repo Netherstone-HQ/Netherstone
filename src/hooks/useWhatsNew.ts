@@ -12,7 +12,7 @@ export function changelogUrl(version: string) {
 }
 
 /** Says the app was updated, with a link to what changed. */
-export function showWhatsNewToast(version: string) {
+function showWhatsNewToast(version: string) {
   toast(`Updated to Netherstone ${version}`, {
     id: "whats-new",
     duration: 15_000,

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Descendant } from "platejs";
 import { useVaultStore } from "@/store/vault";
 
-export type PlateAstValue = Descendant[];
+type PlateAstValue = Descendant[];
 
 type OpenMarkdownFileCommandResult = {
   file_path: string;

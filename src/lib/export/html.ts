@@ -18,7 +18,7 @@ import { CODE_TOKEN_STYLES, DARK_PALETTE, FONT_STACKS, PALETTE, bodySize, pageGe
  * - `web`: the HTML export, a page to read on screen (and print).
  * - `print`: the page the PDF is printed from.
  */
-export type HtmlMode = "web" | "print";
+type HtmlMode = "web" | "print";
 
 export interface HtmlRenderOptions {
   images: ImageMap;

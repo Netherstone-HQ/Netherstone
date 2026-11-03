@@ -129,7 +129,7 @@ export function monthTotals(days: Map<string, DayTotal>, today: Date) {
 /** 0 is a day with no writing; 1 to 4 shade it, more words darker. */
 export type CalendarLevel = 0 | 1 | 2 | 3 | 4;
 
-export interface CalendarDay {
+interface CalendarDay {
   day: string;
   date: Date;
   level: CalendarLevel;

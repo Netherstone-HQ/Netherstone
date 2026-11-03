@@ -77,7 +77,7 @@ import {
 import type { FileTreeNode } from "@/store";
 import { useHistoryStore } from "@/store/history";
 
-export function getDisplayName(node: FileTreeNode) {
+function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
 }
 
@@ -102,18 +102,14 @@ function collectTreePaths(node: FileTreeNode): string[] {
  * Keeps the watcher from treating a rename or move the app just made as an
  * outside change, for `node` and everything inside it at both paths.
  */
-function suppressPathChange(
-  node: FileTreeNode,
-  newPath: string | null,
-  reason: "rename" | "move",
-) {
+function suppressPathChange(node: FileTreeNode, newPath: string | null) {
   const oldPaths = collectTreePaths(node);
   const newPaths = newPath
     ? oldPaths.map(
         (path) => remapPathAfterMove(path, node.path, newPath) ?? path,
       )
     : [];
-  suppressVaultChangePaths([...oldPaths, ...newPaths], { reason });
+  suppressVaultChangePaths([...oldPaths, ...newPaths]);
 }
 
 function remapActiveDrawingPath(oldPath: string, newPath: string) {
@@ -259,9 +255,7 @@ export function useVaultItem(
         })
       : markdownContent;
 
-    suppressVaultChangePaths([currentFilePath], {
-      reason,
-    });
+    suppressVaultChangePaths([currentFilePath]);
 
     await invoke("save_markdown_file", {
       filePath: currentFilePath,
@@ -307,7 +301,7 @@ export function useVaultItem(
   ) => {
     useHistoryStore.getState().setPathChangeTarget(newPath);
     remapActiveDrawingPath(node.path, newPath);
-    suppressPathChange(node, newPath, reason);
+    suppressPathChange(node, newPath);
 
     const openPath = persistedOpenFile
       ? remapPathAfterMove(persistedOpenFile.path, node.path, newPath)
@@ -375,7 +369,7 @@ export function useVaultItem(
     try {
       const persistedOpenFile = await persistOpenFileBeforePathChange("rename");
       await flushDrawingAffectedBy(node.path);
-      suppressPathChange(node, null, "rename");
+      suppressPathChange(node, null);
       useHistoryStore.getState().startPathChange(node.path);
 
       const newPath = await invoke<string>("rename_file", {
@@ -440,7 +434,7 @@ export function useVaultItem(
     try {
       const persistedOpenFile = await persistOpenFileBeforePathChange("move");
       await flushDrawingAffectedBy(node.path);
-      suppressPathChange(node, null, "move");
+      suppressPathChange(node, null);
       useHistoryStore.getState().startPathChange(node.path);
 
       const newPath = await invoke<string>("move_file", {

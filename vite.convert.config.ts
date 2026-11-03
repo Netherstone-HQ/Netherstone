@@ -40,14 +40,22 @@ export default defineConfig({
   },
   worker: { format: "es" },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
       // As in vite.config.ts: the "browser" build crashes in workers.
-      "decode-named-character-reference": path.resolve(
-        __dirname,
-        "node_modules/decode-named-character-reference/index.js",
-      ),
-    },
+      {
+        find: "decode-named-character-reference",
+        replacement: path.resolve(
+          __dirname,
+          "node_modules/decode-named-character-reference/index.js",
+        ),
+      },
+      // As in vite.config.ts: KaTeX's fonts as woff2 only.
+      {
+        find: /^katex\/dist\/katex\.min\.css$/,
+        replacement: path.resolve(__dirname, "src/styles/katex.scss"),
+      },
+    ],
   },
   build: {
     outDir: "dist-convert",

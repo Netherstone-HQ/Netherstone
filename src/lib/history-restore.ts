@@ -137,7 +137,7 @@ async function restoreShard(
   // text already on screen.
   state.setIsSaving(true);
   try {
-    suppressVaultChangePath(filePath, { reason: "restore" });
+    suppressVaultChangePath(filePath);
     const result = await restoreVersion(
       vaultPath,
       filePath,
@@ -183,7 +183,7 @@ async function restoreDrawing(
 ) {
   await finishDrawingSession();
 
-  suppressVaultChangePath(filePath, { reason: "restore" });
+  suppressVaultChangePath(filePath);
   const result = await restoreVersion(vaultPath, filePath, version);
   // A new session, so the canvas loads the restored drawing.
   useUIStore.getState().openDrawing(filePath);

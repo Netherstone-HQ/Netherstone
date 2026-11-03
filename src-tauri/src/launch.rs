@@ -468,7 +468,7 @@ mod tests {
         }
 
         assert_eq!(
-            question(&[folder.clone()]),
+            question(std::slice::from_ref(&folder)),
             ("Open Notes as a vault?".into(), "Open")
         );
         assert_eq!(

@@ -64,7 +64,7 @@ export interface ImportContext {
   checkpoint(): Promise<void>;
 }
 
-export type ImportOutput =
+type ImportOutput =
   | { nodes: PlateNode[]; markdown?: undefined }
   | { markdown: string; nodes?: undefined };
 

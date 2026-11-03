@@ -294,7 +294,7 @@ pub fn tables(vault: &Vault, caller: &Caller, params: TablesParams) -> ToolResul
                 vault,
                 caller,
                 params.summary.as_deref(),
-                &[path.clone()],
+                std::slice::from_ref(&path),
                 || {
                     edit_shard(vault, &path, |markdown| {
                         // Found again under the lock, in the shard as it is now.

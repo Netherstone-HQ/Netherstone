@@ -815,7 +815,7 @@ pub fn edit_drawing(
                 .ok_or_else(|| ToolError("embed needs the shard".to_string()))?;
             let shard = vault.shard(shard_relative)?;
             let tag = embed_tag(&vault.relative(&path));
-            change(vault, caller, summary, &[shard.clone()], || {
+            change(vault, caller, summary, std::slice::from_ref(&shard), || {
                 edit_shard(vault, &shard, |markdown| {
                     let at = match &params.heading {
                         Some(heading) => find_section(&markdown, heading)?.range.end,
@@ -843,7 +843,7 @@ pub fn edit_drawing(
                     params.path
                 )));
             }
-            change(vault, caller, summary, &[path.clone()], || {
+            change(vault, caller, summary, std::slice::from_ref(&path), || {
                 edit_scene(&path, |list| match action {
                     DrawingAction::Add => add_shapes(list, &shapes_given()).map(|_| ()),
                     DrawingAction::Update => update_shapes(list, &shapes_given()),

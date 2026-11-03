@@ -1,8 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { FileTreeNode } from "@/store";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export type MediaDialogKind = "audio" | "file" | "image" | "video";
 
 export interface PersistedAttachment {
@@ -38,6 +36,10 @@ export interface CleanupResult {
 /** Matches CLEANUP_GRACE_SECONDS in the backend. */
 export const CLEANUP_GRACE_DAYS = 7;
 
+/**
+ * The original name of a missing attachment and, when a file with the same
+ * content is in the vault (it was renamed or moved), where it is now.
+ */
 export interface MissingAttachmentInfo {
   originalName: string | null;
   foundAssetPath: string | null;
@@ -444,10 +446,6 @@ export async function cleanUpAttachments(
   });
 }
 
-/**
- * The original name of a missing attachment and, when a file with the same
- * content is in the vault (it was renamed or moved), where it is now.
- */
 /** A vault attachment's type, size and whether it syncs, as it is now. */
 export interface AttachmentSyncInfo {
   extension: string;

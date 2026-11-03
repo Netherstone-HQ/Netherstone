@@ -7,7 +7,7 @@ import { isBlankParagraph } from "@/lib/editor-markdown";
  * with no blocks at all (deleting every selected block would otherwise leave
  * nothing to type into). Saving drops it, so it never reaches the file.
  */
-export const TrailingLinePlugin = createSlatePlugin({
+const TrailingLinePlugin = createSlatePlugin({
   key: "trailingLine",
   transformInitialValue: ({ editor, value }) =>
     isBlankParagraph(value.at(-1))

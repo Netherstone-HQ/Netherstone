@@ -14,7 +14,7 @@ export function versionDetails(version: string, userAgent: string): string {
   return `Netherstone ${version} · ${osName(userAgent)}`;
 }
 
-export function bugReportBody(version: string, userAgent: string): string {
+function bugReportBody(version: string, userAgent: string): string {
   return [
     `**Version:** ${version}`,
     `**OS:** ${osName(userAgent)}`,

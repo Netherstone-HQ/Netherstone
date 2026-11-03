@@ -2,8 +2,6 @@ use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
 #[derive(Serialize)]
 pub struct FileNode {
     pub name: String,
@@ -25,8 +23,6 @@ pub enum FileNodeKind {
     File,
     Directory,
 }
-
-// ── Constants ────────────────────────────────────────────────────────────────
 
 /// Directory/file names that are always skipped during scanning.
 const IGNORED_NAMES: &[&str] = &[

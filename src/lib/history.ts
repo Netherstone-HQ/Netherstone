@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 
-export type VersionKind =
+type VersionKind =
   | "created"
   | "edited"
   | "outsideChange"

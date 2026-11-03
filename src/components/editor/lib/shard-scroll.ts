@@ -54,7 +54,7 @@ function topLevelBlockIndex(editor: SlateEditor, el: Element) {
 }
 
 /** Where `scroller` is in the shard: the block at the top of the window. */
-export function readScrollPosition(
+function readScrollPosition(
   editor: SlateEditor,
   scroller: HTMLElement,
 ): ShardScrollPosition | null {
@@ -89,7 +89,7 @@ export function readScrollPosition(
 }
 
 /** Scrolls `scroller` so `position`'s block is where it was. */
-export function applyScrollPosition(
+function applyScrollPosition(
   editor: SlateEditor,
   scroller: HTMLElement,
   position: ShardScrollPosition,

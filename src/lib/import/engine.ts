@@ -66,7 +66,7 @@ export interface ImportProgress {
   detail?: string;
 }
 
-export interface ImportedShard {
+interface ImportedShard {
   source: string;
   path: string;
   format: string;

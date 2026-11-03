@@ -77,7 +77,7 @@ export const THEMES: ThemeOption[] = [
 ];
 
 /** The named dark themes, set on <html> as `data-theme`. */
-export const NAMED_THEMES = ["tyrant", "bloodline", "citadel"] as const;
+const NAMED_THEMES = ["tyrant", "bloodline", "citadel"] as const;
 export type NamedTheme = (typeof NAMED_THEMES)[number];
 
 export function isNamedTheme(theme: string): theme is NamedTheme {

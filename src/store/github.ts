@@ -16,7 +16,7 @@ import {
   startGitHubSignIn,
 } from "@/lib/github-account";
 
-export type GitHubSignInState =
+type GitHubSignInState =
   | { kind: "idle" }
   | { kind: "starting" }
   | { kind: "waiting"; code: GitHubSignInCode };

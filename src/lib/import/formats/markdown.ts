@@ -79,7 +79,7 @@ async function replaceAsync(
   return result + value.slice(last);
 }
 
-export async function convertMarkdown(source: string, context: ImportContext): Promise<string> {
+async function convertMarkdown(source: string, context: ImportContext): Promise<string> {
   const lines = source.split("\n");
   const out: string[] = [];
   let fence: string | null = null;

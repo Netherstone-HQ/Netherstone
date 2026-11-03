@@ -10,7 +10,7 @@ import { KEYS, type TElement } from "platejs";
 
 export const BLANK_LINE_PROP = "netherstoneBlankLine";
 
-export const BLANK_LINE_HTML = "<br>";
+const BLANK_LINE_HTML = "<br>";
 
 /** A paragraph with no text that is not a list item. */
 export function isEmptyParagraph(node: TElement): boolean {

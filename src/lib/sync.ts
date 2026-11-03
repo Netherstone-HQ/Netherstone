@@ -49,7 +49,7 @@ export type BackupSummary = {
   pushedAt: string | null;
 };
 
-export type SkipReason =
+type SkipReason =
   | "localOnly"
   | "blocked"
   | "pendingReview"

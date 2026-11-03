@@ -2,9 +2,9 @@ import { convertFileSrc, isTauri } from "@tauri-apps/api/core";
 
 import { fileExists, showLinkedFile } from "@/lib/commands";
 
-export type AssetSourceKind = "remote" | "vault" | "local";
-export type MediaSourceKind = AssetSourceKind | "blob" | "data" | "unknown";
-export type MediaSourceStatus = "available" | "missing" | "unknown";
+type AssetSourceKind = "remote" | "vault" | "local";
+type MediaSourceKind = AssetSourceKind | "blob" | "data" | "unknown";
+type MediaSourceStatus = "available" | "missing" | "unknown";
 
 export interface ResolveMediaSourceOptions {
   vaultPath?: string | null;
@@ -54,12 +54,12 @@ export function isDataMediaSource(source: string | null | undefined): boolean {
   return DATA_URL_RE.test(normalized);
 }
 
-export function isBlobMediaSource(source: string | null | undefined): boolean {
+function isBlobMediaSource(source: string | null | undefined): boolean {
   const normalized = normalizeMediaSourceValue(source);
   return BLOB_URL_RE.test(normalized);
 }
 
-export function isFileProtocolSource(
+function isFileProtocolSource(
   source: string | null | undefined,
 ): boolean {
   const normalized = normalizeMediaSourceValue(source);
@@ -90,7 +90,7 @@ export function isVaultAttachmentReference(
   );
 }
 
-export function resolveVaultAttachmentPath(
+function resolveVaultAttachmentPath(
   source: string | null | undefined,
   vaultPath: string | null | undefined,
 ): string | null {
@@ -115,7 +115,7 @@ export function resolveVaultAttachmentPath(
   return `${vaultRoot}/${attachmentPath}`;
 }
 
-export function pathFromFileUrl(source: string): string | null {
+function pathFromFileUrl(source: string): string | null {
   try {
     const url = new URL(source);
 
@@ -182,7 +182,7 @@ function isVaultManagedPath(
   return file === attachmentsRoot || file.startsWith(`${attachmentsRoot}/`);
 }
 
-export function getMediaSourceKind(
+function getMediaSourceKind(
   source: string | null | undefined,
   options: Pick<ResolveMediaSourceOptions, "vaultPath"> = {},
 ): MediaSourceKind {
@@ -263,7 +263,7 @@ export function resolveMediaRenderUrl(
   }
 }
 
-export function resolveMediaOpenTarget(
+function resolveMediaOpenTarget(
   source: string | null | undefined,
   options: Pick<ResolveMediaSourceOptions, "vaultPath"> = {},
 ): string {

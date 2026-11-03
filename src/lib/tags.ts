@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { TextPart } from "@/components/HighlightedText";
 
-export interface TagExcerpt {
+interface TagExcerpt {
   tag: string;
   /** The text around the tag's first appearance, with the tag highlighted. */
   excerpt: TextPart[] | null;

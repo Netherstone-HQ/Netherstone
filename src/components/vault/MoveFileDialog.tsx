@@ -232,5 +232,3 @@ export function MoveFileDialog({
     </Dialog>
   );
 }
-
-export default MoveFileDialog;

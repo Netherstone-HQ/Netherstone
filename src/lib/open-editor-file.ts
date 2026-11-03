@@ -9,7 +9,7 @@ import { useEditorStore, type OpenEditorFilePayload } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 
-export function toOpenEditorFilePayload(
+function toOpenEditorFilePayload(
   result: OpenMarkdownFileResult,
 ): OpenEditorFilePayload {
   return {

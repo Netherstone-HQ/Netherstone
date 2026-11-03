@@ -38,6 +38,10 @@ jobs:
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
+      # Unused files, dependencies and exports (knip.json).
+      - name: Unused code
+        run: pnpm exec knip
+
       - name: Test
         run: pnpm test
 

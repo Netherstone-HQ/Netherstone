@@ -31,7 +31,7 @@ function getDeviceScale(): number {
  * The element's box in device pixels. Edges are rounded, not sizes: rounding
  * position and size apart lets the far edge drift a pixel from frame to frame.
  */
-export function getElementPhysicalBounds(element: HTMLElement): BrowserBounds {
+function getElementPhysicalBounds(element: HTMLElement): BrowserBounds {
   const rect = element.getBoundingClientRect();
   const scale = getDeviceScale();
   const left = Math.round(rect.left * scale);

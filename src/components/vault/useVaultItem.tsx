@@ -77,7 +77,7 @@ import {
 import type { FileTreeNode } from "@/store";
 import { useHistoryStore } from "@/store/history";
 
-export function getDisplayName(node: FileTreeNode) {
+function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
 }
 

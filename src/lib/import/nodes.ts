@@ -36,7 +36,7 @@ export function text(value: string, marks: Marks = {}): PlateNode {
 }
 
 /** Drops empty runs and joins neighbours with the same marks. */
-export function tidyInlines(inlines: PlateNode[]): PlateNode[] {
+function tidyInlines(inlines: PlateNode[]): PlateNode[] {
   const out: PlateNode[] = [];
   for (const node of inlines) {
     if (typeof node.text === "string") {

@@ -20,10 +20,10 @@ import { KEYS, type TElement, type TText } from "platejs";
  * still load, and are written in this form on the next save.
  */
 
-export const DEFAULT_CALLOUT_ICON = "💡";
+const DEFAULT_CALLOUT_ICON = "💡";
 
 /** The emoji for each callout type; the first type listed for an emoji is the one saved. */
-export const CALLOUT_ICONS: Record<string, string> = {
+const CALLOUT_ICONS: Record<string, string> = {
   note: "📝",
   info: "ℹ️",
   todo: "☑️",
@@ -63,7 +63,7 @@ const MARKER = /^\[!([^\]\s]+)\][+-]?[ \t]*/;
 const WORD_TYPE = /^[A-Za-z-]+$/;
 
 /** The emoji a callout type stands for. */
-export function calloutIcon(type: string): string {
+function calloutIcon(type: string): string {
   if (!WORD_TYPE.test(type)) return type;
   return CALLOUT_ICONS[type.toLowerCase()] ?? DEFAULT_CALLOUT_ICON;
 }

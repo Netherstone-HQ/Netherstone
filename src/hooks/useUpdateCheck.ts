@@ -8,7 +8,7 @@ import { useUpdatesStore } from "@/store/updates";
 const TOAST_ID = "app-update";
 
 /** Offers to install the update, if one is available. */
-export function showUpdateToast(version: string) {
+function showUpdateToast(version: string) {
   toast(`Netherstone ${version} is available`, {
     id: TOAST_ID,
     duration: Infinity,

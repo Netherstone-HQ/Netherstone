@@ -174,7 +174,7 @@ export function PreferenceSelect<K extends keyof Preferences>({
 }
 
 /** A compact row of mutually exclusive choices. */
-export function SegmentedControl<T extends string>({
+function SegmentedControl<T extends string>({
   value,
   options,
   onChange,

@@ -24,7 +24,7 @@ export interface OpenEditorFilePayload {
   cacheHit?: boolean;
 }
 
-export interface OutsideChange {
+interface OutsideChange {
   path: string;
   /** The unsaved text in the editor. */
   mine: string;

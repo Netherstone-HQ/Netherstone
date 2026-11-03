@@ -13,7 +13,7 @@ import type { PlateEditor } from "platejs/react";
 
 const LOG_PREFIX = "[media-insert]";
 
-export type LocalMediaNodeType =
+type LocalMediaNodeType =
   | typeof KEYS.audio
   | typeof KEYS.file
   | typeof KEYS.img
@@ -28,7 +28,7 @@ const LOCAL_MEDIA_NODE_TYPES = new Set<LocalMediaNodeType>([
 
 type LocalMediaTextNode = { text: string };
 
-export type LocalMediaNode = {
+type LocalMediaNode = {
   children: LocalMediaTextNode[];
   name?: string;
   type: LocalMediaNodeType;
@@ -53,7 +53,7 @@ export type InsertLocalMediaFilesOptions = {
   select?: boolean;
 };
 
-export type InsertLocalMediaFilesResult = {
+type InsertLocalMediaFilesResult = {
   insertedCount: number;
   nodes: LocalMediaNode[];
 };
@@ -88,19 +88,19 @@ function errorLog(message: string, details?: unknown) {
   console.error(LOG_PREFIX, message, details);
 }
 
-export function isLocalMediaNodeType(
+function isLocalMediaNodeType(
   value: string | null | undefined,
 ): value is LocalMediaNodeType {
   return !!value && LOCAL_MEDIA_NODE_TYPES.has(value as LocalMediaNodeType);
 }
 
-export function normalizeLocalMediaFiles(files: LocalMediaFileInput): File[] {
+function normalizeLocalMediaFiles(files: LocalMediaFileInput): File[] {
   if (!files) return [];
 
   return Array.from(files);
 }
 
-export function getLocalMediaNodeTypeForFile(
+function getLocalMediaNodeTypeForFile(
   file: File,
   preferredType?: LocalMediaNodeType | string,
 ): LocalMediaNodeType {

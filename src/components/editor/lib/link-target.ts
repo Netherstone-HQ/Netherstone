@@ -3,14 +3,14 @@ import { openEditorFile } from "@/lib/open-editor-file";
 import { isWebPageUrl, openWebLink } from "@/lib/open-web-link";
 import type { LinkOpener } from "@/store/settings";
 
-export function isExternalLink(href: string) {
+function isExternalLink(href: string) {
   return (
     /^(https?:|mailto:|tel:|ftp:|file:|data:|blob:|asset:)/i.test(href) ||
     /^https?:\/\/(?:asset|file)\.localhost\//i.test(href)
   );
 }
 
-export function resolveInternalLinkPath(
+function resolveInternalLinkPath(
   currentFilePath: string,
   href: string,
 ): string | null {

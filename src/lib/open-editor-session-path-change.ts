@@ -36,7 +36,7 @@ export function captureOpenEditorSessionPathChangeSnapshot(
   };
 }
 
-export function restoreOpenEditorSessionAfterPathChange(
+function restoreOpenEditorSessionAfterPathChange(
   snapshot: OpenEditorSessionPathChangeSnapshot,
 ): void {
   window.requestAnimationFrame(() => {

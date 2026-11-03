@@ -414,9 +414,9 @@ function getDurableMediaSource(record: Record<string, unknown>): string | null {
   return null;
 }
 
-export type SerializableEditorValue = Descendant[];
+type SerializableEditorValue = Descendant[];
 
-export type SerializableMarkdownPreparation = {
+type SerializableMarkdownPreparation = {
   value: SerializableEditorValue;
 };
 
@@ -444,7 +444,7 @@ export function isBlankParagraph(node: unknown): boolean {
 
 const TABLE_CELL_TYPES = new Set(["td", "th"]);
 
-export function prepareSerializableMarkdownValue(
+function prepareSerializableMarkdownValue(
   nodes: unknown,
 ): SerializableMarkdownPreparation {
   const walk = (
@@ -594,7 +594,7 @@ export function prepareSerializableMarkdownValue(
 // saved as `<br>` instead, so no invisible character ever reaches a file.
 const ZERO_WIDTH_SPACE = /\u200B/g;
 
-export function finalizeSerializedMarkdown(markdown: string): string {
+function finalizeSerializedMarkdown(markdown: string): string {
   const clean = markdown.replace(ZERO_WIDTH_SPACE, "");
   // A note with nothing in it is an empty file.
   return clean.trim() === "" ? "" : clean;

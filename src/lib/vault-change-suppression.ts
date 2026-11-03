@@ -65,7 +65,7 @@ export function suppressVaultChangePaths(paths: Iterable<string>): string[] {
   return normalizedPaths;
 }
 
-export function isVaultChangePathSuppressed(path: string): boolean {
+function isVaultChangePathSuppressed(path: string): boolean {
   cleanupExpiredSuppressions();
 
   const normalizedPath = normalizeVaultPath(path);

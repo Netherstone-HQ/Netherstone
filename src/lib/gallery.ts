@@ -51,7 +51,7 @@ export function galleryThumbnail(vaultPath: string, assetPath: string) {
   return invoke<string>("gallery_thumbnail", { vaultPath, assetPath });
 }
 
-export function isUnused(file: GalleryFile) {
+function isUnused(file: GalleryFile) {
   return file.shardPaths.length === 0;
 }
 

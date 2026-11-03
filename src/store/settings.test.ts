@@ -207,7 +207,7 @@ describe("settings store", () => {
   });
 
   it("recognizes beta versions", async () => {
-    const { isPrerelease } = await loadStore();
+    const { isPrerelease } = await import("./settings");
     expect(isPrerelease("0.2.0")).toBe(false);
     expect(isPrerelease("0.2.0-beta.1")).toBe(true);
   });

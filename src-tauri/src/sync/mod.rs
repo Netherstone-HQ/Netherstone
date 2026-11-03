@@ -388,6 +388,17 @@ pub async fn connect_backup(
     }
 
     run_blocking(move || {
+        if let Some(other) = state::nested_vault_on_backup(&sync_root, &vault_path, &full_name) {
+            let name = Path::new(&other.path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or(other.path);
+            return Err(if other.contains_folder {
+                format!("This backup belongs to \"{}\", and this vault is inside it. Pick another backup.", name)
+            } else {
+                format!("This backup belongs to \"{}\", which is inside this vault. Pick another backup.", name)
+            });
+        }
         let mut record = state::load_or_create_record(&sync_root, &vault_path)?;
         record.repo_name = Some(full_name);
         record.remote_url = Some(clone_url.clone());

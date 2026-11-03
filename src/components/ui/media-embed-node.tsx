@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import LiteYouTubeEmbed from "react-lite-youtube-embed";
 
 import type { TMediaEmbedElement, TResizableProps } from "platejs";

@@ -1513,7 +1513,6 @@ pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Res
         _ => new_name,
     };
 
-    // Build new path in same directory
     let parent = old_file.parent().ok_or("Cannot get parent directory")?;
     let new_path = parent.join(&resolved_new_name);
     let mut parts = Path::new(&resolved_new_name).components();

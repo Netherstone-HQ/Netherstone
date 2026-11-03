@@ -156,15 +156,8 @@ fn read_shard(file_path: &Path) -> Result<ShardFile, String> {
     })
 }
 
-/// Index a single markdown file of the vault at `vault_path` into the
-/// database.
-///
-/// Steps:
-/// 1. Read file metadata (created_at, last_modified, file_size, content)
-/// 2. Parse markdown to extract links, tags, and editor stats
-/// 3. Insert/update file record
-/// 4. Insert extracted metadata (links, tags, drawing embeds)
-/// 5. Update FTS5 search index
+/// Indexes one shard of the vault at `vault_path`: its file record, links,
+/// tags, drawing embeds and search text.
 ///
 /// A shard in another vault inside this one is that vault's, so it's left out.
 pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Result<(), String> {
@@ -191,7 +184,6 @@ fn store_shard(
         content_hash,
     } = shard;
 
-    // Parse markdown
     let parsed = parse_markdown(&content);
 
     let file_name = file_path
@@ -205,7 +197,6 @@ fn store_shard(
         .as_secs() as i64;
     let vault = super::attachments::vault_key(vault_path);
 
-    // Check if file already exists in DB
     let existing_file_id: Option<i64> = conn
         .query_row(
             "SELECT id FROM files WHERE path = ?1",
@@ -215,7 +206,6 @@ fn store_shard(
         .ok();
 
     let file_id = if let Some(id) = existing_file_id {
-        // Update existing file
         conn.execute(
             "UPDATE files SET name = ?1, last_modified = ?2, last_indexed = ?3, content_hash = ?4, word_count = ?5, line_count = ?6, character_count = ?7, file_size = ?8, created_at = ?9, vault_path = ?10 WHERE id = ?11",
             params![
@@ -234,7 +224,6 @@ fn store_shard(
         )
         .map_err(|e| format!("Failed to update file: {}", e))?;
 
-        // Delete old metadata
         conn.execute("DELETE FROM links WHERE source_file_id = ?1", params![id])
             .map_err(|e| format!("Failed to delete old links: {}", e))?;
         conn.execute("DELETE FROM tags WHERE file_id = ?1", params![id])
@@ -246,7 +235,6 @@ fn store_shard(
 
         id
     } else {
-        // Insert new file
         conn.execute(
             "INSERT INTO files (vault_path, path, name, last_modified, last_indexed, content_hash, word_count, line_count, character_count, file_size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
@@ -268,7 +256,6 @@ fn store_shard(
         conn.last_insert_rowid()
     };
 
-    // Insert links
     for link in parsed.links {
         let final_target = resolve_link_target(link.link_type, &link.target, file_path);
         let is_valid = normalize_link_validity(link.link_type, &link.target, &final_target);
@@ -298,11 +285,9 @@ fn store_shard(
 
     super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
 
-    // Update FTS5 search index
-    // FTS5 virtual tables support standard INSERT/UPDATE/DELETE operations
-    // For updates, we need to delete the old entry first, then insert the new one
+    // The search index: the old row, if any, goes first.
     conn.execute("DELETE FROM fts_search WHERE rowid = ?1", params![file_id])
-        .ok(); // Ignore error if row doesn't exist
+        .ok();
 
     conn.execute(
         "INSERT INTO fts_search(rowid, path, name, content) VALUES (?1, ?2, ?3, ?4)",

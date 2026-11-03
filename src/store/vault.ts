@@ -5,8 +5,6 @@ import { renamedLocalStorage } from "./renamed-storage";
 
 const MAX_RECENT_VAULTS = 5;
 
-// ── Types ───────────────────────────────────────────────────────────────────
-
 export interface FileTreeNode {
   name: string;
   path: string;
@@ -24,7 +22,7 @@ interface VaultState {
   /** Drops a vault from the recent list, once its folder is gone. */
   forgetRecentVault: (path: string) => void;
 
-  // ── File Tree (Phase 2) ────────────────────────────────────────────────────
+  // ── File Tree ──────────────────────────────────────────────────────────────
   fileTree: FileTreeNode[];
   setFileTree: (tree: FileTreeNode[]) => void;
 
@@ -37,8 +35,6 @@ interface VaultState {
   newFolderParent: string | null;
   setNewFolderParent: (path: string | null) => void;
 }
-
-// ── Store ───────────────────────────────────────────────────────────────────
 
 export const useVaultStore = create<VaultState>()(
   persist(
@@ -62,7 +58,7 @@ export const useVaultStore = create<VaultState>()(
           recentVaults: state.recentVaults.filter((v) => !isSamePath(v, path)),
         })),
 
-      // ── File Tree (Phase 2) ────────────────────────────────────────────────────
+      // ── File Tree ──────────────────────────────────────────────────────────────
       fileTree: [],
       setFileTree: (tree) => set({ fileTree: tree }),
 

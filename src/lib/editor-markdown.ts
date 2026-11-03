@@ -246,19 +246,19 @@ function prepareMarkdownInput(
   return sanitized + escapeMdxUnsafeProse(markdown.slice(cursor));
 }
 
+export type MarkdownFileOptions = {
+  /** The shard's path, which @ links are resolved against and written from. */
+  filePath?: string | null;
+};
+
 /**
- * Deserializes vault markdown with the editor's MarkdownPlugin.
+ * Reads vault Markdown into editor blocks.
  *
  * If MDX parsing still fails, the whole document is parsed as plain markdown
  * rather than going through Plate's recovery path, which truncates it. Custom
  * MDX elements (callouts, TOC, ...) then show up as literal text, but no
  * content is lost.
  */
-export type MarkdownFileOptions = {
-  /** The shard's path, which @ links are resolved against and written from. */
-  filePath?: string | null;
-};
-
 export function deserializeEditorMarkdown(
   editor: SlateEditor,
   source: string,

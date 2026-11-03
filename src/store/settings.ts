@@ -3,8 +3,6 @@ import { persist } from "zustand/middleware";
 import { type ShortcutOverrides, sanitizeOverrides } from "@/lib/shortcuts";
 import { renamedLocalStorage } from "./renamed-storage";
 
-// ── Types ───────────────────────────────────────────────────────────────────
-
 const THEME_PREFERENCES = [
   "light",
   "dark",
@@ -99,8 +97,6 @@ interface SettingsState extends Preferences {
    */
   resetSettings: () => void;
 }
-
-// ── Defaults ────────────────────────────────────────────────────────────────
 
 const DEFAULT_MEDIA_INSERTION_PREFERENCE: MediaInsertionPreference =
   "vault-import";
@@ -206,8 +202,6 @@ function readLegacyTheme(): ThemePreference | undefined {
   }
   return undefined;
 }
-
-// ── Store ───────────────────────────────────────────────────────────────────
 
 export const useSettingsStore = create<SettingsState>()(
   persist(

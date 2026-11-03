@@ -5,8 +5,6 @@ import type { Descendant, SlateEditor } from "platejs";
 
 import { isSamePath } from "@/lib/drawing-files";
 
-// ── Types ───────────────────────────────────────────────────────────────────
-
 /**
  * In the shard at `path`: a link by its text, a missing file's embed, a tag,
  * or a chart by its place among the shard's charts.
@@ -119,8 +117,6 @@ interface EditorState {
   /** Close the current file and reset all editor state. */
   closeFile: () => void;
 }
-
-// ── Store ───────────────────────────────────────────────────────────────────
 
 export const useEditorStore = create<EditorState>((set) => ({
   // ── Open File ──────────────────────────────────────────────────────────────

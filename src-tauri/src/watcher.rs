@@ -10,8 +10,6 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 type ActiveWatcher =
     notify_debouncer_mini::Debouncer<notify_debouncer_mini::notify::RecommendedWatcher>;
 

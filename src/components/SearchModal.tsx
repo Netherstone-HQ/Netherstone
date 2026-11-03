@@ -182,7 +182,6 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   // Answers can arrive out of order; only the latest search's counts.
   const searchIdRef = useRef(0);
 
-  // Reset state when modal closes
   useEffect(() => {
     if (!open) {
       setQuery("");
@@ -234,7 +233,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     }
   }, []);
 
-  // Debounced search
+  // Searches once typing pauses.
   useEffect(() => {
     const timer = setTimeout(() => {
       void performSearch(query);

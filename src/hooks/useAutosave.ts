@@ -74,15 +74,9 @@ export async function flushPendingAutosave(): Promise<void> {
 }
 
 /**
- * Debounced autosave hook for the editor.
- *
- * This version does not subscribe React to editor edits. Instead, it uses
- * imperative store subscriptions so `App` does not rerender on every change.
- *
- * - Saves 1800ms after the user stops typing
- * - Keeps only one trailing save while a write is in flight
- * - Flushes pending saves on window close
- * - Only saves when content is dirty
+ * Saves the open shard once typing pauses, and on window close. One save
+ * runs at a time, with at most one waiting. It watches the store directly,
+ * so `App` doesn't rerender on every edit.
  */
 export function useAutosave() {
   const timeoutRef = useRef<number | null>(null);

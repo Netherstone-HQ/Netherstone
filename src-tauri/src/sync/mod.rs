@@ -388,17 +388,7 @@ pub async fn connect_backup(
     }
 
     run_blocking(move || {
-        if let Some(other) = state::nested_vault_on_backup(&sync_root, &vault_path, &full_name) {
-            let name = Path::new(&other.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or(other.path);
-            return Err(if other.contains_folder {
-                format!("This backup belongs to \"{}\", and this vault is inside it. Pick another backup.", name)
-            } else {
-                format!("This backup belongs to \"{}\", which is inside this vault. Pick another backup.", name)
-            });
-        }
+        refuse_nested_backup(&sync_root, &vault_path, &full_name, false)?;
         let mut record = state::load_or_create_record(&sync_root, &vault_path)?;
         record.repo_name = Some(full_name);
         record.remote_url = Some(clone_url.clone());
@@ -412,6 +402,37 @@ pub async fn connect_backup(
     .await
 }
 
+/// A vault around or inside another one never syncs with that vault's
+/// backup: the two would copy their folders into each other. With
+/// `only_inside`, a vault around the other one is let through.
+fn refuse_nested_backup(
+    sync_root: &Path,
+    vault_path: &Path,
+    repo_name: &str,
+    only_inside: bool,
+) -> Result<(), String> {
+    let Some(other) = state::nested_vault_on_backup(sync_root, vault_path, repo_name)
+        .filter(|other| other.contains_folder || !only_inside)
+    else {
+        return Ok(());
+    };
+    let name = Path::new(&other.path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| other.path.clone());
+    Err(if other.contains_folder {
+        format!(
+            "This backup belongs to \"{}\" ({}), and this vault is inside it. Pick another backup.",
+            name, other.path
+        )
+    } else {
+        format!(
+            "This backup belongs to \"{}\" ({}), which is inside this vault. Pick another backup.",
+            name, other.path
+        )
+    })
+}
+
 /// Syncs a vault that has backup turned on.
 pub async fn sync_now(sync_root: PathBuf, vault_path: PathBuf) -> Result<SyncReport, String> {
     let token = signed_in_token()?;
@@ -421,6 +442,11 @@ pub async fn sync_now(sync_root: PathBuf, vault_path: PathBuf) -> Result<SyncRep
             (Some(url), true) => url.clone(),
             _ => return Err("Backup isn't turned on for this vault.".to_string()),
         };
+        // A vault joined to an outer vault's backup before this check
+        // existed stops syncing; the outer vault keeps going.
+        if let Some(name) = &record.repo_name {
+            refuse_nested_backup(&sync_root, &vault_path, name, true)?;
+        }
         sync_cycle(&sync_root, &vault_path, &remote_url, &token)
     })
     .await

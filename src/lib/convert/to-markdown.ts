@@ -44,7 +44,6 @@ function splitName(name: string) {
 
 /** A name every desktop system can hold, as the app names attachments. */
 function portableStem(stem: string) {
-  // eslint-disable-next-line no-control-regex
   const cleaned = stem.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").trim().replace(/[. ]+$/, "");
   return cleaned && !cleaned.startsWith(".") ? cleaned : `attachment${cleaned}`;
 }

@@ -1,5 +1,3 @@
-"use client";
-
 import { toPlatePlugin } from "platejs/react";
 
 import { FrontMatterElement } from "@/components/ui/front-matter-node";

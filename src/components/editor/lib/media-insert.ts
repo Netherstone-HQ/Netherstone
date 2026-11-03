@@ -1,5 +1,3 @@
-"use client";
-
 import { convertFileSrc, isTauri } from "@tauri-apps/api/core";
 import type { Path } from "platejs";
 import { KEYS, PathApi } from "platejs";

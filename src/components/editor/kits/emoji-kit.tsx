@@ -1,5 +1,3 @@
-'use client';
-
 import data from '@emoji-mart/data';
 import { EmojiInputPlugin, EmojiPlugin } from '@platejs/emoji/react';
 

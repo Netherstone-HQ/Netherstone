@@ -1,5 +1,3 @@
-"use client";
-
 import * as React from "react";
 
 import { buildToggleIndex, TogglePlugin } from "@platejs/toggle/react";

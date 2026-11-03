@@ -1,5 +1,3 @@
-'use client';
-
 import type { SlateEditor } from 'platejs';
 
 import {

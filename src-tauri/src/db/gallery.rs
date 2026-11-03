@@ -77,10 +77,14 @@ pub fn list_vault_attachments(
     let mut shards_by_asset: HashMap<String, Vec<String>> = HashMap::new();
     {
         let mut stmt = conn
-            .prepare("SELECT file_path, asset_path FROM attachment_references WHERE vault_path = ?1")
+            .prepare(
+                "SELECT file_path, asset_path FROM attachment_references WHERE vault_path = ?1",
+            )
             .map_err(|e| format!("Failed to prepare attachment reference query: {}", e))?;
         let rows = stmt
-            .query_map(params![vault], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))
+            .query_map(params![vault], |row| {
+                Ok((row.get::<_, String>(0)?, row.get(1)?))
+            })
             .map_err(|e| format!("Failed to query attachment references: {}", e))?;
         for (file_path, asset_path) in rows.filter_map(Result::ok) {
             shards_by_asset
@@ -417,7 +421,11 @@ mod tests {
         let other = temp_vault("scoped-other");
         let conn = connection();
         write(&vault, "_attachments/Pic.png", "png");
-        write(&vault, &format!("_attachments/{}.png.tmp", "ab".repeat(32)), "half");
+        write(
+            &vault,
+            &format!("_attachments/{}.png.tmp", "ab".repeat(32)),
+            "half",
+        );
         write(&vault, "_attachments/.Pic.png.netherstone-tmp", "half");
         write(&other, "_attachments/Pic.png", "png");
         save_shard(&conn, &other, "Elsewhere.md", "![](_attachments/Pic.png)\n");

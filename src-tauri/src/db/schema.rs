@@ -249,9 +249,7 @@ fn drop_attachment_tables_without_vault(conn: &Connection) -> Result<(), rusqlit
         |row| row.get(0),
     )?;
     if has_table && !column_exists(conn, "attachments", "vault_path")? {
-        conn.execute_batch(
-            "DROP TABLE IF EXISTS attachment_references; DROP TABLE attachments;",
-        )?;
+        conn.execute_batch("DROP TABLE IF EXISTS attachment_references; DROP TABLE attachments;")?;
     }
     Ok(())
 }
@@ -314,7 +312,9 @@ fn fill_drawing_embeds_from_index(conn: &Connection) -> Result<(), rusqlite::Err
             "SELECT f.id, s.content FROM files f JOIN fts_search s ON s.rowid = f.id
              WHERE instr(s.content, 'data-excalidraw') > 0",
         )?;
-        let shards = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+        let shards = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
         for shard in shards {
             let (file_id, content) = shard?;
             super::indexer::insert_drawing_embeds(&tx, file_id, &content)?;
@@ -346,7 +346,9 @@ mod tests {
         assert!(column_exists(&conn, "tags", "excerpt").unwrap());
         for table in ["files", "tags", "fts_search"] {
             let rows: i64 = conn
-                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
                 .unwrap();
             assert_eq!(rows, 0, "{table}");
         }

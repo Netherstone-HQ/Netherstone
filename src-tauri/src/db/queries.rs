@@ -146,9 +146,8 @@ pub fn find_files(
         values.push(inside.into());
     }
     if let Some(tag) = filter.tag {
-        conditions.push(
-            "f.id IN (SELECT file_id FROM tags WHERE tag = ? COLLATE NOCASE)".to_string(),
-        );
+        conditions
+            .push("f.id IN (SELECT file_id FROM tags WHERE tag = ? COLLATE NOCASE)".to_string());
         values.push(tag.trim_start_matches('#').to_string().into());
     }
     if let Some(after) = filter.modified_after {
@@ -416,7 +415,13 @@ pub fn backlink_sources(
         .map_err(|e| format!("Failed to prepare links query: {}", e))?;
     let links = stmt
         .query_map(
-            params![vault_key(vault_path), shard.path, without_md, shard.stem, shard.name],
+            params![
+                vault_key(vault_path),
+                shard.path,
+                without_md,
+                shard.stem,
+                shard.name
+            ],
             |row| {
                 Ok((
                     BacklinkSource {
@@ -483,7 +488,11 @@ pub fn get_backlinks(
     vault_path: &Path,
     file_path: &str,
 ) -> Result<Vec<Backlink>, String> {
-    backlinks_from(conn, file_path, backlink_sources(conn, vault_path, file_path)?)
+    backlinks_from(
+        conn,
+        file_path,
+        backlink_sources(conn, vault_path, file_path)?,
+    )
 }
 
 /// The text around the first link to `shard` in `content`, the Markdown of
@@ -638,7 +647,10 @@ mod tests {
             "(quote",
             "quote*",
         ] {
-            assert!(search_files(&conn, Path::new("/v"), query, 20).is_ok(), "{query}");
+            assert!(
+                search_files(&conn, Path::new("/v"), query, 20).is_ok(),
+                "{query}"
+            );
         }
     }
 
@@ -711,7 +723,11 @@ mod tests {
         assert_eq!(searchable, 2);
         let trip = home.join("Trip.md").to_string_lossy().into_owned();
         let indexed: i64 = conn
-            .query_row("SELECT COUNT(*) FROM files WHERE path = ?1", [&trip], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE path = ?1",
+                [&trip],
+                |row| row.get(0),
+            )
             .unwrap();
         assert_eq!(indexed, 1);
         std::fs::remove_dir_all(&root).unwrap();

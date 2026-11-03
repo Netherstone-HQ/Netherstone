@@ -284,11 +284,22 @@ pub fn commit_files(
         .find_tree(tree_id)
         .map_err(|e| git_error("Failed to read sync tree", e))?;
 
-    commit_tree(repository, &tree, parent.as_ref(), (added, modified, removed), note).map(Some)
+    commit_tree(
+        repository,
+        &tree,
+        parent.as_ref(),
+        (added, modified, removed),
+        note,
+    )
+    .map(Some)
 }
 
 /// Whether the last version holds `bytes` as the vault file `path`.
-pub fn last_version_holds(repository: &Repository, path: &str, bytes: &[u8]) -> Result<bool, String> {
+pub fn last_version_holds(
+    repository: &Repository,
+    path: &str,
+    bytes: &[u8],
+) -> Result<bool, String> {
     let Some(tree) = tree_of(head_commit(repository)?.as_ref())? else {
         return Ok(false);
     };

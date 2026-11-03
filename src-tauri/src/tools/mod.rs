@@ -65,7 +65,11 @@ pub type ToolResult<T> = Result<T, ToolError>;
 
 impl Vault {
     pub fn new(root: PathBuf, sync_root: PathBuf) -> Self {
-        Self { root, sync_root, caught_up: OnceLock::new() }
+        Self {
+            root,
+            sync_root,
+            caught_up: OnceLock::new(),
+        }
     }
 
     /// The file or folder at `relative` in the vault. Refuses paths that
@@ -95,16 +99,28 @@ impl Vault {
         // The nearest part that exists, by its real name: a link, or another
         // name for the same folder (like a Windows short name), must still
         // lead inside the vault and somewhere the tree shows.
-        let existing = full.ancestors().find(|part| part.exists()).unwrap_or(&self.root);
-        let real = self.root.canonicalize().ok().zip(existing.canonicalize().ok());
-        let Some((root, real)) = real.filter(|(root, real)| crate::vault_access::is_within(root, real)) else {
+        let existing = full
+            .ancestors()
+            .find(|part| part.exists())
+            .unwrap_or(&self.root);
+        let real = self
+            .root
+            .canonicalize()
+            .ok()
+            .zip(existing.canonicalize().ok());
+        let Some((root, real)) =
+            real.filter(|(root, real)| crate::vault_access::is_within(root, real))
+        else {
             return Err(ToolError(format!("'{}' leads outside the vault", relative)));
         };
         if !crate::vault::is_scanned_path(&root, &real) {
             return Err(not_in_vault());
         }
         if crate::sync::state::crosses_into_another_vault(&root, &real) {
-            return Err(ToolError(format!("'{}' is in another vault inside this one", relative)));
+            return Err(ToolError(format!(
+                "'{}' is in another vault inside this one",
+                relative
+            )));
         }
         Ok(full)
     }
@@ -115,14 +131,19 @@ impl Vault {
         let path = Path::new(target);
         path.is_absolute()
             && crate::vault_access::is_within(&self.root, path)
-            && self.resolve(&self.relative(path)).is_ok_and(|path| path.is_file())
+            && self
+                .resolve(&self.relative(path))
+                .is_ok_and(|path| path.is_file())
     }
 
     /// `relative`, which must be a shard (`.md`) that exists.
     pub fn shard(&self, relative: &str) -> ToolResult<PathBuf> {
         let path = self.resolve(relative)?;
         if !crate::vault::is_markdown_path(&path) {
-            return Err(ToolError(format!("'{}' isn't a shard (a .md file)", relative)));
+            return Err(ToolError(format!(
+                "'{}' isn't a shard (a .md file)",
+                relative
+            )));
         }
         if !path.is_file() {
             return Err(ToolError(format!("There's no shard at '{}'", relative)));
@@ -209,7 +230,11 @@ impl Page {
 
     /// The page of `items`, a whole list in memory.
     pub fn of<T>(&self, items: Vec<T>) -> (Vec<T>, Option<String>) {
-        let rest: Vec<T> = items.into_iter().skip(self.offset).take(self.fetch()).collect();
+        let rest: Vec<T> = items
+            .into_iter()
+            .skip(self.offset)
+            .take(self.fetch())
+            .collect();
         self.finish(rest)
     }
 }
@@ -258,7 +283,11 @@ where
         read_only,
         run: Box::new(move |vault, caller, arguments| {
             // An empty call is a call with no arguments.
-            let arguments = if arguments.is_null() { Value::Object(Map::new()) } else { arguments };
+            let arguments = if arguments.is_null() {
+                Value::Object(Map::new())
+            } else {
+                arguments
+            };
             let params: P = serde_json::from_value(arguments)
                 .map_err(|e| ToolError(format!("Those arguments don't fit {}: {}", name, e)))?;
             let result = run(vault, caller, params)?;
@@ -270,21 +299,111 @@ where
 /// Every tool, in the order AI apps list them.
 pub fn all() -> Vec<Tool> {
     vec![
-        tool("search", "Search", find::SEARCH.to_string(), true, find::search),
-        tool("list_folder", "List a folder", find::LIST_FOLDER.to_string(), true, find::list_folder),
-        tool("read", "Read shards", read::READ.to_string(), true, read::read),
-        tool("create_shard", "Create a shard", guide::with_format(write::CREATE_SHARD), false, write::create_shard),
-        tool("edit_shard", "Edit a shard", guide::with_format(write::EDIT_SHARD), false, write::edit_shard),
-        tool("move", "Move or rename", write::MOVE.to_string(), false, write::move_path),
-        tool("create_folder", "Create a folder", write::CREATE_FOLDER.to_string(), false, write::create_folder),
-        tool("links", "Links", links::LINKS.to_string(), true, links::links),
-        tool("fix_link", "Fix a link", links::FIX_LINK.to_string(), false, links::fix_link),
-        tool("list_tags", "List tags", find::LIST_TAGS.to_string(), true, find::list_tags),
-        tool("read_drawing", "Read a drawing", drawings::READ_DRAWING.to_string(), true, drawings::read_drawing),
-        tool("edit_drawing", "Edit a drawing", drawings::EDIT_DRAWING.to_string(), false, drawings::edit_drawing),
-        tool("tables", "Tables and charts", read::TABLES.to_string(), false, read::tables),
-        tool("history", "History", history::HISTORY.to_string(), false, history::history),
-        tool("vault_overview", "Vault overview", find::VAULT_OVERVIEW.to_string(), true, find::vault_overview),
+        tool(
+            "search",
+            "Search",
+            find::SEARCH.to_string(),
+            true,
+            find::search,
+        ),
+        tool(
+            "list_folder",
+            "List a folder",
+            find::LIST_FOLDER.to_string(),
+            true,
+            find::list_folder,
+        ),
+        tool(
+            "read",
+            "Read shards",
+            read::READ.to_string(),
+            true,
+            read::read,
+        ),
+        tool(
+            "create_shard",
+            "Create a shard",
+            guide::with_format(write::CREATE_SHARD),
+            false,
+            write::create_shard,
+        ),
+        tool(
+            "edit_shard",
+            "Edit a shard",
+            guide::with_format(write::EDIT_SHARD),
+            false,
+            write::edit_shard,
+        ),
+        tool(
+            "move",
+            "Move or rename",
+            write::MOVE.to_string(),
+            false,
+            write::move_path,
+        ),
+        tool(
+            "create_folder",
+            "Create a folder",
+            write::CREATE_FOLDER.to_string(),
+            false,
+            write::create_folder,
+        ),
+        tool(
+            "links",
+            "Links",
+            links::LINKS.to_string(),
+            true,
+            links::links,
+        ),
+        tool(
+            "fix_link",
+            "Fix a link",
+            links::FIX_LINK.to_string(),
+            false,
+            links::fix_link,
+        ),
+        tool(
+            "list_tags",
+            "List tags",
+            find::LIST_TAGS.to_string(),
+            true,
+            find::list_tags,
+        ),
+        tool(
+            "read_drawing",
+            "Read a drawing",
+            drawings::READ_DRAWING.to_string(),
+            true,
+            drawings::read_drawing,
+        ),
+        tool(
+            "edit_drawing",
+            "Edit a drawing",
+            drawings::EDIT_DRAWING.to_string(),
+            false,
+            drawings::edit_drawing,
+        ),
+        tool(
+            "tables",
+            "Tables and charts",
+            read::TABLES.to_string(),
+            false,
+            read::tables,
+        ),
+        tool(
+            "history",
+            "History",
+            history::HISTORY.to_string(),
+            false,
+            history::history,
+        ),
+        tool(
+            "vault_overview",
+            "Vault overview",
+            find::VAULT_OVERVIEW.to_string(),
+            true,
+            find::vault_overview,
+        ),
     ]
 }
 
@@ -303,8 +422,14 @@ pub(crate) mod tests {
     #[test]
     fn paths_stay_in_the_vault() {
         let vault = vault("tools-resolve");
-        assert_eq!(vault.resolve("Notes/Plan.md").unwrap(), vault.root.join("Notes/Plan.md"));
-        assert_eq!(vault.resolve("./Plan.md").unwrap(), vault.root.join("Plan.md"));
+        assert_eq!(
+            vault.resolve("Notes/Plan.md").unwrap(),
+            vault.root.join("Notes/Plan.md")
+        );
+        assert_eq!(
+            vault.resolve("./Plan.md").unwrap(),
+            vault.root.join("Plan.md")
+        );
         for outside in [
             "../secret.md",
             "Notes/../../x.md",
@@ -327,7 +452,8 @@ pub(crate) mod tests {
         std::fs::create_dir_all(vault.root.join(".git")).unwrap();
         std::fs::create_dir_all(vault.root.join("_attachments")).unwrap();
         std::os::unix::fs::symlink(vault.root.join(".git"), vault.root.join("GIT~1")).unwrap();
-        std::os::unix::fs::symlink(vault.root.join("_attachments"), vault.root.join("Pictures")).unwrap();
+        std::os::unix::fs::symlink(vault.root.join("_attachments"), vault.root.join("Pictures"))
+            .unwrap();
         for hidden in ["GIT~1", "GIT~1/config", "Pictures/Trip.jpg"] {
             assert!(vault.resolve(hidden).is_err(), "{hidden}");
         }
@@ -376,7 +502,12 @@ pub(crate) mod tests {
         let tools = all();
         assert_eq!(tools.len(), 15);
         for tool in &tools {
-            assert_eq!(tool.input_schema.get("type"), Some(&Value::from("object")), "{}", tool.name);
+            assert_eq!(
+                tool.input_schema.get("type"),
+                Some(&Value::from("object")),
+                "{}",
+                tool.name
+            );
         }
     }
 }

@@ -169,7 +169,10 @@ pub fn forget_writing_log(conn: &Connection, vault_path: &Path) -> rusqlite::Res
     let paths: Vec<String> = {
         let mut stmt = conn.prepare("SELECT DISTINCT file_path FROM writing_log")?;
         stmt.query_map([], |row| row.get::<_, String>(0))?
-            .filter(|path| path.as_ref().map_or(true, |path| Path::new(path).starts_with(vault_path)))
+            .filter(|path| {
+                path.as_ref()
+                    .map_or(true, |path| Path::new(path).starts_with(vault_path))
+            })
             .collect::<rusqlite::Result<_>>()?
     };
     let mut delete = conn.prepare_cached("DELETE FROM writing_log WHERE file_path = ?1")?;
@@ -345,7 +348,11 @@ pub fn find_broken_links(
          FROM links l JOIN files f ON f.id = l.source_file_id
          WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention'){}
          ORDER BY f.name COLLATE NOCASE, f.path, l.id",
-        if shard.is_some() { " AND f.path = ?2" } else { "" }
+        if shard.is_some() {
+            " AND f.path = ?2"
+        } else {
+            ""
+        }
     ))?;
     let row = |row: &rusqlite::Row| {
         Ok((
@@ -387,7 +394,12 @@ pub fn find_broken_links(
         });
         // The same missing shard linked twice from one shard is one fix.
         if seen.insert((path.clone(), path_key(&target))) {
-            broken.push(BrokenLink { text, path, name, target });
+            broken.push(BrokenLink {
+                text,
+                path,
+                name,
+                target,
+            });
         }
     }
     Ok(broken)
@@ -571,14 +583,27 @@ mod tests {
         let shown = |broken: Vec<BrokenLink>| -> Vec<(String, String)> {
             broken.into_iter().map(|b| (b.text, b.name)).collect()
         };
-        let all = [("Gone".to_string(), "Ideas.md".to_string()), ("Old".to_string(), "Ideas.md".to_string())];
+        let all = [
+            ("Gone".to_string(), "Ideas.md".to_string()),
+            ("Old".to_string(), "Ideas.md".to_string()),
+        ];
         assert_eq!(shown(get_broken_links(&conn, &dir).unwrap()), all);
         // A page stops once it has what it wants.
-        assert_eq!(shown(find_broken_links(&conn, &dir, None, Some(1)).unwrap()), all[..1]);
+        assert_eq!(
+            shown(find_broken_links(&conn, &dir, None, Some(1)).unwrap()),
+            all[..1]
+        );
         // In one shard.
         let ideas = dir.join("Notes").join("Ideas.md");
-        assert_eq!(shown(find_broken_links(&conn, &dir, Some(&ideas), None).unwrap()), all);
-        assert!(find_broken_links(&conn, &dir, Some(&dir.join("Plan.md")), None).unwrap().is_empty());
+        assert_eq!(
+            shown(find_broken_links(&conn, &dir, Some(&ideas), None).unwrap()),
+            all
+        );
+        assert!(
+            find_broken_links(&conn, &dir, Some(&dir.join("Plan.md")), None)
+                .unwrap()
+                .is_empty()
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

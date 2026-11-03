@@ -10,14 +10,14 @@ use tauri::Window;
 #[cfg(windows)]
 pub fn apply(window: &Window) {
     use std::sync::Mutex;
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HINSTANCE, LPARAM, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
     use windows::Win32::UI::WindowsAndMessaging::{
-        DestroyIcon, LoadImageW, SendMessageW, HICON, ICON_BIG, ICON_SMALL, IMAGE_ICON,
-        LR_DEFAULTCOLOR, SM_CXICON, SM_CXSMICON, WM_SETICON,
+        DestroyIcon, HICON, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_DEFAULTCOLOR, LoadImageW,
+        SM_CXICON, SM_CXSMICON, SendMessageW, WM_SETICON,
     };
+    use windows::core::PCWSTR;
 
     // tauri-build embeds icon.ico under the IDI_APPLICATION resource id.
     const ICON_RESOURCE: u16 = 32512;

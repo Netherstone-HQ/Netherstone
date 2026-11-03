@@ -26,7 +26,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::future::Future;
 use std::io::Read;
-use tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,6 +33,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Manager;
 use tauri::ipc::Channel;
+use tokio::io::AsyncWriteExt;
 
 use crate::import::{self, ImportSourceFile};
 use crate::vault;
@@ -42,10 +42,16 @@ use crate::vault;
 pub const LINK_PREFIX: &str = "netherstone://open/";
 
 /// The only hosts downloads come from, redirects included.
-const HOSTS: &[&str] = &["netherstone.app", "api.github.com", "raw.githubusercontent.com"];
+const HOSTS: &[&str] = &[
+    "netherstone.app",
+    "api.github.com",
+    "raw.githubusercontent.com",
+];
 
 /// Pictures a shard can show, as the Markdown import brings them in.
-const PICTURE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "tif", "tiff"];
+const PICTURE_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "tif", "tiff",
+];
 
 /// Files downloaded at once: a few, as GitHub's raw files are small and more
 /// at once only risks its abuse limits.
@@ -63,7 +69,11 @@ pub enum Address {
     /// `github.com/<owner>/<repo>`, with what follows `/tree/` when given:
     /// the branch and then the folder, which only GitHub can tell apart, as
     /// a branch name can hold `/`.
-    GitHub { owner: String, repo: String, tree: Vec<String> },
+    GitHub {
+        owner: String,
+        repo: String,
+        tree: Vec<String>,
+    },
 }
 
 impl Address {
@@ -92,14 +102,24 @@ impl Address {
         let (host, rest) = segments.split_first()?;
         let rest: Vec<&str> = rest.iter().map(String::as_str).collect();
         match (host.to_ascii_lowercase().as_str(), rest.as_slice()) {
-            ("netherstone.app", ["templates", id]) if is_template_id(id) => Some(Self::Template { id: id.to_string() }),
-            ("github.com", [owner, repo, more @ ..]) if is_github_name(owner) && is_github_name(repo) => {
+            ("netherstone.app", ["templates", id]) if is_template_id(id) => {
+                Some(Self::Template { id: id.to_string() })
+            }
+            ("github.com", [owner, repo, more @ ..])
+                if is_github_name(owner) && is_github_name(repo) =>
+            {
                 let tree = match more {
                     [] => Vec::new(),
-                    ["tree", tree @ ..] if !tree.is_empty() => tree.iter().map(|s| s.to_string()).collect(),
+                    ["tree", tree @ ..] if !tree.is_empty() => {
+                        tree.iter().map(|s| s.to_string()).collect()
+                    }
                     _ => return None,
                 };
-                Some(Self::GitHub { owner: owner.to_string(), repo: repo.to_string(), tree })
+                Some(Self::GitHub {
+                    owner: owner.to_string(),
+                    repo: repo.to_string(),
+                    tree,
+                })
             }
             _ => None,
         }
@@ -109,8 +129,12 @@ impl Address {
     pub fn text(&self) -> String {
         match self {
             Self::Template { id } => format!("netherstone.app/templates/{id}"),
-            Self::GitHub { owner, repo, tree } if tree.is_empty() => format!("github.com/{owner}/{repo}"),
-            Self::GitHub { owner, repo, tree } => format!("github.com/{owner}/{repo}/tree/{}", tree.join("/")),
+            Self::GitHub { owner, repo, tree } if tree.is_empty() => {
+                format!("github.com/{owner}/{repo}")
+            }
+            Self::GitHub { owner, repo, tree } => {
+                format!("github.com/{owner}/{repo}/tree/{}", tree.join("/"))
+            }
         }
     }
 
@@ -128,17 +152,20 @@ impl Address {
 
 fn strip_prefix_ignoring_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
     let head = text.get(..prefix.len())?;
-    head.eq_ignore_ascii_case(prefix).then(|| &text[prefix.len()..])
+    head.eq_ignore_ascii_case(prefix)
+        .then(|| &text[prefix.len()..])
 }
 
 /// A template's id is its folder's name in the templates collection.
 fn is_template_id(id: &str) -> bool {
-    id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    id.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// The characters GitHub allows in account and repository names.
 fn is_github_name(name: &str) -> bool {
-    name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// Why a link couldn't be opened. The app turns each into its own message.
@@ -147,7 +174,10 @@ fn is_github_name(name: &str) -> bool {
 pub enum Refusal {
     /// The template `name` needs a newer app; `version` as the template
     /// gives it. Neither when the list itself is newer than this app reads.
-    UpdateFirst { name: Option<String>, version: Option<String> },
+    UpdateFirst {
+        name: Option<String>,
+        version: Option<String>,
+    },
     TemplateNotFound,
     /// Private, renamed or gone.
     CantOpen,
@@ -155,12 +185,18 @@ pub enum Refusal {
     NothingToOpen,
     /// GitHub cut the listing off.
     TooManyFiles,
-    NotEnoughSpace { needed: u64, free: u64, folder: String },
+    NotEnoughSpace {
+        needed: u64,
+        free: u64,
+        folder: String,
+    },
     /// No connection, or what came wasn't what was listed.
     DownloadFailed,
     Cancelled,
     /// The new vault's folder can't be used, as `create_vault` says.
-    Vault { error: String },
+    Vault {
+        error: String,
+    },
 }
 
 /// What a link opens, as the dialog shows it before anything downloads.
@@ -253,10 +289,16 @@ fn check_path(path: &str) -> PathCheck {
     if segments.iter().any(climbs_out) {
         return PathCheck::Refuse;
     }
-    if segments.iter().any(|segment| segment.starts_with('.') || !vault::is_valid_folder_name(segment)) {
+    if segments
+        .iter()
+        .any(|segment| segment.starts_with('.') || !vault::is_valid_folder_name(segment))
+    {
         return PathCheck::LeaveOut;
     }
-    let extension = path.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default();
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_default();
     match extension.as_str() {
         "md" => PathCheck::Keep(FileKind::Shard),
         "excalidraw" => PathCheck::Keep(FileKind::Drawing),
@@ -277,9 +319,20 @@ trait Source: Send + Sync {
     fn gone(&self) -> Refusal;
 
     /// Downloads one listed file to `to`, checking it as it comes.
-    fn fetch<'a>(&'a self, web: &'a Web, download: &'a Download, to: &'a Path, cancel: &'a AtomicBool) -> Pending<'a, ()> {
+    fn fetch<'a>(
+        &'a self,
+        web: &'a Web,
+        download: &'a Download,
+        to: &'a Path,
+        cancel: &'a AtomicBool,
+    ) -> Pending<'a, ()> {
         Box::pin(async move {
-            let mut response = web.client.get(&download.url).send().await.map_err(|_| Refusal::DownloadFailed)?;
+            let mut response = web
+                .client
+                .get(&download.url)
+                .send()
+                .await
+                .map_err(|_| Refusal::DownloadFailed)?;
             if response.status() == reqwest::StatusCode::NOT_FOUND {
                 return Err(self.gone());
             }
@@ -287,16 +340,26 @@ trait Source: Send + Sync {
                 return Err(Refusal::DownloadFailed);
             }
             if let Some(parent) = to.parent() {
-                tokio::fs::create_dir_all(parent).await.map_err(|_| Refusal::DownloadFailed)?;
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|_| Refusal::DownloadFailed)?;
             }
-            let mut file = tokio::fs::File::create(to).await.map_err(|_| Refusal::DownloadFailed)?;
+            let mut file = tokio::fs::File::create(to)
+                .await
+                .map_err(|_| Refusal::DownloadFailed)?;
             let mut received = Received::new(download);
-            while let Some(chunk) = response.chunk().await.map_err(|_| Refusal::DownloadFailed)? {
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| Refusal::DownloadFailed)?
+            {
                 if cancel.load(Ordering::SeqCst) {
                     return Err(Refusal::Cancelled);
                 }
                 received.push(&chunk)?;
-                file.write_all(&chunk).await.map_err(|_| Refusal::DownloadFailed)?;
+                file.write_all(&chunk)
+                    .await
+                    .map_err(|_| Refusal::DownloadFailed)?;
             }
             file.flush().await.map_err(|_| Refusal::DownloadFailed)?;
             received.finish()
@@ -334,7 +397,11 @@ impl Received {
 
     fn finish(self) -> Result<(), Refusal> {
         let hash_matches = self.sha256.is_none_or(|(hex, hasher)| {
-            let digest: String = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+            let digest: String = hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
             digest.eq_ignore_ascii_case(&hex)
         });
         if self.bytes == self.size && hash_matches {
@@ -360,7 +427,11 @@ impl Web {
             .connect_timeout(STALLED)
             .read_timeout(STALLED)
             .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.url().host_str().is_some_and(|host| HOSTS.contains(&host)) {
+                if attempt
+                    .url()
+                    .host_str()
+                    .is_some_and(|host| HOSTS.contains(&host))
+                {
                     attempt.follow()
                 } else {
                     attempt.stop()
@@ -369,7 +440,10 @@ impl Web {
             .build()
             .map_err(|_| Refusal::DownloadFailed)?;
         let github_token = crate::github::access_token().ok().flatten();
-        Ok(Self { client, github_token })
+        Ok(Self {
+            client,
+            github_token,
+        })
     }
 }
 
@@ -415,7 +489,10 @@ fn allowed(text: &str) -> Result<Address, Refusal> {
 
 /// Where downloads wait, in the app's data.
 fn scratch_root() -> Option<PathBuf> {
-    crate::db::get_db_path().ok()?.parent().map(|data| data.join("opening"))
+    crate::db::get_db_path()
+        .ok()?
+        .parent()
+        .map(|data| data.join("opening"))
 }
 
 fn remove_scratch(scratch: Option<&Path>) {
@@ -423,7 +500,11 @@ fn remove_scratch(scratch: Option<&Path>) {
         && scratch.exists()
         && let Err(error) = std::fs::remove_dir_all(scratch)
     {
-        eprintln!("[Netherstone] Couldn't remove {}: {}", scratch.display(), error);
+        eprintln!(
+            "[Netherstone] Couldn't remove {}: {}",
+            scratch.display(),
+            error
+        );
     }
 }
 
@@ -468,14 +549,22 @@ pub async fn open_link_create(
     let address = allowed(&address)?;
     let (listing, cancel) = {
         let mut opening = opening();
-        let opening = opening.as_mut().filter(|opening| opening.address == address).ok_or(Refusal::CantOpen)?;
+        let opening = opening
+            .as_mut()
+            .filter(|opening| opening.address == address)
+            .ok_or(Refusal::CantOpen)?;
         opening.cancel.store(false, Ordering::SeqCst);
-        (opening.listing.clone().ok_or(Refusal::CantOpen)?, opening.cancel.clone())
+        (
+            opening.listing.clone().ok_or(Refusal::CantOpen)?,
+            opening.cancel.clone(),
+        )
     };
     let vault_error = |error: String| Refusal::Vault { error };
     let parent = Path::new(&parent);
     let documents = app.path().document_dir().ok();
-    crate::vault_access::get().check_new_vault_parent(parent, documents.as_deref()).map_err(vault_error)?;
+    crate::vault_access::get()
+        .check_new_vault_parent(parent, documents.as_deref())
+        .map_err(vault_error)?;
     let folder = vault::check_vault_folder(parent, &name).map_err(vault_error)?;
     let scratch_root = scratch_root().ok_or(Refusal::DownloadFailed)?;
     // The downloads land in the app's data first, maybe on another disk.
@@ -504,7 +593,15 @@ async fn make(
     cancel: &AtomicBool,
     progress: &Channel<Progress>,
 ) -> Result<Created, Refusal> {
-    download_all(address.reader().as_ref(), &Web::new()?, listing, scratch, cancel, progress).await?;
+    download_all(
+        address.reader().as_ref(),
+        &Web::new()?,
+        listing,
+        scratch,
+        cancel,
+        progress,
+    )
+    .await?;
     if cancel.load(Ordering::SeqCst) {
         return Err(Refusal::Cancelled);
     }
@@ -514,7 +611,9 @@ async fn make(
         check_space(parent, listing.size)?;
     }
     let existed = folder.exists();
-    std::fs::create_dir_all(folder).map_err(|error| Refusal::Vault { error: error.to_string() })?;
+    std::fs::create_dir_all(folder).map_err(|error| Refusal::Vault {
+        error: error.to_string(),
+    })?;
     let vault_path = folder.to_string_lossy().into_owned();
     if !listing.template {
         // Drawings go in as they are; the Markdown import takes the rest.
@@ -525,9 +624,11 @@ async fn make(
             .map(|download| PathBuf::from(&download.path))
             .collect();
         let (scratch_dir, folder_dir) = (scratch.to_path_buf(), folder.to_path_buf());
-        tauri::async_runtime::spawn_blocking(move || move_drawings(&scratch_dir, &folder_dir, &drawings))
-            .await
-            .map_err(|_| Refusal::DownloadFailed)??;
+        tauri::async_runtime::spawn_blocking(move || {
+            move_drawings(&scratch_dir, &folder_dir, &drawings)
+        })
+        .await
+        .map_err(|_| Refusal::DownloadFailed)??;
         // The download only: the folders above it are the app's data and
         // the person's, so not the `_attachments` folders there either.
         import::picked().allow_only(&[scratch.to_path_buf()]);
@@ -536,9 +637,17 @@ async fn make(
             .filter_map(|entry| entry.ok().map(|entry| entry.path()))
             .collect();
         entries.sort();
-        return Ok(Created { vault: vault_path, first_shard: None, sources: import::list_sources(&entries) });
+        return Ok(Created {
+            vault: vault_path,
+            first_shard: None,
+            sources: import::list_sources(&entries),
+        });
     }
-    let zip = listing.downloads.first().map(|download| scratch.join(&download.path)).ok_or(Refusal::DownloadFailed)?;
+    let zip = listing
+        .downloads
+        .first()
+        .map(|download| scratch.join(&download.path))
+        .ok_or(Refusal::DownloadFailed)?;
     let target = folder.to_path_buf();
     let unpacked = tauri::async_runtime::spawn_blocking(move || unpack(&zip, &target))
         .await
@@ -553,10 +662,18 @@ async fn make(
     let first_shard = listing
         .first_shard
         .as_deref()
-        .map(|shard| shard.split('/').fold(folder.to_path_buf(), |path, segment| path.join(segment)))
+        .map(|shard| {
+            shard
+                .split('/')
+                .fold(folder.to_path_buf(), |path, segment| path.join(segment))
+        })
         .filter(|path| path.is_file())
         .map(|path| path.to_string_lossy().into_owned());
-    Ok(Created { vault: vault_path, first_shard, sources: Vec::new() })
+    Ok(Created {
+        vault: vault_path,
+        first_shard,
+        sources: Vec::new(),
+    })
 }
 
 async fn download_all(
@@ -569,22 +686,43 @@ async fn download_all(
 ) -> Result<(), Refusal> {
     let total_bytes = listing.download_size();
     let mut bytes = 0;
-    for stage in [Stage::Template, Stage::Shards, Stage::Drawings, Stage::Pictures] {
-        let downloads: Vec<&Download> = listing.downloads.iter().filter(|download| download.stage == stage).collect();
+    for stage in [
+        Stage::Template,
+        Stage::Shards,
+        Stage::Drawings,
+        Stage::Pictures,
+    ] {
+        let downloads: Vec<&Download> = listing
+            .downloads
+            .iter()
+            .filter(|download| download.stage == stage)
+            .collect();
         if downloads.is_empty() {
             continue;
         }
         let total = downloads.len();
         let report = |done, bytes| {
-            let _ = progress.send(Progress { stage, done, total, bytes, total_bytes });
+            let _ = progress.send(Progress {
+                stage,
+                done,
+                total,
+                bytes,
+                total_bytes,
+            });
         };
         report(0, bytes);
         let fetches: Vec<Pending<'_, u64>> = downloads
             .iter()
             .map(|&download| -> Pending<'_, u64> {
                 Box::pin(async move {
-                    let to = download.path.split('/').fold(scratch.to_path_buf(), |path, segment| path.join(segment));
-                    source.fetch(web, download, &to, cancel).await.map(|()| download.size)
+                    let to = download
+                        .path
+                        .split('/')
+                        .fold(scratch.to_path_buf(), |path, segment| path.join(segment));
+                    source
+                        .fetch(web, download, &to, cancel)
+                        .await
+                        .map(|()| download.size)
                 })
             })
             .collect();
@@ -601,12 +739,17 @@ async fn download_all(
 
 /// Refuses when the disk holding `folder` has less than `needed` free.
 fn check_space(folder: &Path, needed: u64) -> Result<(), Refusal> {
-    let free = fs4::available_space(folder).map_err(|error| Refusal::Vault { error: error.to_string() })?;
+    let free = fs4::available_space(folder).map_err(|error| Refusal::Vault {
+        error: error.to_string(),
+    })?;
     if free < needed {
         return Err(Refusal::NotEnoughSpace {
             needed,
             free,
-            folder: folder.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| folder.display().to_string()),
+            folder: folder
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| folder.display().to_string()),
         });
     }
     Ok(())
@@ -616,7 +759,9 @@ fn check_space(folder: &Path, needed: u64) -> Result<(), Refusal> {
 /// checked) from `scratch` into the vault `folder`, at the same paths.
 fn move_drawings(scratch: &Path, folder: &Path, drawings: &[PathBuf]) -> Result<(), Refusal> {
     let join = |root: &Path, path: &Path| {
-        path.to_string_lossy().split('/').fold(root.to_path_buf(), |path, segment| path.join(segment))
+        path.to_string_lossy()
+            .split('/')
+            .fold(root.to_path_buf(), |path, segment| path.join(segment))
     };
     for drawing in drawings {
         let (from, to) = (join(scratch, drawing), join(folder, drawing));
@@ -662,7 +807,8 @@ fn unpack_into(zip: &Path, vault_folder: &Path, written: &mut Vec<Written>) -> R
     fn failed<E>(_: E) -> Refusal {
         Refusal::DownloadFailed
     }
-    let mut archive = zip::ZipArchive::new(std::fs::File::open(zip).map_err(failed)?).map_err(failed)?;
+    let mut archive =
+        zip::ZipArchive::new(std::fs::File::open(zip).map_err(failed)?).map_err(failed)?;
     let mut keep = Vec::new();
     for index in 0..archive.len() {
         let entry = archive.by_index_raw(index).map_err(failed)?;
@@ -679,11 +825,19 @@ fn unpack_into(zip: &Path, vault_folder: &Path, written: &mut Vec<Written>) -> R
         }
     }
     for (index, name, size) in keep {
-        let target = name.split('/').fold(vault_folder.to_path_buf(), |path, segment| path.join(segment));
+        let target = name
+            .split('/')
+            .fold(vault_folder.to_path_buf(), |path, segment| {
+                path.join(segment)
+            });
         if let Some(parent) = target.parent() {
             create_folders(parent, vault_folder, written).map_err(failed)?;
         }
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(failed)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map_err(failed)?;
         written.push(Written::File(target));
         let entry = archive.by_index(index).map_err(failed)?;
         let copied = std::io::copy(&mut entry.take(size + 1), &mut file).map_err(failed)?;
@@ -696,7 +850,11 @@ fn unpack_into(zip: &Path, vault_folder: &Path, written: &mut Vec<Written>) -> R
 
 /// Makes `folder` and the folders above it, up to `vault_folder`, noting
 /// the ones it made.
-fn create_folders(folder: &Path, vault_folder: &Path, written: &mut Vec<Written>) -> std::io::Result<()> {
+fn create_folders(
+    folder: &Path,
+    vault_folder: &Path,
+    written: &mut Vec<Written>,
+) -> std::io::Result<()> {
     if folder == vault_folder {
         return Ok(());
     }
@@ -740,7 +898,8 @@ fn needs_update(minimum: &str, current: &str) -> bool {
         return true;
     };
     if minimum.pre.is_empty() {
-        (current.major, current.minor, current.patch) < (minimum.major, minimum.minor, minimum.patch)
+        (current.major, current.minor, current.patch)
+            < (minimum.major, minimum.minor, minimum.patch)
     } else {
         current < minimum
     }
@@ -759,8 +918,8 @@ fn version(text: &str) -> Option<semver::Version> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use crate::sync::state::tests::temp_dir;
+    use std::io::Write;
 
     fn github(owner: &str, repo: &str, tree: &[&str]) -> Address {
         Address::GitHub {
@@ -772,16 +931,35 @@ mod tests {
 
     #[test]
     fn reads_addresses() {
-        let template = Some(Address::Template { id: "worldbuilding".into() });
-        assert_eq!(Address::parse("netherstone://open/netherstone.app/templates/worldbuilding"), template);
-        assert_eq!(Address::parse("NETHERSTONE://open/netherstone.app/templates/worldbuilding/"), template);
-        assert_eq!(Address::parse("netherstone.app/templates/worldbuilding"), template);
-        assert_eq!(Address::parse("netherstone://open/github.com/lena-k/field-guide"), Some(github("lena-k", "field-guide", &[])));
+        let template = Some(Address::Template {
+            id: "worldbuilding".into(),
+        });
         assert_eq!(
-            Address::parse("netherstone://open/https://github.com/lena-k/field-guide/tree/main/Field%20notes"),
+            Address::parse("netherstone://open/netherstone.app/templates/worldbuilding"),
+            template
+        );
+        assert_eq!(
+            Address::parse("NETHERSTONE://open/netherstone.app/templates/worldbuilding/"),
+            template
+        );
+        assert_eq!(
+            Address::parse("netherstone.app/templates/worldbuilding"),
+            template
+        );
+        assert_eq!(
+            Address::parse("netherstone://open/github.com/lena-k/field-guide"),
+            Some(github("lena-k", "field-guide", &[]))
+        );
+        assert_eq!(
+            Address::parse(
+                "netherstone://open/https://github.com/lena-k/field-guide/tree/main/Field%20notes"
+            ),
             Some(github("lena-k", "field-guide", &["main", "Field notes"]))
         );
-        assert_eq!(github("lena-k", "field-guide", &["main", "docs"]).text(), "github.com/lena-k/field-guide/tree/main/docs");
+        assert_eq!(
+            github("lena-k", "field-guide", &["main", "docs"]).text(),
+            "github.com/lena-k/field-guide/tree/main/docs"
+        );
     }
 
     #[test]
@@ -808,19 +986,50 @@ mod tests {
 
     #[test]
     fn writes_only_vault_files_inside_the_vault() {
-        assert_eq!(check_path("World/Places.md"), PathCheck::Keep(FileKind::Shard));
-        assert_eq!(check_path("Map.excalidraw"), PathCheck::Keep(FileKind::Drawing));
-        assert_eq!(check_path("_attachments/map.PNG"), PathCheck::Keep(FileKind::Picture));
-        for left_out in [".git/config", ".netherstone/vault-id", "docs/.hidden.md", "build.sh", "a?.md", "trailing./a.md"] {
+        assert_eq!(
+            check_path("World/Places.md"),
+            PathCheck::Keep(FileKind::Shard)
+        );
+        assert_eq!(
+            check_path("Map.excalidraw"),
+            PathCheck::Keep(FileKind::Drawing)
+        );
+        assert_eq!(
+            check_path("_attachments/map.PNG"),
+            PathCheck::Keep(FileKind::Picture)
+        );
+        for left_out in [
+            ".git/config",
+            ".netherstone/vault-id",
+            "docs/.hidden.md",
+            "build.sh",
+            "a?.md",
+            "trailing./a.md",
+        ] {
             assert_eq!(check_path(left_out), PathCheck::LeaveOut, "{left_out}");
         }
-        for refused in ["../a.md", "a/../../b.md", "/etc/a.md", "a//b.md", "C:/a.md", "a\\..\\b.md", "./a.md", ""] {
+        for refused in [
+            "../a.md",
+            "a/../../b.md",
+            "/etc/a.md",
+            "a//b.md",
+            "C:/a.md",
+            "a\\..\\b.md",
+            "./a.md",
+            "",
+        ] {
             assert_eq!(check_path(refused), PathCheck::Refuse, "{refused}");
         }
     }
 
     fn download(size: u64, sha256: Option<&str>) -> Download {
-        Download { path: "a.md".into(), url: String::new(), size, stage: Stage::Shards, sha256: sha256.map(String::from) }
+        Download {
+            path: "a.md".into(),
+            url: String::new(),
+            size,
+            stage: Stage::Shards,
+            sha256: sha256.map(String::from),
+        }
     }
 
     #[test]
@@ -851,7 +1060,8 @@ mod tests {
     fn zip_of(dir: &Path, entries: &[(&str, &[u8])]) -> PathBuf {
         let path = dir.join("template.zip");
         let mut writer = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
-        let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         for (name, bytes) in entries {
             writer.start_file(*name, options).unwrap();
             writer.write_all(bytes).unwrap();
@@ -876,12 +1086,18 @@ mod tests {
         let vault_folder = dir.join("Worldbuilding");
         std::fs::create_dir(&vault_folder).unwrap();
         unpack(&zip, &vault_folder).unwrap();
-        assert_eq!(std::fs::read_to_string(vault_folder.join("World").join("Places.md")).unwrap(), "@Start here");
+        assert_eq!(
+            std::fs::read_to_string(vault_folder.join("World").join("Places.md")).unwrap(),
+            "@Start here"
+        );
         assert!(vault_folder.join("_attachments").join("map.png").is_file());
         assert!(!vault_folder.join(".netherstone").exists());
         assert!(!vault_folder.join("run.sh").exists());
 
-        let climbing = zip_of(&dir, &[("Start here.md", b"# Start"), ("../outside.md", b"x")]);
+        let climbing = zip_of(
+            &dir,
+            &[("Start here.md", b"# Start"), ("../outside.md", b"x")],
+        );
         let other = dir.join("Other");
         std::fs::create_dir(&other).unwrap();
         assert_eq!(unpack(&climbing, &other), Err(Refusal::DownloadFailed));
@@ -893,14 +1109,25 @@ mod tests {
     #[test]
     fn a_failed_unpack_takes_back_only_what_it_wrote() {
         let dir = temp_dir("open-source-unpack-failed");
-        let zip = zip_of(&dir, &[("Start here.md", b"# Start"), ("World/Places.md", b"x"), ("Mine/Map.md", b"x"), ("Notes.md", b"x")]);
+        let zip = zip_of(
+            &dir,
+            &[
+                ("Start here.md", b"# Start"),
+                ("World/Places.md", b"x"),
+                ("Mine/Map.md", b"x"),
+                ("Notes.md", b"x"),
+            ],
+        );
         let vault_folder = dir.join("Worldbuilding");
         // Put in the folder while the template downloaded.
         std::fs::create_dir_all(vault_folder.join("Mine")).unwrap();
         std::fs::write(vault_folder.join("Notes.md"), "mine").unwrap();
 
         assert_eq!(unpack(&zip, &vault_folder), Err(Refusal::DownloadFailed));
-        assert_eq!(std::fs::read_to_string(vault_folder.join("Notes.md")).unwrap(), "mine");
+        assert_eq!(
+            std::fs::read_to_string(vault_folder.join("Notes.md")).unwrap(),
+            "mine"
+        );
         assert!(vault_folder.join("Mine").is_dir());
         assert!(!vault_folder.join("Mine").join("Map.md").exists());
         assert!(!vault_folder.join("Start here.md").exists());
@@ -917,9 +1144,23 @@ mod tests {
         std::fs::write(scratch.join("Field notes").join("Wings.excalidraw"), "{}").unwrap();
         std::fs::write(scratch.join("Birds.md"), "# Birds").unwrap();
 
-        move_drawings(&scratch, &vault_folder, &[PathBuf::from("Field notes/Wings.excalidraw")]).unwrap();
-        assert_eq!(std::fs::read_to_string(vault_folder.join("Field notes").join("Wings.excalidraw")).unwrap(), "{}");
-        assert!(!scratch.join("Field notes").join("Wings.excalidraw").exists());
+        move_drawings(
+            &scratch,
+            &vault_folder,
+            &[PathBuf::from("Field notes/Wings.excalidraw")],
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(vault_folder.join("Field notes").join("Wings.excalidraw"))
+                .unwrap(),
+            "{}"
+        );
+        assert!(
+            !scratch
+                .join("Field notes")
+                .join("Wings.excalidraw")
+                .exists()
+        );
         // The rest stays for the Markdown import.
         assert!(scratch.join("Birds.md").exists());
         std::fs::remove_dir_all(&dir).unwrap();

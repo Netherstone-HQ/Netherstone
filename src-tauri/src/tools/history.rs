@@ -110,7 +110,10 @@ pub fn history(vault: &Vault, _: &Caller, params: HistoryParams) -> ToolResult<H
     let path = vault.resolve(&params.path)?;
     let is_drawing = crate::vault::is_drawing_path(&path);
     if !is_drawing && !crate::vault::is_markdown_path(&path) {
-        return Err(ToolError(format!("'{}' isn't a shard or drawing", params.path)));
+        return Err(ToolError(format!(
+            "'{}' isn't a shard or drawing",
+            params.path
+        )));
     }
     let history = list_versions(&vault.sync_root, &vault.root, &path)?;
     let find = |id: &str| -> ToolResult<FileVersion> {
@@ -120,10 +123,20 @@ pub fn history(vault: &Vault, _: &Caller, params: HistoryParams) -> ToolResult<H
             .chain(&history.versions)
             .find(|version| version.blob == id || version.id == id)
             .cloned()
-            .ok_or_else(|| ToolError(format!("'{}' isn't a version of {}. List them first.", id, params.path)))
+            .ok_or_else(|| {
+                ToolError(format!(
+                    "'{}' isn't a version of {}. List them first.",
+                    id, params.path
+                ))
+            })
     };
     let version = || -> ToolResult<FileVersion> {
-        find(params.version.as_deref().ok_or_else(|| ToolError("This needs the version's id".to_string()))?)
+        find(
+            params
+                .version
+                .as_deref()
+                .ok_or_else(|| ToolError("This needs the version's id".to_string()))?,
+        )
     };
 
     match params.action {
@@ -134,7 +147,13 @@ pub fn history(vault: &Vault, _: &Caller, params: HistoryParams) -> ToolResult<H
                 .clone()
                 .map(|now| shown(now, true))
                 .into_iter()
-                .chain(history.versions.clone().into_iter().map(|v| shown(v, false)))
+                .chain(
+                    history
+                        .versions
+                        .clone()
+                        .into_iter()
+                        .map(|v| shown(v, false)),
+                )
                 .collect();
             let (versions, next_cursor) = page.of(all);
             Ok(HistoryResult::Versions {
@@ -153,14 +172,22 @@ pub fn history(vault: &Vault, _: &Caller, params: HistoryParams) -> ToolResult<H
         HistoryAction::Diff => {
             let version = version()?;
             let old = read_version(&vault.sync_root, &vault.root, &version.blob)?;
-            let now = if path.is_file() { read_text(&path)? } else { String::new() };
+            let now = if path.is_file() {
+                read_text(&path)?
+            } else {
+                String::new()
+            };
             let diff = similar::TextDiff::from_lines(&old, &now)
                 .unified_diff()
                 .header("version", "now")
                 .to_string();
             Ok(HistoryResult::Diff {
                 version: version.blob,
-                diff: if diff.is_empty() { "The file is the same as this version.".to_string() } else { diff },
+                diff: if diff.is_empty() {
+                    "The file is the same as this version.".to_string()
+                } else {
+                    diff
+                },
             })
         }
         HistoryAction::Restore => {
@@ -174,8 +201,9 @@ pub fn history(vault: &Vault, _: &Caller, params: HistoryParams) -> ToolResult<H
                 |content| {
                     let writes = crate::locks::vault_writes()?;
                     if let Some(folder) = path.parent().filter(|folder| !folder.exists()) {
-                        std::fs::create_dir_all(folder)
-                            .map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
+                        std::fs::create_dir_all(folder).map_err(|e| {
+                            format!("Failed to create folder {}: {}", folder.display(), e)
+                        })?;
                     }
                     if is_drawing {
                         crate::vault::write_atomically(&writes, &path, content.as_bytes())

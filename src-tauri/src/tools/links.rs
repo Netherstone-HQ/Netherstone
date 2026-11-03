@@ -82,13 +82,20 @@ fn shard_named(vault: &Vault, conn: &rusqlite::Connection, name: &str) -> ToolRe
 
 pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkPage> {
     let page = Page::new(params.cursor.as_deref(), params.limit)?;
-    let shard = params.path.as_deref().map(|path| vault.shard(path)).transpose()?;
+    let shard = params
+        .path
+        .as_deref()
+        .map(|path| vault.shard(path))
+        .transpose()?;
     let conn = vault.index()?;
     let (links, next_cursor) = match (params.kind, &shard) {
         (LinksKind::Backlinks, Some(shard)) => {
             let file = shard.to_string_lossy();
-            let (sources, next_cursor) =
-                page.of(crate::db::queries::backlink_sources(&conn, &vault.root, &file)?);
+            let (sources, next_cursor) = page.of(crate::db::queries::backlink_sources(
+                &conn,
+                &vault.root,
+                &file,
+            )?);
             let links = crate::db::queries::backlinks_from(&conn, &file, sources)?
                 .into_iter()
                 .map(|backlink| Link {
@@ -104,10 +111,15 @@ pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkP
             let markdown = super::edits::read_text(shard)?;
             let mut links = Vec::new();
             for link in parse_markdown(&markdown).links {
-                let target = crate::db::indexer::resolve_link_target(link.link_type, &link.target, shard);
+                let target =
+                    crate::db::indexer::resolve_link_target(link.link_type, &link.target, shard);
                 let works = match link.link_type {
-                    LinkType::Internal if target.to_lowercase().ends_with(".md") => Some(vault.has_file(&target)),
-                    LinkType::Mention => Some(vault.has_file(&target) || shard_named(vault, &conn, &target)?),
+                    LinkType::Internal if target.to_lowercase().ends_with(".md") => {
+                        Some(vault.has_file(&target))
+                    }
+                    LinkType::Mention => {
+                        Some(vault.has_file(&target) || shard_named(vault, &conn, &target)?)
+                    }
                     _ => None,
                 };
                 links.push(Link {
@@ -122,18 +134,27 @@ pub fn links(vault: &Vault, _: &Caller, params: LinksParams) -> ToolResult<LinkP
         (LinksKind::Broken, _) => {
             // Stops at the end of the page, one past it to tell if there's more.
             let wanted = page.offset + page.fetch();
-            let broken = crate::db::data::find_broken_links(&conn, &vault.root, shard.as_deref(), Some(wanted))?
-                .into_iter()
-                .map(|broken| Link {
-                    from: Some(vault.relative(Path::new(&broken.path))),
-                    to: Some(shown_target(vault, &broken.target)),
-                    text: Some(broken.text),
-                    works: Some(false),
-                })
-                .collect();
+            let broken = crate::db::data::find_broken_links(
+                &conn,
+                &vault.root,
+                shard.as_deref(),
+                Some(wanted),
+            )?
+            .into_iter()
+            .map(|broken| Link {
+                from: Some(vault.relative(Path::new(&broken.path))),
+                to: Some(shown_target(vault, &broken.target)),
+                text: Some(broken.text),
+                works: Some(false),
+            })
+            .collect();
             page.of(broken)
         }
-        (_, None) => return Err(ToolError("backlinks and outgoing need the shard's path".to_string())),
+        (_, None) => {
+            return Err(ToolError(
+                "backlinks and outgoing need the shard's path".to_string(),
+            ));
+        }
     };
     Ok(LinkPage { links, next_cursor })
 }
@@ -171,7 +192,11 @@ pub fn fix_link(vault: &Vault, caller: &Caller, params: FixLinkParams) -> ToolRe
     // name is a mention by name.
     let link = params.link.trim();
     let old = if link.contains('/') || link.to_lowercase().ends_with(".md") {
-        let old: PathBuf = if Path::new(link).is_absolute() { PathBuf::from(link) } else { vault.root.join(link) };
+        let old: PathBuf = if Path::new(link).is_absolute() {
+            PathBuf::from(link)
+        } else {
+            vault.root.join(link)
+        };
         old.to_string_lossy().into_owned()
     } else {
         link.to_string()
@@ -182,20 +207,31 @@ pub fn fix_link(vault: &Vault, caller: &Caller, params: FixLinkParams) -> ToolRe
     }];
     let file = shard.to_string_lossy().into_owned();
 
-    change(vault, caller, params.summary.as_deref(), &[shard.clone()], || {
-        edit_shard(vault, &shard, |markdown| {
-            crate::shard_links::rewrite_moved_links(&markdown, &file, &file, &moved).ok_or_else(|| {
-                ToolError(format!("{} has no link to '{}'. Check it with links outgoing.", params.path, link))
-            })
-        })?;
-        Ok((
-            Fixed {
-                path: vault.relative(&shard),
-                now_points_to: vault.relative(&target),
-            },
-            Vec::new(),
-        ))
-    })
+    change(
+        vault,
+        caller,
+        params.summary.as_deref(),
+        &[shard.clone()],
+        || {
+            edit_shard(vault, &shard, |markdown| {
+                crate::shard_links::rewrite_moved_links(&markdown, &file, &file, &moved).ok_or_else(
+                    || {
+                        ToolError(format!(
+                            "{} has no link to '{}'. Check it with links outgoing.",
+                            params.path, link
+                        ))
+                    },
+                )
+            })?;
+            Ok((
+                Fixed {
+                    path: vault.relative(&shard),
+                    now_points_to: vault.relative(&target),
+                },
+                Vec::new(),
+            ))
+        },
+    )
 }
 
 #[cfg(test)]
@@ -209,7 +245,9 @@ mod tests {
         std::fs::write(vault.root.join("Projects/Plan.md"), "The plan").unwrap();
         let today = vault.root.join("Today.md");
         std::fs::write(&today, "See [Plan](Plan.md) and [Plan](Plan.md#steps).\n").unwrap();
-        let caller = Caller { app: "Goose".into() };
+        let caller = Caller {
+            app: "Goose".into(),
+        };
 
         let fixed = fix_link(
             &vault,

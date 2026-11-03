@@ -284,7 +284,10 @@ pub fn records(sync_root: &Path) -> Vec<VaultSyncRecord> {
 
 /// The records of the vaults whose folder no longer holds them, as `gone`
 /// tells which folders are gone.
-pub fn records_of_gone_vaults(sync_root: &Path, gone: impl Fn(&Path) -> bool) -> Vec<VaultSyncRecord> {
+pub fn records_of_gone_vaults(
+    sync_root: &Path,
+    gone: impl Fn(&Path) -> bool,
+) -> Vec<VaultSyncRecord> {
     records(sync_root)
         .into_iter()
         .filter(|record| names_no_vault(record, &gone))
@@ -466,7 +469,11 @@ pub(crate) mod tests {
 
         // A vault about to be created inside one is found too.
         let new_vault = outer.join("Not yet");
-        assert!(find_nested_vault(&sync_root, &new_vault).unwrap().contains_folder);
+        assert!(
+            find_nested_vault(&sync_root, &new_vault)
+                .unwrap()
+                .contains_folder
+        );
 
         load_or_create_record(&sync_root, &inner).unwrap();
         let below = find_nested_vault(&sync_root, &dir).unwrap();

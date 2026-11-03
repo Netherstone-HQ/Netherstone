@@ -52,7 +52,11 @@ pub struct CreateShardParams {
     summary: Option<String>,
 }
 
-pub fn create_shard(vault: &Vault, caller: &Caller, params: CreateShardParams) -> ToolResult<Written> {
+pub fn create_shard(
+    vault: &Vault,
+    caller: &Caller,
+    params: CreateShardParams,
+) -> ToolResult<Written> {
     let name = file_name(&params.name)?;
     let name = name.strip_suffix(".md").unwrap_or(name).trim();
     let folder = folder_or_root(vault, params.folder.as_deref())?;
@@ -61,8 +65,18 @@ pub fn create_shard(vault: &Vault, caller: &Caller, params: CreateShardParams) -
     change(vault, caller, params.summary.as_deref(), &[], || {
         let writes = crate::locks::vault_writes()?;
         let path = crate::import::prepare_new_shard(&vault.root, &wanted)?;
-        crate::write_shard(&writes, &vault.root, &path.to_string_lossy(), &params.content)?;
-        Ok((Written { path: vault.relative(&path) }, vec![path]))
+        crate::write_shard(
+            &writes,
+            &vault.root,
+            &path.to_string_lossy(),
+            &params.content,
+        )?;
+        Ok((
+            Written {
+                path: vault.relative(&path),
+            },
+            vec![path],
+        ))
     })
 }
 
@@ -138,7 +152,10 @@ fn insert_block(markdown: &str, at: usize, text: &str) -> String {
 fn tag_name(tag: &str) -> ToolResult<String> {
     let tag = tag.trim().trim_start_matches('#');
     if tag.is_empty() || tag.chars().any(char::is_whitespace) || !has_letter(tag) {
-        return Err(ToolError(format!("'{}' can't be a tag: one word, with a letter", tag)));
+        return Err(ToolError(format!(
+            "'{}' can't be a tag: one word, with a letter",
+            tag
+        )));
     }
     Ok(tag.to_string())
 }
@@ -186,7 +203,11 @@ fn remove_tag(markdown: String, tag: &str) -> ToolResult<String> {
     let mut out = markdown.clone();
     for range in ranges.into_iter().rev() {
         // With the space before it, so no gap is left behind.
-        let start = if out[..range.start].ends_with(' ') { range.start - 1 } else { range.start };
+        let start = if out[..range.start].ends_with(' ') {
+            range.start - 1
+        } else {
+            range.start
+        };
         out.replace_range(start..range.end, "");
     }
     Ok(out)
@@ -211,21 +232,44 @@ fn edit(markdown: String, params: &EditShardParams) -> ToolResult<String> {
             }
             match markdown.matches(find).count() {
                 1 => Ok(markdown.replacen(find, params.replace_with.as_deref().unwrap_or(""), 1)),
-                0 => Err(ToolError("That text isn't in the shard. Read it again and copy the text exactly.".to_string())),
-                n => Err(ToolError(format!("That text is in the shard {} times. Give more of it, so it's there once.", n))),
+                0 => Err(ToolError(
+                    "That text isn't in the shard. Read it again and copy the text exactly."
+                        .to_string(),
+                )),
+                n => Err(ToolError(format!(
+                    "That text is in the shard {} times. Give more of it, so it's there once.",
+                    n
+                ))),
             }
         }
-        EditAction::AddTag => Ok(add_tag(markdown, &tag_name(needed(&params.tag, "tag", "add_tag")?)?)),
-        EditAction::RemoveTag => remove_tag(markdown, &tag_name(needed(&params.tag, "tag", "remove_tag")?)?),
+        EditAction::AddTag => Ok(add_tag(
+            markdown,
+            &tag_name(needed(&params.tag, "tag", "add_tag")?)?,
+        )),
+        EditAction::RemoveTag => remove_tag(
+            markdown,
+            &tag_name(needed(&params.tag, "tag", "remove_tag")?)?,
+        ),
     }
 }
 
 pub fn edit_shard(vault: &Vault, caller: &Caller, params: EditShardParams) -> ToolResult<Written> {
     let path = vault.shard(&params.path)?;
-    change(vault, caller, params.summary.as_deref(), &[path.clone()], || {
-        edit_under_lock(vault, &path, |markdown| edit(markdown, &params))?;
-        Ok((Written { path: vault.relative(&path) }, Vec::new()))
-    })
+    change(
+        vault,
+        caller,
+        params.summary.as_deref(),
+        &[path.clone()],
+        || {
+            edit_under_lock(vault, &path, |markdown| edit(markdown, &params))?;
+            Ok((
+                Written {
+                    path: vault.relative(&path),
+                },
+                Vec::new(),
+            ))
+        },
+    )
 }
 
 // ── move ─────────────────────────────────────────────────────────────────────
@@ -269,24 +313,43 @@ fn documents_at(path: &Path) -> Vec<PathBuf> {
 
 /// Whether another vault is somewhere inside `folder`.
 fn holds_another_vault(folder: &Path) -> bool {
-    std::fs::read_dir(folder).into_iter().flatten().flatten().any(|entry| {
-        let path = entry.path();
-        entry.file_type().is_ok_and(|kind| kind.is_dir())
-            && crate::vault::is_scanned_name(&entry.file_name().to_string_lossy())
-            && (crate::sync::state::has_vault_marker(&path) || holds_another_vault(&path))
-    })
+    std::fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|entry| {
+            let path = entry.path();
+            entry.file_type().is_ok_and(|kind| kind.is_dir())
+                && crate::vault::is_scanned_name(&entry.file_name().to_string_lossy())
+                && (crate::sync::state::has_vault_marker(&path) || holds_another_vault(&path))
+        })
 }
 
 pub fn move_path(vault: &Vault, caller: &Caller, params: MoveParams) -> ToolResult<Written> {
     let source = vault.resolve(&params.path)?;
     if source == vault.root || !source.exists() {
-        return Err(ToolError(format!("There's nothing to move at '{}'", params.path)));
+        return Err(ToolError(format!(
+            "There's nothing to move at '{}'",
+            params.path
+        )));
     }
     if holds_another_vault(&source) {
-        return Err(ToolError(format!("'{}' has another vault inside it, so it stays where it is", params.path)));
+        return Err(ToolError(format!(
+            "'{}' has another vault inside it, so it stays where it is",
+            params.path
+        )));
     }
-    let destination = params.to_folder.as_deref().map(|folder| folder_or_root(vault, Some(folder))).transpose()?;
-    let new_name = params.new_name.as_deref().map(file_name).transpose()?.map(str::to_string);
+    let destination = params
+        .to_folder
+        .as_deref()
+        .map(|folder| folder_or_root(vault, Some(folder)))
+        .transpose()?;
+    let new_name = params
+        .new_name
+        .as_deref()
+        .map(file_name)
+        .transpose()?
+        .map(str::to_string);
     if destination.is_none() && new_name.is_none() {
         return Err(ToolError("Give to_folder, new_name, or both".to_string()));
     }
@@ -315,7 +378,12 @@ pub fn move_path(vault: &Vault, caller: &Caller, params: MoveParams) -> ToolResu
             at = crate::rename_path(&vault.root, &at, name)?;
         }
         let at = PathBuf::from(at);
-        Ok((Written { path: vault.relative(&at) }, documents_at(&at)))
+        Ok((
+            Written {
+                path: vault.relative(&at),
+            },
+            documents_at(&at),
+        ))
     })
 }
 
@@ -335,7 +403,9 @@ pub fn create_folder(vault: &Vault, _: &Caller, params: CreateFolderParams) -> T
     let parent = folder_or_root(vault, params.parent.as_deref())?;
     let _writes = crate::locks::vault_writes()?;
     let folder = crate::vault::create_folder(&parent, file_name(&params.name)?)?;
-    Ok(Written { path: vault.relative(&folder) })
+    Ok(Written {
+        path: vault.relative(&folder),
+    })
 }
 
 #[cfg(test)]
@@ -379,7 +449,10 @@ mod tests {
 
     #[test]
     fn tags_are_added_once_and_removed_from_text_only() {
-        assert_eq!(add_tag("Notes\n\n#work\n".into(), "idea"), "Notes\n\n#work #idea\n");
+        assert_eq!(
+            add_tag("Notes\n\n#work\n".into(), "idea"),
+            "Notes\n\n#work #idea\n"
+        );
         assert_eq!(add_tag("Notes\n".into(), "idea"), "Notes\n\n#idea\n");
         assert_eq!(add_tag("Has #idea.\n".into(), "idea"), "Has #idea.\n");
         assert_eq!(
@@ -397,7 +470,9 @@ mod tests {
         let inner = vault.root.join("Projects/Inner");
         std::fs::create_dir_all(&inner).unwrap();
         crate::sync::state::load_or_create_record(&vault.sync_root, &inner).unwrap();
-        let caller = Caller { app: "Goose".into() };
+        let caller = Caller {
+            app: "Goose".into(),
+        };
 
         let moved = move_path(
             &vault,

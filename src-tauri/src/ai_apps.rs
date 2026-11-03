@@ -79,9 +79,12 @@ struct AiApp {
 impl AiApp {
     /// The install on this computer, if there's one.
     fn found(&self) -> Option<&Install> {
-        self.installs
-            .iter()
-            .find(|install| install.installed.resolve().is_some_and(|path| path.exists()))
+        self.installs.iter().find(|install| {
+            install
+                .installed
+                .resolve()
+                .is_some_and(|path| path.exists())
+        })
     }
 
     /// Where the app's settings are: the found install's, or the first one's.
@@ -92,14 +95,23 @@ impl AiApp {
 
 /// Claude Desktop as installed from its own installer.
 const CLAUDE_DESKTOP: Install = Install {
-    installed: Place { base: Base::Config, path: &["Claude"] },
-    config: Place { base: Base::Config, path: &["Claude", "claude_desktop_config.json"] },
+    installed: Place {
+        base: Base::Config,
+        path: &["Claude"],
+    },
+    config: Place {
+        base: Base::Config,
+        path: &["Claude", "claude_desktop_config.json"],
+    },
 };
 
 /// Claude Desktop as a Windows app package (MSIX): Windows keeps its
 /// AppData\Roaming in the package's own folder, where only it looks.
 const CLAUDE_DESKTOP_PACKAGE: Install = Install {
-    installed: Place { base: Base::LocalData, path: &["Packages", "Claude_pzs8sxrjxfjjc"] },
+    installed: Place {
+        base: Base::LocalData,
+        path: &["Packages", "Claude_pzs8sxrjxfjjc"],
+    },
     config: Place {
         base: Base::LocalData,
         path: &[
@@ -122,37 +134,67 @@ const APPS: &[AiApp] = &[
         } else {
             &[CLAUDE_DESKTOP]
         },
-        format: Format::Json { key: "mcpServers", typed: false },
+        format: Format::Json {
+            key: "mcpServers",
+            typed: false,
+        },
         download_url: "https://claude.ai/download",
     },
     AiApp {
         id: "claude-code",
         name: "Claude Code",
         installs: &[Install {
-            installed: Place { base: Base::Home, path: &[".claude"] },
-            config: Place { base: Base::Home, path: &[".claude.json"] },
+            installed: Place {
+                base: Base::Home,
+                path: &[".claude"],
+            },
+            config: Place {
+                base: Base::Home,
+                path: &[".claude.json"],
+            },
         }],
-        format: Format::Json { key: "mcpServers", typed: true },
+        format: Format::Json {
+            key: "mcpServers",
+            typed: true,
+        },
         download_url: "https://claude.com/product/claude-code",
     },
     AiApp {
         id: "cursor",
         name: "Cursor",
         installs: &[Install {
-            installed: Place { base: Base::Home, path: &[".cursor"] },
-            config: Place { base: Base::Home, path: &[".cursor", "mcp.json"] },
+            installed: Place {
+                base: Base::Home,
+                path: &[".cursor"],
+            },
+            config: Place {
+                base: Base::Home,
+                path: &[".cursor", "mcp.json"],
+            },
         }],
-        format: Format::Json { key: "mcpServers", typed: false },
+        format: Format::Json {
+            key: "mcpServers",
+            typed: false,
+        },
         download_url: "https://cursor.com/download",
     },
     AiApp {
         id: "vscode",
         name: "VS Code",
         installs: &[Install {
-            installed: Place { base: Base::Config, path: &["Code", "User"] },
-            config: Place { base: Base::Config, path: &["Code", "User", "mcp.json"] },
+            installed: Place {
+                base: Base::Config,
+                path: &["Code", "User"],
+            },
+            config: Place {
+                base: Base::Config,
+                path: &["Code", "User", "mcp.json"],
+            },
         }],
-        format: Format::Json { key: "servers", typed: true },
+        format: Format::Json {
+            key: "servers",
+            typed: true,
+        },
         download_url: "https://code.visualstudio.com/download",
     },
     AiApp {
@@ -160,13 +202,25 @@ const APPS: &[AiApp] = &[
         name: "Goose",
         installs: if cfg!(windows) {
             &[Install {
-                installed: Place { base: Base::Config, path: &["Block", "goose", "config"] },
-                config: Place { base: Base::Config, path: &["Block", "goose", "config", "config.yaml"] },
+                installed: Place {
+                    base: Base::Config,
+                    path: &["Block", "goose", "config"],
+                },
+                config: Place {
+                    base: Base::Config,
+                    path: &["Block", "goose", "config", "config.yaml"],
+                },
             }]
         } else {
             &[Install {
-                installed: Place { base: Base::Home, path: &[".config", "goose"] },
-                config: Place { base: Base::Home, path: &[".config", "goose", "config.yaml"] },
+                installed: Place {
+                    base: Base::Home,
+                    path: &[".config", "goose"],
+                },
+                config: Place {
+                    base: Base::Home,
+                    path: &[".config", "goose", "config.yaml"],
+                },
             }]
         },
         format: Format::GooseYaml,
@@ -234,8 +288,12 @@ fn add_server(format: Format, config: &Path, command: &str) -> Result<(), String
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(format!("Couldn't read {}: {error}", config.display())),
     };
-    let text = with_server(format, &existing, command)
-        .ok_or_else(|| format!("Couldn't read {}, so it was left as it is", config.display()))?;
+    let text = with_server(format, &existing, command).ok_or_else(|| {
+        format!(
+            "Couldn't read {}, so it was left as it is",
+            config.display()
+        )
+    })?;
     if let Some(folder) = config.parent() {
         std::fs::create_dir_all(folder)
             .map_err(|e| format!("Couldn't create {}: {e}", folder.display()))?;
@@ -327,7 +385,10 @@ fn cst_value(value: &Json) -> CstInputValue {
         Json::String(text) => CstInputValue::String(text.clone()),
         Json::Array(items) => CstInputValue::Array(items.iter().map(cst_value).collect()),
         Json::Object(fields) => CstInputValue::Object(
-            fields.iter().map(|(name, value)| (name.clone(), cst_value(value))).collect(),
+            fields
+                .iter()
+                .map(|(name, value)| (name.clone(), cst_value(value)))
+                .collect(),
         ),
     }
 }
@@ -414,7 +475,10 @@ mod tests {
 
     #[test]
     fn json_keeps_the_order_comments_and_layout_around_the_entry() {
-        let format = Format::Json { key: "servers", typed: true };
+        let format = Format::Json {
+            key: "servers",
+            typed: true,
+        };
         let path = temp_config(
             "mcp.json",
             Some(
@@ -432,10 +496,15 @@ mod tests {
 
     #[test]
     fn json_points_the_entry_back_in_place() {
-        let format = Format::Json { key: "mcpServers", typed: false };
+        let format = Format::Json {
+            key: "mcpServers",
+            typed: false,
+        };
         let path = temp_config(
             "mcp.json",
-            Some(r#"{"mcpServers": {"a": 1, "netherstone": {"command": "/old", "args": ["mcp"]}, "b": 2}}"#),
+            Some(
+                r#"{"mcpServers": {"a": 1, "netherstone": {"command": "/old", "args": ["mcp"]}, "b": 2}}"#,
+            ),
         );
         assert!(!is_connected(format, &path, "/apps/Netherstone"));
         add_server(format, &path, "/apps/Netherstone").unwrap();
@@ -448,8 +517,16 @@ mod tests {
 
     #[test]
     fn json_settings_that_arent_a_list_of_servers_are_left_as_they_are() {
-        let format = Format::Json { key: "mcpServers", typed: false };
-        for text in ["[1, 2]", r#"{"mcpServers": []}"#, r#"{"mcpServers": null}"#, "{ not json"] {
+        let format = Format::Json {
+            key: "mcpServers",
+            typed: false,
+        };
+        for text in [
+            "[1, 2]",
+            r#"{"mcpServers": []}"#,
+            r#"{"mcpServers": null}"#,
+            "{ not json",
+        ] {
             let path = temp_config("mcp.json", Some(text));
             assert!(add_server(format, &path, "/apps/Netherstone").is_err());
             assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
@@ -458,7 +535,10 @@ mod tests {
 
     #[test]
     fn json_starts_a_missing_file() {
-        let format = Format::Json { key: "mcpServers", typed: false };
+        let format = Format::Json {
+            key: "mcpServers",
+            typed: false,
+        };
         let path = temp_config("claude_desktop_config.json", None);
         add_server(format, &path, "/apps/Netherstone").unwrap();
         assert!(is_connected(format, &path, "/apps/Netherstone"));
@@ -482,7 +562,11 @@ mod tests {
 
     #[test]
     fn goose_yaml_starts_the_list_in_a_file_without_one() {
-        for text in [None, Some("# Only a comment.\n"), Some("GOOSE_PROVIDER: anthropic\n")] {
+        for text in [
+            None,
+            Some("# Only a comment.\n"),
+            Some("GOOSE_PROVIDER: anthropic\n"),
+        ] {
             let path = temp_config("config.yaml", text);
             add_server(Format::GooseYaml, &path, "/apps/Netherstone").unwrap();
             let edited = std::fs::read_to_string(&path).unwrap();
@@ -493,7 +577,11 @@ mod tests {
 
     #[test]
     fn goose_yaml_that_isnt_a_list_of_extensions_is_left_as_it_is() {
-        for text in ["- a\n- b\n", "extensions:\n- developer\n", "extensions: [\n"] {
+        for text in [
+            "- a\n- b\n",
+            "extensions:\n- developer\n",
+            "extensions: [\n",
+        ] {
             let path = temp_config("config.yaml", Some(text));
             assert!(add_server(Format::GooseYaml, &path, "/apps/Netherstone").is_err());
             assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
@@ -504,6 +592,9 @@ mod tests {
     fn the_setup_snippet_starts_this_program() {
         let setup: Json = serde_json::from_str(&setup_snippet().unwrap()).unwrap();
         assert_eq!(setup["mcpServers"][SERVER_NAME]["args"], json!(["mcp"]));
-        assert_eq!(setup["mcpServers"][SERVER_NAME]["command"], server_command().unwrap());
+        assert_eq!(
+            setup["mcpServers"][SERVER_NAME]["command"],
+            server_command().unwrap()
+        );
     }
 }

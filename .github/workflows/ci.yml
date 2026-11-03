@@ -221,6 +221,13 @@ jobs:
           sudo apt-get install -y -o Dir::Cache::Archives=/var/cache/tauri-apt -o APT::Keep-Downloaded-Packages=true libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Format
+        if: env.BUMP != 'true'
+        working-directory: src-tauri
+        run: cargo fmt --check
 
       - uses: Swatinem/rust-cache@v2
         if: env.BUMP != 'true'

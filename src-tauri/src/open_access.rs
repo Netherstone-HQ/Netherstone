@@ -9,18 +9,86 @@ use crate::db::attachments::extension_for_path;
 /// Files that run something when opened, on Windows, macOS or Linux.
 const PROGRAM_EXTENSIONS: &[&str] = &[
     // Windows
-    "exe", "com", "bat", "cmd", "msi", "msp", "mst", "scr", "pif", "cpl", "lnk", "url", "reg",
-    "vbs", "vbe", "js", "jse", "ws", "wsf", "wsc", "wsh", "ps1", "psm1", "psd1", "hta", "msc",
-    "scf", "inf", "chm", "dll", "sys", "gadget", "application", "appref-ms", "appx", "appxbundle",
-    "msix", "msixbundle", "library-ms", "settingcontent-ms", "diagcab", "xll",
+    "exe",
+    "com",
+    "bat",
+    "cmd",
+    "msi",
+    "msp",
+    "mst",
+    "scr",
+    "pif",
+    "cpl",
+    "lnk",
+    "url",
+    "reg",
+    "vbs",
+    "vbe",
+    "js",
+    "jse",
+    "ws",
+    "wsf",
+    "wsc",
+    "wsh",
+    "ps1",
+    "psm1",
+    "psd1",
+    "hta",
+    "msc",
+    "scf",
+    "inf",
+    "chm",
+    "dll",
+    "sys",
+    "gadget",
+    "application",
+    "appref-ms",
+    "appx",
+    "appxbundle",
+    "msix",
+    "msixbundle",
+    "library-ms",
+    "settingcontent-ms",
+    "diagcab",
+    "xll",
     // macOS
-    "app", "command", "tool", "terminal", "workflow", "action", "pkg", "mpkg", "scpt", "scptd",
-    "applescript", "osax", "prefpane", "webloc", "inetloc", "fileloc",
+    "app",
+    "command",
+    "tool",
+    "terminal",
+    "workflow",
+    "action",
+    "pkg",
+    "mpkg",
+    "scpt",
+    "scptd",
+    "applescript",
+    "osax",
+    "prefpane",
+    "webloc",
+    "inetloc",
+    "fileloc",
     // Linux
-    "desktop", "sh", "bash", "zsh", "csh", "ksh", "fish", "run", "bin", "appimage", "deb", "rpm",
-    "flatpakref", "snap",
+    "desktop",
+    "sh",
+    "bash",
+    "zsh",
+    "csh",
+    "ksh",
+    "fish",
+    "run",
+    "bin",
+    "appimage",
+    "deb",
+    "rpm",
+    "flatpakref",
+    "snap",
     // Anywhere an interpreter is installed
-    "jar", "py", "pyw", "pl", "rb",
+    "jar",
+    "py",
+    "pyw",
+    "pl",
+    "rb",
 ];
 
 /// Checks that `path` is a file that may be opened: not a folder, and not a
@@ -32,7 +100,10 @@ pub fn check(path: &Path) -> Result<(), String> {
         return Err(format!("{} isn't a file", path.display()));
     }
     if is_program(path, &metadata) {
-        return Err(format!("Netherstone doesn't open programs: {}", path.display()));
+        return Err(format!(
+            "Netherstone doesn't open programs: {}",
+            path.display()
+        ));
     }
     Ok(())
 }
@@ -65,14 +136,32 @@ mod tests {
     fn documents_open_and_programs_dont() {
         let dir = temp_dir("open-access");
         std::fs::create_dir_all(dir.join("Tool.app")).unwrap();
-        for name in ["report.pdf", "photo.PNG", "notes.txt", "sheet.xlsx", "run.exe", "a.LNK", "x.desktop", "y.command", "z.js"] {
+        for name in [
+            "report.pdf",
+            "photo.PNG",
+            "notes.txt",
+            "sheet.xlsx",
+            "run.exe",
+            "a.LNK",
+            "x.desktop",
+            "y.command",
+            "z.js",
+        ] {
             std::fs::write(dir.join(name), b"x").unwrap();
         }
 
         for name in ["report.pdf", "photo.PNG", "notes.txt", "sheet.xlsx"] {
             assert!(check(&dir.join(name)).is_ok(), "{name}");
         }
-        for name in ["run.exe", "a.LNK", "x.desktop", "y.command", "z.js", "Tool.app", "missing.pdf"] {
+        for name in [
+            "run.exe",
+            "a.LNK",
+            "x.desktop",
+            "y.command",
+            "z.js",
+            "Tool.app",
+            "missing.pdf",
+        ] {
             assert!(check(&dir.join(name)).is_err(), "{name}");
         }
     }

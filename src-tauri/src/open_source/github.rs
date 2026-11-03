@@ -6,7 +6,9 @@
 
 use serde::Deserialize;
 
-use super::{Download, FileKind, Listing, PathCheck, Pending, Refusal, Source, Stage, Web, check_path};
+use super::{
+    Download, FileKind, Listing, PathCheck, Pending, Refusal, Source, Stage, Web, check_path,
+};
 
 const API: &str = "https://api.github.com";
 const RAW: &str = "https://raw.githubusercontent.com";
@@ -63,7 +65,9 @@ impl Folder {
             }
             request.send()
         };
-        let mut response = send(web.github_token.as_ref()).await.map_err(|_| Refusal::DownloadFailed)?;
+        let mut response = send(web.github_token.as_ref())
+            .await
+            .map_err(|_| Refusal::DownloadFailed)?;
         if response.status() == reqwest::StatusCode::UNAUTHORIZED && web.github_token.is_some() {
             // A sign-in that ran out; public folders open without one.
             response = send(None).await.map_err(|_| Refusal::DownloadFailed)?;
@@ -73,7 +77,12 @@ impl Folder {
 
     /// The commit `branch` points at, or None when there's no such branch.
     async fn commit_of(&self, web: &Web, branch: &str) -> Result<Option<String>, Refusal> {
-        let url = format!("{API}/repos/{}/{}/commits/{}", self.owner, self.repo, urlencoding::encode(branch));
+        let url = format!(
+            "{API}/repos/{}/{}/commits/{}",
+            self.owner,
+            self.repo,
+            urlencoding::encode(branch)
+        );
         let response = self.get(web, &url, "application/vnd.github.sha").await?;
         match response.status() {
             status if status.is_success() => {
@@ -91,7 +100,12 @@ impl Folder {
 
     /// Lists `folder` at `commit`, everything under it, or None when the
     /// commit has no such folder.
-    async fn list_folder(&self, web: &Web, commit: &str, folder: &[String]) -> Result<Option<Tree>, Refusal> {
+    async fn list_folder(
+        &self,
+        web: &Web,
+        commit: &str,
+        folder: &[String],
+    ) -> Result<Option<Tree>, Refusal> {
         let url = format!(
             "{API}/repos/{}/{}/git/trees/{commit}:{}?recursive=1",
             self.owner,
@@ -100,7 +114,11 @@ impl Folder {
         );
         let response = self.get(web, &url, "application/vnd.github+json").await?;
         match response.status() {
-            status if status.is_success() => response.json().await.map(Some).map_err(|_| Refusal::DownloadFailed),
+            status if status.is_success() => response
+                .json()
+                .await
+                .map(Some)
+                .map_err(|_| Refusal::DownloadFailed),
             reqwest::StatusCode::NOT_FOUND | reqwest::StatusCode::UNPROCESSABLE_ENTITY => Ok(None),
             _ => Err(Refusal::DownloadFailed),
         }
@@ -115,7 +133,10 @@ impl Folder {
         if tree.truncated {
             return Err(Refusal::TooManyFiles);
         }
-        let prefix = folder.iter().map(|segment| format!("{segment}/")).collect::<String>();
+        let prefix = folder
+            .iter()
+            .map(|segment| format!("{segment}/"))
+            .collect::<String>();
         let mut listing = Listing {
             template: false,
             name: self.name(folder),
@@ -180,7 +201,10 @@ impl Folder {
 
 /// Each part of a `/`-separated path, made safe for a URL.
 fn encode_path(path: &str) -> String {
-    path.split('/').map(|segment| urlencoding::encode(segment).into_owned()).collect::<Vec<_>>().join("/")
+    path.split('/')
+        .map(|segment| urlencoding::encode(segment).into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 impl Source for Folder {
@@ -244,7 +268,10 @@ mod tests {
         assert_eq!(
             folder(&["feature", "x", "docs"]).splits(),
             vec![
-                ("feature".to_string(), vec!["x".to_string(), "docs".to_string()]),
+                (
+                    "feature".to_string(),
+                    vec!["x".to_string(), "docs".to_string()]
+                ),
                 ("feature/x".to_string(), vec!["docs".to_string()]),
                 ("feature/x/docs".to_string(), vec![]),
             ]
@@ -257,13 +284,34 @@ mod tests {
         let docs = vec!["docs".to_string()];
         let listing = source.listing("b3725f1", &docs, tree(false)).unwrap();
         assert_eq!(listing.name, "docs");
-        assert_eq!(listing.address, "github.com/lena-k/field-guide/tree/main/docs");
         assert_eq!(
-            (listing.shards, listing.drawings, listing.pictures, listing.left_out, listing.size),
+            listing.address,
+            "github.com/lena-k/field-guide/tree/main/docs"
+        );
+        assert_eq!(
+            (
+                listing.shards,
+                listing.drawings,
+                listing.pictures,
+                listing.left_out,
+                listing.size
+            ),
             (2, 1, 1, 2, 2550)
         );
-        let paths: Vec<&str> = listing.downloads.iter().map(|download| download.path.as_str()).collect();
-        assert_eq!(paths, vec!["Birds.md", "Field notes/Owls.md", "Field notes/Wings.excalidraw", "img/owl.png"]);
+        let paths: Vec<&str> = listing
+            .downloads
+            .iter()
+            .map(|download| download.path.as_str())
+            .collect();
+        assert_eq!(
+            paths,
+            vec![
+                "Birds.md",
+                "Field notes/Owls.md",
+                "Field notes/Wings.excalidraw",
+                "img/owl.png"
+            ]
+        );
         assert_eq!(
             listing.downloads[1].url,
             "https://raw.githubusercontent.com/lena-k/field-guide/b3725f1/docs/Field%20notes/Owls.md"
@@ -273,8 +321,17 @@ mod tests {
     #[test]
     fn refuses_what_it_cant_open() {
         let source = folder(&[]);
-        assert_eq!(source.listing("b3725f1", &[], tree(true)).err(), Some(Refusal::TooManyFiles));
-        let empty = Tree { truncated: false, tree: vec![] };
-        assert_eq!(source.listing("b3725f1", &[], empty).err(), Some(Refusal::NothingToOpen));
+        assert_eq!(
+            source.listing("b3725f1", &[], tree(true)).err(),
+            Some(Refusal::TooManyFiles)
+        );
+        let empty = Tree {
+            truncated: false,
+            tree: vec![],
+        };
+        assert_eq!(
+            source.listing("b3725f1", &[], empty).err(),
+            Some(Refusal::NothingToOpen)
+        );
     }
 }

@@ -263,8 +263,14 @@ pub(crate) fn vault_key(vault_path: &Path) -> String {
 /// to them, once its folder is gone.
 pub fn forget_vault_attachments(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()> {
     let vault = vault_key(vault_path);
-    conn.execute("DELETE FROM attachment_references WHERE vault_path = ?1", params![vault])?;
-    conn.execute("DELETE FROM attachments WHERE vault_path = ?1", params![vault])?;
+    conn.execute(
+        "DELETE FROM attachment_references WHERE vault_path = ?1",
+        params![vault],
+    )?;
+    conn.execute(
+        "DELETE FROM attachments WHERE vault_path = ?1",
+        params![vault],
+    )?;
     Ok(())
 }
 
@@ -615,14 +621,13 @@ fn readable_asset_paths(original_name: &str, extension: &str) -> impl Iterator<I
         format!(".{}", extension)
     };
 
-    (0..)
-        .map(move |n| {
-            if n == 0 {
-                format!("{}/{}{}", ATTACHMENTS_DIR_NAME, stem, suffix)
-            } else {
-                format!("{}/{}-{}{}", ATTACHMENTS_DIR_NAME, stem, n, suffix)
-            }
-        })
+    (0..).map(move |n| {
+        if n == 0 {
+            format!("{}/{}{}", ATTACHMENTS_DIR_NAME, stem, suffix)
+        } else {
+            format!("{}/{}-{}{}", ATTACHMENTS_DIR_NAME, stem, n, suffix)
+        }
+    })
 }
 
 /// What a new attachment is made from.
@@ -690,7 +695,9 @@ fn find_identical_attachment(
             )
             .map_err(|e| format!("Failed to prepare attachment hash query: {}", e))?;
         let rows = stmt
-            .query_map(params![vault_key(vault_path), hash], |row| row.get::<_, String>(0))
+            .query_map(params![vault_key(vault_path), hash], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|e| format!("Failed to query attachments by hash: {}", e))?;
         rows.filter_map(Result::ok).collect()
     };
@@ -941,7 +948,11 @@ pub fn sync_references_for_saved_markdown(
 
     let vault = vault_key(vault_path);
     let mut touched = previous;
-    touched.extend(current_by_path.into_keys().map(|asset_path| (vault.clone(), asset_path)));
+    touched.extend(
+        current_by_path
+            .into_keys()
+            .map(|asset_path| (vault.clone(), asset_path)),
+    );
     refresh_attachment_counts(conn, &touched)
 }
 
@@ -1917,9 +1928,18 @@ mod tests {
         let ours = persist_attachment_bytes(&conn, &vault, "photo.png", b"ours").unwrap();
 
         assert_eq!(ours.asset_path, "_attachments/photo-2.png");
-        assert_eq!(std::fs::read(vault.join("_attachments/photo.png")).unwrap(), b"theirs");
-        assert_eq!(std::fs::read(vault.join("_attachments/photo-1.png")).unwrap(), b"theirs too");
-        assert_eq!(std::fs::read(vault.join(&ours.asset_path)).unwrap(), b"ours");
+        assert_eq!(
+            std::fs::read(vault.join("_attachments/photo.png")).unwrap(),
+            b"theirs"
+        );
+        assert_eq!(
+            std::fs::read(vault.join("_attachments/photo-1.png")).unwrap(),
+            b"theirs too"
+        );
+        assert_eq!(
+            std::fs::read(vault.join(&ours.asset_path)).unwrap(),
+            b"ours"
+        );
         std::fs::remove_dir_all(&vault).unwrap();
     }
 
@@ -1938,7 +1958,10 @@ mod tests {
         assert_eq!(copied.asset_path, "_attachments/Recording.mp3");
         assert_eq!(copied.size_bytes, content.len() as u64);
         assert_eq!(copied.hash, blake3::hash(&content).to_hex().to_string());
-        assert_eq!(std::fs::read(vault.join(&copied.asset_path)).unwrap(), content);
+        assert_eq!(
+            std::fs::read(vault.join(&copied.asset_path)).unwrap(),
+            content
+        );
         let mut names: Vec<_> = std::fs::read_dir(vault.join(ATTACHMENTS_DIR_NAME))
             .unwrap()
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
@@ -2010,7 +2033,11 @@ mod tests {
         let now = now_unix_seconds();
         conn.execute(
             "UPDATE attachments SET gc_candidate_at = ?1 WHERE vault_path = ?3 AND asset_path = ?2",
-            params![now - CLEANUP_GRACE_SECONDS - 1, old.asset_path, vault_key(&vault)],
+            params![
+                now - CLEANUP_GRACE_SECONDS - 1,
+                old.asset_path,
+                vault_key(&vault)
+            ],
         )
         .unwrap();
 
@@ -2155,7 +2182,10 @@ mod tests {
         );
         let blocked = attachment_sync_info(&vault, "_attachments/setup.exe").unwrap();
         assert_eq!(blocked.unwrap().sync_status, "blocked");
-        assert_eq!(attachment_sync_info(&vault, "_attachments/gone.png").unwrap(), None);
+        assert_eq!(
+            attachment_sync_info(&vault, "_attachments/gone.png").unwrap(),
+            None
+        );
         assert!(attachment_sync_info(&vault, "notes/a.png").is_err());
         assert!(attachment_sync_info(&vault, "_attachments/../secret.txt").is_err());
 

@@ -23,7 +23,9 @@ pub fn drive_of(path: &Path) -> Option<u64> {
     #[cfg(windows)]
     {
         let handle = winapi_util::Handle::from_path_any(path).ok()?;
-        winapi_util::file::information(&handle).ok().map(|info| info.volume_serial_number())
+        winapi_util::file::information(&handle)
+            .ok()
+            .map(|info| info.volume_serial_number())
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -51,8 +53,13 @@ pub fn is_gone(path: &Path, drive: Option<u64>) -> bool {
 /// The drive each vault the app opened was on, where it's known.
 fn drives(conn: &Connection) -> rusqlite::Result<HashMap<PathBuf, u64>> {
     let mut stmt = conn.prepare("SELECT path, drive FROM vaults WHERE drive IS NOT NULL")?;
-    stmt.query_map([], |row| Ok((PathBuf::from(row.get::<_, String>(0)?), row.get::<_, i64>(1)? as u64)))?
-        .collect()
+    stmt.query_map([], |row| {
+        Ok((
+            PathBuf::from(row.get::<_, String>(0)?),
+            row.get::<_, i64>(1)? as u64,
+        ))
+    })?
+    .collect()
 }
 
 /// Every vault the database holds something for: the ones the app opened,
@@ -85,16 +92,22 @@ fn forget_vault(conn: &Connection, vault_path: &Path, has_history: bool) -> Resu
 
     let thumbnails = db::gallery::thumbnail_folder(vault_path)?;
     match std::fs::remove_dir_all(&thumbnails) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            Err(format!("Couldn't remove {}: {}", thumbnails.display(), error))
-        }
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(format!(
+            "Couldn't remove {}: {}",
+            thumbnails.display(),
+            error
+        )),
         _ => Ok(()),
     }
 }
 
 /// Forgets the vaults whose folder is gone, of the ones `conn` holds
 /// something for and `also`, and returns them.
-fn forget_gone(conn: &Connection, sync_root: &Path, also: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+fn forget_gone(
+    conn: &Connection,
+    sync_root: &Path,
+    also: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
     let drives = drives(conn).map_err(|e| e.to_string())?;
     let mut vaults = known_vaults(conn).map_err(|e| e.to_string())?;
     vaults.extend(also.iter().cloned());
@@ -106,10 +119,17 @@ fn forget_gone(conn: &Connection, sync_root: &Path, also: &[PathBuf]) -> Result<
         .collect();
 
     let mut gone = Vec::new();
-    for vault in vaults.into_iter().filter(|vault| is_gone(vault, drives.get(vault).copied())) {
+    for vault in vaults
+        .into_iter()
+        .filter(|vault| is_gone(vault, drives.get(vault).copied()))
+    {
         match forget_vault(conn, &vault, histories.contains(&vault)) {
             Ok(()) => gone.push(vault),
-            Err(error) => eprintln!("[Netherstone] Couldn't forget {}: {}", vault.display(), error),
+            Err(error) => eprintln!(
+                "[Netherstone] Couldn't forget {}: {}",
+                vault.display(),
+                error
+            ),
         }
     }
     Ok(gone)
@@ -140,7 +160,13 @@ fn size_of(dir: &Path) -> u64 {
     entries
         .flatten()
         .filter_map(|entry| Some((entry.path(), entry.metadata().ok()?)))
-        .map(|(path, metadata)| if metadata.is_dir() { size_of(&path) } else { metadata.len() })
+        .map(|(path, metadata)| {
+            if metadata.is_dir() {
+                size_of(&path)
+            } else {
+                metadata.len()
+            }
+        })
         .sum()
 }
 
@@ -170,7 +196,11 @@ pub fn histories(conn: &Connection, sync_root: &Path) -> Result<Vec<GoneHistory>
         .into_iter()
         .map(|record| gone_history(sync_root, record))
         .collect();
-    histories.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes).then_with(|| a.name.cmp(&b.name)));
+    histories.sort_by(|a, b| {
+        b.size_bytes
+            .cmp(&a.size_bytes)
+            .then_with(|| a.name.cmp(&b.name))
+    });
     Ok(histories)
 }
 
@@ -249,15 +279,22 @@ mod tests {
     }
 
     fn rows(conn: &Connection, table: &str) -> i64 {
-        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap()
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .unwrap()
     }
 
     #[test]
     fn gone_vaults_are_forgotten_and_the_others_left() {
         let dir = state::tests::temp_dir("gone-vaults-forget");
         let sync_root = dir.join("sync");
-        let (kept, gone, kept_history, unmounted) =
-            (dir.join("Kept"), dir.join("Gone"), dir.join("History"), dir.join("Mount/Vault"));
+        let (kept, gone, kept_history, unmounted) = (
+            dir.join("Kept"),
+            dir.join("Gone"),
+            dir.join("History"),
+            dir.join("Mount/Vault"),
+        );
         let conn = db();
         for vault in [&kept, &gone, &kept_history] {
             std::fs::create_dir_all(vault).unwrap();
@@ -265,7 +302,11 @@ mod tests {
         }
         state::load_or_create_record(&sync_root, &kept_history).unwrap();
         std::fs::create_dir_all(dir.join("Mount")).unwrap();
-        add_rows(&conn, &unmounted, drive_of(&dir).map(|drive| drive.wrapping_add(1)));
+        add_rows(
+            &conn,
+            &unmounted,
+            drive_of(&dir).map(|drive| drive.wrapping_add(1)),
+        );
         std::fs::remove_dir_all(&gone).unwrap();
         std::fs::remove_dir_all(&kept_history).unwrap();
 
@@ -274,7 +315,14 @@ mod tests {
         let forgotten = forget_gone(&conn, &sync_root, std::slice::from_ref(&recent)).unwrap();
 
         assert_eq!(forgotten, [gone, kept_history, recent]);
-        for table in ["files", "fts_search", "tags", "attachments", "ast_cache_index", "vaults"] {
+        for table in [
+            "files",
+            "fts_search",
+            "tags",
+            "attachments",
+            "ast_cache_index",
+            "vaults",
+        ] {
             assert_eq!(rows(&conn, table), 2, "{table}");
         }
         // The writing goes only with no history to keep it with.
@@ -288,14 +336,22 @@ mod tests {
     fn histories_of_gone_vaults_are_listed_and_trashed_on_request() {
         let dir = state::tests::temp_dir("gone-vaults-history");
         let sync_root = dir.join("sync");
-        let (kept, deleted, replaced, unmarked) =
-            (dir.join("Kept"), dir.join("Deleted"), dir.join("Replaced"), dir.join("Unmarked"));
+        let (kept, deleted, replaced, unmarked) = (
+            dir.join("Kept"),
+            dir.join("Deleted"),
+            dir.join("Replaced"),
+            dir.join("Unmarked"),
+        );
         let conn = db();
         let mut ids = Vec::new();
         for vault in [&kept, &deleted, &replaced, &unmarked] {
             std::fs::create_dir_all(vault).unwrap();
             let record = state::load_or_create_record(&sync_root, vault).unwrap();
-            std::fs::write(state::vault_dir(&sync_root, &record.vault_id).join("pack"), b"12345").unwrap();
+            std::fs::write(
+                state::vault_dir(&sync_root, &record.vault_id).join("pack"),
+                b"12345",
+            )
+            .unwrap();
             ids.push(record.vault_id);
         }
         std::fs::remove_dir_all(&deleted).unwrap();
@@ -306,7 +362,10 @@ mod tests {
         std::fs::remove_dir_all(unmarked.join(state::VAULT_META_DIR)).unwrap();
 
         let listed = histories(&conn, &sync_root).unwrap();
-        let mut listed_ids: Vec<_> = listed.iter().map(|history| history.vault_id.clone()).collect();
+        let mut listed_ids: Vec<_> = listed
+            .iter()
+            .map(|history| history.vault_id.clone())
+            .collect();
         listed_ids.sort();
         let mut expected = vec![ids[1].clone(), ids[2].clone()];
         expected.sort();
@@ -324,8 +383,15 @@ mod tests {
 
         // A vault still in its folder keeps its history.
         for id in [&ids[0], &ids[3]] {
-            assert!(delete_history(&conn, &sync_root, id, |_| panic!("trashed a kept vault")).is_err());
+            assert!(
+                delete_history(&conn, &sync_root, id, |_| panic!("trashed a kept vault")).is_err()
+            );
         }
-        assert!(delete_history(&conn, &sync_root, "../elsewhere", |_| panic!("left the sync folder")).is_err());
+        assert!(
+            delete_history(&conn, &sync_root, "../elsewhere", |_| panic!(
+                "left the sync folder"
+            ))
+            .is_err()
+        );
     }
 }

@@ -138,8 +138,13 @@ fn merge_diverged(
             // A file deleted on one side and edited on the other keeps the edit.
             let chosen = match (entry.our, entry.their) {
                 (Some(ours), Some(theirs)) => {
-                    match merge_drawing(repository, &path, entry.ancestor.as_ref(), &ours, &theirs)? {
-                        Some((id, file_size)) => Some(IndexEntry { id, file_size, ..ours }),
+                    match merge_drawing(repository, &path, entry.ancestor.as_ref(), &ours, &theirs)?
+                    {
+                        Some((id, file_size)) => Some(IndexEntry {
+                            id,
+                            file_size,
+                            ..ours
+                        }),
                         None => {
                             conflicts.push(IncomingConflict {
                                 path: path.clone(),
@@ -204,7 +209,10 @@ fn merge_drawing(
             .map(|blob| String::from_utf8_lossy(blob.content()).into_owned())
             .map_err(|e| git_error("Failed to read merge conflicts", e))
     };
-    let base = ancestor.map(|entry| read(entry.id)).transpose()?.unwrap_or_default();
+    let base = ancestor
+        .map(|entry| read(entry.id))
+        .transpose()?
+        .unwrap_or_default();
     let Some(merged) = drawing_merge::merge(&base, &read(ours.id)?, &read(theirs.id)?)
         .filter(|merged| !merged.conflicted)
     else {
@@ -452,7 +460,9 @@ mod tests {
         let laptop = Device::new(&dir, "laptop", &remote);
         let desktop = Device::new(&dir, "desktop", &remote);
         let shape = |id: &str, version: i64| {
-            format!(r#"{{ "id": "{id}", "type": "rectangle", "version": {version}, "versionNonce": {version} }}"#)
+            format!(
+                r#"{{ "id": "{id}", "type": "rectangle", "version": {version}, "versionNonce": {version} }}"#
+            )
         };
         let drawing = |shapes: &[String]| format!(r#"{{ "elements": [{}] }}"#, shapes.join(", "));
         let ids = |device: &Device| {
@@ -469,9 +479,15 @@ mod tests {
         laptop.sync();
         desktop.sync();
 
-        laptop.write("Plan.excalidraw", &drawing(&[shape("a", 2), shape("b", 1), shape("laptop", 1)]));
+        laptop.write(
+            "Plan.excalidraw",
+            &drawing(&[shape("a", 2), shape("b", 1), shape("laptop", 1)]),
+        );
         laptop.sync();
-        desktop.write("Plan.excalidraw", &drawing(&[shape("a", 1), shape("b", 2), shape("desktop", 1)]));
+        desktop.write(
+            "Plan.excalidraw",
+            &drawing(&[shape("a", 1), shape("b", 2), shape("desktop", 1)]),
+        );
         let pulled = desktop.sync();
 
         assert!(pulled.conflicts.is_empty());

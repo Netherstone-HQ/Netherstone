@@ -31,7 +31,10 @@ pub enum Command {
     Mcp,
     /// The app, with any files and folders to open, as written, and the
     /// links it was opened with.
-    Open { paths: Vec<PathBuf>, links: Vec<Address> },
+    Open {
+        paths: Vec<PathBuf>,
+        links: Vec<Address>,
+    },
 }
 
 /// Reads the command line, without the program's own path. Links are read
@@ -85,11 +88,16 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
                 }
                 get().keep_links(links);
             }
-            let own = crate::db::get_db_path().ok().and_then(|db| db.parent().map(Path::to_path_buf));
+            let own = crate::db::get_db_path()
+                .ok()
+                .and_then(|db| db.parent().map(Path::to_path_buf));
             if let Some(own) = own
                 && let Err(error) = std::env::set_current_dir(&own)
             {
-                eprintln!("[Netherstone] Couldn't leave the folder the app started in: {}", error);
+                eprintln!(
+                    "[Netherstone] Couldn't leave the folder the app started in: {}",
+                    error
+                );
             }
             Ok(())
         })
@@ -191,7 +199,11 @@ impl Launches {
         } else {
             (Vec::new(), files.iter().map(|path| name(path)).collect())
         };
-        let link = if can_open_link { lock(&self.link).take() } else { None };
+        let link = if can_open_link {
+            lock(&self.link).take()
+        } else {
+            None
+        };
         if let Some(link) = &link {
             crate::open_source::allow(link.clone());
         }
@@ -213,13 +225,20 @@ pub fn receive(app: &tauri::AppHandle, paths: &[PathBuf], links: Vec<Address>, c
         ask(app, message, button, move || get().keep(paths));
     }
     if let Some(link) = links.into_iter().last() {
-        ask(app, format!("Open {}?", link.text()), "Open", move || get().keep_links(vec![link]));
+        ask(app, format!("Open {}?", link.text()), "Open", move || {
+            get().keep_links(vec![link])
+        });
     }
 }
 
 /// Keeps what came in and tells the window, first asking when the page is
 /// already running.
-fn ask(app: &tauri::AppHandle, message: String, button: &str, keep: impl FnOnce() -> bool + Send + 'static) {
+fn ask(
+    app: &tauri::AppHandle,
+    message: String,
+    button: &str,
+    keep: impl FnOnce() -> bool + Send + 'static,
+) {
     if !get().needs_confirming() {
         keep_and_tell(app, keep);
         return;
@@ -228,7 +247,10 @@ fn ask(app: &tauri::AppHandle, message: String, button: &str, keep: impl FnOnce(
     app.dialog()
         .message(message)
         .title("Open in Netherstone")
-        .buttons(MessageDialogButtons::OkCancelCustom(button.into(), "Cancel".into()))
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            button.into(),
+            "Cancel".into(),
+        ))
         .show(move |yes| {
             if yes {
                 keep_and_tell(&handle, keep);
@@ -240,18 +262,32 @@ fn keep_and_tell(app: &tauri::AppHandle, keep: impl FnOnce() -> bool) {
     if keep()
         && let Err(error) = app.emit(EVENT, ())
     {
-        eprintln!("[Netherstone] Couldn't tell the window about what was opened: {}", error);
+        eprintln!(
+            "[Netherstone] Couldn't tell the window about what was opened: {}",
+            error
+        );
     }
 }
 
 /// The question for opening `paths`, and the button that says yes. Only the
 /// last folder opens, as in `keep`.
 fn question(paths: &[PathBuf]) -> (String, &'static str) {
-    let folder = paths.iter().rev().find(|path| path.is_dir()).map(|path| name(path));
-    let files: Vec<String> = paths.iter().filter(|path| !path.is_dir()).map(|path| name(path)).collect();
+    let folder = paths
+        .iter()
+        .rev()
+        .find(|path| path.is_dir())
+        .map(|path| name(path));
+    let files: Vec<String> = paths
+        .iter()
+        .filter(|path| !path.is_dir())
+        .map(|path| name(path))
+        .collect();
     match (folder, files.is_empty()) {
         (Some(folder), true) => (format!("Open {folder} as a vault?"), "Open"),
-        (Some(folder), false) => (format!("Open {folder} as a vault and import {}?", names(&files)), "Open"),
+        (Some(folder), false) => (
+            format!("Open {folder} as a vault and import {}?", names(&files)),
+            "Open",
+        ),
         (None, _) => (format!("Import {}?", names(&files)), "Import"),
     }
 }
@@ -276,7 +312,9 @@ fn resolve(path: &Path, cwd: &Path) -> Option<PathBuf> {
     // Windows' canonical form starts with `\\?\`, which no other path in the
     // app has; `absolute` works out `..` there without it.
     #[cfg(windows)]
-    let path = std::path::absolute(&path).ok().filter(|path| path.exists())?;
+    let path = std::path::absolute(&path)
+        .ok()
+        .filter(|path| path.exists())?;
     #[cfg(not(windows))]
     let path = path.canonicalize().ok()?;
     Some(path)
@@ -287,7 +325,9 @@ fn text(path: &Path) -> String {
 }
 
 fn name(path: &Path) -> String {
-    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| text(path))
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| text(path))
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -306,11 +346,21 @@ mod tests {
     #[test]
     fn reads_the_command_line() {
         assert_eq!(parse(args(&["mcp"])), Command::Mcp);
-        assert_eq!(parse(args(&[])), Command::Open { paths: vec![], links: vec![] });
+        assert_eq!(
+            parse(args(&[])),
+            Command::Open {
+                paths: vec![],
+                links: vec![]
+            }
+        );
         assert_eq!(
             parse(args(&[".", "-psn_0_123", "notes.md", "mcp"])),
             Command::Open {
-                paths: vec![PathBuf::from("."), PathBuf::from("notes.md"), PathBuf::from("mcp")],
+                paths: vec![
+                    PathBuf::from("."),
+                    PathBuf::from("notes.md"),
+                    PathBuf::from("mcp")
+                ],
                 links: vec![]
             }
         );
@@ -319,8 +369,16 @@ mod tests {
     #[test]
     fn reads_links_before_paths() {
         let template = Address::parse("netherstone.app/templates/worldbuilding").unwrap();
-        let file = if cfg!(windows) { "file:///C:/Notes/Plan%20B.md" } else { "file:///home/lena/Plan%20B.md" };
-        let path = if cfg!(windows) { r"C:\Notes\Plan B.md" } else { "/home/lena/Plan B.md" };
+        let file = if cfg!(windows) {
+            "file:///C:/Notes/Plan%20B.md"
+        } else {
+            "file:///home/lena/Plan%20B.md"
+        };
+        let path = if cfg!(windows) {
+            r"C:\Notes\Plan B.md"
+        } else {
+            "/home/lena/Plan B.md"
+        };
         assert_eq!(
             parse(args(&[
                 "netherstone://open/netherstone.app/templates/worldbuilding",
@@ -345,7 +403,12 @@ mod tests {
         let launches = Launches::new();
 
         let added = launches.add(
-            &[PathBuf::from("Other"), PathBuf::from("Vault/../Vault"), PathBuf::from("Vault/Report.md"), PathBuf::from("missing.md")],
+            &[
+                PathBuf::from("Other"),
+                PathBuf::from("Vault/../Vault"),
+                PathBuf::from("Vault/Report.md"),
+                PathBuf::from("missing.md"),
+            ],
             &dir,
         );
         assert!(added);
@@ -359,7 +422,15 @@ mod tests {
         assert_eq!(taken.waiting, vec!["Report.md".to_string()]);
 
         let taken = launches.take(true, false);
-        assert_eq!(taken, Taken { vault: None, files: vec![text(&report)], waiting: vec![], link: None });
+        assert_eq!(
+            taken,
+            Taken {
+                vault: None,
+                files: vec![text(&report)],
+                waiting: vec![],
+                link: None
+            }
+        );
         assert!(crate::import::picked().check(&report).is_ok());
         assert_eq!(launches.take(true, false), Taken::default());
     }
@@ -388,14 +459,26 @@ mod tests {
         let dir = temp_dir("launch-question");
         let folder = dir.join("Notes");
         std::fs::create_dir_all(&folder).unwrap();
-        let files: Vec<PathBuf> = ["Report.md", "Plan.docx", "Scan.pdf"].iter().map(|name| dir.join(name)).collect();
+        let files: Vec<PathBuf> = ["Report.md", "Plan.docx", "Scan.pdf"]
+            .iter()
+            .map(|name| dir.join(name))
+            .collect();
         for file in &files {
             std::fs::write(file, b"x").unwrap();
         }
 
-        assert_eq!(question(&[folder.clone()]), ("Open Notes as a vault?".into(), "Open"));
-        assert_eq!(question(&files[..1]), ("Import Report.md?".into(), "Import"));
-        assert_eq!(question(&files[..2]), ("Import Report.md and Plan.docx?".into(), "Import"));
+        assert_eq!(
+            question(&[folder.clone()]),
+            ("Open Notes as a vault?".into(), "Open")
+        );
+        assert_eq!(
+            question(&files[..1]),
+            ("Import Report.md?".into(), "Import")
+        );
+        assert_eq!(
+            question(&files[..2]),
+            ("Import Report.md and Plan.docx?".into(), "Import")
+        );
         assert_eq!(
             question(&[folder, files[0].clone(), files[1].clone(), files[2].clone()]),
             ("Open Notes as a vault and import 3 files?".into(), "Open")

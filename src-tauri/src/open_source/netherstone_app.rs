@@ -3,7 +3,9 @@
 
 use serde::Deserialize;
 
-use super::{Download, Listing, PathCheck, Pending, Refusal, Source, Stage, Web, check_path, needs_update};
+use super::{
+    Download, Listing, PathCheck, Pending, Refusal, Source, Stage, Web, check_path, needs_update,
+};
 
 const SITE: &str = "https://netherstone.app";
 
@@ -62,7 +64,10 @@ impl Source for Template {
 /// passed over, so a new field elsewhere breaks nothing.
 fn find(list: List, id: &str) -> Result<Entry, Refusal> {
     if list.v != LIST_VERSION {
-        return Err(Refusal::UpdateFirst { name: None, version: None });
+        return Err(Refusal::UpdateFirst {
+            name: None,
+            version: None,
+        });
     }
     list.templates
         .into_iter()
@@ -73,7 +78,10 @@ fn find(list: List, id: &str) -> Result<Entry, Refusal> {
 
 fn entry_listing(entry: Entry, app_version: &str) -> Result<Listing, Refusal> {
     if needs_update(&entry.min_app_version, app_version) {
-        return Err(Refusal::UpdateFirst { name: Some(entry.name), version: Some(entry.min_app_version) });
+        return Err(Refusal::UpdateFirst {
+            name: Some(entry.name),
+            version: Some(entry.min_app_version),
+        });
     }
     if entry.sha256.len() != 64 || !entry.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(Refusal::DownloadFailed);
@@ -83,7 +91,10 @@ fn entry_listing(entry: Entry, app_version: &str) -> Result<Listing, Refusal> {
         .filter(|shard| check_path(shard) == PathCheck::Keep(super::FileKind::Shard));
     Ok(Listing {
         template: true,
-        address: super::Address::Template { id: entry.id.clone() }.text(),
+        address: super::Address::Template {
+            id: entry.id.clone(),
+        }
+        .text(),
         name: entry.name,
         files: entry.files,
         shards: 0,
@@ -134,22 +145,35 @@ mod tests {
         assert_eq!(listing.address, "netherstone.app/templates/worldbuilding");
         assert_eq!(listing.size, 48213);
         assert_eq!(listing.first_shard.as_deref(), Some("Start here.md"));
-        assert_eq!(listing.downloads[0].url, "https://netherstone.app/templates/worldbuilding.zip");
+        assert_eq!(
+            listing.downloads[0].url,
+            "https://netherstone.app/templates/worldbuilding.zip"
+        );
         assert_eq!(listing.downloads[0].size, 21877);
     }
 
     #[test]
     fn refuses_what_it_cant_open() {
-        let templates = || list(serde_json::json!({ "v": 1, "templates": [worldbuilding("0.8.0")] }));
-        assert_eq!(find(templates(), "studying").err(), Some(Refusal::TemplateNotFound));
+        let templates =
+            || list(serde_json::json!({ "v": 1, "templates": [worldbuilding("0.8.0")] }));
+        assert_eq!(
+            find(templates(), "studying").err(),
+            Some(Refusal::TemplateNotFound)
+        );
         let entry = find(templates(), "worldbuilding").unwrap();
         assert_eq!(
             entry_listing(entry, "0.7.0").err(),
-            Some(Refusal::UpdateFirst { name: Some("Worldbuilding".into()), version: Some("0.8.0".into()) })
+            Some(Refusal::UpdateFirst {
+                name: Some("Worldbuilding".into()),
+                version: Some("0.8.0".into())
+            })
         );
         assert_eq!(
             find(list(serde_json::json!({ "v": 2 })), "worldbuilding").err(),
-            Some(Refusal::UpdateFirst { name: None, version: None })
+            Some(Refusal::UpdateFirst {
+                name: None,
+                version: None
+            })
         );
     }
 }

@@ -246,19 +246,19 @@ function prepareMarkdownInput(
   return sanitized + escapeMdxUnsafeProse(markdown.slice(cursor));
 }
 
+export type MarkdownFileOptions = {
+  /** The shard's path, which @ links are resolved against and written from. */
+  filePath?: string | null;
+};
+
 /**
- * Deserializes vault markdown with the editor's MarkdownPlugin.
+ * Reads vault Markdown into editor blocks.
  *
  * If MDX parsing still fails, the whole document is parsed as plain markdown
  * rather than going through Plate's recovery path, which truncates it. Custom
  * MDX elements (callouts, TOC, ...) then show up as literal text, but no
  * content is lost.
  */
-export type MarkdownFileOptions = {
-  /** The shard's path, which @ links are resolved against and written from. */
-  filePath?: string | null;
-};
-
 export function deserializeEditorMarkdown(
   editor: SlateEditor,
   source: string,
@@ -414,9 +414,9 @@ function getDurableMediaSource(record: Record<string, unknown>): string | null {
   return null;
 }
 
-export type SerializableEditorValue = Descendant[];
+type SerializableEditorValue = Descendant[];
 
-export type SerializableMarkdownPreparation = {
+type SerializableMarkdownPreparation = {
   value: SerializableEditorValue;
 };
 
@@ -444,7 +444,7 @@ export function isBlankParagraph(node: unknown): boolean {
 
 const TABLE_CELL_TYPES = new Set(["td", "th"]);
 
-export function prepareSerializableMarkdownValue(
+function prepareSerializableMarkdownValue(
   nodes: unknown,
 ): SerializableMarkdownPreparation {
   const walk = (
@@ -594,7 +594,7 @@ export function prepareSerializableMarkdownValue(
 // saved as `<br>` instead, so no invisible character ever reaches a file.
 const ZERO_WIDTH_SPACE = /\u200B/g;
 
-export function finalizeSerializedMarkdown(markdown: string): string {
+function finalizeSerializedMarkdown(markdown: string): string {
   const clean = markdown.replace(ZERO_WIDTH_SPACE, "");
   // A note with nothing in it is an empty file.
   return clean.trim() === "" ? "" : clean;

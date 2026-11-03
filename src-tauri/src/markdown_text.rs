@@ -464,6 +464,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::single_range_in_vec_init, reason = "one highlight")]
     fn keeps_short_text_whole_and_marks_highlights() {
         let text = "A short line with #ideas in it.";
         assert_eq!(
@@ -473,6 +474,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::single_range_in_vec_init, reason = "one highlight")]
     fn cuts_long_text_to_whole_words_around_the_first_highlight() {
         let text = format!("{}#ideas{}", "café ".repeat(40), " more".repeat(60));
         let start = text.find('#').unwrap();

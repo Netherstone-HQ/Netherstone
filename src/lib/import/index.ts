@@ -17,7 +17,7 @@ export type ImportStep =
   | { kind: "done"; report: ImportReport; vaultPath: string; since: number; isUndoing?: boolean };
 
 /** An import started from the window, until its summary is closed. */
-export interface ImportJob {
+interface ImportJob {
   targetDir: string;
   step: ImportStep;
   cancel: () => void;

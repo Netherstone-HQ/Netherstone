@@ -14,11 +14,11 @@ import { useVaultStore } from "@/store/vault";
 const STARTUP_DELAY_MS = 3_000;
 
 /**
- * Keeps the open vault in sync while sync and automatic sync are on. It
- * syncs once the vault opens, then when you leave the window with edits,
- * when you come back to it, while edits wait, and when the connection comes
- * back, but at most once per interval chosen in Settings: a sync asked for
- * sooner waits for the interval to end. Quitting with edits syncs right away.
+ * Keeps the open vault in sync. Syncs when the vault opens, when you leave the
+ * window with edits, when you come back, while edits wait, and when the
+ * connection returns, at most once per `autoSyncInterval` (30 minutes for
+ * now). A sync asked for sooner waits for the interval to end. Quitting with
+ * edits syncs right away.
  */
 export function useBackgroundSync() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);

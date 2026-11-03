@@ -247,7 +247,7 @@ pub fn tables(vault: &Vault, caller: &Caller, params: TablesParams) -> ToolResul
             }
             let comment = format!("<!-- netherstone chart: {} -->", parts.join("; "));
 
-            change(vault, caller, params.summary.as_deref(), &[path.clone()], || {
+            change(vault, caller, params.summary.as_deref(), std::slice::from_ref(&path), || {
                 edit_shard(vault, &path, |markdown| {
                     // Found again under the lock, in the shard as it is now.
                     let table = find_tables(&markdown)

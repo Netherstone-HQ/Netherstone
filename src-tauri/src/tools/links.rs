@@ -182,7 +182,7 @@ pub fn fix_link(vault: &Vault, caller: &Caller, params: FixLinkParams) -> ToolRe
     }];
     let file = shard.to_string_lossy().into_owned();
 
-    change(vault, caller, params.summary.as_deref(), &[shard.clone()], || {
+    change(vault, caller, params.summary.as_deref(), std::slice::from_ref(&shard), || {
         edit_shard(vault, &shard, |markdown| {
             crate::shard_links::rewrite_moved_links(&markdown, &file, &file, &moved).ok_or_else(|| {
                 ToolError(format!("{} has no link to '{}'. Check it with links outgoing.", params.path, link))

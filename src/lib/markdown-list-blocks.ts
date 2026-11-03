@@ -17,7 +17,7 @@ import { KEYS, type TElement } from "platejs";
  * single Markdown list with the blocks inside their items.
  */
 
-export const LIST_GROUP_KEY = "list_group";
+const LIST_GROUP_KEY = "list_group";
 
 /** What can sit inside a list item and load back where it was. */
 const CONTENT_TYPES = new Set<string>([

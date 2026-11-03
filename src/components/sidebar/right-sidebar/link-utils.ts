@@ -359,7 +359,7 @@ export function resolveInternalTargetPath(
   return null;
 }
 
-export function resolveShardReferencePath(
+function resolveShardReferencePath(
   target: string,
   shardFiles: FileTreeNode[],
 ) {

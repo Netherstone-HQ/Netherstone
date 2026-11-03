@@ -1,0 +1,8 @@
+// KaTeX's stylesheet with woff2 fonts only: every webview we run in loads
+// woff2, so the woff and ttf copies would ship unused. Stands in for
+// `katex/dist/katex.min.css` (see vite.config.ts).
+@use "katex/src/styles/katex.scss" with (
+  $font-folder: "../../node_modules/katex/dist/fonts",
+  $use-woff: false,
+  $use-ttf: false
+);

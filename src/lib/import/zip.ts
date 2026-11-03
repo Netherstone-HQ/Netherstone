@@ -77,7 +77,7 @@ export interface OpenedArchives {
   failed: { source: string; error: string }[];
 }
 
-export function isArchive(relativePath: string) {
+function isArchive(relativePath: string) {
   return /\.zip$/i.test(relativePath);
 }
 

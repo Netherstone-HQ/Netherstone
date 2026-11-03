@@ -7,7 +7,7 @@ import { createSlatePlugin, type TElement } from "platejs";
  * in a read-only block at the top of the document, and written back first.
  */
 
-export const FRONT_MATTER_KEY = "front_matter";
+const FRONT_MATTER_KEY = "front_matter";
 
 export type TFrontMatterElement = TElement & {
   type: typeof FRONT_MATTER_KEY;

@@ -1,7 +1,6 @@
-'use client';
-
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { getPluginTypes, KEYS } from 'platejs';
+import type { PlateElementProps } from 'platejs/react';
 
 import { BlockSelection } from '@/components/ui/block-selection';
 
@@ -20,7 +19,8 @@ export const BlockSelectionKit = [
           return null;
         }
 
-        return <BlockSelection {...(props as any)} />;
+        // Typed for this plugin; BlockSelection takes any element's props.
+        return <BlockSelection {...(props as PlateElementProps)} />;
       },
     },
   })),

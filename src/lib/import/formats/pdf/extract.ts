@@ -29,7 +29,7 @@ export interface PagePicture {
 }
 
 /** A small filled shape: a bullet drawn as a dot or square instead of a character. */
-export interface PageMark {
+interface PageMark {
   x: number;
   y: number;
   width: number;

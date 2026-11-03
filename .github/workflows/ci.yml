@@ -38,6 +38,10 @@ jobs:
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
+      # Unused files, dependencies and exports (knip.json).
+      - name: Unused code
+        run: pnpm exec knip
+
       - name: Test
         run: pnpm test
 
@@ -221,6 +225,8 @@ jobs:
           sudo apt-get install -y -o Dir::Cache::Archives=/var/cache/tauri-apt -o APT::Keep-Downloaded-Packages=true libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
         if: env.BUMP != 'true'
@@ -230,6 +236,11 @@ jobs:
       # tauri::generate_context! needs the frontend output folder to exist.
       - if: env.BUMP != 'true'
         run: mkdir -p dist
+
+      - name: Lint
+        if: env.BUMP != 'true'
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
         if: env.BUMP != 'true'

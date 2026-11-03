@@ -36,7 +36,7 @@ export function text(value: string, marks: Marks = {}): PlateNode {
 }
 
 /** Drops empty runs and joins neighbours with the same marks. */
-export function tidyInlines(inlines: PlateNode[]): PlateNode[] {
+function tidyInlines(inlines: PlateNode[]): PlateNode[] {
   const out: PlateNode[] = [];
   for (const node of inlines) {
     if (typeof node.text === "string") {
@@ -138,10 +138,6 @@ export function image(url: string, options: { width?: number; alt?: string; alig
   if (options.alt) node.alt = options.alt;
   if (options.align && options.align !== "center") node.align = options.align;
   return node;
-}
-
-export function fileBlock(url: string, name: string): PlateNode {
-  return { type: "file", url, name, children: [{ text: "" }] };
 }
 
 export function link(url: string, children: PlateNode[]): PlateNode {

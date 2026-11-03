@@ -15,7 +15,7 @@ import { isPathWithin, resolveVaultRelativePath } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store/editor";
 import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
-import { useVaultStore } from "@/store/vault";
+import { useVaultStore, type FileTreeNode } from "@/store/vault";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { indexVault } from "@/lib/refresh-vault";
 
@@ -57,7 +57,6 @@ export function NewShardDialog({
     setError(null);
 
     try {
-      // Ensure .md extension
       const fileName = shardName.endsWith(".md")
         ? shardName
         : `${shardName}.md`;
@@ -69,7 +68,6 @@ export function NewShardDialog({
         folder ?? getNewShardFolder(currentVaultPath),
       );
 
-      // Create empty file with basic template
       const initialContent = `# ${shardName.replace(/\.md$/, "")}\n\n`;
 
       await invoke("save_markdown_file", {
@@ -81,16 +79,13 @@ export function NewShardDialog({
       // Ctrl+N works from any mode; the new shard opens in the editor.
       useUIStore.getState().openMode("editor");
 
-      // Trigger vault rescan to update file tree
-      const fileTree = await invoke("scan_vault", {
+      const fileTree = await invoke<FileTreeNode[]>("scan_vault", {
         vaultPath: currentVaultPath,
       });
-      useVaultStore.getState().setFileTree(fileTree as any);
+      useVaultStore.getState().setFileTree(fileTree);
 
-      // Trigger re-indexing
       await indexVault(currentVaultPath);
 
-      // Close dialog and reset
       onOpenChange(false);
       setShardName("");
     } catch (err) {

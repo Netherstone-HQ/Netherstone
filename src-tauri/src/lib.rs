@@ -1513,7 +1513,6 @@ pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Res
         _ => new_name,
     };
 
-    // Build new path in same directory
     let parent = old_file.parent().ok_or("Cannot get parent directory")?;
     let new_path = parent.join(&resolved_new_name);
     let mut parts = Path::new(&resolved_new_name).components();
@@ -1534,7 +1533,7 @@ pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Res
     }
 
     // Rename the file or directory
-    std::fs::rename(&old_file, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
+    std::fs::rename(old_file, &new_path).map_err(|e| format!("Failed to rename file: {}", e))?;
     // Released first: rewriting links takes the lock for each shard.
     drop(writes);
 
@@ -1588,7 +1587,7 @@ pub(crate) fn move_path(vault: &Path, source_path: &str, destination_dir: &str) 
         ));
     }
 
-    std::fs::rename(&source, &new_path).map_err(|e| format!("Failed to move {}: {}", kind, e))?;
+    std::fs::rename(source, &new_path).map_err(|e| format!("Failed to move {}: {}", kind, e))?;
     // Released first: rewriting links takes the lock for each shard.
     drop(writes);
 

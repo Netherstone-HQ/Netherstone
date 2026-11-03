@@ -470,6 +470,6 @@ function base64Bytes(value: string) {
   return bytes;
 }
 
-export async function htmlToNodes(root: Element, context: ImportContext): Promise<PlateNode[]> {
+async function htmlToNodes(root: Element, context: ImportContext): Promise<PlateNode[]> {
   return new HtmlReader(context).read(root);
 }

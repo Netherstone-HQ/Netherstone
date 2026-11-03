@@ -20,7 +20,7 @@ function linkText(node: Record<string, unknown>): string | null {
 }
 
 /** The first @ link or link in the document whose text is `text`. */
-export function findLinkByText(
+function findLinkByText(
   editor: SlateEditor,
   text: string,
 ): Path | undefined {
@@ -49,7 +49,7 @@ function attachmentPathOf(url: unknown): string | null {
 }
 
 /** The first embed of the attachment at `assetPath`, missing or not. */
-export function findAttachment(
+function findAttachment(
   editor: SlateEditor,
   assetPath: string,
 ): Path | undefined {
@@ -122,7 +122,7 @@ export function revealTag(editor: SlateEditor, tag: string) {
 }
 
 /** The shard's chart at `index`, counting its charts from the top. */
-export function findChart(
+function findChart(
   editor: SlateEditor,
   index: number,
 ): Path | undefined {

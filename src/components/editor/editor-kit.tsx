@@ -35,34 +35,34 @@ import { AutoformatKit } from "./kits/autoformat-kit";
 export const EditorKit = [
   ...ShortcutsKit, // first, so its keys run before other key handling
   ...AlignKit,
-  ...AutoformatKit, // enables markdown formatting
-  ...BasicBlocksKit, // for headings, blockquote and diviers
-  ...BasicMarksKit, // for bold, italic, underline, strikethrough, code, subscript, superscript, kbd and highlight
-  ...BlockMenuKit, // right clicking on a block brings up a menu
-  ...BlockPlaceholderKit, // shows "type something..."
-  ...CalloutKit, // marked for customization or fixing emojis
+  ...AutoformatKit, // Markdown shortcuts as you type
+  ...BasicBlocksKit, // headings, quotes and dividers
+  ...BasicMarksKit, // bold, italic, code, highlight and the other marks
+  ...BlockMenuKit, // a block's right-click menu
+  ...BlockPlaceholderKit,
+  ...CalloutKit,
   ...CodeBlockKit,
   ...ColumnKit,
   ...DateKit,
   ...DndKit,
-  ...EmojiKit, // need to fix for callouts or remove
-  ...ExitBreakKit, // marked for testing - tested, is good, need to check why selecting from the toolbar unfocuses editor
+  ...EmojiKit,
+  ...ExitBreakKit,
   ...FixedToolbarKit,
   ...FloatingToolbarKit,
-  ...FontKit, // marked for testing - using features besides font family (?) - okay this says it supports applying font styling and other things, not just family
+  ...FontKit, // text color, background, size and font
   ...FrontMatterKit, // YAML front matter, kept as it is in the file
   ...LineHeightKit,
   ...LinkKit,
   ...ListKit,
   ...MarkdownKit,
   ...MathKit,
-  ...MediaKit, // marked for debug
-  ...MentionKit, // marked for customization
+  ...MediaKit,
+  ...MentionKit, // @ links between shards
   ...RawBlockKit, // HTML the editor has no block for, kept as written
   ...ShardLinkKit, // the shard path that @ links are saved relative to
   ...SlashKit,
   ...TableKit,
   ...TocKit,
-  ...ToggleKit, // tested and it works
+  ...ToggleKit,
   ...TrailingLineKit, // an empty line always ends the shard
 ];

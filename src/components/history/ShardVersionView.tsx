@@ -27,7 +27,7 @@ type Loaded = {
 async function currentValue(filePath: string) {
   const state = useEditorStore.getState();
   if (state.plateEditor && state.currentFilePath === filePath) {
-    return state.plateEditor.children as any[];
+    return state.plateEditor.children;
   }
   return resolveSessionValue(filePath, state.markdownContent, null);
 }

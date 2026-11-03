@@ -13,8 +13,10 @@ const CMAPS = import.meta.glob("/node_modules/pdfjs-dist/cmaps/*.bcmap", {
   query: "?url",
   import: "default",
 }) as Record<string, () => Promise<string>>;
-// QuickJS runs a PDF's own scripts, which an import never does.
-const WASM = import.meta.glob(["/node_modules/pdfjs-dist/wasm/*.{wasm,js}", "!**/quickjs*"], {
+// The decoders for scanned pages. Left out: QuickJS, which runs a PDF's own
+// scripts (an import never does), and the JS fallbacks for webviews without
+// WebAssembly (all of ours have it).
+const WASM = import.meta.glob(["/node_modules/pdfjs-dist/wasm/*.wasm", "!**/quickjs*"], {
   query: "?url",
   import: "default",
 }) as Record<string, () => Promise<string>>;

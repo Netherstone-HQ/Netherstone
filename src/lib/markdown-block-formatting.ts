@@ -28,7 +28,7 @@ export type BlockFormatting = {
 };
 
 /** One indent step, as `IndentKit` renders it. */
-export const INDENT_OFFSET = 24;
+const INDENT_OFFSET = 24;
 
 /** `LineHeightKit`'s default; a block set back to it carries nothing. */
 const DEFAULT_LINE_HEIGHT = 1.5;

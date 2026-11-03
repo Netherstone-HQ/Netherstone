@@ -243,7 +243,6 @@ pub fn parse_markdown(content: &str) -> MarkdownMetadata {
                     .tags
                     .extend(tags_in(&text).map(|(_, tag)| tag.to_string()));
 
-                // Count words
                 word_count += text.split_whitespace().count();
             }
 

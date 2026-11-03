@@ -220,7 +220,7 @@ pub(crate) fn sync_status_for_attachment(extension: &str, size_bytes: u64) -> At
 
 fn safe_original_name(candidate: &str) -> String {
     let normalized = candidate.replace('\\', "/");
-    let name = normalized.split('/').last().unwrap_or(candidate).trim();
+    let name = normalized.split('/').next_back().unwrap_or(candidate).trim();
 
     if name.is_empty() || name == "." || name == ".." {
         "attachment".to_string()
@@ -379,9 +379,7 @@ fn extract_html_attr_value(html: &str, attr_name: &str) -> Option<String> {
         }
 
         rest = rest[1..].trim_start();
-        let Some(quote) = rest.chars().next() else {
-            return None;
-        };
+        let quote = rest.chars().next()?;
 
         if quote == '"' || quote == '\'' {
             let value_start = quote.len_utf8();
@@ -2106,7 +2104,7 @@ mod tests {
         std::fs::create_dir_all(vault.join("_attachments/1b/nested")).unwrap();
         std::fs::write(vault.join("_attachments/1b/Thumbs.db"), b"x").unwrap();
 
-        let report = reconcile_vault_attachments(&conn, &vault, &[note.clone()]).unwrap();
+        let report = reconcile_vault_attachments(&conn, &vault, std::slice::from_ref(&note)).unwrap();
         assert!(!vault.join("_attachments/1a").exists());
         assert!(!vault.join("_attachments/1b").exists());
 

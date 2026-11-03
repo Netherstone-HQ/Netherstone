@@ -3,9 +3,7 @@ import { persist } from "zustand/middleware";
 import { type ShortcutOverrides, sanitizeOverrides } from "@/lib/shortcuts";
 import { renamedLocalStorage } from "./renamed-storage";
 
-// ── Types ───────────────────────────────────────────────────────────────────
-
-export const THEME_PREFERENCES = [
+const THEME_PREFERENCES = [
   "light",
   "dark",
   "system",
@@ -18,13 +16,13 @@ export type MediaInsertionPreference = "vault-import" | "local-reference";
 export type ReadingFont = "newsreader" | "geist" | "system";
 export type TextSize = "small" | "default" | "large";
 export type ContentWidth = "narrow" | "default" | "wide" | "full";
-export type NewShardLocation = "vault-root" | "current-folder";
+type NewShardLocation = "vault-root" | "current-folder";
 /** Where a web link opens: beside the editor, or in the system browser. */
 export type LinkOpener = "browser-panel" | "your-browser";
 /** How much bigger or smaller the whole interface is, in percent. */
 export type Zoom = 80 | 90 | 100 | 110 | 125 | 150;
 /** The fewest minutes between automatic syncs. */
-export type SyncInterval = 5 | 15 | 30 | 60;
+type SyncInterval = 5 | 15 | 30 | 60;
 
 /** Everything the user can change in Settings (and onboarding). */
 export interface Preferences {
@@ -100,15 +98,13 @@ interface SettingsState extends Preferences {
   resetSettings: () => void;
 }
 
-// ── Defaults ────────────────────────────────────────────────────────────────
-
-export const DEFAULT_MEDIA_INSERTION_PREFERENCE: MediaInsertionPreference =
+const DEFAULT_MEDIA_INSERTION_PREFERENCE: MediaInsertionPreference =
   "vault-import";
-export const DEFAULT_RECENT_FILES_LIMIT = 3;
+const DEFAULT_RECENT_FILES_LIMIT = 3;
 /** Recent always lists the open shard first, so one would show nothing else. */
 export const MIN_RECENT_FILES_LIMIT = 2;
 export const MAX_RECENT_FILES_LIMIT = 20;
-export const SYNC_INTERVALS: SyncInterval[] = [5, 15, 30, 60];
+const SYNC_INTERVALS: SyncInterval[] = [5, 15, 30, 60];
 /** The steps browsers zoom in, so Ctrl+= feels the same here. */
 export const ZOOM_LEVELS: Zoom[] = [80, 90, 100, 110, 125, 150];
 
@@ -207,8 +203,6 @@ function readLegacyTheme(): ThemePreference | undefined {
   return undefined;
 }
 
-// ── Store ───────────────────────────────────────────────────────────────────
-
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
@@ -277,7 +271,7 @@ export const useSettingsStore = create<SettingsState>()(
             state.recentFilesLimit,
           );
         }
-        // Version 3 synced every 5 minutes; free sync now waits 30 between.
+        // Version 3 synced every 5 minutes; now it waits 30 between.
         if (version < 4) delete state.autoSyncInterval;
         return state as SettingsState;
       },

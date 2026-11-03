@@ -105,7 +105,7 @@ mod tests {
         std::fs::write(&shard, "Typed by hand").unwrap();
         let caller = Caller { app: "Goose".into() };
 
-        change(&vault, &caller, Some("Added a line"), &[shard.clone()], || {
+        change(&vault, &caller, Some("Added a line"), std::slice::from_ref(&shard), || {
             std::fs::write(&shard, "Typed by hand\n\nAdded").unwrap();
             Ok(((), Vec::new()))
         })
@@ -122,7 +122,7 @@ mod tests {
         );
 
         // Nothing changed, nothing saved.
-        change(&vault, &caller, None, &[shard.clone()], || Ok(((), Vec::new()))).unwrap();
+        change(&vault, &caller, None, std::slice::from_ref(&shard), || Ok(((), Vec::new()))).unwrap();
         let again = list_versions(&vault.sync_root, &vault.root, &shard).unwrap();
         assert_eq!(again.versions.len(), history.versions.len());
     }

@@ -8,7 +8,7 @@ import { useAttachmentReportStore, useVaultStore } from "@/store";
 import { formatBytes, plural } from "@/components/settings/attachment-format";
 import { ExternalFilesRow } from "@/components/settings/AttachmentMigrationRows";
 
-export const ATTACHMENTS_SECTION_ID = "settings-attachments";
+const ATTACHMENTS_SECTION_ID = "settings-attachments";
 
 /**
  * The open vault's attachments, and files linked from outside the attachment

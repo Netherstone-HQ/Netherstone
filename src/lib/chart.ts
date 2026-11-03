@@ -152,7 +152,7 @@ export function defaultChartSpec(data: TableData): ChartSpec {
   };
 }
 
-export interface ChartSeries {
+interface ChartSeries {
   name: string;
   values: (number | null)[];
 }

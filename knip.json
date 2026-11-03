@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/*.mjs",
+    "src/styles/katex.scss"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx,css,scss,sass}",
+    "scripts/**/*.mjs",
+    "e2e/**/*.ts"
+  ],
+  "ignoreDependencies": [
+    "@platejs/ai",
+    "decode-named-character-reference"
+  ],
+  "ignoreIssues": {
+    "src/components/ui/**": [
+      "exports",
+      "types",
+      "duplicates"
+    ]
+  }
+}

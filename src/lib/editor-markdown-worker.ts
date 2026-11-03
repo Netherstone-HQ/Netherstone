@@ -53,24 +53,16 @@ export interface SerializeMarkdownInWorkerOptions {
    * it stops a running read and goes first, and the read starts again after.
    */
   urgent?: boolean;
-  /**
-   * Logical file identity for race handling and worker metadata.
-   * Requests for the same file supersede older in-flight requests.
-   */
+  /** The shard's path. A newer save of the same shard replaces an older one. */
   filePath?: string | null;
-  /**
-   * Optional override for request deduping/race handling.
-   * Defaults to the normalized file path when present.
-   */
+  /** Which saves replace each other, when not by `filePath`. */
   requestKey?: string;
 }
 
 export interface DeserializeMarkdownInWorkerOptions {
   /** Does the work where Web Workers aren't available (tests). */
   fallback?: () => unknown[] | Promise<unknown[]>;
-  /**
-   * Logical file identity for worker metadata and logging.
-   */
+  /** The shard's path, for @ links and error messages. */
   filePath?: string | null;
 }
 
@@ -393,9 +385,3 @@ export async function serializeMarkdownInWorker(
   return typeof markdown === "string" ? markdown : "";
 }
 
-export function terminateEditorMarkdownWorker() {
-  rejectAllPendingRequests(
-    new Error("Editor markdown worker was terminated before completion."),
-  );
-  resetWorkerInstance();
-}

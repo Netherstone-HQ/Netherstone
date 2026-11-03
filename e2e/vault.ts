@@ -84,7 +84,7 @@ export const test = base.extend<{ securityPolicy: void }>({
 
 export { expect };
 
-export type VaultFiles = Record<string, string>;
+type VaultFiles = Record<string, string>;
 
 export type Save = { filePath: string; content: string };
 

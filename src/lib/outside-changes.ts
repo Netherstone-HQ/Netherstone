@@ -280,7 +280,7 @@ function waitForSave(): Promise<void> {
  * (`read` → `saved`): a block written here isn't in it, or a block deleted
  * here is back. Empty lines don't count.
  */
-export function dropsWrittenText(
+function dropsWrittenText(
   read: Descendant[],
   saved: Descendant[],
   outside: Descendant[],
@@ -453,7 +453,7 @@ function replaceBlocks(editor: SlateEditor, changes: BlockChange[]) {
 type BlockChange = { start: number; end: number; blocks: Descendant[] };
 
 /** `Note.md` → `Note (Changed outside).md`, numbered if that name is taken. */
-export async function freeCopyPath(filePath: string) {
+async function freeCopyPath(filePath: string) {
   const base = filePath.replace(/\.md$/i, "");
   for (let n = 1; ; n += 1) {
     const label = n === 1 ? "Changed outside" : `Changed outside ${n}`;

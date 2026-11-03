@@ -118,15 +118,14 @@ pub fn show_linked_file<R: Runtime>(app: &AppHandle<R>, path: &Path) -> bool {
     let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     if is_showable(&target) {
         let scope = app.asset_protocol_scope();
-        if !scope.is_allowed(&target) {
-            if let Err(error) = scope.allow_file(&target) {
+        if !scope.is_allowed(&target)
+            && let Err(error) = scope.allow_file(&target) {
                 eprintln!(
                     "[Netherstone] Couldn't allow linked file {}: {}",
                     path.display(),
                     error
                 );
             }
-        }
     }
     true
 }

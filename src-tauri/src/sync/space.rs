@@ -362,6 +362,9 @@ pub struct Freed {
     pub bytes: u64,
 }
 
+/// Sends the rewritten history to GitHub: the repository and the refs to push.
+type Upload<'a> = &'a dyn Fn(&Repository, &[&str]) -> Result<(), String>;
+
 /// Removes the old versions `blobs` from the history, then packs it so their
 /// space is freed. With sync on, `upload` replaces GitHub's history with the
 /// new one first (with the list of what was removed); the local history only
@@ -371,7 +374,7 @@ pub(super) fn free_locked(
     sync_root: &Path,
     vault_path: &Path,
     blobs: &[String],
-    upload: Option<&dyn Fn(&Repository, &[&str]) -> Result<(), String>>,
+    upload: Option<Upload<'_>>,
 ) -> Result<Freed, String> {
     let record = state::load_or_create_record(sync_root, vault_path)?;
     let git_dir = state::git_dir(sync_root, &record.vault_id);

@@ -393,7 +393,7 @@ mod tests {
             std::fs::write(file, b"x").unwrap();
         }
 
-        assert_eq!(question(&[folder.clone()]), ("Open Notes as a vault?".into(), "Open"));
+        assert_eq!(question(std::slice::from_ref(&folder)), ("Open Notes as a vault?".into(), "Open"));
         assert_eq!(question(&files[..1]), ("Import Report.md?".into(), "Import"));
         assert_eq!(question(&files[..2]), ("Import Report.md and Plan.docx?".into(), "Import"));
         assert_eq!(

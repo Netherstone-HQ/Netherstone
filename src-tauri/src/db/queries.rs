@@ -182,7 +182,7 @@ pub fn find_files(
         _ => terms.clone(),
     };
     let mut stmt = conn.prepare(&sql)?;
-    let found = stmt
+    stmt
         .query_map(rusqlite::params_from_iter(values), |row| {
             let content: String = row.get(2)?;
             Ok(FoundFile {
@@ -194,8 +194,7 @@ pub fn find_files(
                 word_count: row.get(5)?,
             })
         })?
-        .collect();
-    found
+        .collect()
 }
 
 /// The words of a search, lowercase, split as the index splits text: at
@@ -547,6 +546,50 @@ pub fn get_file_metadata(
         .collect::<Result<_, _>>()
         .map_err(|e| format!("Failed to collect tags: {}", e))?;
     Ok(Some(metadata))
+}
+
+/// The indexed files of the vault at `vault_path` holding a link or mention
+/// to any of `shards`, as their paths. The index is only as current as the
+/// last pass; a file edited since may be missing.
+pub fn files_linking_to_any(
+    conn: &Connection,
+    vault_path: &Path,
+    shards: &[LinkedShard],
+) -> Result<Vec<String>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT f.path, l.link_type, l.target_path FROM links l
+             JOIN files f ON f.id = l.source_file_id
+             WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')",
+        )
+        .map_err(|e| format!("Failed to prepare links query: {}", e))?;
+    let rows = stmt
+        .query_map(params![vault_key(vault_path)], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| format!("Failed to query links: {}", e))?;
+
+    let mut sources: Vec<String> = Vec::new();
+    for row in rows {
+        let (source, link_type, target) = row.map_err(|e| format!("Failed to read link: {}", e))?;
+        let link_type = if link_type == LinkType::Mention.as_str() {
+            LinkType::Mention
+        } else {
+            LinkType::Internal
+        };
+        if shards
+            .iter()
+            .any(|shard| shard.is_target(link_type, &target))
+            && !sources.contains(&source)
+        {
+            sources.push(source);
+        }
+    }
+    Ok(sources)
 }
 
 #[cfg(test)]
@@ -903,48 +946,4 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&vault);
     }
-}
-
-/// The indexed files of the vault at `vault_path` holding a link or mention
-/// to any of `shards`, as their paths. The index is only as current as the
-/// last pass; a file edited since may be missing.
-pub fn files_linking_to_any(
-    conn: &Connection,
-    vault_path: &Path,
-    shards: &[LinkedShard],
-) -> Result<Vec<String>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT f.path, l.link_type, l.target_path FROM links l
-             JOIN files f ON f.id = l.source_file_id
-             WHERE f.vault_path = ?1 AND l.link_type IN ('internal', 'mention')",
-        )
-        .map_err(|e| format!("Failed to prepare links query: {}", e))?;
-    let rows = stmt
-        .query_map(params![vault_key(vault_path)], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })
-        .map_err(|e| format!("Failed to query links: {}", e))?;
-
-    let mut sources: Vec<String> = Vec::new();
-    for row in rows {
-        let (source, link_type, target) = row.map_err(|e| format!("Failed to read link: {}", e))?;
-        let link_type = if link_type == LinkType::Mention.as_str() {
-            LinkType::Mention
-        } else {
-            LinkType::Internal
-        };
-        if shards
-            .iter()
-            .any(|shard| shard.is_target(link_type, &target))
-            && !sources.contains(&source)
-        {
-            sources.push(source);
-        }
-    }
-    Ok(sources)
 }

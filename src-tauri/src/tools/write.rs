@@ -222,7 +222,7 @@ fn edit(markdown: String, params: &EditShardParams) -> ToolResult<String> {
 
 pub fn edit_shard(vault: &Vault, caller: &Caller, params: EditShardParams) -> ToolResult<Written> {
     let path = vault.shard(&params.path)?;
-    change(vault, caller, params.summary.as_deref(), &[path.clone()], || {
+    change(vault, caller, params.summary.as_deref(), std::slice::from_ref(&path), || {
         edit_under_lock(vault, &path, |markdown| edit(markdown, &params))?;
         Ok((Written { path: vault.relative(&path) }, Vec::new()))
     })

@@ -131,6 +131,36 @@ pub async fn create_backup_repo(
     ))
 }
 
+/// The current `owner/name` of the repository once called `full_name`:
+/// GitHub redirects a renamed or moved repository. None when it's gone.
+pub async fn current_full_name(
+    client: &reqwest::Client,
+    token: &str,
+    full_name: &str,
+) -> Result<Option<String>, String> {
+    #[derive(Deserialize)]
+    struct Repo {
+        full_name: String,
+    }
+    let response = client
+        .get(format!("{}/repos/{}", API, full_name))
+        .bearer_auth(token)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(super::network_error)?;
+
+    match response.status().as_u16() {
+        200 => response
+            .json::<Repo>()
+            .await
+            .map(|repo| Some(repo.full_name))
+            .map_err(|_| "GitHub sent an unexpected response.".to_string()),
+        404 => Ok(None),
+        _ => Err(api_error(response, "check the backup repository").await),
+    }
+}
+
 /// Whether `full_name` still exists and is reachable with `token`.
 pub async fn repo_exists(
     client: &reqwest::Client,

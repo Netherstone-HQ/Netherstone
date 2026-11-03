@@ -387,6 +387,8 @@ pub async fn connect_backup(
         return Err("That isn't a GitHub repository.".to_string());
     }
 
+    check_backup_fits(&sync_root, &vault_path, &full_name).await?;
+
     run_blocking(move || {
         let mut record = state::load_or_create_record(&sync_root, &vault_path)?;
         record.repo_name = Some(full_name);
@@ -401,6 +403,50 @@ pub async fn connect_backup(
     .await
 }
 
+/// Refuses the backup `full_name` for the vault at `vault_path` (which may
+/// not exist yet) when a vault around or inside it already syncs with that
+/// backup, even under a name it had before a rename on GitHub.
+pub async fn check_backup_fits(
+    sync_root: &Path,
+    vault_path: &Path,
+    full_name: &str,
+) -> Result<(), String> {
+    let nested = state::nested_vaults_with_backups(sync_root, vault_path);
+    if nested.is_empty() {
+        return Ok(());
+    }
+    let token = signed_in_token()?;
+    let client = crate::github::http_client()?;
+    for (other, name) in nested {
+        let same = name.eq_ignore_ascii_case(full_name)
+            || crate::github::repos::current_full_name(&client, &token, &name)
+                .await?
+                .is_some_and(|current| current.eq_ignore_ascii_case(full_name));
+        if same {
+            return Err(nested_backup_error(&other));
+        }
+    }
+    Ok(())
+}
+
+fn nested_backup_error(other: &state::NestedVault) -> String {
+    let name = Path::new(&other.path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| other.path.clone());
+    if other.contains_folder {
+        format!(
+            "This backup belongs to \"{}\" ({}), and this vault is inside it. Pick another backup.",
+            name, other.path
+        )
+    } else {
+        format!(
+            "This backup belongs to \"{}\" ({}), which is inside this vault. Pick another backup.",
+            name, other.path
+        )
+    }
+}
+
 /// Syncs a vault that has backup turned on.
 pub async fn sync_now(sync_root: PathBuf, vault_path: PathBuf) -> Result<SyncReport, String> {
     let token = signed_in_token()?;
@@ -410,6 +456,16 @@ pub async fn sync_now(sync_root: PathBuf, vault_path: PathBuf) -> Result<SyncRep
             (Some(url), true) => url.clone(),
             _ => return Err("Backup isn't turned on for this vault.".to_string()),
         };
+        // A vault joined to an outer vault's backup before this check
+        // existed stops syncing; the outer vault keeps going.
+        if let Some(other) = record
+            .repo_name
+            .as_deref()
+            .and_then(|name| state::nested_vault_on_backup(&sync_root, &vault_path, name))
+            .filter(|other| other.contains_folder)
+        {
+            return Err(nested_backup_error(&other));
+        }
         sync_cycle(&sync_root, &vault_path, &remote_url, &token)
     })
     .await

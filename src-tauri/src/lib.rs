@@ -773,6 +773,12 @@ async fn sync_connect_backup(
     sync::connect_backup(sync::sync_root()?, vault_path.into(), full_name, clone_url).await
 }
 
+/// Whether the backup can go into a vault about to be made at `vault_path`.
+#[tauri::command]
+async fn sync_check_backup(vault_path: String, full_name: String) -> Result<(), String> {
+    sync::check_backup_fits(&sync::sync_root()?, Path::new(&vault_path), &full_name).await
+}
+
 #[tauri::command(async)]
 fn sync_get_conflict_versions(
     vault_path: String,
@@ -1999,6 +2005,7 @@ pub fn run() {
             sync_now,
             sync_list_backups,
             sync_connect_backup,
+            sync_check_backup,
             sync_get_conflict_versions,
             sync_resolve_conflict,
             sync_turn_off_backup,

@@ -306,6 +306,50 @@ pub fn record_of_gone_vault(
     Ok(read_record(sync_root, vault_id)?.filter(|record| names_no_vault(record, &gone)))
 }
 
+/// The vaults on this device around or inside `vault_path` that sync with a
+/// backup, with that backup's name as last saved.
+pub fn nested_vaults_with_backups(
+    sync_root: &Path,
+    vault_path: &Path,
+) -> Vec<(NestedVault, String)> {
+    let vault = canonical(vault_path);
+    records(sync_root)
+        .into_iter()
+        .filter_map(|record| {
+            let path = PathBuf::from(&record.vault_path);
+            let other = canonical(&path);
+            let holds_it = read_vault_id(&path).as_deref() == Some(record.vault_id.as_str());
+            if !holds_it || other == vault {
+                return None;
+            }
+            let contains_folder = vault.starts_with(&other);
+            let nested = contains_folder || other.starts_with(&vault);
+            let repo_name = record.repo_name.filter(|_| nested)?;
+            Some((
+                NestedVault {
+                    path: record.vault_path,
+                    contains_folder,
+                },
+                repo_name,
+            ))
+        })
+        .collect()
+}
+
+/// A vault around or inside `vault_path` that already syncs with the backup
+/// `repo_name`. Joining that backup would copy the outer vault's folders
+/// into the inner one.
+pub fn nested_vault_on_backup(
+    sync_root: &Path,
+    vault_path: &Path,
+    repo_name: &str,
+) -> Option<NestedVault> {
+    nested_vaults_with_backups(sync_root, vault_path)
+        .into_iter()
+        .find(|(_, name)| name.eq_ignore_ascii_case(repo_name))
+        .map(|(other, _)| other)
+}
+
 /// The first vault marker in a folder below `folder`, skipping hidden ones.
 fn marked_vault_below(folder: &Path) -> Option<PathBuf> {
     let mut queue = std::collections::VecDeque::from([folder.to_path_buf()]);
@@ -491,5 +535,40 @@ pub(crate) mod tests {
         let below = find_nested_vault(&dir.join("sync"), &dir).unwrap();
         assert!(!below.contains_folder);
         assert_eq!(canonical(Path::new(&below.path)), canonical(&inner));
+    }
+
+    #[test]
+    fn a_vault_around_or_inside_cant_join_the_same_backup() {
+        let dir = temp_dir("nested-backup");
+        let sync_root = dir.join("sync");
+        let outer = dir.join("My Vault");
+        let inner = outer.join("Quisnap");
+        let sibling = dir.join("Other");
+        fs::create_dir_all(&inner).unwrap();
+        fs::create_dir_all(&sibling).unwrap();
+
+        let mut record = load_or_create_record(&sync_root, &outer).unwrap();
+        record.repo_name = Some("me/My-Vault".to_string());
+        save_record(&sync_root, &record).unwrap();
+
+        let around = nested_vault_on_backup(&sync_root, &inner, "me/my-vault").unwrap();
+        assert!(around.contains_folder);
+        assert_eq!(canonical(Path::new(&around.path)), canonical(&outer));
+        assert_eq!(nested_vault_on_backup(&sync_root, &inner, "me/Other"), None);
+        // Reconnecting the vault itself, or a vault beside it, is fine.
+        assert_eq!(
+            nested_vault_on_backup(&sync_root, &outer, "me/My-Vault"),
+            None
+        );
+        assert_eq!(
+            nested_vault_on_backup(&sync_root, &sibling, "me/My-Vault"),
+            None
+        );
+
+        let mut record = load_or_create_record(&sync_root, &inner).unwrap();
+        record.repo_name = Some("me/Quisnap".to_string());
+        save_record(&sync_root, &record).unwrap();
+        let below = nested_vault_on_backup(&sync_root, &dir, "me/Quisnap").unwrap();
+        assert!(!below.contains_folder);
     }
 }

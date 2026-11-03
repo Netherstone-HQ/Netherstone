@@ -1,28 +1,13 @@
-export type VaultChangeSuppressionReason =
-  | "autosave"
-  | "rename"
-  | "move"
-  | "app-initiated"
-  | (string & {});
 
-export type SuppressVaultChangeOptions = {
-  durationMs?: number;
-  reason?: VaultChangeSuppressionReason;
-};
-
-export type PartitionedVaultChangePaths = {
+type PartitionedVaultChangePaths = {
   suppressedPaths: string[];
   unsuppressedPaths: string[];
 };
 
-type VaultChangeSuppressionEntry = {
-  expiresAt: number;
-  reason: VaultChangeSuppressionReason;
-};
+const VAULT_CHANGE_SUPPRESSION_MS = 2_500;
 
-const DEFAULT_VAULT_CHANGE_SUPPRESSION_MS = 2_500;
-
-const suppressionByPath = new Map<string, VaultChangeSuppressionEntry>();
+/** When each suppressed path stops being suppressed. */
+const suppressionByPath = new Map<string, number>();
 
 function now(): number {
   return window.performance.now();
@@ -36,8 +21,8 @@ function normalizeVaultPath(path: string): string | null {
 }
 
 function cleanupExpiredSuppressions(currentTime = now()): void {
-  for (const [path, entry] of suppressionByPath.entries()) {
-    if (entry.expiresAt <= currentTime) {
+  for (const [path, expiresAt] of suppressionByPath.entries()) {
+    if (expiresAt <= currentTime) {
       suppressionByPath.delete(path);
     }
   }
@@ -55,40 +40,26 @@ function getNormalizedUniquePaths(paths: Iterable<string>): string[] {
   return [...uniquePaths];
 }
 
-export function suppressVaultChangePath(
-  path: string,
-  options: SuppressVaultChangeOptions = {},
-): string | null {
+export function suppressVaultChangePath(path: string): string | null {
   cleanupExpiredSuppressions();
 
   const normalizedPath = normalizeVaultPath(path);
   if (!normalizedPath) return null;
 
-  const durationMs = Math.max(
-    0,
-    options.durationMs ?? DEFAULT_VAULT_CHANGE_SUPPRESSION_MS,
+  const expiresAt = now() + VAULT_CHANGE_SUPPRESSION_MS;
+  suppressionByPath.set(
+    normalizedPath,
+    Math.max(suppressionByPath.get(normalizedPath) ?? 0, expiresAt),
   );
-  const expiresAt = now() + durationMs;
-  const reason = options.reason ?? "app-initiated";
-
-  const existingEntry = suppressionByPath.get(normalizedPath);
-
-  suppressionByPath.set(normalizedPath, {
-    reason,
-    expiresAt: Math.max(existingEntry?.expiresAt ?? 0, expiresAt),
-  });
 
   return normalizedPath;
 }
 
-export function suppressVaultChangePaths(
-  paths: Iterable<string>,
-  options: SuppressVaultChangeOptions = {},
-): string[] {
+export function suppressVaultChangePaths(paths: Iterable<string>): string[] {
   const normalizedPaths = getNormalizedUniquePaths(paths);
 
   for (const path of normalizedPaths) {
-    suppressVaultChangePath(path, options);
+    suppressVaultChangePath(path);
   }
 
   return normalizedPaths;
@@ -100,10 +71,10 @@ export function isVaultChangePathSuppressed(path: string): boolean {
   const normalizedPath = normalizeVaultPath(path);
   if (!normalizedPath) return false;
 
-  const entry = suppressionByPath.get(normalizedPath);
-  if (!entry) return false;
+  const expiresAt = suppressionByPath.get(normalizedPath);
+  if (expiresAt === undefined) return false;
 
-  if (entry.expiresAt <= now()) {
+  if (expiresAt <= now()) {
     suppressionByPath.delete(normalizedPath);
     return false;
   }
@@ -131,37 +102,4 @@ export function partitionSuppressedVaultChangePaths(
     suppressedPaths,
     unsuppressedPaths,
   };
-}
-
-export function clearVaultChangeSuppression(path: string): boolean {
-  const normalizedPath = normalizeVaultPath(path);
-  if (!normalizedPath) return false;
-
-  return suppressionByPath.delete(normalizedPath);
-}
-
-export function clearVaultChangeSuppressions(paths: Iterable<string>): number {
-  let clearedCount = 0;
-
-  for (const path of getNormalizedUniquePaths(paths)) {
-    if (suppressionByPath.delete(path)) {
-      clearedCount += 1;
-    }
-  }
-
-  return clearedCount;
-}
-
-export function resetVaultChangeSuppressionRegistry(): void {
-  suppressionByPath.clear();
-}
-
-export function getVaultChangeSuppressionSnapshot() {
-  cleanupExpiredSuppressions();
-
-  return [...suppressionByPath.entries()].map(([path, entry]) => ({
-    path,
-    reason: entry.reason,
-    expiresAt: entry.expiresAt,
-  }));
 }

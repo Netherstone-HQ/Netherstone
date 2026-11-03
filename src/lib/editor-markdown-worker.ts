@@ -393,9 +393,3 @@ export async function serializeMarkdownInWorker(
   return typeof markdown === "string" ? markdown : "";
 }
 
-export function terminateEditorMarkdownWorker() {
-  rejectAllPendingRequests(
-    new Error("Editor markdown worker was terminated before completion."),
-  );
-  resetWorkerInstance();
-}

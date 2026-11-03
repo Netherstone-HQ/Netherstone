@@ -203,7 +203,7 @@ export function useAutosave() {
       let changedOnDisk = false;
 
       try {
-        suppressVaultChangePath(filePath, { reason: "autosave" });
+        suppressVaultChangePath(filePath);
 
         await invoke("save_markdown_file", {
           filePath,

@@ -140,10 +140,6 @@ export function image(url: string, options: { width?: number; alt?: string; alig
   return node;
 }
 
-export function fileBlock(url: string, name: string): PlateNode {
-  return { type: "file", url, name, children: [{ text: "" }] };
-}
-
 export function link(url: string, children: PlateNode[]): PlateNode {
   return { type: "a", url, children: tidyInlines(children) };
 }

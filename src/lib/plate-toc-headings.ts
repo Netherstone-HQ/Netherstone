@@ -68,7 +68,7 @@ export function getPlateHeadingList(editor: SlateEditor): Heading[] {
         const { type } = node;
         const title = NodeApi.string(node);
         const depth = headingDepth[type] ?? 1;
-        const id = (node as any).id as string | undefined;
+        const id = typeof node.id === "string" ? node.id : undefined;
 
         if (title) {
           headingList.push({
@@ -100,8 +100,8 @@ export function getPlateHeadingList(editor: SlateEditor): Heading[] {
       const children = record.children;
       const nextPath = [...path, index];
 
-      if (type && (KEYS as any).heading?.includes?.(type)) {
-        const title = NodeApi.string(node as any);
+      if (type && (KEYS.heading as readonly string[]).includes(type)) {
+        const title = NodeApi.string(node as TElement);
         const depth = headingDepth[type] ?? 1;
         const id = typeof record.id === "string" ? record.id : `${type}-${nextPath.join("-")}`;
         if (title) {
@@ -113,7 +113,7 @@ export function getPlateHeadingList(editor: SlateEditor): Heading[] {
     });
   };
 
-  walk(editor.children as any, []);
+  walk(editor.children, []);
   return headingList;
 }
 

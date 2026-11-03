@@ -26,7 +26,7 @@ export async function resolveSessionValue(
       deserializeEditorMarkdown(createSlateEditor({ plugins: EditorKit }), content, {
         filePath,
       }),
-    ) as any[];
+    );
 
   const value = await deserializeMarkdownInWorker(content, {
     filePath,

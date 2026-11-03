@@ -7,3 +7,8 @@ allowBuilds:
 patchedDependencies:
   '@excalidraw/excalidraw': patches/@excalidraw__excalidraw.patch
   '@platejs/selection': patches/@platejs__selection.patch
+
+overrides:
+  # @platejs/math pins katex 0.16.22 while everything else uses 0.16.45, which
+  # put two copies in the app. Drop once @platejs/math moves past 0.16.22.
+  '@platejs/math>katex': 0.16.45

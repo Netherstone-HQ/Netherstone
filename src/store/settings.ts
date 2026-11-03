@@ -277,7 +277,7 @@ export const useSettingsStore = create<SettingsState>()(
             state.recentFilesLimit,
           );
         }
-        // Version 3 synced every 5 minutes; free sync now waits 30 between.
+        // Version 3 synced every 5 minutes; now it waits 30 between.
         if (version < 4) delete state.autoSyncInterval;
         return state as SettingsState;
       },

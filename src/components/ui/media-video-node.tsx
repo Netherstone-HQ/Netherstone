@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import LiteYouTubeEmbed from "react-lite-youtube-embed";
-import ReactPlayer from "react-player";
 
 import type { TResizableProps, TVideoElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
@@ -288,14 +287,15 @@ export const VideoElement = withHOC(
         resolvedSource.kind === "data" ||
         (resolvedSource.kind === "remote" && (isUpload || !isVideo)));
 
-    const shouldRenderRemotePlayer =
+    // Vimeo and the other sites Plate knows play in their own embed player.
+    const remotePlayerUrl =
       isEditorMounted &&
       resolvedSource.kind === "remote" &&
       !isUpload &&
       !isYoutube &&
-      isVideo;
-
-    const isTweet = true;
+      isVideo
+        ? embed?.url
+        : undefined;
 
     return (
       <PlateElement className="py-2.5" {...props}>
@@ -308,8 +308,8 @@ export const VideoElement = withHOC(
             align={align}
             options={{
               align,
-              maxWidth: isTweet ? 550 : "100%",
-              minWidth: isTweet ? 300 : 100,
+              maxWidth: 550,
+              minWidth: 300,
               readOnly,
             }}
           >
@@ -344,13 +344,14 @@ export const VideoElement = withHOC(
                 </div>
               )}
 
-              {shouldRenderRemotePlayer && (
+              {remotePlayerUrl && (
                 <div ref={handleRef}>
-                  <ReactPlayer
-                    height="100%"
-                    src={renderUrl}
-                    width="100%"
-                    controls
+                  <iframe
+                    className="aspect-video w-full rounded-sm"
+                    src={remotePlayerUrl}
+                    title={props.element.name ?? "Video"}
+                    loading="lazy"
+                    allowFullScreen
                   />
                 </div>
               )}

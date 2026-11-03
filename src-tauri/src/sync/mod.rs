@@ -11,7 +11,6 @@ pub mod changes;
 pub mod conflicts;
 pub mod drawing_merge;
 pub mod history;
-pub mod writing;
 pub mod merge;
 pub mod pack;
 pub mod planner;
@@ -19,6 +18,7 @@ pub mod remote;
 pub mod repo;
 pub mod space;
 pub mod state;
+pub mod writing;
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -117,8 +117,14 @@ pub fn save_app_change(
             .as_deref()
             .filter(|bytes| planner::is_backed_up(Path::new(path), path, bytes.len() as u64))
     }
-    let before: Vec<_> = changes.iter().map(|c| (c.path.as_str(), kept(&c.before, &c.path))).collect();
-    let after: Vec<_> = changes.iter().map(|c| (c.path.as_str(), kept(&c.after, &c.path))).collect();
+    let before: Vec<_> = changes
+        .iter()
+        .map(|c| (c.path.as_str(), kept(&c.before, &c.path)))
+        .collect();
+    let after: Vec<_> = changes
+        .iter()
+        .map(|c| (c.path.as_str(), kept(&c.after, &c.path)))
+        .collect();
     let note = changes
         .iter()
         .filter(|change| change.after.is_some())
@@ -136,7 +142,11 @@ pub fn save_app_change(
     let mut record = state::load_or_create_record(sync_root, vault_path)?;
     let repository = repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault_path)?;
     repo::commit_files(&repository, &before, None)?;
-    let commit = repo::commit_files(&repository, &after, (!note.is_empty()).then_some(note.as_str()))?;
+    let commit = repo::commit_files(
+        &repository,
+        &after,
+        (!note.is_empty()).then_some(note.as_str()),
+    )?;
     if let Some(commit) = commit {
         record.last_commit = Some(commit.id);
         record.last_commit_at = Some(commit.time);
@@ -157,7 +167,12 @@ pub fn vault_relative(vault_path: &Path, file_path: &Path) -> Result<String, Str
 }
 
 fn snapshot_locked(sync_root: &Path, vault_path: &Path) -> Result<VaultSnapshotResult, String> {
-    commit_snapshot(sync_root, vault_path, planner::plan_vault(vault_path)?, None)
+    commit_snapshot(
+        sync_root,
+        vault_path,
+        planner::plan_vault(vault_path)?,
+        None,
+    )
 }
 
 fn commit_snapshot(
@@ -271,7 +286,9 @@ fn sync_cycle(
     let detected_at = now_unix_seconds();
     for conflict in conflicts {
         // A newer GitHub version of the same file replaces the older one.
-        record.conflicts.retain(|existing| existing.path != conflict.path);
+        record
+            .conflicts
+            .retain(|existing| existing.path != conflict.path);
         record.conflicts.push(state::SyncConflict {
             path: conflict.path,
             theirs: conflict.theirs.to_string(),
@@ -522,7 +539,10 @@ mod tests {
             snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
         assert!(result.commit.is_some());
 
-        assert_eq!(note_versions(&sync_root, &vault), ["outside", "mine", "first"]);
+        assert_eq!(
+            note_versions(&sync_root, &vault),
+            ["outside", "mine", "first"]
+        );
     }
 
     #[test]
@@ -552,7 +572,10 @@ mod tests {
         let result =
             snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
         assert!(result.commit.is_none());
-        assert_eq!(note_versions(&sync_root, &vault), ["the app's", "mine", "first"]);
+        assert_eq!(
+            note_versions(&sync_root, &vault),
+            ["the app's", "mine", "first"]
+        );
     }
 
     #[test]
@@ -568,13 +591,17 @@ mod tests {
         let result =
             snapshot_outside_change(&sync_root, &vault, &vault.join("Note.md"), "mine").unwrap();
         assert!(result.commit.is_some());
-        assert_eq!(note_versions(&sync_root, &vault), ["first", "mine", "first"]);
+        assert_eq!(
+            note_versions(&sync_root, &vault),
+            ["first", "mine", "first"]
+        );
     }
 
     /// Each version's `Note.md`, newest first.
     fn note_versions(sync_root: &Path, vault: &Path) -> Vec<String> {
         let record = state::load_or_create_record(sync_root, vault).unwrap();
-        let repository = repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault).unwrap();
+        let repository =
+            repo::open_or_init(&state::git_dir(sync_root, &record.vault_id), vault).unwrap();
         let mut walk = repository.revwalk().unwrap();
         walk.push_head().unwrap();
         walk.map(|id| {

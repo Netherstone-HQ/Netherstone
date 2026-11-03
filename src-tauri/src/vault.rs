@@ -200,7 +200,9 @@ pub(crate) fn create_temp(
     {
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-        let kept = std::fs::metadata(target).ok().map(|meta| meta.permissions());
+        let kept = std::fs::metadata(target)
+            .ok()
+            .map(|meta| meta.permissions());
         // Created no wider than it will end up, so it's never readable by
         // more people than that, even for a moment.
         match (&kept, new_file) {
@@ -417,7 +419,6 @@ pub fn unique_drawing_path(dir: &Path, name: &str) -> Result<PathBuf, String> {
     Ok(candidate)
 }
 
-
 /// Why a new vault folder couldn't be made. The app turns each into its own
 /// message, so these are codes rather than sentences.
 pub const VAULT_NAME_EMPTY: &str = "vault-name-empty";
@@ -431,9 +432,9 @@ pub fn is_valid_folder_name(name: &str) -> bool {
     name != "."
         && name != ".."
         && !name.ends_with('.')
-        && !name
-            .chars()
-            .any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'))
+        && !name.chars().any(|c| {
+            c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+        })
 }
 
 /// Creates the folder `parent/name` for a new vault and returns its path.
@@ -503,7 +504,10 @@ mod tests {
     #[test]
     fn saves_never_write_through_a_left_temp_link() {
         let dir = temp_vault("temp-link");
-        let outside = dir.with_file_name(format!("{}-outside", dir.file_name().unwrap().to_string_lossy()));
+        let outside = dir.with_file_name(format!(
+            "{}-outside",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
         std::fs::write(&outside, "keep").unwrap();
         std::fs::write(dir.join("Note.md"), "old").unwrap();
         std::os::unix::fs::symlink(&outside, dir.join(".Note.md.netherstone-tmp")).unwrap();
@@ -556,7 +560,10 @@ mod tests {
     #[test]
     fn create_vault_folder_rejects_bad_names_and_locations() {
         let parent = temp_vault("create-invalid");
-        assert_eq!(create_vault_folder(&parent, "  ").unwrap_err(), VAULT_NAME_EMPTY);
+        assert_eq!(
+            create_vault_folder(&parent, "  ").unwrap_err(),
+            VAULT_NAME_EMPTY
+        );
         for name in ["a/b", "a\\b", "what?", "..", "trailing."] {
             assert_eq!(
                 create_vault_folder(&parent, name).unwrap_err(),
@@ -585,7 +592,10 @@ mod tests {
         let nodes = scan_dir(&vault);
         let names: Vec<_> = nodes.iter().map(|node| node.name.as_str()).collect();
 
-        assert_eq!(names, vec!["drawings", "empty", "note.md", "sketch.excalidraw"]);
+        assert_eq!(
+            names,
+            vec!["drawings", "empty", "note.md", "sketch.excalidraw"]
+        );
         std::fs::remove_dir_all(&vault).unwrap();
     }
 
@@ -632,7 +642,9 @@ mod tests {
         let staged = stage_file(&vault, |file| file.write_all(b"picture")).unwrap();
         let unused = stage_file(&vault, |file| file.write_all(b"other")).unwrap();
         assert_eq!(std::fs::read_dir(&vault).unwrap().count(), 3);
-        staged.put(&crate::locks::vault_writes().unwrap(), &photo).unwrap();
+        staged
+            .put(&crate::locks::vault_writes().unwrap(), &photo)
+            .unwrap();
         drop(unused);
 
         let names: Vec<_> = std::fs::read_dir(&vault)

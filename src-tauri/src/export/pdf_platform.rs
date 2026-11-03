@@ -42,8 +42,10 @@ mod platform {
 
         let started = unsafe {
             (|| -> windows_core::Result<(ICoreWebView2_7, _)> {
-                let webview: ICoreWebView2_7 = platform_webview.controller().CoreWebView2()?.cast()?;
-                let environment: ICoreWebView2Environment6 = platform_webview.environment().cast()?;
+                let webview: ICoreWebView2_7 =
+                    platform_webview.controller().CoreWebView2()?.cast()?;
+                let environment: ICoreWebView2Environment6 =
+                    platform_webview.environment().cast()?;
                 let settings = environment.CreatePrintSettings()?;
                 settings.SetOrientation(COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT)?;
                 settings.SetPageWidth(inches(page.width_mm))?;
@@ -62,7 +64,9 @@ mod platform {
         let (webview, settings) = match started {
             Ok(parts) => parts,
             Err(error) => {
-                let _ = done.send(Err(format!("This version of Windows can't save PDFs from the app: {error}")));
+                let _ = done.send(Err(format!(
+                    "This version of Windows can't save PDFs from the app: {error}"
+                )));
                 return;
             }
         };
@@ -104,7 +108,8 @@ mod platform {
     use objc2::runtime::{Bool, NSObject, ProtocolObject};
     use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
     use objc2_app_kit::{
-        NSPrintInfo, NSPrintJobSavingURL, NSPrintOperation, NSPrintSaveJob, NSPrintingPaginationMode, NSWindow,
+        NSPrintInfo, NSPrintJobSavingURL, NSPrintOperation, NSPrintSaveJob,
+        NSPrintingPaginationMode, NSWindow,
     };
     use objc2_foundation::{NSSize, NSString, NSURL};
     use objc2_web_kit::WKWebView;
@@ -153,7 +158,9 @@ mod platform {
 
     pub fn print(platform_webview: PlatformWebview, output: PathBuf, page: PageSetup, done: Done) {
         let Some(mtm) = MainThreadMarker::new() else {
-            let _ = done.send(Err("The PDF must be printed on the main thread.".to_string()));
+            let _ = done.send(Err(
+                "The PDF must be printed on the main thread.".to_string()
+            ));
             return;
         };
 
@@ -162,7 +169,10 @@ mod platform {
             let window = &*platform_webview.ns_window().cast::<NSWindow>();
 
             let info = NSPrintInfo::new();
-            info.setPaperSize(NSSize::new(page.width_mm * POINTS_PER_MM, page.height_mm * POINTS_PER_MM));
+            info.setPaperSize(NSSize::new(
+                page.width_mm * POINTS_PER_MM,
+                page.height_mm * POINTS_PER_MM,
+            ));
             info.setTopMargin(page.margin_top_mm * POINTS_PER_MM);
             info.setRightMargin(page.margin_right_mm * POINTS_PER_MM);
             info.setBottomMargin(page.margin_bottom_mm * POINTS_PER_MM);
@@ -173,7 +183,8 @@ mod platform {
             info.setVerticallyCentered(false);
             info.setJobDisposition(NSPrintSaveJob);
             let url = NSURL::fileURLWithPath(&NSString::from_str(&output.to_string_lossy()));
-            info.dictionary().setObject_forKey(&url, ProtocolObject::from_ref(NSPrintJobSavingURL));
+            info.dictionary()
+                .setObject_forKey(&url, ProtocolObject::from_ref(NSPrintJobSavingURL));
 
             let operation = view.printOperationWithPrintInfo(&info);
             operation.setShowsPrintPanel(false);
@@ -221,7 +232,13 @@ mod platform {
             return;
         };
 
-        let paper = PaperSize::new_custom("netherstone", "Netherstone", page.width_mm, page.height_mm, Unit::Mm);
+        let paper = PaperSize::new_custom(
+            "netherstone",
+            "Netherstone",
+            page.width_mm,
+            page.height_mm,
+            Unit::Mm,
+        );
         let setup = GtkPageSetup::new();
         setup.set_paper_size(&paper);
         setup.set_top_margin(page.margin_top_mm, Unit::Mm);
@@ -274,7 +291,12 @@ mod platform {
     use super::super::pdf::PageSetup;
     use super::Done;
 
-    pub fn print(_platform_webview: PlatformWebview, _output: PathBuf, _page: PageSetup, done: Done) {
+    pub fn print(
+        _platform_webview: PlatformWebview,
+        _output: PathBuf,
+        _page: PageSetup,
+        done: Done,
+    ) {
         let _ = done.send(Err("PDF export isn't available on this system.".to_string()));
     }
 }

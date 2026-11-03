@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -214,13 +214,7 @@ pub fn upsert_ast_cache(
 ) -> Result<(), String> {
     let ast_json = serialize_ast_value(file_path, ast)?;
 
-    upsert_content_addressed_ast_cache_json(
-        conn,
-        file_path,
-        content_hash,
-        cache_version,
-        &ast_json,
-    )
+    upsert_content_addressed_ast_cache_json(conn, file_path, content_hash, cache_version, &ast_json)
 }
 
 pub fn delete_ast_cache(conn: &Connection, file_path: &str) -> Result<bool, String> {

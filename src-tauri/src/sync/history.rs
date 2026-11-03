@@ -34,7 +34,10 @@ const CHANGED_BY: &str = "Changed by\t";
 
 /// `text` on one line with no tabs, so it can't break up a note.
 fn one_line(text: &str) -> String {
-    text.split(['\t', '\r', '\n']).filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ")
+    text.split(['\t', '\r', '\n'])
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl fmt::Display for Note {
@@ -136,7 +139,10 @@ fn git_error(context: &str, e: git2::Error) -> String {
 
 /// The vault's repository, or `None` when it has no history yet. Never
 /// creates one: reading history shouldn't write anything.
-pub(super) fn open_existing(sync_root: &Path, vault_path: &Path) -> Result<Option<Repository>, String> {
+pub(super) fn open_existing(
+    sync_root: &Path,
+    vault_path: &Path,
+) -> Result<Option<Repository>, String> {
     let Some(record) = state::find_record(sync_root, vault_path)? else {
         return Ok(None);
     };
@@ -188,7 +194,11 @@ struct Change {
 
 /// Whether `bytes` is a version of the vault file `path`, one this device's
 /// History lists, looking back from the newest until it's found.
-pub(super) fn has_version(repository: &Repository, path: &str, bytes: &[u8]) -> Result<bool, String> {
+pub(super) fn has_version(
+    repository: &Repository,
+    path: &str,
+    bytes: &[u8],
+) -> Result<bool, String> {
     let Some(head) = repo::head_commit(repository)? else {
         return Ok(false);
     };
@@ -288,7 +298,9 @@ pub fn list_versions(
     }
 
     let on_disk = Oid::hash_file(ObjectType::Blob, file_path).ok();
-    let is_current = changes.first().is_some_and(|change| Some(change.blob) == on_disk);
+    let is_current = changes
+        .first()
+        .is_some_and(|change| Some(change.blob) == on_disk);
 
     let is_drawing = crate::vault::is_drawing_path(file_path);
     let deadline = Instant::now() + SUMMARY_BUDGET;
@@ -297,14 +309,17 @@ pub fn list_versions(
     let mut versions: Vec<FileVersion> = changes
         .into_iter()
         .map(|change| {
-            let summary = change.previous.filter(|previous| *previous != change.blob).and_then(|previous| {
-                cached_summary(previous, change.blob).or_else(|| {
-                    (worked_out < MIN_SUMMARIES || Instant::now() < deadline).then(|| {
-                        worked_out += 1;
-                        summarize(&repository, previous, change.blob, is_drawing)
+            let summary = change
+                .previous
+                .filter(|previous| *previous != change.blob)
+                .and_then(|previous| {
+                    cached_summary(previous, change.blob).or_else(|| {
+                        (worked_out < MIN_SUMMARIES || Instant::now() < deadline).then(|| {
+                            worked_out += 1;
+                            summarize(&repository, previous, change.blob, is_drawing)
+                        })
                     })
-                })
-            });
+                });
             let (added, removed, changed) = summary.unwrap_or_default();
             FileVersion {
                 id: change.id.to_string(),
@@ -618,10 +633,16 @@ mod tests {
         crate::sync::snapshot_vault(&sync_root, &vault).unwrap();
         save(&sync_root, &vault, "New.md", "Some more text here, renamed");
 
-        let versions = list_versions(&sync_root, &vault, &vault.join("New.md")).unwrap().versions;
+        let versions = list_versions(&sync_root, &vault, &vault.join("New.md"))
+            .unwrap()
+            .versions;
         assert_eq!(
             kinds(&versions),
-            [VersionKind::Renamed, VersionKind::Edited, VersionKind::Created]
+            [
+                VersionKind::Renamed,
+                VersionKind::Edited,
+                VersionKind::Created
+            ]
         );
         assert_eq!(versions[0].renamed_from.as_deref(), Some("Old.md"));
         assert!(versions[0].counted);
@@ -635,7 +656,12 @@ mod tests {
         let text = "First line\nSecond line\nThird line\nFourth line\n";
         save(&sync_root, &vault, "Old.md", text);
         fs::remove_file(vault.join("Old.md")).unwrap();
-        save(&sync_root, &vault, "Folder/Old.md", &format!("{text}Fifth\n"));
+        save(
+            &sync_root,
+            &vault,
+            "Folder/Old.md",
+            &format!("{text}Fifth\n"),
+        );
 
         let history = list_versions(&sync_root, &vault, &vault.join("Folder/Old.md")).unwrap();
         let current = history.current.unwrap();
@@ -718,7 +744,9 @@ mod tests {
         .unwrap();
         fs::write(vault.join("Note.md"), "Typed after").unwrap();
 
-        let versions = list_versions(&sync_root, &vault, &vault.join("Note.md")).unwrap().versions;
+        let versions = list_versions(&sync_root, &vault, &vault.join("Note.md"))
+            .unwrap()
+            .versions;
         assert_eq!(
             kinds(&versions),
             [
@@ -754,7 +782,14 @@ mod tests {
         let theirs = repository.find_commit(theirs).unwrap();
         let (author, committer) = repo::signatures().unwrap();
         repository
-            .commit(Some("HEAD"), &author, &committer, "Sync", &tree, &[&mine, &theirs])
+            .commit(
+                Some("HEAD"),
+                &author,
+                &committer,
+                "Sync",
+                &tree,
+                &[&mine, &theirs],
+            )
             .unwrap();
         fs::write(vault.join("Note.md"), "One, from the laptop").unwrap();
 

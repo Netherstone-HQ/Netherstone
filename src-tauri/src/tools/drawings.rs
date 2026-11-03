@@ -57,7 +57,10 @@ pub struct Drawing {
 fn drawing_path(vault: &Vault, relative: &str) -> ToolResult<PathBuf> {
     let path = vault.resolve(relative)?;
     if !crate::vault::is_drawing_path(&path) {
-        return Err(ToolError(format!("'{}' isn't a drawing (a .excalidraw file)", relative)));
+        return Err(ToolError(format!(
+            "'{}' isn't a drawing (a .excalidraw file)",
+            relative
+        )));
     }
     Ok(path)
 }
@@ -65,7 +68,9 @@ fn drawing_path(vault: &Vault, relative: &str) -> ToolResult<PathBuf> {
 fn parse(content: &str) -> ToolResult<Map<String, Value>> {
     match serde_json::from_str(content) {
         Ok(Value::Object(scene)) => Ok(scene),
-        _ => Err(ToolError("The file isn't an Excalidraw drawing".to_string())),
+        _ => Err(ToolError(
+            "The file isn't an Excalidraw drawing".to_string(),
+        )),
     }
 }
 
@@ -73,11 +78,17 @@ fn elements(scene: &mut Map<String, Value>) -> &mut Vec<Value> {
     if !scene.get("elements").is_some_and(Value::is_array) {
         scene.insert("elements".to_string(), Value::Array(Vec::new()));
     }
-    scene.get_mut("elements").and_then(Value::as_array_mut).expect("just made an array")
+    scene
+        .get_mut("elements")
+        .and_then(Value::as_array_mut)
+        .expect("just made an array")
 }
 
 fn is_live(element: &Value) -> bool {
-    !element.get("isDeleted").and_then(Value::as_bool).unwrap_or(false)
+    !element
+        .get("isDeleted")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn str_of<'a>(element: &'a Value, key: &str) -> Option<&'a str> {
@@ -89,7 +100,11 @@ fn num_of(element: &Value, key: &str) -> f64 {
 }
 
 fn shapes(scene: &mut Map<String, Value>) -> Vec<Shape> {
-    let live: Vec<Value> = elements(scene).iter().filter(|e| is_live(e)).cloned().collect();
+    let live: Vec<Value> = elements(scene)
+        .iter()
+        .filter(|e| is_live(e))
+        .cloned()
+        .collect();
     // A label is a text bound to its shape; it's shown as the shape's text.
     let label = |id: &str| {
         live.iter()
@@ -98,13 +113,20 @@ fn shapes(scene: &mut Map<String, Value>) -> Vec<Shape> {
             .map(str::to_string)
     };
     let bound = |e: &Value, key: &str| {
-        e.get(key).and_then(|b| b.get("elementId")).and_then(Value::as_str).map(str::to_string)
+        e.get(key)
+            .and_then(|b| b.get("elementId"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
     };
     live.iter()
         .filter(|e| str_of(e, "containerId").is_none_or(str::is_empty))
         .map(|e| {
             let id = str_of(e, "id").unwrap_or_default().to_string();
-            let colour = |key| str_of(e, key).filter(|c| *c != "transparent").map(str::to_string);
+            let colour = |key| {
+                str_of(e, key)
+                    .filter(|c| *c != "transparent")
+                    .map(str::to_string)
+            };
             Shape {
                 text: str_of(e, "text").map(str::to_string).or_else(|| label(&id)),
                 kind: str_of(e, "type").unwrap_or_default().to_string(),
@@ -135,7 +157,10 @@ fn shown_in(vault: &Vault, relative: &str) -> ToolResult<Vec<String>> {
             |row| row.get::<_, String>(0),
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(paths.iter().map(|path| vault.relative(Path::new(path))).collect())
+    Ok(paths
+        .iter()
+        .map(|path| vault.relative(Path::new(path)))
+        .collect())
 }
 
 pub fn read_drawing(vault: &Vault, _: &Caller, params: ReadDrawingParams) -> ToolResult<Drawing> {
@@ -276,7 +301,11 @@ const EMBED_WIDTH: &str = "480";
 
 fn random() -> u64 {
     let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-    hasher.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
     hasher.finish()
 }
 
@@ -296,7 +325,9 @@ fn new_id() -> String {
 }
 
 fn now_millis() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
 }
 
 /// The fields every Excalidraw element has.
@@ -337,11 +368,24 @@ fn base(id: &str, kind: &str, x: f64, y: f64, width: f64, height: f64) -> Map<St
 /// The size of `text` in the drawing's font.
 fn text_size(text: &str) -> (f64, f64) {
     let lines: Vec<&str> = text.lines().collect();
-    let longest = lines.iter().map(|line| line.chars().count()).max().unwrap_or(0) as f64;
-    (longest * FONT_SIZE * CHARACTER_WIDTH, lines.len().max(1) as f64 * FONT_SIZE * LINE_HEIGHT)
+    let longest = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0) as f64;
+    (
+        longest * FONT_SIZE * CHARACTER_WIDTH,
+        lines.len().max(1) as f64 * FONT_SIZE * LINE_HEIGHT,
+    )
 }
 
-fn text_element(id: &str, text: &str, x: f64, y: f64, container: Option<&str>) -> Map<String, Value> {
+fn text_element(
+    id: &str,
+    text: &str,
+    x: f64,
+    y: f64,
+    container: Option<&str>,
+) -> Map<String, Value> {
     let (width, height) = text_size(text);
     let mut element = base(id, "text", x, y, width, height);
     element.insert("roundness".to_string(), Value::Null);
@@ -350,8 +394,18 @@ fn text_element(id: &str, text: &str, x: f64, y: f64, container: Option<&str>) -
         ("originalText", json!(text)),
         ("fontSize", json!(FONT_SIZE)),
         ("fontFamily", json!(FONT_FAMILY)),
-        ("textAlign", json!(if container.is_some() { "center" } else { "left" })),
-        ("verticalAlign", json!(if container.is_some() { "middle" } else { "top" })),
+        (
+            "textAlign",
+            json!(if container.is_some() {
+                "center"
+            } else {
+                "left"
+            }),
+        ),
+        (
+            "verticalAlign",
+            json!(if container.is_some() { "middle" } else { "top" }),
+        ),
         ("containerId", json!(container)),
         ("autoResize", json!(true)),
         ("lineHeight", json!(LINE_HEIGHT)),
@@ -363,7 +417,12 @@ fn text_element(id: &str, text: &str, x: f64, y: f64, container: Option<&str>) -
 
 /// The box a shape takes up.
 fn bounds(element: &Value) -> (f64, f64, f64, f64) {
-    (num_of(element, "x"), num_of(element, "y"), num_of(element, "width"), num_of(element, "height"))
+    (
+        num_of(element, "x"),
+        num_of(element, "y"),
+        num_of(element, "width"),
+        num_of(element, "height"),
+    )
 }
 
 /// Where the line from the middle of `from` towards `toward` leaves `from`'s box.
@@ -379,11 +438,13 @@ fn edge_point(from: (f64, f64, f64, f64), toward: (f64, f64)) -> (f64, f64) {
 }
 
 fn find<'a>(list: &'a [Value], id: &str) -> Option<&'a Value> {
-    list.iter().find(|e| str_of(e, "id") == Some(id) && is_live(e))
+    list.iter()
+        .find(|e| str_of(e, "id") == Some(id) && is_live(e))
 }
 
 fn find_mut<'a>(list: &'a mut [Value], id: &str) -> Option<&'a mut Value> {
-    list.iter_mut().find(|e| str_of(e, "id") == Some(id) && is_live(e))
+    list.iter_mut()
+        .find(|e| str_of(e, "id") == Some(id) && is_live(e))
 }
 
 /// Notes `bound` (an arrow or label) on the shape `id`, so moving the shape
@@ -411,8 +472,13 @@ fn bump(element: &mut Value) {
 
 /// Puts a label's text in the middle of its shape.
 fn center_label(list: &mut [Value], container: &str) {
-    let Some(shape) = find(list, container).map(bounds) else { return };
-    if let Some(label) = list.iter_mut().find(|e| str_of(e, "containerId") == Some(container) && is_live(e)) {
+    let Some(shape) = find(list, container).map(bounds) else {
+        return;
+    };
+    if let Some(label) = list
+        .iter_mut()
+        .find(|e| str_of(e, "containerId") == Some(container) && is_live(e))
+    {
         let (w, h) = (num_of(label, "width"), num_of(label, "height"));
         label["x"] = json!(shape.0 + (shape.2 - w) / 2.0);
         label["y"] = json!(shape.1 + (shape.3 - h) / 2.0);
@@ -421,10 +487,22 @@ fn center_label(list: &mut [Value], container: &str) {
 
 /// Lays an arrow between the shapes it connects.
 fn route(list: &mut [Value], arrow: &str) {
-    let Some(element) = find(list, arrow) else { return };
-    let end = |key: &str| element.get(key).and_then(|b| b.get("elementId")).and_then(Value::as_str).map(str::to_string);
-    let (Some(start), Some(end)) = (end("startBinding"), end("endBinding")) else { return };
-    let (Some(a), Some(b)) = (find(list, &start).map(bounds), find(list, &end).map(bounds)) else { return };
+    let Some(element) = find(list, arrow) else {
+        return;
+    };
+    let end = |key: &str| {
+        element
+            .get(key)
+            .and_then(|b| b.get("elementId"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let (Some(start), Some(end)) = (end("startBinding"), end("endBinding")) else {
+        return;
+    };
+    let (Some(a), Some(b)) = (find(list, &start).map(bounds), find(list, &end).map(bounds)) else {
+        return;
+    };
     let middle = |r: (f64, f64, f64, f64)| (r.0 + r.2 / 2.0, r.1 + r.3 / 2.0);
     let from = edge_point(a, middle(b));
     let to = edge_point(b, middle(a));
@@ -435,7 +513,10 @@ fn route(list: &mut [Value], arrow: &str) {
         element["height"] = json!((to.1 - from.1).abs());
         element["points"] = json!([[0.0, 0.0], [to.0 - from.0, to.1 - from.1]]);
     }
-    if let Some(label) = list.iter().find(|e| str_of(e, "containerId") == Some(arrow) && is_live(e)) {
+    if let Some(label) = list
+        .iter()
+        .find(|e| str_of(e, "containerId") == Some(arrow) && is_live(e))
+    {
         let id = str_of(label, "id").unwrap_or_default().to_string();
         let (w, h) = (num_of(label, "width"), num_of(label, "height"));
         if let Some(label) = find_mut(list, &id) {
@@ -448,15 +529,34 @@ fn route(list: &mut [Value], arrow: &str) {
 fn add_shapes(list: &mut Vec<Value>, specs: &[ShapeSpec]) -> ToolResult<Vec<String>> {
     let mut added = Vec::new();
     for spec in specs {
-        let kind = spec.kind.ok_or_else(|| ToolError("A new shape needs a type".to_string()))?;
-        let id = spec.id.clone().filter(|id| !id.trim().is_empty()).unwrap_or_else(new_id);
+        let kind = spec
+            .kind
+            .ok_or_else(|| ToolError("A new shape needs a type".to_string()))?;
+        let id = spec
+            .id
+            .clone()
+            .filter(|id| !id.trim().is_empty())
+            .unwrap_or_else(new_id);
         if list.iter().any(|e| str_of(e, "id") == Some(id.as_str())) {
-            return Err(ToolError(format!("The drawing already has a shape with id '{}'", id)));
+            return Err(ToolError(format!(
+                "The drawing already has a shape with id '{}'",
+                id
+            )));
         }
         // Right of everything else, on the top row, unless placed.
-        let right = list.iter().filter(|e| is_live(e)).map(|e| num_of(e, "x") + num_of(e, "width")).fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.max(r))));
-        let top = list.iter().filter(|e| is_live(e)).map(|e| num_of(e, "y")).fold(None, |m: Option<f64>, t| Some(m.map_or(t, |m| m.min(t))));
-        let x = spec.x.unwrap_or_else(|| right.map_or(0.0, |r| r + SHAPE_GAP));
+        let right = list
+            .iter()
+            .filter(|e| is_live(e))
+            .map(|e| num_of(e, "x") + num_of(e, "width"))
+            .fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.max(r))));
+        let top = list
+            .iter()
+            .filter(|e| is_live(e))
+            .map(|e| num_of(e, "y"))
+            .fold(None, |m: Option<f64>, t| Some(m.map_or(t, |m| m.min(t))));
+        let x = spec
+            .x
+            .unwrap_or_else(|| right.map_or(0.0, |r| r + SHAPE_GAP));
         let y = spec.y.unwrap_or_else(|| top.unwrap_or(0.0));
 
         let mut element = if kind == ShapeKind::Text {
@@ -467,21 +567,36 @@ fn add_shapes(list: &mut Vec<Value>, specs: &[ShapeSpec]) -> ToolResult<Vec<Stri
                 kind.name(),
                 x,
                 y,
-                spec.width.unwrap_or(if kind.is_link() { 0.0 } else { SHAPE_WIDTH }),
-                spec.height.unwrap_or(if kind.is_link() { 0.0 } else { SHAPE_HEIGHT }),
+                spec.width
+                    .unwrap_or(if kind.is_link() { 0.0 } else { SHAPE_WIDTH }),
+                spec.height
+                    .unwrap_or(if kind.is_link() { 0.0 } else { SHAPE_HEIGHT }),
             );
             if kind.is_link() {
-                let (w, h) = (spec.width.unwrap_or(SHAPE_WIDTH), spec.height.unwrap_or(0.0));
+                let (w, h) = (
+                    spec.width.unwrap_or(SHAPE_WIDTH),
+                    spec.height.unwrap_or(0.0),
+                );
                 element.insert("points".to_string(), json!([[0.0, 0.0], [w, h]]));
                 element.insert("lastCommittedPoint".to_string(), Value::Null);
                 element.insert("startArrowhead".to_string(), Value::Null);
-                element.insert("endArrowhead".to_string(), json!(if kind == ShapeKind::Arrow { Some("arrow") } else { None }));
+                element.insert(
+                    "endArrowhead".to_string(),
+                    json!(if kind == ShapeKind::Arrow {
+                        Some("arrow")
+                    } else {
+                        None
+                    }),
+                );
                 element.insert("elbowed".to_string(), json!(false));
                 for (key, end) in [("startBinding", &spec.from), ("endBinding", &spec.to)] {
                     let binding = match end {
                         Some(end) => {
                             if find(list, end).is_none() {
-                                return Err(ToolError(format!("There's no shape '{}' to connect to", end)));
+                                return Err(ToolError(format!(
+                                    "There's no shape '{}' to connect to",
+                                    end
+                                )));
                             }
                             json!({ "elementId": end, "focus": 0, "gap": ARROW_GAP })
                         }
@@ -492,7 +607,10 @@ fn add_shapes(list: &mut Vec<Value>, specs: &[ShapeSpec]) -> ToolResult<Vec<Stri
             }
             element
         };
-        for (key, colour) in [("strokeColor", &spec.stroke_color), ("backgroundColor", &spec.background_color)] {
+        for (key, colour) in [
+            ("strokeColor", &spec.stroke_color),
+            ("backgroundColor", &spec.background_color),
+        ] {
             if let Some(colour) = colour {
                 element.insert(key.to_string(), json!(colour));
             }
@@ -535,14 +653,26 @@ fn arrows_of(list: &[Value], id: &str) -> Vec<String> {
 
 fn update_shapes(list: &mut Vec<Value>, specs: &[ShapeSpec]) -> ToolResult<()> {
     for spec in specs {
-        let id = spec.id.as_deref().ok_or_else(|| ToolError("update needs each shape's id".to_string()))?;
-        let element = find_mut(list, id).ok_or_else(|| ToolError(format!("There's no shape '{}'", id)))?;
-        for (key, value) in [("x", spec.x), ("y", spec.y), ("width", spec.width), ("height", spec.height)] {
+        let id = spec
+            .id
+            .as_deref()
+            .ok_or_else(|| ToolError("update needs each shape's id".to_string()))?;
+        let element =
+            find_mut(list, id).ok_or_else(|| ToolError(format!("There's no shape '{}'", id)))?;
+        for (key, value) in [
+            ("x", spec.x),
+            ("y", spec.y),
+            ("width", spec.width),
+            ("height", spec.height),
+        ] {
             if let Some(value) = value {
                 element[key] = json!(value);
             }
         }
-        for (key, colour) in [("strokeColor", &spec.stroke_color), ("backgroundColor", &spec.background_color)] {
+        for (key, colour) in [
+            ("strokeColor", &spec.stroke_color),
+            ("backgroundColor", &spec.background_color),
+        ] {
             if let Some(colour) = colour {
                 element[key] = json!(colour);
             }
@@ -558,7 +688,9 @@ fn update_shapes(list: &mut Vec<Value>, specs: &[ShapeSpec]) -> ToolResult<()> {
         bump(element);
 
         if let (Some(text), false) = (&spec.text, is_text) {
-            let label = list.iter().position(|e| str_of(e, "containerId") == Some(id) && is_live(e));
+            let label = list
+                .iter()
+                .position(|e| str_of(e, "containerId") == Some(id) && is_live(e));
             match label {
                 Some(index) => {
                     let (w, h) = text_size(text);
@@ -592,7 +724,8 @@ fn remove_shapes(list: &mut [Value], ids: &[String]) -> ToolResult<()> {
             return Err(ToolError(format!("There's no shape '{}'", id)));
         }
         for element in list.iter_mut() {
-            let owned = str_of(element, "id") == Some(id.as_str()) || str_of(element, "containerId") == Some(id.as_str());
+            let owned = str_of(element, "id") == Some(id.as_str())
+                || str_of(element, "containerId") == Some(id.as_str());
             if owned && is_live(element) {
                 element["isDeleted"] = json!(true);
                 bump(element);
@@ -613,7 +746,10 @@ fn escape_attribute(value: &str) -> String {
 /// The image tag the app writes for a drawing in a shard, without its
 /// pictures yet: the app exports them when the shard is next opened.
 fn embed_tag(relative: &str) -> String {
-    let name = Path::new(relative).file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = Path::new(relative)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
     format!(
         "<img src=\"\" data-dark-src=\"\" alt=\"{}\" width=\"{}\" data-excalidraw=\"{}\" />",
         escape_attribute(&name),
@@ -628,11 +764,20 @@ fn edit_scene(path: &Path, edit: impl FnOnce(&mut Vec<Value>) -> ToolResult<()>)
     let writes = crate::locks::vault_writes()?;
     let mut scene = parse(&read_text(path)?)?;
     edit(elements(&mut scene))?;
-    let content = serde_json::to_string_pretty(&Value::Object(scene)).map_err(|e| ToolError(e.to_string()))?;
-    Ok(crate::vault::write_atomically(&writes, path, content.as_bytes())?)
+    let content = serde_json::to_string_pretty(&Value::Object(scene))
+        .map_err(|e| ToolError(e.to_string()))?;
+    Ok(crate::vault::write_atomically(
+        &writes,
+        path,
+        content.as_bytes(),
+    )?)
 }
 
-pub fn edit_drawing(vault: &Vault, caller: &Caller, params: EditDrawingParams) -> ToolResult<Drawing> {
+pub fn edit_drawing(
+    vault: &Vault,
+    caller: &Caller,
+    params: EditDrawingParams,
+) -> ToolResult<Drawing> {
     let path = drawing_path(vault, &params.path)?;
     let summary = params.summary.as_deref();
     let shapes_given = || params.shapes.clone().unwrap_or_default();
@@ -640,23 +785,34 @@ pub fn edit_drawing(vault: &Vault, caller: &Caller, params: EditDrawingParams) -
     let path = match params.action {
         DrawingAction::Create => {
             let folder = path.parent().unwrap_or(&vault.root).to_path_buf();
-            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
             change(vault, caller, summary, &[], || {
                 let writes = crate::locks::vault_writes()?;
-                std::fs::create_dir_all(&folder).map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
+                std::fs::create_dir_all(&folder)
+                    .map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
                 let path = crate::vault::unique_drawing_path(&folder, &name)?;
                 let mut scene = parse(crate::vault::EMPTY_DRAWING)?;
                 add_shapes(elements(&mut scene), &shapes_given())?;
-                let content = serde_json::to_string_pretty(&Value::Object(scene)).map_err(|e| ToolError(e.to_string()))?;
+                let content = serde_json::to_string_pretty(&Value::Object(scene))
+                    .map_err(|e| ToolError(e.to_string()))?;
                 crate::vault::write_atomically(&writes, &path, content.as_bytes())?;
                 Ok((path.clone(), vec![path]))
             })?
         }
         DrawingAction::Embed => {
             if !path.is_file() {
-                return Err(ToolError(format!("There's no drawing at '{}'", params.path)));
+                return Err(ToolError(format!(
+                    "There's no drawing at '{}'",
+                    params.path
+                )));
             }
-            let shard_relative = params.shard.as_deref().ok_or_else(|| ToolError("embed needs the shard".to_string()))?;
+            let shard_relative = params
+                .shard
+                .as_deref()
+                .ok_or_else(|| ToolError("embed needs the shard".to_string()))?;
             let shard = vault.shard(shard_relative)?;
             let tag = embed_tag(&vault.relative(&path));
             change(vault, caller, summary, std::slice::from_ref(&shard), || {
@@ -669,7 +825,11 @@ pub fn edit_drawing(vault: &Vault, caller: &Caller, params: EditDrawingParams) -
                     let before = before.trim_end_matches(['\n', '\r', ' ']);
                     let gap = if before.is_empty() { "" } else { "\n\n" };
                     let rest = after.trim_start_matches(['\n', '\r']);
-                    let tail = if rest.is_empty() { String::new() } else { format!("\n{}", rest) };
+                    let tail = if rest.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n{}", rest)
+                    };
                     Ok(format!("{}{}{}\n{}", before, gap, tag, tail))
                 })?;
                 Ok(((), Vec::new()))
@@ -678,13 +838,18 @@ pub fn edit_drawing(vault: &Vault, caller: &Caller, params: EditDrawingParams) -
         }
         action => {
             if !path.is_file() {
-                return Err(ToolError(format!("There's no drawing at '{}'. Use create to make one.", params.path)));
+                return Err(ToolError(format!(
+                    "There's no drawing at '{}'. Use create to make one.",
+                    params.path
+                )));
             }
             change(vault, caller, summary, std::slice::from_ref(&path), || {
                 edit_scene(&path, |list| match action {
                     DrawingAction::Add => add_shapes(list, &shapes_given()).map(|_| ()),
                     DrawingAction::Update => update_shapes(list, &shapes_given()),
-                    DrawingAction::Remove => remove_shapes(list, params.ids.as_deref().unwrap_or_default()),
+                    DrawingAction::Remove => {
+                        remove_shapes(list, params.ids.as_deref().unwrap_or_default())
+                    }
                     DrawingAction::Create | DrawingAction::Embed => unreachable!("handled above"),
                 })?;
                 Ok(((), Vec::new()))
@@ -692,5 +857,11 @@ pub fn edit_drawing(vault: &Vault, caller: &Caller, params: EditDrawingParams) -
             path
         }
     };
-    read_drawing(vault, caller, ReadDrawingParams { path: vault.relative(&path) })
+    read_drawing(
+        vault,
+        caller,
+        ReadDrawingParams {
+            path: vault.relative(&path),
+        },
+    )
 }

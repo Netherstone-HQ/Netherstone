@@ -35,12 +35,21 @@ impl OpenVault {
 
     /// Checks that a new vault may be made in `parent`: `default` (the
     /// Documents folder) or a folder the user picked this session.
-    pub fn check_new_vault_parent(&self, parent: &Path, default: Option<&Path>) -> Result<(), String> {
-        let picked = lock(&self.picked).iter().any(|folder| is_same(folder, parent));
+    pub fn check_new_vault_parent(
+        &self,
+        parent: &Path,
+        default: Option<&Path>,
+    ) -> Result<(), String> {
+        let picked = lock(&self.picked)
+            .iter()
+            .any(|folder| is_same(folder, parent));
         if picked || default.is_some_and(|default| is_same(default, parent)) {
             Ok(())
         } else {
-            Err(format!("{} wasn't picked for a new vault", parent.display()))
+            Err(format!(
+                "{} wasn't picked for a new vault",
+                parent.display()
+            ))
         }
     }
 
@@ -66,7 +75,9 @@ impl OpenVault {
 
     /// The open vault.
     pub fn open_vault(&self) -> Result<PathBuf, String> {
-        lock(&self.open).clone().ok_or_else(|| "No vault is open".to_string())
+        lock(&self.open)
+            .clone()
+            .ok_or_else(|| "No vault is open".to_string())
     }
 
     /// Checks that `vault_path` is the open vault.
@@ -80,8 +91,7 @@ impl OpenVault {
     /// Checks that `vault_path` is the open vault or another of the user's
     /// vaults.
     pub fn check_known_vault(&self, vault_path: &Path) -> Result<(), String> {
-        if self.check_vault(vault_path).is_ok()
-            || crate::sync::state::has_vault_marker(vault_path)
+        if self.check_vault(vault_path).is_ok() || crate::sync::state::has_vault_marker(vault_path)
         {
             Ok(())
         } else {
@@ -96,7 +106,11 @@ impl OpenVault {
         if is_within(vault_path, path) {
             Ok(())
         } else {
-            Err(format!("{} is outside {}", path.display(), vault_path.display()))
+            Err(format!(
+                "{} is outside {}",
+                path.display(),
+                vault_path.display()
+            ))
         }
     }
 
@@ -190,7 +204,11 @@ mod tests {
         assert!(vaults.check_inside(&vault).is_err());
         assert!(vaults.check_inside(&vault.join("Notes/Note.md")).is_ok());
         assert!(vaults.check_path(&vault.join("../secret.txt")).is_err());
-        assert!(vaults.check_path(&vault.join("Notes/../../secret.txt")).is_err());
+        assert!(
+            vaults
+                .check_path(&vault.join("Notes/../../secret.txt"))
+                .is_err()
+        );
         assert!(vaults.check_path(&dir.join("Vault2/Note.md")).is_err());
         assert!(vaults.check_path(&dir.join("secret.txt")).is_err());
         assert!(vaults.check_vault(&dir).is_err());

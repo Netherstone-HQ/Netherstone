@@ -685,7 +685,9 @@ mod tests {
             .map(|text| Oid::hash_object(ObjectType::Blob, text.as_bytes()).unwrap())
             .collect();
         let freed = commit_freed_list(&github, &list, None).unwrap();
-        github.reference(FREED_REF, freed, true, "Freed up space").unwrap();
+        github
+            .reference(FREED_REF, freed, true, "Freed up space")
+            .unwrap();
         let mut builder = github.treebuilder(None).unwrap();
         builder
             .insert("Note.md", github.blob(b"Second").unwrap(), 0o100644)

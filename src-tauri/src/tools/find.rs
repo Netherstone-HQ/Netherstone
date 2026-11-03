@@ -32,7 +32,11 @@ fn day_start(day: &str) -> ToolResult<i64> {
 
 pub(super) fn local_date(unix_seconds: i64) -> String {
     chrono::DateTime::from_timestamp(unix_seconds, 0)
-        .map(|time| time.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
+        .map(|time| {
+            time.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string()
+        })
         .unwrap_or_default()
 }
 
@@ -96,8 +100,16 @@ pub fn search(vault: &Vault, _: &Caller, params: SearchParams) -> ToolResult<Fou
         query: params.query.as_deref().unwrap_or(""),
         folder: folder.as_deref(),
         tag: params.tag.as_deref().filter(|tag| !tag.trim().is_empty()),
-        modified_after: params.modified_after.as_deref().map(day_start).transpose()?,
-        modified_before: params.modified_before.as_deref().map(day_start).transpose()?,
+        modified_after: params
+            .modified_after
+            .as_deref()
+            .map(day_start)
+            .transpose()?,
+        modified_before: params
+            .modified_before
+            .as_deref()
+            .map(day_start)
+            .transpose()?,
     };
     let conn = vault.index()?;
     let found =
@@ -166,8 +178,12 @@ pub fn list_folder(vault: &Vault, _: &Caller, params: ListFolderParams) -> ToolR
         Some(folder) => vault.resolve(folder)?,
         None => vault.root.clone(),
     };
-    let entries = std::fs::read_dir(&folder)
-        .map_err(|_| ToolError(format!("There's no folder at '{}'", vault.relative(&folder))))?;
+    let entries = std::fs::read_dir(&folder).map_err(|_| {
+        ToolError(format!(
+            "There's no folder at '{}'",
+            vault.relative(&folder)
+        ))
+    })?;
 
     let mut listed: Vec<(EntryKind, std::path::PathBuf, i64)> = entries
         .filter_map(Result::ok)
@@ -210,7 +226,11 @@ pub fn list_folder(vault: &Vault, _: &Caller, params: ListFolderParams) -> ToolR
         .into_iter()
         .map(|(kind, path, modified)| {
             let words = matches!(kind, EntryKind::Shard)
-                .then(|| words.query_row(params![path.to_string_lossy()], |row| row.get(0)).ok())
+                .then(|| {
+                    words
+                        .query_row(params![path.to_string_lossy()], |row| row.get(0))
+                        .ok()
+                })
                 .flatten();
             Entry {
                 path: vault.relative(&path),
@@ -391,7 +411,10 @@ pub fn vault_overview(vault: &Vault, _: &Caller, _: OverviewParams) -> ToolResul
     let record = crate::sync::state::find_record(&vault.sync_root, &vault.root)?;
     let backup = Backup {
         on: record.as_ref().is_some_and(|record| record.sync_enabled),
-        last_synced: record.as_ref().and_then(|record| record.last_sync_at).map(local_date),
+        last_synced: record
+            .as_ref()
+            .and_then(|record| record.last_sync_at)
+            .map(local_date),
         conflicts: record
             .map(|record| record.conflicts.into_iter().map(|c| c.path).collect())
             .unwrap_or_default(),

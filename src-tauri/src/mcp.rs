@@ -26,7 +26,8 @@ struct Server {
 
 /// What a call can't go ahead without, said so the AI app can tell the user.
 const TURNED_OFF: &str = "Netherstone isn't letting AI apps use its vaults. Turn on Connect your AI apps in Netherstone's Settings, then try again.";
-const NO_VAULT: &str = "No vault has been opened in Netherstone yet. Open one in the app, then try again.";
+const NO_VAULT: &str =
+    "No vault has been opened in Netherstone yet. Open one in the app, then try again.";
 const NONE_PICKED: &str = "Netherstone isn't letting AI apps use any of its vaults yet. Pick the ones they may use in Netherstone's Settings, then try again.";
 
 /// The argument every vault tool takes to name its vault.
@@ -80,7 +81,8 @@ impl Server {
             None => {
                 let last = opened_last(&conn)?.ok_or(NO_VAULT)?;
                 if !last.ai_allowed {
-                    let any = settings::known_vaults(&conn, true, 0, Some(1)).map_err(|e| e.to_string())?;
+                    let any = settings::known_vaults(&conn, true, 0, Some(1))
+                        .map_err(|e| e.to_string())?;
                     return Err(if any.is_empty() {
                         NONE_PICKED.to_string()
                     } else {
@@ -94,7 +96,11 @@ impl Server {
             }
         };
         if !known.path.is_dir() {
-            return Err(format!("The vault {} isn't at {} anymore", known.name(), known.path.display()));
+            return Err(format!(
+                "The vault {} isn't at {} anymore",
+                known.name(),
+                known.path.display()
+            ));
         }
         Ok(Vault::new(known.path, crate::sync::sync_root()?))
     }
@@ -103,10 +109,14 @@ impl Server {
     fn list_vaults(&self, arguments: &Map<String, Value>) -> Result<Value, String> {
         let conn = self.settings()?;
         let cursor = arguments.get("cursor").and_then(Value::as_str);
-        let limit = arguments.get("limit").and_then(Value::as_u64).map(|limit| limit as usize);
+        let limit = arguments
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map(|limit| limit as usize);
         let page = Page::new(cursor, limit).map_err(|error| error.0)?;
         let last = opened_last(&conn)?.map(|vault| vault.path);
-        let vaults = settings::known_vaults(&conn, true, page.offset, Some(page.fetch())).map_err(|e| e.to_string())?;
+        let vaults = settings::known_vaults(&conn, true, page.offset, Some(page.fetch()))
+            .map_err(|e| e.to_string())?;
         let (vaults, next_cursor) = page.finish(vaults);
         // A page can come out short of a vault that's gone; the cursor still
         // counts it.
@@ -131,7 +141,9 @@ impl Server {
 fn opened_last(conn: &rusqlite::Connection) -> Result<Option<KnownVault>, String> {
     let mut offset = 0;
     loop {
-        let next = settings::known_vaults(conn, false, offset, Some(1)).map_err(|e| e.to_string())?.pop();
+        let next = settings::known_vaults(conn, false, offset, Some(1))
+            .map_err(|e| e.to_string())?
+            .pop();
         match next {
             Some(vault) if crate::gone_vaults::is_gone(&vault.path, vault.drive) => offset += 1,
             next => return Ok(next),
@@ -143,7 +155,11 @@ fn opened_last(conn: &rusqlite::Connection) -> Result<Option<KnownVault>, String
 fn caller(context: &RequestContext<RoleServer>) -> Caller {
     let app = context
         .client_info()
-        .map(|info| info.title.filter(|title| !title.trim().is_empty()).unwrap_or(info.name))
+        .map(|info| {
+            info.title
+                .filter(|title| !title.trim().is_empty())
+                .unwrap_or(info.name)
+        })
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| "an AI app".to_string());
     Caller { app }
@@ -267,14 +283,21 @@ impl ServerHandler for Server {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         let vault_tools = self.tools.iter().map(mcp_tool);
-        Ok(ListToolsResult::with_all_items(std::iter::once(list_vaults_tool()).chain(vault_tools).collect()))
+        Ok(ListToolsResult::with_all_items(
+            std::iter::once(list_vaults_tool())
+                .chain(vault_tools)
+                .collect(),
+        ))
     }
 
     fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
         if name == LIST_VAULTS {
             return Some(list_vaults_tool());
         }
-        self.tools.iter().find(|tool| tool.name == name).map(mcp_tool)
+        self.tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .map(mcp_tool)
     }
 
     async fn call_tool(
@@ -303,7 +326,8 @@ impl ServerHandler for Server {
                 .iter()
                 .find(|tool| tool.name == name)
                 .ok_or_else(|| format!("There's no tool named {}", name))?;
-            tool.call(&vault, &caller, Value::Object(arguments)).map_err(|error| error.0)
+            tool.call(&vault, &caller, Value::Object(arguments))
+                .map_err(|error| error.0)
         })
         .await
         .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
@@ -334,12 +358,20 @@ impl ServerHandler for Server {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResponse, ErrorData> {
         if request.uri != guide::URI {
-            return Err(ErrorData::resource_not_found(format!("There's no resource {}", request.uri), None));
+            return Err(ErrorData::resource_not_found(
+                format!("There's no resource {}", request.uri),
+                None,
+            ));
         }
         let contents = match ResourceContents::text(guide::GUIDE, guide::URI) {
-            ResourceContents::TextResourceContents { uri, text, meta, .. } => {
-                ResourceContents::TextResourceContents { uri, text, meta, mime_type: Some("text/markdown".into()) }
-            }
+            ResourceContents::TextResourceContents {
+                uri, text, meta, ..
+            } => ResourceContents::TextResourceContents {
+                uri,
+                text,
+                meta,
+                mime_type: Some("text/markdown".into()),
+            },
             other => other,
         };
         Ok(ReadResourceResult::new(vec![contents]).into())
@@ -355,12 +387,17 @@ impl ServerHandler for Server {
                 .iter()
                 .map(|prompt| {
                     let arguments = prompt.shard.then(|| {
-                        vec![PromptArgument::new(PATH_ARGUMENT)
-                            .with_title("Shard")
-                            .with_description("The shard's path in the vault, like Projects/Plan.md")
-                            .with_required(true)]
+                        vec![
+                            PromptArgument::new(PATH_ARGUMENT)
+                                .with_title("Shard")
+                                .with_description(
+                                    "The shard's path in the vault, like Projects/Plan.md",
+                                )
+                                .with_required(true),
+                        ]
                     });
-                    Prompt::new(prompt.name, Some(prompt.description), arguments).with_title(prompt.title)
+                    Prompt::new(prompt.name, Some(prompt.description), arguments)
+                        .with_title(prompt.title)
                 })
                 .collect(),
         ))
@@ -374,7 +411,9 @@ impl ServerHandler for Server {
         let prompt = PROMPTS
             .iter()
             .find(|prompt| prompt.name == request.name)
-            .ok_or_else(|| ErrorData::invalid_params(format!("There's no prompt {}", request.name), None))?;
+            .ok_or_else(|| {
+                ErrorData::invalid_params(format!("There's no prompt {}", request.name), None)
+            })?;
         let path = request
             .arguments
             .as_ref()
@@ -384,13 +423,18 @@ impl ServerHandler for Server {
         let text = match (prompt.shard, path) {
             (true, Some(path)) => prompt.text.replace("{path}", &path),
             (true, None) => {
-                return Err(ErrorData::invalid_params("This prompt needs the shard's path", None));
+                return Err(ErrorData::invalid_params(
+                    "This prompt needs the shard's path",
+                    None,
+                ));
             }
             (false, _) => prompt.text.to_string(),
         };
-        Ok(GetPromptResult::new(vec![PromptMessage::new_text(Role::User, text)])
-            .with_description(prompt.description)
-            .into())
+        Ok(
+            GetPromptResult::new(vec![PromptMessage::new_text(Role::User, text)])
+                .with_description(prompt.description)
+                .into(),
+        )
     }
 }
 

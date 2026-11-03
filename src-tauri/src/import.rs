@@ -58,7 +58,10 @@ impl PickedSources {
     fn replace(&self, paths: &[PathBuf], attachments: bool) {
         *self.picked.lock().unwrap_or_else(|e| e.into_inner()) = paths
             .iter()
-            .map(|path| Picked { path: path.clone(), attachments })
+            .map(|path| Picked {
+                path: path.clone(),
+                attachments,
+            })
             .collect();
     }
 
@@ -176,7 +179,10 @@ fn clean_segment(segment: &str) -> String {
 /// Finds a free `.md` path inside `target_dir` for each of `relative_paths`
 /// (`Folder/Name`, without extension), in order. A name taken on disk or
 /// earlier in the same list gets `_1`, `_2`, … like other new files.
-pub fn reserve_shard_paths(target_dir: &Path, relative_paths: &[String]) -> Result<Vec<String>, String> {
+pub fn reserve_shard_paths(
+    target_dir: &Path,
+    relative_paths: &[String],
+) -> Result<Vec<String>, String> {
     if !target_dir.is_dir() {
         return Err(format!("Not a directory: {}", target_dir.display()));
     }
@@ -226,18 +232,29 @@ pub fn prepare_new_shard(vault_root: &Path, path: &Path) -> Result<PathBuf, Stri
     if !vault::is_markdown_path(path) {
         return Err(format!("Not a shard: {}", path.display()));
     }
-    if path.components().any(|c| matches!(c, Component::ParentDir)) || !path.starts_with(vault_root) {
+    if path.components().any(|c| matches!(c, Component::ParentDir)) || !path.starts_with(vault_root)
+    {
         return Err(format!("{} is outside the vault", path.display()));
     }
-    let parent = path.parent().ok_or_else(|| format!("Not a shard: {}", path.display()))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Not a shard: {}", path.display()))?;
     std::fs::create_dir_all(parent)
         .map_err(|e| format!("Failed to create folder {}: {}", parent.display(), e))?;
 
-    let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let stem = path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
     let candidates = std::iter::once(path.to_path_buf())
         .chain((1..).map(|n| parent.join(format!("{}_{}.md", stem, n))));
     for candidate in candidates {
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
             Ok(_) => return Ok(candidate),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(format!("Failed to create {}: {}", candidate.display(), e)),
@@ -252,7 +269,10 @@ pub fn remove_empty_folders(target_dir: &Path, shard_paths: &[PathBuf]) {
     for shard in shard_paths {
         let mut dir = shard.parent();
         while let Some(current) = dir {
-            if current == target_dir || !current.starts_with(target_dir) || std::fs::remove_dir(current).is_err() {
+            if current == target_dir
+                || !current.starts_with(target_dir)
+                || std::fs::remove_dir(current).is_err()
+            {
                 break;
             }
             dir = current.parent();
@@ -275,7 +295,9 @@ pub fn remove_new_attachments(
     for asset_path in asset_paths {
         let relative = Path::new(asset_path);
         let inside = relative.starts_with(ATTACHMENTS_DIR_NAME)
-            && relative.components().all(|c| matches!(c, Component::Normal(_)));
+            && relative
+                .components()
+                .all(|c| matches!(c, Component::Normal(_)));
         if !inside {
             continue;
         }
@@ -308,7 +330,11 @@ mod tests {
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("netherstone-import-{}-{}", name, std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "netherstone-import-{}-{}",
+            name,
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -328,7 +354,10 @@ mod tests {
         let files = list_sources(&[notes.clone(), root.join("single.pdf")]);
         let relative: Vec<&str> = files.iter().map(|f| f.relative_path.as_str()).collect();
 
-        assert_eq!(relative, vec!["Notes/a.md", "Notes/Plans/b.docx", "single.pdf"]);
+        assert_eq!(
+            relative,
+            vec!["Notes/a.md", "Notes/Plans/b.docx", "single.pdf"]
+        );
         assert_eq!(files[2].size, 3);
     }
 
@@ -339,7 +368,12 @@ mod tests {
 
         let paths = reserve_shard_paths(
             &vault,
-            &["Report".into(), "Report".into(), "Notes/Plan".into(), "Bad:Name?".into()],
+            &[
+                "Report".into(),
+                "Report".into(),
+                "Notes/Plan".into(),
+                "Bad:Name?".into(),
+            ],
         )
         .unwrap();
 
@@ -360,11 +394,20 @@ mod tests {
         std::fs::write(vault.join("Taken.md"), "x").unwrap();
         std::fs::write(vault.join("Taken_1.md"), "y").unwrap();
 
-        assert_eq!(prepare_new_shard(&vault, &vault.join("Taken.md")).unwrap(), vault.join("Taken_2.md"));
-        assert_eq!(std::fs::read_to_string(vault.join("Taken.md")).unwrap(), "x");
+        assert_eq!(
+            prepare_new_shard(&vault, &vault.join("Taken.md")).unwrap(),
+            vault.join("Taken_2.md")
+        );
+        assert_eq!(
+            std::fs::read_to_string(vault.join("Taken.md")).unwrap(),
+            "x"
+        );
         assert!(prepare_new_shard(&vault, &vault.join("../Escape.md")).is_err());
         assert!(prepare_new_shard(&vault, &vault.join("Notes.txt")).is_err());
-        assert_eq!(prepare_new_shard(&vault, &vault.join("Deep/New.md")).unwrap(), vault.join("Deep/New.md"));
+        assert_eq!(
+            prepare_new_shard(&vault, &vault.join("Deep/New.md")).unwrap(),
+            vault.join("Deep/New.md")
+        );
         assert!(vault.join("Deep").is_dir());
     }
 
@@ -381,7 +424,11 @@ mod tests {
         assert!(picked.check(&root.join("_attachments/scan.pdf")).is_ok());
         assert!(picked.check(&vault.join("Private/Diary.md")).is_err());
         assert!(picked.check(&root.join("Other.docx")).is_err());
-        assert!(picked.check(&vault.join("Notes/../Private/Diary.md")).is_err());
+        assert!(
+            picked
+                .check(&vault.join("Notes/../Private/Diary.md"))
+                .is_err()
+        );
 
         picked.allow(&[root.join("Single.docx")]);
         assert!(picked.check(&vault.join("Notes/Plans/Q3.md")).is_err());
@@ -392,7 +439,11 @@ mod tests {
 
         // A link's download: what's in it, but not the attachments above it.
         picked.allow_only(&[vault.join("Notes")]);
-        assert!(picked.check(&vault.join("Notes/_attachments/photo.png")).is_ok());
+        assert!(
+            picked
+                .check(&vault.join("Notes/_attachments/photo.png"))
+                .is_ok()
+        );
         assert!(picked.check(&vault.join("_attachments/photo.png")).is_err());
         assert!(picked.check(&root.join("_attachments/scan.pdf")).is_err());
     }
@@ -403,7 +454,10 @@ mod tests {
         std::fs::create_dir_all(vault.join("Notes/Trip")).unwrap();
         std::fs::create_dir_all(vault.join("Kept")).unwrap();
         std::fs::write(vault.join("Kept/Other.md"), "x").unwrap();
-        remove_empty_folders(&vault, &[vault.join("Notes/Trip/Day.md"), vault.join("Kept/New.md")]);
+        remove_empty_folders(
+            &vault,
+            &[vault.join("Notes/Trip/Day.md"), vault.join("Kept/New.md")],
+        );
         assert!(!vault.join("Notes").exists());
         assert!(vault.join("Kept/Other.md").exists());
         assert!(vault.is_dir());
@@ -414,7 +468,11 @@ mod tests {
         }
         let conn = Connection::open_in_memory().unwrap();
         crate::db::init_schema(&conn).unwrap();
-        for (name, created_at, ref_count) in [("old.png", 100, 0), ("new.png", 200, 0), ("used.png", 200, 1)] {
+        for (name, created_at, ref_count) in [
+            ("old.png", 100, 0),
+            ("new.png", 200, 0),
+            ("used.png", 200, 1),
+        ] {
             conn.execute(
                 "INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, created_at, updated_at, sync_status, ref_count)
                  VALUES (?4, ?1, ?1, ?1, 'png', 'image/png', 1, ?2, ?2, 'syncable', ?3)",

@@ -72,12 +72,21 @@ pub(super) fn find_section(
             ToolError(format!(
                 "There's no heading '{}'. Its headings are: {}",
                 wanted,
-                if headings.is_empty() { "none".to_string() } else { headings.join(", ") }
+                if headings.is_empty() {
+                    "none".to_string()
+                } else {
+                    headings.join(", ")
+                }
             ))
         })
 }
 
-fn read_one(vault: &Vault, relative: &str, section: Option<&str>, outline: bool) -> ToolResult<Shard> {
+fn read_one(
+    vault: &Vault,
+    relative: &str,
+    section: Option<&str>,
+    outline: bool,
+) -> ToolResult<Shard> {
     let path = vault.shard(relative)?;
     let markdown = read_text(&path)?;
     let conn = vault.index()?;
@@ -105,9 +114,18 @@ fn read_one(vault: &Vault, relative: &str, section: Option<&str>, outline: bool)
         content,
         outline,
         words: metadata.as_ref().map_or(0, |m| m.word_count),
-        tags: metadata.as_ref().map(|m| m.tags.clone()).unwrap_or_default(),
-        created: metadata.as_ref().map(|m| date(m.created_at)).unwrap_or_default(),
-        modified: metadata.as_ref().map(|m| date(m.last_modified)).unwrap_or_default(),
+        tags: metadata
+            .as_ref()
+            .map(|m| m.tags.clone())
+            .unwrap_or_default(),
+        created: metadata
+            .as_ref()
+            .map(|m| date(m.created_at))
+            .unwrap_or_default(),
+        modified: metadata
+            .as_ref()
+            .map(|m| date(m.last_modified))
+            .unwrap_or_default(),
         linked_from,
     })
 }
@@ -123,7 +141,9 @@ pub fn read(vault: &Vault, _: &Caller, params: ReadParams) -> ToolResult<Read> {
                 .map(|path| read_one(vault, path, params.section.as_deref(), params.outline))
                 .collect::<ToolResult<_>>()?,
         }),
-        _ => Err(ToolError("Give path for one shard, or paths for several".to_string())),
+        _ => Err(ToolError(
+            "Give path for one shard, or paths for several".to_string(),
+        )),
     }
 }
 
@@ -194,7 +214,9 @@ fn chart_name(text: &str) -> String {
 
 /// Whether a chart comment comes right after `end` in `markdown`.
 fn chart_after(markdown: &str, end: usize) -> bool {
-    markdown[end..].trim_start().starts_with("<!-- netherstone chart:")
+    markdown[end..]
+        .trim_start()
+        .starts_with("<!-- netherstone chart:")
 }
 
 pub fn tables(vault: &Vault, caller: &Caller, params: TablesParams) -> ToolResult<Vec<TableRows>> {
@@ -217,7 +239,11 @@ pub fn tables(vault: &Vault, caller: &Caller, params: TablesParams) -> ToolResul
         TablesAction::AddChart => {
             let index = params.table.unwrap_or(0);
             let Some(table) = found.get(index) else {
-                return Err(ToolError(format!("The shard has {} tables; there's no table {}", found.len(), index)));
+                return Err(ToolError(format!(
+                    "The shard has {} tables; there's no table {}",
+                    found.len(),
+                    index
+                )));
             };
             let header = table.rows.first().cloned().unwrap_or_default();
             let column = |name: &str| -> ToolResult<String> {
@@ -225,7 +251,13 @@ pub fn tables(vault: &Vault, caller: &Caller, params: TablesParams) -> ToolResul
                     .iter()
                     .find(|h| h.eq_ignore_ascii_case(name.trim()))
                     .cloned()
-                    .ok_or_else(|| ToolError(format!("The table has no column '{}'. Its columns are: {}", name, header.join(", "))))
+                    .ok_or_else(|| {
+                        ToolError(format!(
+                            "The table has no column '{}'. Its columns are: {}",
+                            name,
+                            header.join(", ")
+                        ))
+                    })
             };
             let mut parts = vec![match params.kind.unwrap_or(ChartKind::Bar) {
                 ChartKind::Bar => "bar".to_string(),
@@ -236,33 +268,60 @@ pub fn tables(vault: &Vault, caller: &Caller, params: TablesParams) -> ToolResul
             }
             let y = params.y.unwrap_or_default();
             if y.len() > MAX_CHART_SERIES {
-                return Err(ToolError(format!("A chart draws up to {} columns", MAX_CHART_SERIES)));
+                return Err(ToolError(format!(
+                    "A chart draws up to {} columns",
+                    MAX_CHART_SERIES
+                )));
             }
             if !y.is_empty() {
-                let y = y.iter().map(|name| column(name).map(|c| chart_name(&c))).collect::<ToolResult<Vec<_>>>()?;
+                let y = y
+                    .iter()
+                    .map(|name| column(name).map(|c| chart_name(&c)))
+                    .collect::<ToolResult<Vec<_>>>()?;
                 parts.push(format!("y {}", y.join(", ")));
             }
-            if let Some(title) = params.title.as_deref().map(chart_name).filter(|t| !t.is_empty()) {
+            if let Some(title) = params
+                .title
+                .as_deref()
+                .map(chart_name)
+                .filter(|t| !t.is_empty())
+            {
                 parts.push(format!("title {}", title));
             }
             let comment = format!("<!-- netherstone chart: {} -->", parts.join("; "));
 
-            change(vault, caller, params.summary.as_deref(), std::slice::from_ref(&path), || {
-                edit_shard(vault, &path, |markdown| {
-                    // Found again under the lock, in the shard as it is now.
-                    let table = find_tables(&markdown)
-                        .into_iter()
-                        .nth(index)
-                        .ok_or_else(|| ToolError("The shard changed; read its tables again".to_string()))?;
-                    if chart_after(&markdown, table.range.end) {
-                        return Err(ToolError("That table already has a chart".to_string()));
-                    }
-                    let (before, after) = markdown.split_at(table.range.end);
-                    let before = before.trim_end_matches('\n');
-                    Ok(format!("{}\n\n{}\n\n{}", before, comment, after.trim_start_matches('\n')))
-                })?;
-                Ok(((), Vec::new()))
-            })?;
+            change(
+                vault,
+                caller,
+                params.summary.as_deref(),
+                std::slice::from_ref(&path),
+                || {
+                    edit_shard(vault, &path, |markdown| {
+                        // Found again under the lock, in the shard as it is now.
+                        let table =
+                            find_tables(&markdown)
+                                .into_iter()
+                                .nth(index)
+                                .ok_or_else(|| {
+                                    ToolError(
+                                        "The shard changed; read its tables again".to_string(),
+                                    )
+                                })?;
+                        if chart_after(&markdown, table.range.end) {
+                            return Err(ToolError("That table already has a chart".to_string()));
+                        }
+                        let (before, after) = markdown.split_at(table.range.end);
+                        let before = before.trim_end_matches('\n');
+                        Ok(format!(
+                            "{}\n\n{}\n\n{}",
+                            before,
+                            comment,
+                            after.trim_start_matches('\n')
+                        ))
+                    })?;
+                    Ok(((), Vec::new()))
+                },
+            )?;
             Ok(rows(&read_text(&path)?))
         }
     }

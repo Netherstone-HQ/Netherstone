@@ -134,7 +134,9 @@ pub async fn fetch_export_asset(url: String) -> Result<Response, String> {
     let mut target = reqwest::Url::parse(&url).map_err(|error| failed(&error))?;
     let mut redirects = 0;
     let mut response = loop {
-        let address = public_address(&target).await.map_err(|error| failed(&error))?;
+        let address = public_address(&target)
+            .await
+            .map_err(|error| failed(&error))?;
         let client = reqwest::Client::builder()
             .timeout(REMOTE_ASSET_TIMEOUT)
             .redirect(reqwest::redirect::Policy::none())
@@ -181,7 +183,10 @@ async fn public_address(url: &reqwest::Url) -> Result<SocketAddr, String> {
     }
     let port = url.port_or_known_default().unwrap_or(443);
     let host = url.host_str().unwrap_or_default();
-    let literal = host.trim_start_matches('[').trim_end_matches(']').parse::<IpAddr>();
+    let literal = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<IpAddr>();
     let addresses: Vec<SocketAddr> = match literal {
         Ok(ip) => vec![SocketAddr::new(ip, port)],
         Err(_) if host.is_empty() => Vec::new(),
@@ -239,11 +244,14 @@ fn is_public(ip: IpAddr) -> bool {
 /// (JSON, see `pdf::PageSetup`) headers.
 #[tauri::command]
 pub async fn export_pdf(app: tauri::AppHandle, request: Request<'_>) -> Result<(), String> {
-    let output = PathBuf::from(header(&request, "x-export-path").ok_or("The export is missing its destination.")?);
+    let output = PathBuf::from(
+        header(&request, "x-export-path").ok_or("The export is missing its destination.")?,
+    );
     check_chosen(&output)?;
-    let page: pdf::PageSetup =
-        serde_json::from_str(&header(&request, "x-export-page").ok_or("The export is missing its paper size.")?)
-            .map_err(|error| format!("The export's paper size is malformed: {error}"))?;
+    let page: pdf::PageSetup = serde_json::from_str(
+        &header(&request, "x-export-page").ok_or("The export is missing its paper size.")?,
+    )
+    .map_err(|error| format!("The export's paper size is malformed: {error}"))?;
     let html = raw_body(&request)?.to_vec();
 
     // Printed beside the target, then renamed over it, like other exports.
@@ -367,10 +375,8 @@ mod tests {
 
     #[test]
     fn atomic_writes_replace_the_target() {
-        let directory = std::env::temp_dir().join(format!(
-            "netherstone-export-test-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("netherstone-export-test-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let target = directory.join("out.html");
 
@@ -388,8 +394,18 @@ mod tests {
             assert!(is_public(ip.parse().unwrap()), "{ip}");
         }
         for ip in [
-            "127.0.0.1", "10.0.0.5", "172.16.0.1", "192.168.1.1", "169.254.169.254", "0.0.0.0",
-            "100.64.0.1", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:192.168.0.1",
+            "127.0.0.1",
+            "10.0.0.5",
+            "172.16.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "0.0.0.0",
+            "100.64.0.1",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:127.0.0.1",
+            "::ffff:192.168.0.1",
         ] {
             assert!(!is_public(ip.parse().unwrap()), "{ip}");
         }

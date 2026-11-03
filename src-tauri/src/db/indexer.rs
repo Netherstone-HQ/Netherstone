@@ -326,7 +326,11 @@ fn insert_tags(
 
 /// Stores which drawings the shard `file_id` shows, so finding the shards
 /// that show a drawing is a lookup.
-pub(super) fn insert_drawing_embeds(conn: &Connection, file_id: i64, content: &str) -> rusqlite::Result<()> {
+pub(super) fn insert_drawing_embeds(
+    conn: &Connection,
+    file_id: i64,
+    content: &str,
+) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare_cached(
         "INSERT OR IGNORE INTO drawing_embeds (file_id, drawing_path) VALUES (?1, ?2)",
     )?;
@@ -350,8 +354,12 @@ fn modified_secs(file_path: &Path) -> Result<i64, String> {
 
 /// The shards of the vault at `vault_path` the index holds, by path, with
 /// their id and when each had last changed when it was indexed.
-fn indexed_shards(conn: &Connection, vault_path: &Path) -> rusqlite::Result<HashMap<String, (i64, i64)>> {
-    let mut stmt = conn.prepare("SELECT path, id, last_modified FROM files WHERE vault_path = ?1")?;
+fn indexed_shards(
+    conn: &Connection,
+    vault_path: &Path,
+) -> rusqlite::Result<HashMap<String, (i64, i64)>> {
+    let mut stmt =
+        conn.prepare("SELECT path, id, last_modified FROM files WHERE vault_path = ?1")?;
     stmt.query_map(params![super::attachments::vault_key(vault_path)], |row| {
         Ok((row.get(0)?, (row.get(1)?, row.get(2)?)))
     })?
@@ -391,7 +399,10 @@ pub struct VaultIndexed {
 /// vault inside it.
 pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed, String> {
     if !vault_path.is_dir() {
-        return Err(format!("Vault path is not a directory: {}", vault_path.display()));
+        return Err(format!(
+            "Vault path is not a directory: {}",
+            vault_path.display()
+        ));
     }
 
     let mut on_disk = Vec::new();
@@ -401,11 +412,14 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
 
     // Read once, so a pass over a vault where little changed checks each
     // shard's time on disk only.
-    let mut shards = indexed_shards(conn, vault_path).map_err(|e| format!("Failed to read the index: {}", e))?;
+    let mut shards =
+        indexed_shards(conn, vault_path).map_err(|e| format!("Failed to read the index: {}", e))?;
     let (mut indexed, mut skipped, mut errors) = (0, 0, 0);
     for (path_str, modified) in &on_disk {
         let path = Path::new(path_str);
-        let known = shards.remove(path_str).map(|(_, last_modified)| last_modified);
+        let known = shards
+            .remove(path_str)
+            .map(|(_, last_modified)| last_modified);
         match modified.map_or_else(|| modified_secs(path), Ok) {
             Ok(modified) if known.is_some_and(|known| known >= modified) => skipped += 1,
             Ok(_) => match index_file(conn, vault_path, path) {
@@ -439,14 +453,18 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
 /// Forgets the indexed shards at `path` or inside it, with their search text,
 /// once they're gone from disk: a deleted shard, or a folder moved away.
 pub fn forget_path(conn: &Connection, vault_path: &Path, path: &Path) -> Result<usize, String> {
-    let path_str = path.to_str().ok_or_else(|| "Invalid file path".to_string())?;
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| "Invalid file path".to_string())?;
     let inside = format!("{}{}", path_str, std::path::MAIN_SEPARATOR);
     let vault = super::attachments::vault_key(vault_path);
     let matching = "vault_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)";
     let forget = || -> rusqlite::Result<usize> {
         // The search text isn't tied to its file, so it goes first.
         conn.execute(
-            &format!("DELETE FROM fts_search WHERE rowid IN (SELECT id FROM files WHERE {matching})"),
+            &format!(
+                "DELETE FROM fts_search WHERE rowid IN (SELECT id FROM files WHERE {matching})"
+            ),
             params![vault, path_str, inside],
         )?;
         conn.execute(
@@ -491,14 +509,23 @@ mod tests {
         index_file(&conn, &vault, &a).unwrap();
         index_file(&conn, &vault, &b).unwrap();
 
-        assert_eq!(shards_showing(&conn, "d/F & co.excalidraw"), ["a.md", "b.md"]);
+        assert_eq!(
+            shards_showing(&conn, "d/F & co.excalidraw"),
+            ["a.md", "b.md"]
+        );
         assert_eq!(shards_showing(&conn, "Flow.excalidraw"), ["a.md"]);
 
         std::fs::write(&a, "No drawings now.").unwrap();
         index_file(&conn, &vault, &a).unwrap();
-        assert_eq!(shards_showing(&conn, "Flow.excalidraw"), Vec::<String>::new());
+        assert_eq!(
+            shards_showing(&conn, "Flow.excalidraw"),
+            Vec::<String>::new()
+        );
         forget_path(&conn, &vault, &b).unwrap();
-        assert_eq!(shards_showing(&conn, "d/F & co.excalidraw"), Vec::<String>::new());
+        assert_eq!(
+            shards_showing(&conn, "d/F & co.excalidraw"),
+            Vec::<String>::new()
+        );
         std::fs::remove_dir_all(&vault).unwrap();
     }
 

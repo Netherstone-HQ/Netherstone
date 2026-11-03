@@ -43,7 +43,11 @@ pub fn integrations_get(_app: tauri::AppHandle) -> Integrations {
 }
 
 #[tauri::command(async)]
-pub fn integrations_set(_app: tauri::AppHandle, integration: Integration, on: bool) -> Result<(), String> {
+pub fn integrations_set(
+    _app: tauri::AppHandle,
+    integration: Integration,
+    on: bool,
+) -> Result<(), String> {
     #[cfg(windows)]
     return windows::set(integration, on);
     #[cfg(target_os = "macos")]
@@ -90,7 +94,10 @@ mod windows {
 
     fn application() -> Result<String, String> {
         let exe = exe()?;
-        let name = exe.file_name().ok_or("The app has no file name")?.to_string_lossy();
+        let name = exe
+            .file_name()
+            .ok_or("The app has no file name")?
+            .to_string_lossy();
         Ok(format!(r"{CLASSES}\Applications\{name}"))
     }
 
@@ -100,7 +107,10 @@ mod windows {
 
     /// The value at `path`, if the key and value are there.
     fn read(path: &str, name: &str) -> Option<String> {
-        CURRENT_USER.open(path).and_then(|key| key.get_string(name)).ok()
+        CURRENT_USER
+            .open(path)
+            .and_then(|key| key.get_string(name))
+            .ok()
     }
 
     fn create(path: &str) -> Result<Key, String> {
@@ -117,13 +127,22 @@ mod windows {
     }
 
     pub fn get() -> Integrations {
-        let open_with = command("%1").ok().zip(read(&format!(r"{CLASSES}\{PROG_ID}\shell\open\command"), ""));
-        let folder = command("%V").ok().zip(read(&format!(r"{CLASSES}\Directory\shell\{FOLDER_VERB}\command"), ""));
+        let open_with = command("%1").ok().zip(read(
+            &format!(r"{CLASSES}\{PROG_ID}\shell\open\command"),
+            "",
+        ));
+        let folder = command("%V").ok().zip(read(
+            &format!(r"{CLASSES}\Directory\shell\{FOLDER_VERB}\command"),
+            "",
+        ));
         Integrations {
             open_with: Some(open_with.is_some_and(|(ours, found)| ours == found)),
             folder_menu: Some(folder.is_some_and(|(ours, found)| ours == found)),
             // Dev builds have no bin folder to put on the PATH.
-            terminal: bin().ok().filter(|bin| bin.is_dir()).map(|bin| path_entries().contains(&text(&bin))),
+            terminal: bin()
+                .ok()
+                .filter(|bin| bin.is_dir())
+                .map(|bin| path_entries().contains(&text(&bin))),
         }
     }
 
@@ -141,7 +160,9 @@ mod windows {
         let application = application()?;
         if !on {
             for extension in EXTENSIONS {
-                if let Ok(key) = CURRENT_USER.open(format!(r"{CLASSES}\.{extension}\OpenWithProgids")) {
+                if let Ok(key) =
+                    CURRENT_USER.open(format!(r"{CLASSES}\.{extension}\OpenWithProgids"))
+                {
                     let _ = key.remove_value(PROG_ID);
                 }
             }
@@ -149,15 +170,35 @@ mod windows {
             remove(&application);
             return Ok(());
         }
-        write(&create(&format!(r"{CLASSES}\{PROG_ID}"))?, "", "Netherstone")?;
-        write(&create(&format!(r"{CLASSES}\{PROG_ID}\DefaultIcon"))?, "", &icon()?)?;
-        write(&create(&format!(r"{CLASSES}\{PROG_ID}\shell\open\command"))?, "", &command("%1")?)?;
+        write(
+            &create(&format!(r"{CLASSES}\{PROG_ID}"))?,
+            "",
+            "Netherstone",
+        )?;
+        write(
+            &create(&format!(r"{CLASSES}\{PROG_ID}\DefaultIcon"))?,
+            "",
+            &icon()?,
+        )?;
+        write(
+            &create(&format!(r"{CLASSES}\{PROG_ID}\shell\open\command"))?,
+            "",
+            &command("%1")?,
+        )?;
         write(&create(&application)?, "FriendlyAppName", "Netherstone")?;
-        write(&create(&format!(r"{application}\shell\open\command"))?, "", &command("%1")?)?;
+        write(
+            &create(&format!(r"{application}\shell\open\command"))?,
+            "",
+            &command("%1")?,
+        )?;
         let supported = create(&format!(r"{application}\SupportedTypes"))?;
         for extension in EXTENSIONS {
             write(&supported, &format!(".{extension}"), "")?;
-            write(&create(&format!(r"{CLASSES}\.{extension}\OpenWithProgids"))?, PROG_ID, "")?;
+            write(
+                &create(&format!(r"{CLASSES}\.{extension}\OpenWithProgids"))?,
+                PROG_ID,
+                "",
+            )?;
         }
         Ok(())
     }
@@ -190,13 +231,21 @@ mod windows {
 
     fn path_entries() -> Vec<String> {
         path_value()
-            .map(|(_, value)| value.split(';').filter(|entry| !entry.is_empty()).map(str::to_string).collect())
+            .map(|(_, value)| {
+                value
+                    .split(';')
+                    .filter(|entry| !entry.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
     fn set_terminal(on: bool) -> Result<(), String> {
         let bin = text(&bin()?);
-        let kind = path_value().map(|(kind, _)| kind).unwrap_or(Type::ExpandString);
+        let kind = path_value()
+            .map(|(kind, _)| kind)
+            .unwrap_or(Type::ExpandString);
         let mut entries: Vec<String> = path_entries()
             .into_iter()
             .filter(|entry| !entry.eq_ignore_ascii_case(&bin))
@@ -265,7 +314,10 @@ mod macos {
     const MODE: u32 = 0o755;
 
     fn script(app: &tauri::AppHandle) -> String {
-        format!("#!/bin/sh\nexec open -b {} \"$@\"\n", app.config().identifier)
+        format!(
+            "#!/bin/sh\nexec open -b {} \"$@\"\n",
+            app.config().identifier
+        )
     }
 
     pub fn terminal_on(app: &tauri::AppHandle) -> bool {
@@ -286,7 +338,11 @@ mod macos {
     /// Whether the user can write the folder, or make it when it isn't there.
     fn user_can_write() -> bool {
         let folder = Path::new(FOLDER);
-        let existing = if folder.is_dir() { Some(folder) } else { folder.parent() };
+        let existing = if folder.is_dir() {
+            Some(folder)
+        } else {
+            folder.parent()
+        };
         existing
             .and_then(|folder| tempfile_in(folder).ok())
             .is_some_and(|probe| std::fs::remove_file(probe).is_ok())
@@ -296,7 +352,10 @@ mod macos {
     /// there, a link included.
     fn tempfile_in(folder: &Path) -> std::io::Result<std::path::PathBuf> {
         let path = folder.join(format!(".netherstone-{}", std::process::id()));
-        std::fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
         Ok(path)
     }
 

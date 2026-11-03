@@ -207,9 +207,10 @@ pub fn cancel_sign_in() {
 /// finishing poll loop never cancels a newer sign-in.
 fn clear_sign_in(id: u64) {
     if let Ok(mut pending) = PENDING.lock()
-        && pending.as_ref().is_some_and(|p| p.id == id) {
-            *pending = None;
-        }
+        && pending.as_ref().is_some_and(|p| p.id == id)
+    {
+        *pending = None;
+    }
 }
 
 /// Waits for the user to approve the pending sign-in, then stores the token.

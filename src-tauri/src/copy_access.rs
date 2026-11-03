@@ -37,7 +37,10 @@ impl CopySources {
     /// Checks that `path` may be copied into the open vault.
     pub fn check(&self, vaults: &OpenVault, path: &Path) -> Result<(), String> {
         if self.needs_asking(vaults, path) {
-            Err(format!("{} wasn't picked to copy into the vault", path.display()))
+            Err(format!(
+                "{} wasn't picked to copy into the vault",
+                path.display()
+            ))
         } else {
             Ok(())
         }
@@ -49,7 +52,9 @@ impl CopySources {
         let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let fine = vaults.check_real_path(path).is_ok()
             || is_showable(&target)
-            || lock(&self.allowed).iter().any(|allowed| is_same(allowed, path));
+            || lock(&self.allowed)
+                .iter()
+                .any(|allowed| is_same(allowed, path));
         !fine
     }
 }
@@ -74,7 +79,10 @@ pub fn question(paths: &[PathBuf]) -> String {
     } else {
         format!("these {} files", paths.len())
     };
-    format!("Copy {count} from outside the vault into its attachments?\n\n{}", lines.join("\n"))
+    format!(
+        "Copy {count} from outside the vault into its attachments?\n\n{}",
+        lines.join("\n")
+    )
 }
 
 #[cfg(test)]
@@ -136,7 +144,9 @@ mod tests {
         assert!(one.starts_with("Copy this file from outside the vault"));
         assert!(one.ends_with("/a/report.pdf"));
 
-        let many: Vec<PathBuf> = (0..7).map(|i| PathBuf::from(format!("/a/{i}.pdf"))).collect();
+        let many: Vec<PathBuf> = (0..7)
+            .map(|i| PathBuf::from(format!("/a/{i}.pdf")))
+            .collect();
         let text = question(&many);
         assert!(text.starts_with("Copy these 7 files"));
         assert!(text.contains("/a/4.pdf"));

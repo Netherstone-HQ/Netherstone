@@ -58,15 +58,19 @@ pub fn allow_thumbnail<R: Runtime>(app: &AppHandle<R>, path: &Path) {
 fn linked_targets(vault_path: &Path) -> Vec<PathBuf> {
     let mut targets = Vec::new();
     let mut linked_folders = Vec::new();
-    walk(vault_path, &mut |link| {
-        if let Ok(target) = link.canonicalize() {
-            if target.is_dir() {
-                linked_folders.push(target);
-            } else if is_showable(&target) {
-                targets.push(target);
+    walk(
+        vault_path,
+        &mut |link| {
+            if let Ok(target) = link.canonicalize() {
+                if target.is_dir() {
+                    linked_folders.push(target);
+                } else if is_showable(&target) {
+                    targets.push(target);
+                }
             }
-        }
-    }, &mut |_| {});
+        },
+        &mut |_| {},
+    );
     for folder in linked_folders {
         walk(&folder, &mut |_| {}, &mut |file| {
             if is_showable(file) {
@@ -119,13 +123,14 @@ pub fn show_linked_file<R: Runtime>(app: &AppHandle<R>, path: &Path) -> bool {
     if is_showable(&target) {
         let scope = app.asset_protocol_scope();
         if !scope.is_allowed(&target)
-            && let Err(error) = scope.allow_file(&target) {
-                eprintln!(
-                    "[Netherstone] Couldn't allow linked file {}: {}",
-                    path.display(),
-                    error
-                );
-            }
+            && let Err(error) = scope.allow_file(&target)
+        {
+            eprintln!(
+                "[Netherstone] Couldn't allow linked file {}: {}",
+                path.display(),
+                error
+            );
+        }
     }
     true
 }

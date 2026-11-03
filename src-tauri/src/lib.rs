@@ -108,7 +108,12 @@ fn collect_markdown_file_paths(path: &Path) -> Result<Vec<String>, String> {
 
 #[tauri::command(async)]
 fn open_vault_dialog(app: tauri::AppHandle) -> Option<String> {
-    let picked = app.dialog().file().blocking_pick_folder()?.into_path().ok()?;
+    let picked = app
+        .dialog()
+        .file()
+        .blocking_pick_folder()?
+        .into_path()
+        .ok()?;
     vault_access::get().allow(&picked);
     Some(picked.to_string_lossy().into_owned())
 }
@@ -121,12 +126,15 @@ fn open_vault_dialog(app: tauri::AppHandle) -> Option<String> {
 fn open_vault(vault_path: String) -> Result<(), String> {
     let vault = Path::new(&vault_path);
     vault_access::get().open(&sync::sync_root()?, vault)?;
-    let kept = db::open_connection()
-        .and_then(|conn| {
-            db::settings::record_opened_vault(&conn, vault, gone_vaults::drive_of(vault)).map_err(|e| e.to_string())
-        });
+    let kept = db::open_connection().and_then(|conn| {
+        db::settings::record_opened_vault(&conn, vault, gone_vaults::drive_of(vault))
+            .map_err(|e| e.to_string())
+    });
     if let Err(error) = kept {
-        eprintln!("[Netherstone] Couldn't keep the vault in the vaults opened: {}", error);
+        eprintln!(
+            "[Netherstone] Couldn't keep the vault in the vaults opened: {}",
+            error
+        );
     }
     Ok(())
 }
@@ -270,7 +278,10 @@ fn open_media_files_dialog(
 fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
     let dialog = app.dialog().file().set_title("Import");
     let picked = if folder {
-        dialog.blocking_pick_folder().into_iter().collect::<Vec<_>>()
+        dialog
+            .blocking_pick_folder()
+            .into_iter()
+            .collect::<Vec<_>>()
     } else {
         dialog.blocking_pick_files().unwrap_or_default()
     };
@@ -316,7 +327,11 @@ fn read_import_file(path: String) -> Result<tauri::ipc::Response, String> {
 /// Reads up to `length` bytes of a file being imported from `offset`, as raw
 /// bytes, so a big file such as a zip is never read whole.
 #[tauri::command(async)]
-fn read_import_file_range(path: String, offset: u64, length: u64) -> Result<tauri::ipc::Response, String> {
+fn read_import_file_range(
+    path: String,
+    offset: u64,
+    length: u64,
+) -> Result<tauri::ipc::Response, String> {
     use std::io::{Read, Seek, SeekFrom};
     import::picked().check(Path::new(&path))?;
     let read = || -> std::io::Result<Vec<u8>> {
@@ -335,7 +350,8 @@ fn read_import_file_range(path: String, offset: u64, length: u64) -> Result<taur
 #[tauri::command(async)]
 fn vault_free_space(vault_path: String) -> Result<u64, String> {
     open_vault_only(&vault_path)?;
-    fs4::available_space(&vault_path).map_err(|e| format!("Could not read the free space for {}: {}", vault_path, e))
+    fs4::available_space(&vault_path)
+        .map_err(|e| format!("Could not read the free space for {}: {}", vault_path, e))
 }
 
 /// Copies a file an imported shard uses into the vault's attachments.
@@ -362,9 +378,13 @@ fn undo_import(
 ) -> Result<(), String> {
     open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
-    let shards: Vec<std::path::PathBuf> = shard_paths.iter().map(std::path::PathBuf::from).collect();
+    let shards: Vec<std::path::PathBuf> =
+        shard_paths.iter().map(std::path::PathBuf::from).collect();
     for shard in &shards {
-        let inside = shard.starts_with(vault) && !shard.components().any(|c| matches!(c, std::path::Component::ParentDir));
+        let inside = shard.starts_with(vault)
+            && !shard
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir));
         if inside && vault::is_markdown_path(shard) && shard.exists() {
             delete_path(shard)?;
         }
@@ -375,14 +395,18 @@ fn undo_import(
 
     let conn = db::open_connection()?;
     import::remove_new_attachments(&conn, vault, &asset_paths, since, |path| {
-        trash::delete(path).map_err(|e| format!("Failed to move {} to the OS trash: {}", path.display(), e))
+        trash::delete(path)
+            .map_err(|e| format!("Failed to move {} to the OS trash: {}", path.display(), e))
     })?;
     Ok(())
 }
 
 /// Finds a free shard path in `target_dir` for each imported file.
 #[tauri::command(async)]
-fn reserve_import_paths(target_dir: String, relative_paths: Vec<String>) -> Result<Vec<String>, String> {
+fn reserve_import_paths(
+    target_dir: String,
+    relative_paths: Vec<String>,
+) -> Result<Vec<String>, String> {
     in_open_vault(&target_dir)?;
     import::reserve_shard_paths(Path::new(&target_dir), &relative_paths)
 }
@@ -390,7 +414,11 @@ fn reserve_import_paths(target_dir: String, relative_paths: Vec<String>) -> Resu
 /// Writes an imported shard to a path `reserve_import_paths` gave out, or the
 /// next free one when that was taken since. Returns where it went.
 #[tauri::command(async)]
-fn save_imported_shard(vault_path: String, file_path: String, content: String) -> Result<String, String> {
+fn save_imported_shard(
+    vault_path: String,
+    file_path: String,
+    content: String,
+) -> Result<String, String> {
     open_vault_only(&vault_path)?;
     let writes = locks::vault_writes()?;
     let path = import::prepare_new_shard(Path::new(&vault_path), Path::new(&file_path))?;
@@ -405,8 +433,15 @@ fn save_imported_shard(vault_path: String, file_path: String, content: String) -
 /// Points the links in shards this import already saved at `new_path`,
 /// where the shard reserved at `old_path` went instead.
 #[tauri::command(async)]
-fn fix_imported_links(shard_paths: Vec<String>, old_path: String, new_path: String) -> Result<(), String> {
-    let moved = [shard_links::MovedShard { old: old_path, new: new_path }];
+fn fix_imported_links(
+    shard_paths: Vec<String>,
+    old_path: String,
+    new_path: String,
+) -> Result<(), String> {
+    let moved = [shard_links::MovedShard {
+        old: old_path,
+        new: new_path,
+    }];
     let vault = vault_access::get().open_vault()?;
     let writes = locks::vault_writes()?;
     for shard in &shard_paths {
@@ -450,7 +485,10 @@ fn confirm_attachment_copies(app: tauri::AppHandle, paths: Vec<String>) -> bool 
         .dialog()
         .message(copy_access::question(&asking))
         .title("Copy into the vault")
-        .buttons(MessageDialogButtons::OkCancelCustom("Copy".into(), "Cancel".into()))
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Copy".into(),
+            "Cancel".into(),
+        ))
         .blocking_show();
     if yes {
         copy_access::get().allow(&asking);
@@ -483,8 +521,10 @@ fn persist_attachment_bytes(
     app: tauri::AppHandle,
     request: tauri::ipc::Request<'_>,
 ) -> Result<db::attachments::PersistedAttachment, String> {
-    let file_name = export::header(&request, "x-file-name").ok_or("The file is missing its name.")?;
-    let vault_path = export::header(&request, "x-vault-path").ok_or("The file is missing its vault.")?;
+    let file_name =
+        export::header(&request, "x-file-name").ok_or("The file is missing its name.")?;
+    let vault_path =
+        export::header(&request, "x-vault-path").ok_or("The file is missing its vault.")?;
     open_vault_only(&vault_path)?;
     let vault = std::path::Path::new(&vault_path);
     let conn = db::open_connection()?;
@@ -648,7 +688,10 @@ fn sync_get_vault_record(
 
 #[tauri::command(async)]
 fn find_nested_vault(folder: String) -> Result<Option<sync::state::NestedVault>, String> {
-    Ok(sync::state::find_nested_vault(&sync::sync_root()?, Path::new(&folder)))
+    Ok(sync::state::find_nested_vault(
+        &sync::sync_root()?,
+        Path::new(&folder),
+    ))
 }
 
 #[tauri::command(async)]
@@ -671,9 +714,7 @@ async fn sync_now(vault_path: String) -> Result<sync::SyncReport, String> {
 
 /// Old versions of the open vault's attachments still in its history.
 #[tauri::command(async)]
-fn history_old_attachments(
-    vault_path: String,
-) -> Result<Vec<sync::space::OldAttachment>, String> {
+fn history_old_attachments(vault_path: String) -> Result<Vec<sync::space::OldAttachment>, String> {
     open_vault_only(&vault_path)?;
     sync::space::old_attachments(&sync::sync_root()?, Path::new(&vault_path))
 }
@@ -709,9 +750,12 @@ fn gone_vault_histories() -> Result<Vec<gone_vaults::GoneHistory>, String> {
 /// Resolves to the bytes freed.
 #[tauri::command(async)]
 fn delete_gone_vault_history(vault_id: String) -> Result<u64, String> {
-    gone_vaults::delete_history(&db::open_connection()?, &sync::sync_root()?, &vault_id, |path| {
-        trash::delete(path).map_err(|e| e.to_string())
-    })
+    gone_vaults::delete_history(
+        &db::open_connection()?,
+        &sync::sync_root()?,
+        &vault_id,
+        |path| trash::delete(path).map_err(|e| e.to_string()),
+    )
 }
 
 #[tauri::command]
@@ -796,7 +840,11 @@ fn history_list_versions(
     file_path: String,
 ) -> Result<sync::history::FileHistory, String> {
     open_vault_only(&vault_path)?;
-    sync::history::list_versions(&sync::sync_root()?, Path::new(&vault_path), Path::new(&file_path))
+    sync::history::list_versions(
+        &sync::sync_root()?,
+        Path::new(&vault_path),
+        Path::new(&file_path),
+    )
 }
 
 #[tauri::command(async)]
@@ -844,7 +892,7 @@ fn history_restore(
                     content,
                     expected_content.as_deref(),
                 )
-                    .map(|_| ())
+                .map(|_| ())
             }
         },
     )
@@ -1056,7 +1104,13 @@ fn save_markdown_file(
 ) -> Result<(), String> {
     in_open_vault(&file_path)?;
     let vault = vault_access::get().open_vault()?;
-    save_shard(&vault, &file_path, &content, record_writing == Some(true), expected_content.as_deref())
+    save_shard(
+        &vault,
+        &file_path,
+        &content,
+        record_writing == Some(true),
+        expected_content.as_deref(),
+    )
 }
 
 fn save_shard(
@@ -1078,8 +1132,10 @@ fn save_shard(
 /// words the shard started with, `previous`. A failure only costs the count.
 fn record_writing_after_save(file_path: &str, content: &str, previous: Option<String>) {
     let result = db::open_connection().and_then(|conn| {
-        db::data::record_writing(&conn, &db::data::local_today(), file_path, content, || previous)
-            .map_err(|e| e.to_string())
+        db::data::record_writing(&conn, &db::data::local_today(), file_path, content, || {
+            previous
+        })
+        .map_err(|e| e.to_string())
     });
     if let Err(error) = result {
         eprintln!(
@@ -1244,9 +1300,11 @@ fn pictures_are_stale(drawing: &Path, images: &[Option<&Path>]) -> bool {
     let Some(drawn) = modified(drawing).filter(|_| vault::is_drawing_path(drawing)) else {
         return false;
     };
-    images
-        .iter()
-        .any(|image| image.and_then(modified).is_none_or(|exported| exported < drawn))
+    images.iter().any(|image| {
+        image
+            .and_then(modified)
+            .is_none_or(|exported| exported < drawn)
+    })
 }
 
 /// Creates the folder `name` inside `parent` and returns its path.
@@ -1485,7 +1543,11 @@ fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
 
 /// Renames the shard, drawing or folder at `old_path` in `vault` and points
 /// the links to the shards it holds at the new name.
-pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Result<String, String> {
+pub(crate) fn rename_path(
+    vault: &Path,
+    old_path: &str,
+    new_name: String,
+) -> Result<String, String> {
     let old_file = std::path::Path::new(old_path);
 
     let writes = locks::vault_writes()?;
@@ -1516,7 +1578,10 @@ pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Res
     let parent = old_file.parent().ok_or("Cannot get parent directory")?;
     let new_path = parent.join(&resolved_new_name);
     let mut parts = Path::new(&resolved_new_name).components();
-    if !matches!((parts.next(), parts.next()), (Some(std::path::Component::Normal(_)), None)) {
+    if !matches!(
+        (parts.next(), parts.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    ) {
         return Err(format!("'{}' can't be used as a name", resolved_new_name));
     }
     let old_path_normalized = old_file.to_string_lossy();
@@ -1548,12 +1613,20 @@ pub(crate) fn rename_path(vault: &Path, old_path: &str, new_name: String) -> Res
 fn move_file(source_path: String, destination_dir: String) -> Result<String, String> {
     vault_access::get().check_inside(Path::new(&source_path))?;
     in_open_vault(&destination_dir)?;
-    move_path(&vault_access::get().open_vault()?, &source_path, &destination_dir)
+    move_path(
+        &vault_access::get().open_vault()?,
+        &source_path,
+        &destination_dir,
+    )
 }
 
 /// Moves the shard, drawing or folder at `source_path` in `vault` into
 /// `destination_dir` and points the links to the shards it holds there.
-pub(crate) fn move_path(vault: &Path, source_path: &str, destination_dir: &str) -> Result<String, String> {
+pub(crate) fn move_path(
+    vault: &Path,
+    source_path: &str,
+    destination_dir: &str,
+) -> Result<String, String> {
     let source = std::path::Path::new(source_path);
     let dest_dir = std::path::Path::new(destination_dir);
 
@@ -1798,7 +1871,10 @@ fn register_links(_app: &tauri::App) {
         let appimage = false;
         let without_installer = cfg!(debug_assertions) || appimage;
         if without_installer && let Err(error) = _app.deep_link().register_all() {
-            eprintln!("[Netherstone] Couldn't register Netherstone links: {}", error);
+            eprintln!(
+                "[Netherstone] Couldn't register Netherstone links: {}",
+                error
+            );
         }
     }
 }
@@ -1810,7 +1886,9 @@ pub fn run() {
     // already open. Dev builds run on their own, beside an installed app.
     #[cfg(all(desktop, not(debug_assertions)))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-        if let launch::Command::Open { paths, links } = launch::parse(args.into_iter().skip(1).map(Into::into)) {
+        if let launch::Command::Open { paths, links } =
+            launch::parse(args.into_iter().skip(1).map(Into::into))
+        {
             launch::receive(app, &paths, links, Path::new(&cwd));
         }
         if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
@@ -1968,8 +2046,14 @@ pub fn run() {
             // Dock, `open`) and links as an event, not on the command line.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = _event {
-                let paths: Vec<_> = urls.iter().filter_map(|url| url.to_file_path().ok()).collect();
-                let links = urls.iter().filter_map(|url| open_source::Address::parse(url.as_str())).collect();
+                let paths: Vec<_> = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .collect();
+                let links = urls
+                    .iter()
+                    .filter_map(|url| open_source::Address::parse(url.as_str()))
+                    .collect();
                 launch::receive(_app, &paths, links, Path::new("/"));
             }
         });
@@ -2110,9 +2194,14 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
 
         let expected = |relative: &[&str]| {
-            let from = relative.iter().fold(old_root.clone(), |p, part| p.join(part));
+            let from = relative
+                .iter()
+                .fold(old_root.clone(), |p, part| p.join(part));
             let to = relative.iter().fold(moved.clone(), |p, part| p.join(part));
-            (from.to_string_lossy().to_string(), to.to_string_lossy().to_string())
+            (
+                from.to_string_lossy().to_string(),
+                to.to_string_lossy().to_string(),
+            )
         };
         let mut wanted = vec![expected(&["2026", "Notes.md"]), expected(&["Plan.md"])];
         wanted.sort();
@@ -2143,7 +2232,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let shard = dir.join("Note.md").to_string_lossy().into_owned();
 
-        assert_eq!(write_markdown_file_if_unchanged(&dir, &shard, "first", None), Ok(None));
+        assert_eq!(
+            write_markdown_file_if_unchanged(&dir, &shard, "first", None),
+            Ok(None)
+        );
         assert_eq!(
             write_markdown_file_if_unchanged(&dir, &shard, "second", Some("first")),
             Ok(Some("first".to_string()))

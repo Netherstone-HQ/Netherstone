@@ -18,8 +18,10 @@ pub(super) fn change<R>(
 ) -> ToolResult<R> {
     // Held across the change, so no other version lands in between.
     let _history = crate::locks::history(&vault.sync_root)?;
-    let before: Vec<(PathBuf, Option<Vec<u8>>)> =
-        touched.iter().map(|path| (path.clone(), std::fs::read(path).ok())).collect();
+    let before: Vec<(PathBuf, Option<Vec<u8>>)> = touched
+        .iter()
+        .map(|path| (path.clone(), std::fs::read(path).ok()))
+        .collect();
 
     let (made, created) = change()?;
 
@@ -45,7 +47,13 @@ pub(super) fn change<R>(
     }
 
     let summary = summary.map(str::trim).filter(|summary| !summary.is_empty());
-    crate::sync::save_app_change(&vault.sync_root, &vault.root, &changes, &caller.app, summary)?;
+    crate::sync::save_app_change(
+        &vault.sync_root,
+        &vault.root,
+        &changes,
+        &caller.app,
+        summary,
+    )?;
     for (path, _) in &files {
         reindex(vault, path);
     }
@@ -66,7 +74,9 @@ pub(super) fn reindex(vault: &Vault, path: &Path) {
         } else if path.is_file() {
             Ok(crate::db::indexer::index_file(&conn, &vault.root, path)?)
         } else {
-            crate::db::indexer::forget_path(&conn, &vault.root, path).map(|_| ()).map_err(Into::into)
+            crate::db::indexer::forget_path(&conn, &vault.root, path)
+                .map(|_| ())
+                .map_err(Into::into)
         }
     });
     if let Err(error) = result {
@@ -90,7 +100,12 @@ pub(super) fn edit_shard(
     let writes = crate::locks::vault_writes()?;
     let content = read_text(path)?;
     let edited = edit(content)?;
-    Ok(crate::write_shard(&writes, &vault.root, &path.to_string_lossy(), &edited)?)
+    Ok(crate::write_shard(
+        &writes,
+        &vault.root,
+        &path.to_string_lossy(),
+        &edited,
+    )?)
 }
 
 #[cfg(test)]
@@ -103,12 +118,20 @@ mod tests {
         let vault = super::super::tests::vault("tools-change");
         let shard = vault.root.join("Plan.md");
         std::fs::write(&shard, "Typed by hand").unwrap();
-        let caller = Caller { app: "Goose".into() };
+        let caller = Caller {
+            app: "Goose".into(),
+        };
 
-        change(&vault, &caller, Some("Added a line"), std::slice::from_ref(&shard), || {
-            std::fs::write(&shard, "Typed by hand\n\nAdded").unwrap();
-            Ok(((), Vec::new()))
-        })
+        change(
+            &vault,
+            &caller,
+            Some("Added a line"),
+            std::slice::from_ref(&shard),
+            || {
+                std::fs::write(&shard, "Typed by hand\n\nAdded").unwrap();
+                Ok(((), Vec::new()))
+            },
+        )
         .unwrap();
 
         let history = list_versions(&vault.sync_root, &vault.root, &shard).unwrap();
@@ -122,7 +145,10 @@ mod tests {
         );
 
         // Nothing changed, nothing saved.
-        change(&vault, &caller, None, std::slice::from_ref(&shard), || Ok(((), Vec::new()))).unwrap();
+        change(&vault, &caller, None, std::slice::from_ref(&shard), || {
+            Ok(((), Vec::new()))
+        })
+        .unwrap();
         let again = list_versions(&vault.sync_root, &vault.root, &shard).unwrap();
         assert_eq!(again.versions.len(), history.versions.len());
     }

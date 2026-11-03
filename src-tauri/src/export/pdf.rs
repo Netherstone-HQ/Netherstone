@@ -46,7 +46,11 @@ fn jobs() -> &'static Mutex<HashMap<String, Job>> {
 
 /// Serves `/<job>/page.html`, and hears `/<job>/ready` from the page once
 /// its fonts and images have loaded.
-pub fn serve<R: Runtime>(_: UriSchemeContext<'_, R>, request: Request<Vec<u8>>, responder: UriSchemeResponder) {
+pub fn serve<R: Runtime>(
+    _: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
     let path = request.uri().path().trim_start_matches('/').to_string();
     let (job_id, file) = path.split_once('/').unwrap_or((path.as_str(), ""));
     let mut jobs = jobs().lock().unwrap();
@@ -59,9 +63,13 @@ pub fn serve<R: Runtime>(_: UriSchemeContext<'_, R>, request: Request<Vec<u8>>, 
             if let Some(ready) = job.ready.take() {
                 let _ = ready.send(());
             }
-            Response::builder().status(StatusCode::NO_CONTENT).body(Vec::new())
+            Response::builder()
+                .status(StatusCode::NO_CONTENT)
+                .body(Vec::new())
         }
-        _ => Response::builder().status(StatusCode::NOT_FOUND).body(Vec::new()),
+        _ => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Vec::new()),
     };
 
     responder.respond(response.unwrap_or_else(|_| Response::new(Vec::new())));
@@ -93,7 +101,10 @@ pub async fn render<R: Runtime>(
     output: PathBuf,
 ) -> Result<(), String> {
     static NEXT_JOB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-    let job_id = format!("job{}", NEXT_JOB.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let job_id = format!(
+        "job{}",
+        NEXT_JOB.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
 
     let (ready_sender, ready) = oneshot::channel();
     jobs().lock().unwrap().insert(
@@ -106,14 +117,18 @@ pub async fn render<R: Runtime>(
     let _guard = JobGuard(job_id.clone());
 
     let label = format!("export-{job_id}");
-    let window = tauri::WebviewWindowBuilder::new(app, &label, WebviewUrl::CustomProtocol(page_url(&job_id)))
-        .title("Netherstone export")
-        .visible(false)
-        .focused(false)
-        .skip_taskbar(true)
-        .inner_size(900.0, 1200.0)
-        .build()
-        .map_err(|error| format!("Could not prepare the PDF: {error}"))?;
+    let window = tauri::WebviewWindowBuilder::new(
+        app,
+        &label,
+        WebviewUrl::CustomProtocol(page_url(&job_id)),
+    )
+    .title("Netherstone export")
+    .visible(false)
+    .focused(false)
+    .skip_taskbar(true)
+    .inner_size(900.0, 1200.0)
+    .build()
+    .map_err(|error| format!("Could not prepare the PDF: {error}"))?;
 
     let result = async {
         tokio::time::timeout(READY_TIMEOUT, ready)

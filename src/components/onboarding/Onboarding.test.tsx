@@ -207,6 +207,33 @@ describe("Onboarding", () => {
     expect(await screen.findByRole("radio", { name: /Notes/ })).toBeTruthy();
   });
 
+  it("refuses a backup that a vault around the new folder uses, before making the folder", async () => {
+    const refusal = 'This backup belongs to "Documents" (/home/me/Documents), and this vault is inside it. Pick another backup.';
+    mockCommands({
+      ...baseCommands,
+      github_get_account: () => ({ login: "octocat", name: null, avatarUrl: null }),
+      github_get_installation: () => ({ installed: true, installedOn: [], installUrl: "" }),
+      sync_list_backups: () => [
+        { fullName: "octocat/Notes", name: "Notes", cloneUrl: "", pushedAt: null },
+      ],
+      sync_check_backup: () => {
+        throw refusal;
+      },
+    });
+    await renderOnboarding();
+
+    fireEvent.click(screen.getByRole("button", { name: /Restore a synced vault/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Notes/ }));
+    fireEvent.click(screen.getByRole("button", { name: copy.vault.restore.submit }));
+
+    expect(await screen.findByText(refusal)).toBeTruthy();
+    expect(invoke).toHaveBeenCalledWith("sync_check_backup", {
+      vaultPath: `${DOCUMENTS}/Notes`,
+      fullName: "octocat/Notes",
+    });
+    expect(invoke).not.toHaveBeenCalledWith("create_vault", expect.anything());
+  });
+
   it("leaves the guide unticked when the tour is replayed", async () => {
     useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
     mockCommands(baseCommands);

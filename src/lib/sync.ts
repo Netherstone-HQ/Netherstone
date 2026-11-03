@@ -98,6 +98,11 @@ export function listBackups() {
   return invoke<BackupSummary[]>("sync_list_backups");
 }
 
+/** Rejects when a vault around or inside `vaultPath` already uses `backup`. */
+export function checkBackup(vaultPath: string, backup: BackupSummary) {
+  return invoke<void>("sync_check_backup", { vaultPath, fullName: backup.fullName });
+}
+
 export function connectBackup(vaultPath: string, backup: BackupSummary) {
   return invoke<SyncReport>("sync_connect_backup", {
     vaultPath,

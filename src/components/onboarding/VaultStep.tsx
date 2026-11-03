@@ -20,7 +20,7 @@ import {
 import { errorMessage } from "@/lib/github-account";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, joinPath, openVault } from "@/lib/open-vault";
-import type { BackupSummary } from "@/lib/sync";
+import { checkBackup, type BackupSummary } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useVaultStore } from "@/store";
 import { useGitHubStore } from "@/store/github";
@@ -305,6 +305,13 @@ function RestoreVault({
     try {
       if (!path) {
         const target = joinPath(location, backup.name);
+        try {
+          await checkBackup(target, backup);
+        } catch (e) {
+          setError(errorMessage(e));
+          setBusy(false);
+          return;
+        }
         const picked = await chooseVaultFolder(target, "create");
         if (picked !== target) {
           if (picked) {

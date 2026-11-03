@@ -306,32 +306,48 @@ pub fn record_of_gone_vault(
     Ok(read_record(sync_root, vault_id)?.filter(|record| names_no_vault(record, &gone)))
 }
 
-/// Another vault on this device that already syncs with the backup
-/// `repo_name` and is around or inside `vault_path`. Joining that backup
-/// would copy the outer vault's folders into the inner one.
+/// The vaults on this device around or inside `vault_path` that sync with a
+/// backup, with that backup's name as last saved.
+pub fn nested_vaults_with_backups(
+    sync_root: &Path,
+    vault_path: &Path,
+) -> Vec<(NestedVault, String)> {
+    let vault = canonical(vault_path);
+    records(sync_root)
+        .into_iter()
+        .filter_map(|record| {
+            let path = PathBuf::from(&record.vault_path);
+            let other = canonical(&path);
+            let holds_it = read_vault_id(&path).as_deref() == Some(record.vault_id.as_str());
+            if !holds_it || other == vault {
+                return None;
+            }
+            let contains_folder = vault.starts_with(&other);
+            let nested = contains_folder || other.starts_with(&vault);
+            let repo_name = record.repo_name.filter(|_| nested)?;
+            Some((
+                NestedVault {
+                    path: record.vault_path,
+                    contains_folder,
+                },
+                repo_name,
+            ))
+        })
+        .collect()
+}
+
+/// A vault around or inside `vault_path` that already syncs with the backup
+/// `repo_name`. Joining that backup would copy the outer vault's folders
+/// into the inner one.
 pub fn nested_vault_on_backup(
     sync_root: &Path,
     vault_path: &Path,
     repo_name: &str,
 ) -> Option<NestedVault> {
-    let vault = canonical(vault_path);
-    records(sync_root).into_iter().find_map(|record| {
-        let path = PathBuf::from(&record.vault_path);
-        let other = canonical(&path);
-        let same_backup = record
-            .repo_name
-            .as_deref()
-            .is_some_and(|name| name.eq_ignore_ascii_case(repo_name));
-        let holds_it = read_vault_id(&path).as_deref() == Some(record.vault_id.as_str());
-        if !same_backup || !holds_it || other == vault {
-            return None;
-        }
-        let contains_folder = vault.starts_with(&other);
-        (contains_folder || other.starts_with(&vault)).then_some(NestedVault {
-            path: record.vault_path,
-            contains_folder,
-        })
-    })
+    nested_vaults_with_backups(sync_root, vault_path)
+        .into_iter()
+        .find(|(_, name)| name.eq_ignore_ascii_case(repo_name))
+        .map(|(other, _)| other)
 }
 
 /// The first vault marker in a folder below `folder`, skipping hidden ones.

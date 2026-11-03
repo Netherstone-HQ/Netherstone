@@ -29,7 +29,9 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["protocol-asset", "unstable"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-updater = { version = "2", optional = true }
+# native-tls like our own reqwest; rustls would compile in unused. No zip:
+# our update files are the plain installers, not the old zipped format.
+tauri-plugin-updater = { version = "2", optional = true, default-features = false, features = ["native-tls", "system-proxy"] }
 # Netherstone links (`netherstone://open/...`) from the site and others' docs.
 tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }

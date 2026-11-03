@@ -40,8 +40,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 notify-debouncer-mini = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
 pulldown-cmark = "0.12"
-dirs = "5.0"
-md5 = "0.7"
+dirs = "6"
 blake3 = "1"
 flate2 = "1"
 # Templates arrive as a zip with its sha256 listed beside it.

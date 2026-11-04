@@ -468,7 +468,7 @@ const pendingSyncInfo = new Map<string, Map<string, SyncInfoAsk>>();
  * gone. Every file block asks as it shows, so asks made in the same turn go
  * to the backend together: a shard asks once for all its files when it opens.
  */
-export function attachmentSyncInfo(
+export async function attachmentSyncInfo(
   vaultPath: string,
   assetPath: string,
 ): Promise<AttachmentSyncInfo | null> {

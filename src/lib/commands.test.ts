@@ -56,6 +56,15 @@ describe("attachmentSyncInfo", () => {
     expect(later).toEqual(exe);
   });
 
+  it("fails as a promise outside the app", async () => {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+
+    const ask = attachmentSyncInfo("C:/Vault", "_attachments/a.pdf");
+
+    await expect(ask).rejects.toThrow("Tauri internals not found");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("fails every ask in a call that fails", async () => {
     vi.mocked(invoke).mockRejectedValue(new Error("Not the open vault"));
 

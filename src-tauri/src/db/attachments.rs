@@ -1415,7 +1415,15 @@ pub fn attachment_sync_info(
     let asset_path = normalize_attachment_path(asset_path)
         .ok_or_else(|| format!("Not a vault attachment: {}", asset_path))?;
     let path = path_from_asset_path(vault_path, &asset_path)?;
-    let size_bytes = match std::fs::metadata(&path) {
+    // A link inside the attachment folder may point anywhere on the device.
+    let folder = vault_path.join(ATTACHMENTS_DIR_NAME).canonicalize();
+    let (Ok(folder), Ok(target)) = (folder, path.canonicalize()) else {
+        return Ok(None);
+    };
+    if !target.starts_with(&folder) {
+        return Ok(None);
+    }
+    let size_bytes = match std::fs::metadata(&target) {
         Ok(metadata) if metadata.is_file() => metadata.len(),
         _ => return Ok(None),
     };
@@ -2193,5 +2201,38 @@ mod tests {
         assert!(attachment_sync_info(&vault, "_attachments/../secret.txt").is_err());
 
         std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_info_ignores_links_to_files_outside_the_attachment_folder() {
+        let vault = temp_vault("sync-info-links");
+        let outside = temp_vault("sync-info-outside");
+        std::fs::write(outside.join("secret.pdf"), b"secret").unwrap();
+        std::fs::write(vault.join("_attachments/a.pdf"), b"pdf").unwrap();
+        let link = |target: &Path, name: &str| {
+            std::os::unix::fs::symlink(target, vault.join("_attachments").join(name)).unwrap()
+        };
+        link(&outside.join("secret.pdf"), "secret.pdf");
+        link(&outside, "aa");
+        link(&vault.join("_attachments/a.pdf"), "same.pdf");
+
+        assert_eq!(
+            attachment_sync_info(&vault, "_attachments/secret.pdf"),
+            Ok(None)
+        );
+        assert_eq!(
+            attachment_sync_info(&vault, "_attachments/aa/secret.pdf"),
+            Ok(None)
+        );
+        assert_eq!(
+            attachment_sync_info(&vault, "_attachments/same.pdf")
+                .unwrap()
+                .map(|info| info.size_bytes),
+            Some(3)
+        );
+
+        std::fs::remove_dir_all(&vault).unwrap();
+        std::fs::remove_dir_all(&outside).unwrap();
     }
 }

@@ -23,7 +23,7 @@ the app (`src-tauri/src/github/device_flow.rs`). The App needs Contents and
 Administration read/write and is installed on the user's account with "All
 repositories", because Apps can't be limited to repositories they create. The
 token is kept in the OS credential store, with a fallback when none is
-available (`github/token_store.rs`).
+available (`src-tauri/src/credentials.rs`, shared with other secrets the app keeps).
 
 ## Repository and vault identity
 

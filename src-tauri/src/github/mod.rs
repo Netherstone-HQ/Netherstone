@@ -1,15 +1,15 @@
 //! GitHub account connection for sync.
 //!
 //! The access token lives in the OS credential store, or where a Linux
-//! desktop has none, as `token_store` describes. The account's public profile
+//! desktop has none, as `credentials` describes. The account's public profile
 //! is cached in AppData so the UI can show who is signed in without a network
 //! call.
 
 pub mod app;
 pub mod device_flow;
 pub mod repos;
-pub mod token_store;
 
+use crate::credentials;
 use device_flow::PollOutcome;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -43,7 +43,7 @@ pub struct TokenStorageStatus {
     /// chooses between a private file and signing in each time.
     pub keyring_available: bool,
     /// Where the current sign-in is kept, if signed in.
-    pub current: Option<token_store::TokenStorage>,
+    pub current: Option<credentials::Storage>,
 }
 
 #[derive(Debug, Serialize)]
@@ -91,13 +91,13 @@ fn account_path() -> Result<PathBuf, String> {
 
 /// The stored access token, if the user is signed in.
 pub fn access_token() -> Result<Option<String>, String> {
-    Ok(token_store::load()?.map(|(token, _)| token))
+    Ok(credentials::load(&credentials::GITHUB)?.map(|(token, _)| token))
 }
 
 pub fn token_storage_status() -> Result<TokenStorageStatus, String> {
     Ok(TokenStorageStatus {
-        keyring_available: token_store::keyring_available(),
-        current: token_store::load()?.map(|(_, storage)| storage),
+        keyring_available: credentials::keyring_available(),
+        current: credentials::load(&credentials::GITHUB)?.map(|(_, storage)| storage),
     })
 }
 
@@ -277,7 +277,7 @@ pub async fn finish_sign_in(remember: bool) -> Result<Option<GitHubAccount>, Str
     let mut account = fetch_account(&client, &token).await?;
     account.client_id = Some(device_flow::CLIENT_ID.to_string());
     tauri::async_runtime::spawn_blocking(move || {
-        token_store::save(&token, remember)?;
+        credentials::save(&credentials::GITHUB, &token, remember)?;
         write_cached_account(&account)?;
         Ok(Some(account))
     })
@@ -290,7 +290,7 @@ pub async fn finish_sign_in(remember: bool) -> Result<Option<GitHubAccount>, Str
 /// The authorization itself stays listed on GitHub until the user revokes it
 /// there; revoking from the app would need the OAuth App's client secret.
 pub fn sign_out() -> Result<(), String> {
-    token_store::clear()?;
+    credentials::clear(&credentials::GITHUB)?;
     match std::fs::remove_file(account_path()?) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

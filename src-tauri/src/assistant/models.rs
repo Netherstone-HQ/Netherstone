@@ -219,7 +219,7 @@ fn scrub_line(line: &str) -> String {
 }
 
 fn is_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || "-_.:/?=&%+~".contains(c)
+    c.is_ascii_alphanumeric() || "-_.:/?=&%+~@".contains(c)
 }
 
 fn scrub_words(line: &str) -> String {
@@ -243,7 +243,7 @@ fn scrub_words(line: &str) -> String {
 const SECRET_LENGTH: usize = 20;
 
 fn scrub_word(word: &str) -> String {
-    if word.contains("://") {
+    if word.contains("://") || word.contains('@') {
         return "[address]".to_string();
     }
     let word = word.split_once('?').map_or(word, |(before, _)| before);
@@ -523,13 +523,15 @@ mod tests {
         let text = "Request to https://api.example.com/v1/models?key=abc failed\n\
                     x-api-key: sk-ant-whatever\n\
                     {\"error\":\"bad\",\"user_id\":\"user_3CUzU0CH9SZRfTCa73VLREhQVpK\"} with sk-test-0123456789abcdefSECRET\n\
-                    Status 401 Unauthorized for model claude-sonnet-5-5";
+                    Status 401 Unauthorized for model claude-sonnet-5-5\n\
+                    Account someone@example.org has no credit";
         let scrubbed = scrub(text, Some(KEY));
         assert!(!scrubbed.contains("example.com"), "{scrubbed}");
         assert!(!scrubbed.contains("key=abc"));
         assert!(!scrubbed.contains("sk-ant-whatever"));
         assert!(!scrubbed.contains("3CUzU0CH9SZRfTCa73VLREhQVpK"));
         assert!(!scrubbed.contains(KEY));
+        assert!(!scrubbed.contains("someone") && !scrubbed.contains("example.org"));
         // Plain words and model names stay readable.
         assert!(scrubbed.contains("Status 401 Unauthorized for model claude-sonnet-5-5"));
     }

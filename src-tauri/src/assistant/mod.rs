@@ -75,8 +75,14 @@ pub struct Status {
 }
 
 fn read<T: serde::de::DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
-    let conn = db::open_connection()?;
-    let value = db::settings::get(&conn, key).map_err(|e| e.to_string())?;
+    read_in(&db::open_connection()?, key)
+}
+
+fn read_in<T: serde::de::DeserializeOwned>(
+    conn: &rusqlite::Connection,
+    key: &str,
+) -> Result<Option<T>, String> {
+    let value = db::settings::get(conn, key).map_err(|e| e.to_string())?;
     Ok(value.and_then(|json| serde_json::from_str(&json).ok()))
 }
 
@@ -106,7 +112,8 @@ fn saved_key(provider: &Provider) -> Result<Option<(String, Storage)>, String> {
 pub fn status() -> Result<Status, String> {
     let conn = db::open_connection()?;
     let enabled = db::settings::assistant_enabled(&conn).map_err(|e| e.to_string())?;
-    let custom: Option<Custom> = read(CUSTOM)?;
+    let custom: Option<Custom> = read_in(&conn, CUSTOM)?;
+    let servers: Vec<Server> = read_in(&conn, LOCAL_SERVERS)?.unwrap_or_default();
     let providers = providers::PROVIDERS
         .iter()
         .map(|provider| {
@@ -122,7 +129,7 @@ pub fn status() -> Result<Status, String> {
                 key: saved_key(provider)?.map(|(_, storage)| storage),
                 limits: api.map_or(Limits::UNKNOWN, Limits::of),
                 servers: match provider.setup {
-                    Setup::Local => servers()?,
+                    Setup::Local => servers.clone(),
                     _ => Vec::new(),
                 },
                 custom: match provider.setup {
@@ -135,7 +142,7 @@ pub fn status() -> Result<Status, String> {
     Ok(Status {
         enabled,
         keyring_available: credentials::keyring_available(),
-        model: read(MODEL)?,
+        model: read_in(&conn, MODEL)?,
         providers,
     })
 }
@@ -146,6 +153,16 @@ pub fn set_enabled(enabled: bool) -> Result<(), String> {
 
 pub fn set_model(choice: Option<ModelChoice>) -> Result<(), String> {
     write(MODEL, choice.as_ref())
+}
+
+/// Runs keyring and database work off the async threads: a locked keyring
+/// can wait on its unlock prompt.
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, ProviderError> + Send + 'static,
+) -> Result<T, ProviderError> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|_| ProviderError::Failed)?
 }
 
 fn storage_error(error: String) -> ProviderError {
@@ -187,7 +204,8 @@ fn target(provider: &Provider, server: Option<&str>) -> Result<Target, ProviderE
 /// models of its server at `server`.
 pub async fn models(provider: &str, server: Option<String>) -> Result<Vec<Model>, ProviderError> {
     let provider = providers::find(provider).map_err(|_| ProviderError::Failed)?;
-    models::list(&target(provider, server.as_deref())?).await
+    let target = blocking(move || target(provider, server.as_deref())).await?;
+    models::list(&target).await
 }
 
 /// Saves a key for a provider set up by key, once the provider takes it.
@@ -205,23 +223,31 @@ pub async fn save_key(
     ) else {
         return Err(ProviderError::Failed);
     };
-    let key = key.trim();
+    let key = key.trim().to_string();
     let target = Target {
         api,
         base_url: base_url.to_string(),
-        key: Some(key.to_string()),
+        key: Some(key.clone()),
     };
     let models = models::list(&target).await?;
-    credentials::save(credential, key, remember).map_err(storage_error)?;
+    blocking(move || credentials::save(credential, &key, remember).map_err(storage_error)).await?;
     Ok(models)
+}
+
+/// Adds `found` to the saved servers, keeping the ones added by address.
+fn keep_servers(found: Vec<Server>) -> Result<(), ProviderError> {
+    let mut servers = servers().map_err(storage_error)?;
+    servers.retain(|saved| found.iter().all(|new| new.address != saved.address));
+    servers.extend(found);
+    write(LOCAL_SERVERS, Some(&servers)).map_err(storage_error)
 }
 
 /// Looks for servers on their usual ports, and keeps the ones found.
 pub async fn find_local() -> Result<Vec<Found>, ProviderError> {
     let found = local::find().await;
     if !found.is_empty() {
-        let servers: Vec<&Server> = found.iter().map(|(server, _)| server).collect();
-        write(LOCAL_SERVERS, Some(&servers)).map_err(storage_error)?;
+        let servers: Vec<Server> = found.iter().map(|(server, _)| server.clone()).collect();
+        blocking(move || keep_servers(servers)).await?;
     }
     Ok(found
         .into_iter()
@@ -232,10 +258,8 @@ pub async fn find_local() -> Result<Vec<Found>, ProviderError> {
 /// Keeps the server at a typed address on this computer, once it answers.
 pub async fn save_local(address: &str) -> Result<Found, ProviderError> {
     let (server, models) = local::at(address).await?;
-    let mut servers = servers().map_err(storage_error)?;
-    servers.retain(|saved| saved.address != server.address);
-    servers.push(server.clone());
-    write(LOCAL_SERVERS, Some(&servers)).map_err(storage_error)?;
+    let kept = server.clone();
+    blocking(move || keep_servers(vec![kept])).await?;
     Ok(Found { server, models })
 }
 
@@ -263,20 +287,23 @@ pub async fn save_custom(
         api,
     };
 
-    let previous: Option<Custom> = read(CUSTOM).map_err(storage_error)?;
-    let same_address = previous
-        .as_ref()
-        .is_some_and(|p| p.address == custom.address);
     let new_key = key
         .map(|key| key.trim().to_string())
         .filter(|key| !key.is_empty());
-    let key = match &new_key {
-        Some(key) => Some(key.clone()),
-        None if same_address => saved_key(provider)
-            .map_err(storage_error)?
-            .map(|(key, _)| key),
-        None => None,
-    };
+    let address = custom.address.clone();
+    let (same_address, saved) = blocking(move || {
+        let previous: Option<Custom> = read(CUSTOM).map_err(storage_error)?;
+        let same_address = previous.is_some_and(|p| p.address == address);
+        let saved = match same_address {
+            true => saved_key(provider)
+                .map_err(storage_error)?
+                .map(|(key, _)| key),
+            false => None,
+        };
+        Ok((same_address, saved))
+    })
+    .await?;
+    let key = new_key.clone().or(saved);
     if key.is_some() && url.scheme() != "https" && !local::is_loopback(&url) {
         return Err(ProviderError::Insecure);
     }
@@ -288,19 +315,21 @@ pub async fn save_custom(
     })
     .await?;
 
-    write(CUSTOM, Some(&custom)).map_err(storage_error)?;
-    match (new_key, key) {
-        (Some(key), _) => {
-            credentials::save(credential, &key, remember).map_err(storage_error)?;
+    blocking(move || {
+        write(CUSTOM, Some(&custom)).map_err(storage_error)?;
+        match (new_key, key) {
+            (Some(key), _) => credentials::save(credential, &key, remember)
+                .map(|_| ())
+                .map_err(storage_error)?,
+            (None, None) => credentials::clear(credential).map_err(storage_error)?,
+            (None, Some(_)) => {}
         }
-        (None, None) => {
-            credentials::clear(credential).map_err(storage_error)?;
+        if !same_address {
+            forget_model_of("custom")?;
         }
-        (None, Some(_)) => {}
-    }
-    if !same_address {
-        forget_model_of("custom")?;
-    }
+        Ok(())
+    })
+    .await?;
     Ok(models)
 }
 

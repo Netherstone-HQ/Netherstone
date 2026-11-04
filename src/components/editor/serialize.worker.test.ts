@@ -47,6 +47,23 @@ describe("markdown worker", () => {
     });
   });
 
+  it("makes the cache entry for a save: the markdown, then the value", () => {
+    const children = [{ type: "p", children: [{ text: "Héllo" }] }];
+    const { markdown, cache } = send({
+      type: "serialize",
+      requestId: 4,
+      children,
+      withCache: true,
+    }) as { markdown: string; cache: { body: Uint8Array; markdownBytes: number } };
+
+    const split = new TextEncoder().encode(markdown).length;
+    expect(cache.markdownBytes).toBe(split);
+    expect(new TextDecoder().decode(cache.body.slice(0, split))).toBe(markdown);
+    expect(JSON.parse(new TextDecoder().decode(cache.body.slice(split)))).toEqual(
+      children,
+    );
+  });
+
   it("drops transient input nodes when saving", () => {
     const children = [
       {

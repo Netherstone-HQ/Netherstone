@@ -145,3 +145,21 @@ it("queues an autosave behind a running read", async () => {
     "open.md",
   ]);
 });
+
+it("hands back the cache entry the worker made for a save", async () => {
+  const { serializeShardInWorker } = await import("./editor-markdown-worker");
+  const save = serializeShardInWorker([], { filePath: "a.md" });
+  const [worker] = FakeWorker.instances;
+  const { requestId, filePath, withCache } = worker.posted.shift() as {
+    requestId: number;
+    filePath: string;
+    withCache: boolean;
+  };
+  const cache = { body: new Uint8Array([1, 2]), markdownBytes: 1 };
+
+  expect(withCache).toBe(true);
+  worker.onmessage?.({
+    data: { type: "success", requestId, filePath, markdown: "#", cache },
+  } as MessageEvent);
+  await expect(save).resolves.toEqual({ markdown: "#", cache });
+});

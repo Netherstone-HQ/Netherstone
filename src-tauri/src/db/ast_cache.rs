@@ -217,6 +217,24 @@ pub fn upsert_ast_cache(
     upsert_content_addressed_ast_cache_json(conn, file_path, content_hash, cache_version, &ast_json)
 }
 
+/// [`upsert_ast_cache`] for a tree that arrives as JSON already.
+pub fn upsert_ast_cache_json(
+    conn: &Connection,
+    file_path: &str,
+    content_hash: &str,
+    cache_version: i64,
+    ast_json: &str,
+) -> Result<(), String> {
+    serde_json::from_str::<serde::de::IgnoredAny>(ast_json).map_err(|error| {
+        format!(
+            "Failed to parse AST cache JSON for {}: {}",
+            file_path, error
+        )
+    })?;
+
+    upsert_content_addressed_ast_cache_json(conn, file_path, content_hash, cache_version, ast_json)
+}
+
 pub fn delete_ast_cache(conn: &Connection, file_path: &str) -> Result<bool, String> {
     let deleted_index_rows = delete_content_addressed_ast_cache(conn, file_path)?;
     let _ = prune_orphaned_ast_cache_blobs(conn)?;
@@ -277,5 +295,21 @@ mod tests {
         prune_stale_ast_cache_for_vault(&conn, "/v/Notes", &existing).unwrap();
 
         assert_eq!(cached_paths(&conn), ["/v/Notes/a.md", "/v/Notes2/b.md"]);
+    }
+
+    #[test]
+    fn stores_a_tree_sent_as_json_and_refuses_broken_json() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::init_schema(&conn).unwrap();
+        let json = r#"[{"type":"p","children":[{"text":"Hi"}]}]"#;
+
+        upsert_ast_cache_json(&conn, "/v/a.md", "hash", 1, json).unwrap();
+        assert!(upsert_ast_cache_json(&conn, "/v/b.md", "other", 1, "[{").is_err());
+
+        assert_eq!(cached_paths(&conn), ["/v/a.md"]);
+        assert_eq!(
+            get_valid_ast_cache(&conn, "/v/a.md", "hash", 1).unwrap(),
+            Some(serde_json::from_str(json).unwrap())
+        );
     }
 }

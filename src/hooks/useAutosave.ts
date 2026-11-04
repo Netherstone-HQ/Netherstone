@@ -2,9 +2,12 @@ import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEditorStore, useVaultStore } from "@/store";
-import { upsertAstCache } from "@/lib/editor-ast-cache";
+import { upsertAstCache, writeShardCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
-import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
+import {
+  serializeShardInWorker,
+  type ShardCache,
+} from "@/lib/editor-markdown-worker";
 import {
   finishDrawingSession,
   hasPendingDrawingSave,
@@ -35,6 +38,8 @@ let pendingCacheEntry: {
   filePath: string;
   markdown: string;
   plateValue: unknown;
+  /** The entry ready to send, when the markdown worker made it. */
+  cache: ShardCache | null;
 } | null = null;
 
 /** The cache writes still running, one after another. */
@@ -49,7 +54,16 @@ export function writeOpenShardCache(): Promise<void> {
   if (entry) {
     pendingCacheEntry = null;
     const write: Promise<void> = (cacheWrites ?? Promise.resolve())
-      .then(() => upsertAstCache(entry))
+      .then(() =>
+        entry.cache
+          ? writeShardCache(entry.vaultPath, entry.filePath, entry.cache)
+          : upsertAstCache({
+              vaultPath: entry.vaultPath,
+              filePath: entry.filePath,
+              markdown: entry.markdown,
+              plateValue: entry.plateValue,
+            }),
+      )
       .catch((error) =>
         console.error(
           "[Netherstone] AST cache write failed:",
@@ -144,10 +158,10 @@ export function useAutosave() {
       const filePath = latestFilePathRef.current;
 
       if (!editor) {
-        return fallbackMarkdown;
+        return { markdown: fallbackMarkdown, cache: null };
       }
 
-      return serializeMarkdownInWorker(editor.children, {
+      return serializeShardInWorker(editor.children, {
         filePath,
         requestKey: filePath ? `autosave:${filePath}` : "autosave",
         urgent,
@@ -175,7 +189,8 @@ export function useAutosave() {
       // The text the file held when it was opened or last saved.
       const expectedContent = useEditorStore.getState().markdownContent;
       const savedEditTick = useEditorStore.getState().editTick;
-      const content = await serializeCurrentMarkdown(urgent);
+      const { markdown: content, cache } =
+        await serializeCurrentMarkdown(urgent);
 
       if (
         lastSavedFilePathRef.current === filePath &&
@@ -213,7 +228,9 @@ export function useAutosave() {
             vaultPath,
             filePath,
             markdown: content,
-            plateValue: savedValue,
+            // Only needed when there's no ready entry.
+            plateValue: cache ? null : savedValue,
+            cache,
           };
         }
 

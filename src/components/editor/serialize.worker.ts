@@ -10,6 +10,7 @@ type SerializeWorkerRequest = {
   requestId: number;
   filePath?: string | null;
   children: unknown;
+  withCache?: boolean;
 };
 
 type DeserializeWorkerRequest = {
@@ -26,6 +27,7 @@ type SerializeWorkerSuccessResponse = {
   requestId: number;
   filePath: string | null;
   markdown: string;
+  cache?: { body: Uint8Array; markdownBytes: number };
 };
 
 type DeserializeWorkerSuccessResponse = {
@@ -62,6 +64,21 @@ function deserializeMarkdown(
   ) as unknown[];
 }
 
+/**
+ * The editor cache entry for a save, ready to send: the markdown's bytes,
+ * then the value as JSON. Made here so the page never turns a long shard's
+ * whole value into JSON itself.
+ */
+function cacheBody(markdown: string, children: unknown[]) {
+  const encoder = new TextEncoder();
+  const text = encoder.encode(markdown);
+  const value = encoder.encode(JSON.stringify(children));
+  const body = new Uint8Array(text.length + value.length);
+  body.set(text);
+  body.set(value, text.length);
+  return { body, markdownBytes: text.length };
+}
+
 // Reuse a single editor instance for the lifetime of the worker.
 const serializerEditor = createSlateEditor({
   plugins: SerializationKit,
@@ -82,15 +99,19 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>): void => {
         ? event.data.children
         : [];
       const markdown = serializeChildren(children, filePath);
+      const cache = event.data.withCache
+        ? cacheBody(markdown, children)
+        : undefined;
 
       const response: MarkdownWorkerSuccessResponse = {
         type: "success",
         requestId,
         filePath,
         markdown,
+        cache,
       };
 
-      self.postMessage(response);
+      self.postMessage(response, { transfer: cache ? [cache.body.buffer] : [] });
       return;
     }
 

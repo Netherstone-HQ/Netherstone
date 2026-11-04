@@ -156,9 +156,10 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
         with:
           releaseId: ${{ needs.check-version.outputs.release-id }}
-          # Without the tag, latest.json links to /releases/latest/download,
-          # which only follows stable releases, so betas could not update.
-          tagName: ${{ github.ref_name }}
+          # The publish job writes latest.json once from every build's
+          # signatures. When each build merged itself into it, two builds
+          # finishing together both uploaded it and one failed.
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
 
   # Package managers that update the app themselves get it without the
@@ -256,23 +257,21 @@ jobs:
           gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
             -f tag_name="$GITHUB_REF_NAME" -F body=@notes.md --silent
 
-      # Each build merges its platforms into latest.json, the file installed
-      # apps update from. Publish only once all of them are in it.
-      - name: Check every platform is in latest.json
+      # latest.json is the file installed apps update from. It links to the
+      # tag, since /releases/latest/download only follows stable releases.
+      # A missing bundle or signature fails here, so the release stays a draft.
+      - name: Write latest.json
         run: |
-          asset=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" \
-            --jq '.assets[] | select(.name == "latest.json") | .id')
-          if [ -z "$asset" ]; then
-            echo "::error::The release has no latest.json, so it stays a draft."
-            exit 1
-          fi
-          gh api "repos/$GH_REPO/releases/assets/$asset" \
-            -H "Accept: application/octet-stream" > latest.json
-          missing=$(jq -r '["darwin-aarch64", "darwin-x86_64", "linux-x86_64", "windows-x86_64"] - (.platforms | keys) | join(", ")' latest.json)
-          if [ -n "$missing" ]; then
-            echo "::error::latest.json is missing $missing, so the release stays a draft."
-            exit 1
-          fi
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID" > release.json
+          mkdir signatures
+          jq -r '.assets[] | select(.name | endswith(".sig")) | "\(.id) \(.name)"' release.json \
+            | while read -r id name; do
+                gh api "repos/$GH_REPO/releases/assets/$id" \
+                  -H "Accept: application/octet-stream" > "signatures/$name"
+              done
+          node scripts/channels.mjs updater release.json signatures > latest.json
+          cat latest.json
+          gh release upload "$GITHUB_REF_NAME" latest.json --clobber
 
       - name: Publish the release
         run: |

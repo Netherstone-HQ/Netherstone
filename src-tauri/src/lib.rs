@@ -2,6 +2,7 @@ mod ai_apps;
 mod asset_scope;
 mod browser;
 mod copy_access;
+mod credentials;
 mod db;
 mod export;
 mod github;

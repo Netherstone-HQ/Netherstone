@@ -4,7 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { createSlateEditor, type SlateEditor } from "platejs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SerializationKit } from "@/components/editor/serialization-kit";
-import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
+import {
+  openMarkdownFile,
+  upsertAstCache,
+  writeShardCache,
+} from "@/lib/editor-ast-cache";
+import type { ShardCache } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { rememberSavedValue } from "@/lib/outside-changes";
 import { useEditorStore, useVaultStore } from "@/store";
@@ -28,8 +33,27 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 vi.mock("@/lib/editor-ast-cache", () => ({
   upsertAstCache: vi.fn(async () => {}),
+  writeShardCache: vi.fn(async () => {}),
   openMarkdownFile: vi.fn(),
 }));
+
+/** The cache entry the markdown worker makes for the next save, if any. */
+let workerCache: ShardCache | null = null;
+
+vi.mock("@/lib/editor-markdown-worker", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/lib/editor-markdown-worker")>();
+  return {
+    ...original,
+    serializeShardInWorker: async (
+      children: unknown,
+      options: Parameters<typeof original.serializeShardInWorker>[1],
+    ) => ({
+      ...(await original.serializeShardInWorker(children, options)),
+      cache: workerCache,
+    }),
+  };
+});
 
 vi.mock("@/components/editor/lib/session-value", () => ({
   resolveSessionValue: async (_path: string, markdown: string) =>
@@ -88,6 +112,7 @@ function type(editor: SlateEditor, text: string) {
 const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
 beforeEach(() => {
+  workerCache = null;
   vi.useFakeTimers();
   vi.mocked(invoke).mockResolvedValue(null);
   vi.spyOn(console, "info").mockImplementation(() => {});
@@ -167,6 +192,18 @@ describe("autosave", () => {
       markdown: "Hello!\n",
       plateValue: editor.children,
     });
+  });
+
+  it("sends the cache entry the markdown worker made", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+    workerCache = { body: new Uint8Array([1]), markdownBytes: 1 };
+
+    type(editor, "!");
+    await wait(AUTOSAVE_DELAY_MS);
+    await writeOpenShardCache();
+
+    expect(writeShardCache).toHaveBeenCalledWith(VAULT, NOTE_A, workerCache);
+    expect(upsertAstCache).not.toHaveBeenCalled();
   });
 
   it("skips the write when the edit is undone before saving", async () => {

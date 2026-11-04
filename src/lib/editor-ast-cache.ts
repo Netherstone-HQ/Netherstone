@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Descendant } from "platejs";
+import type { ShardCache } from "@/lib/editor-markdown-worker";
 import { useVaultStore } from "@/store/vault";
 
 type PlateAstValue = Descendant[];
@@ -83,6 +84,33 @@ export async function openMarkdownFile(
   } catch (error) {
     logAstCacheError("open:error", error, {
       filePath,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Writes a save's editor cache entry made by the markdown worker, as raw
+ * bytes, so nothing turns the value into JSON on this thread.
+ */
+export async function writeShardCache(
+  vaultPath: string,
+  filePath: string,
+  cache: ShardCache,
+): Promise<void> {
+  assertTauri();
+  try {
+    await invoke("write_shard_cache", cache.body, {
+      headers: {
+        "x-vault-path": encodeURIComponent(vaultPath),
+        "x-file-path": encodeURIComponent(filePath),
+        "x-markdown-bytes": String(cache.markdownBytes),
+      },
+    });
+  } catch (error) {
+    logAstCacheError("write:error", error, {
+      filePath,
+      bytes: cache.body.length,
     });
     throw error;
   }

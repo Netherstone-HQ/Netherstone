@@ -3,6 +3,7 @@ type SerializeMarkdownWorkerRequest = {
   requestId: number;
   filePath: string | null;
   children: unknown;
+  withCache?: boolean;
 };
 
 type DeserializeMarkdownWorkerRequest = {
@@ -16,12 +17,21 @@ type MarkdownWorkerRequest =
   | SerializeMarkdownWorkerRequest
   | DeserializeMarkdownWorkerRequest;
 
+/**
+ * A save's editor cache entry as the backend takes it: the markdown's bytes,
+ * then the editor value as JSON.
+ */
+export type ShardCache = { body: Uint8Array; markdownBytes: number };
+
 type SerializeMarkdownWorkerSuccess = {
   type: "success";
   requestId: number;
   filePath: string | null;
   markdown: string;
+  cache?: ShardCache;
 };
+
+type Serialized = { markdown: string; cache: ShardCache | null };
 
 type DeserializeMarkdownWorkerSuccess = {
   type: "success";
@@ -214,7 +224,11 @@ function handleWorkerMessage(event: MessageEvent<unknown>) {
   // A request superseded by a newer one is no longer pending, so its reply
   // is dropped.
   if (isSerializeSuccessMessage(data)) {
-    resolveRequest(data.requestId, data.markdown);
+    const serialized: Serialized = {
+      markdown: data.markdown,
+      cache: data.cache ?? null,
+    };
+    resolveRequest(data.requestId, serialized);
     return;
   }
 
@@ -364,24 +378,44 @@ export function preloadEditorMarkdownWorker() {
   }
 }
 
-export async function serializeMarkdownInWorker(
+async function serialize(
   children: unknown,
-  options: SerializeMarkdownInWorkerOptions = {},
-): Promise<string> {
-  if (typeof Worker === "undefined") return runWithoutWorker(options.fallback);
+  options: SerializeMarkdownInWorkerOptions,
+  withCache: boolean,
+): Promise<Serialized> {
+  if (typeof Worker === "undefined") {
+    return { markdown: await runWithoutWorker(options.fallback), cache: null };
+  }
 
   const filePath = normalizeFilePath(options.filePath);
-  const markdown = await requestFromWorker(
+  return (await requestFromWorker(
     {
       type: "serialize",
       requestId: nextRequestId++,
       filePath,
       children,
+      withCache,
     },
     resolveRequestKey(options.requestKey, filePath),
     options.urgent,
-  );
+  )) as Serialized;
+}
 
-  return typeof markdown === "string" ? markdown : "";
+export async function serializeMarkdownInWorker(
+  children: unknown,
+  options: SerializeMarkdownInWorkerOptions = {},
+): Promise<string> {
+  return (await serialize(children, options, false)).markdown;
+}
+
+/**
+ * Serializes a shard being saved, with its editor cache entry when the
+ * worker made one.
+ */
+export function serializeShardInWorker(
+  children: unknown,
+  options: SerializeMarkdownInWorkerOptions = {},
+): Promise<Serialized> {
+  return serialize(children, options, true);
 }
 

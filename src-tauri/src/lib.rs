@@ -1,5 +1,6 @@
 mod ai_apps;
 mod asset_scope;
+mod assistant;
 mod browser;
 mod copy_access;
 mod credentials;
@@ -185,6 +186,68 @@ fn mcp_set_vault_allowed(path: String, allowed: bool) -> Result<(), String> {
         Ok(false) => Err("Netherstone hasn't opened that vault".to_string()),
         Err(error) => Err(error.to_string()),
     }
+}
+
+/// The assistant's switch, model and providers, without any key.
+#[tauri::command(async)]
+fn assistant_status() -> Result<assistant::Status, String> {
+    assistant::status()
+}
+
+#[tauri::command(async)]
+fn assistant_set_enabled(enabled: bool) -> Result<(), String> {
+    assistant::set_enabled(enabled)
+}
+
+#[tauri::command(async)]
+fn assistant_set_model(choice: Option<assistant::ModelChoice>) -> Result<(), String> {
+    assistant::set_model(choice)
+}
+
+/// The models a set-up provider offers, asked of the provider.
+#[tauri::command]
+async fn assistant_models(
+    provider: String,
+    server: Option<String>,
+) -> Result<Vec<assistant::Model>, assistant::ProviderError> {
+    assistant::models(&provider, server).await
+}
+
+/// Checks a key with its provider, then keeps it.
+#[tauri::command]
+async fn assistant_save_key(
+    provider: String,
+    key: String,
+    remember: bool,
+) -> Result<Vec<assistant::Model>, assistant::ProviderError> {
+    assistant::save_key(&provider, &key, remember).await
+}
+
+#[tauri::command]
+async fn assistant_find_local() -> Result<Vec<assistant::Found>, assistant::ProviderError> {
+    assistant::find_local().await
+}
+
+#[tauri::command]
+async fn assistant_save_local(
+    address: String,
+) -> Result<assistant::Found, assistant::ProviderError> {
+    assistant::save_local(&address).await
+}
+
+#[tauri::command]
+async fn assistant_save_custom(
+    address: String,
+    api: assistant::Api,
+    key: Option<String>,
+    remember: bool,
+) -> Result<Vec<assistant::Model>, assistant::ProviderError> {
+    assistant::save_custom(&address, api, key, remember).await
+}
+
+#[tauri::command(async)]
+fn assistant_remove(provider: String) -> Result<(), String> {
+    assistant::remove(&provider)
 }
 
 /// The AI apps Settings can connect, and which are installed and connected.
@@ -1973,6 +2036,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             splash::show_main_window,
+            assistant_status,
+            assistant_set_enabled,
+            assistant_set_model,
+            assistant_models,
+            assistant_save_key,
+            assistant_find_local,
+            assistant_save_local,
+            assistant_save_custom,
+            assistant_remove,
             #[cfg(feature = "updater")]
             updater::updater_check,
             #[cfg(feature = "updater")]

@@ -196,6 +196,32 @@ until it's deleted in Settings (`gone_vaults.rs`).
 - A drawing an AI app embeds has no picture yet; the app makes it when the
   shard is opened.
 
+## AI assistant providers
+
+The assistant reaches models through providers set up in Settings > AI
+assistant (`src-tauri/src/assistant/`).
+
+- Each provider is a row in `PROVIDERS` (`providers.rs`): its API, its
+  address and where its key is kept. Local servers (Ollama, LM Studio,
+  llama.cpp) are looked for on their usual ports only when asked, and only
+  on this computer. Custom takes any address and the API it speaks.
+- Requests go through the `genai` crate, pinned to an exact version, behind
+  our own types (`models.rs`): no genai type leaves that file, so a provider
+  can move to its own adapter later. We always hand genai the address and
+  key, so it never reads its own from the environment.
+- Keys live in the shared credential store (`credentials.rs`), one entry per
+  provider, and stay in Rust: they go in a header to the provider they were
+  saved for and never back to the webview. Redirects aren't followed. A key
+  only goes to another computer over https, and a Custom key is dropped when
+  its address changes. A key is checked by listing models before it's saved.
+- Errors reach the webview as kinds (refused key, unreachable, no models),
+  never as provider text, and anything logged is scrubbed of addresses,
+  header values and key-shaped text.
+- What's known about each model (limits, thinking, images and PDFs) comes
+  from `catalog.json`, built from models.dev and LiteLLM data by
+  `scripts/ai-catalog.mjs` and shipped with the app. A model it doesn't know
+  still works, as text only.
+
 ## Subsystems with their own docs
 
 - [Attachments](ATTACHMENTS_ARCHITECTURE.md): the `_attachments/` folder,

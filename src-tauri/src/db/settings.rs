@@ -9,8 +9,10 @@ use std::path::{Path, PathBuf};
 /// Whether AI apps may use the vault through the MCP server. Off unless
 /// turned on in Settings.
 const MCP_ENABLED: &str = "mcp_enabled";
+/// Whether the assistant is on. Off unless turned on in Settings.
+const ASSISTANT_ENABLED: &str = "assistant_enabled";
 
-fn get(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+pub(crate) fn get(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     conn.query_row(
         "SELECT value FROM settings WHERE key = ?1",
         params![key],
@@ -19,13 +21,26 @@ fn get(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     .optional()
 }
 
-fn set(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
+pub(crate) fn set(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value],
     )
     .map(|_| ())
+}
+
+pub(crate) fn delete(conn: &Connection, key: &str) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM settings WHERE key = ?1", params![key])
+        .map(|_| ())
+}
+
+pub fn assistant_enabled(conn: &Connection) -> rusqlite::Result<bool> {
+    Ok(get(conn, ASSISTANT_ENABLED)?.as_deref() == Some("1"))
+}
+
+pub fn set_assistant_enabled(conn: &Connection, enabled: bool) -> rusqlite::Result<()> {
+    set(conn, ASSISTANT_ENABLED, if enabled { "1" } else { "0" })
 }
 
 pub fn mcp_enabled(conn: &Connection) -> rusqlite::Result<bool> {
@@ -154,6 +169,16 @@ mod tests {
         assert!(!mcp_enabled(&conn).unwrap());
         set_mcp_enabled(&conn, true).unwrap();
         assert!(mcp_enabled(&conn).unwrap());
+    }
+
+    #[test]
+    fn the_assistant_stays_off_until_turned_on() {
+        let conn = db();
+        assert!(!assistant_enabled(&conn).unwrap());
+        set_assistant_enabled(&conn, true).unwrap();
+        assert!(assistant_enabled(&conn).unwrap());
+        // Apart from AI apps.
+        assert!(!mcp_enabled(&conn).unwrap());
     }
 
     #[test]

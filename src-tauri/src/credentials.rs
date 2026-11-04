@@ -41,6 +41,54 @@ pub const GITHUB: Credential = Credential {
     label: "GitHub sign-in",
 };
 
+/// A key for an AI provider the assistant uses. Its names follow the
+/// provider's id, so each provider keeps its own entry.
+const fn ai_key(
+    id: &'static str,
+    keyring_service: &'static str,
+    file: &'static str,
+    label: &'static str,
+) -> Credential {
+    Credential {
+        id,
+        keyring_service,
+        keyring_user: "default",
+        file,
+        label,
+    }
+}
+
+pub const OPENAI_KEY: Credential = ai_key(
+    "ai-openai",
+    "com.netherstone.app.ai.openai",
+    "ai-openai-key",
+    "OpenAI key",
+);
+pub const ANTHROPIC_KEY: Credential = ai_key(
+    "ai-anthropic",
+    "com.netherstone.app.ai.anthropic",
+    "ai-anthropic-key",
+    "Anthropic key",
+);
+pub const GOOGLE_KEY: Credential = ai_key(
+    "ai-google",
+    "com.netherstone.app.ai.google",
+    "ai-google-key",
+    "Google key",
+);
+pub const OPENROUTER_KEY: Credential = ai_key(
+    "ai-openrouter",
+    "com.netherstone.app.ai.openrouter",
+    "ai-openrouter-key",
+    "OpenRouter key",
+);
+pub const CUSTOM_KEY: Credential = ai_key(
+    "ai-custom",
+    "com.netherstone.app.ai.custom",
+    "ai-custom-key",
+    "Custom server key",
+);
+
 /// Where a secret is kept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -562,6 +610,25 @@ mod tests {
             Ok(Some(("tok".to_string(), Storage::File)))
         );
         assert!(dir.join(GITHUB.file).exists());
+    }
+
+    #[test]
+    fn every_entry_has_its_own_names() {
+        let all = [
+            &GITHUB,
+            &OPENAI_KEY,
+            &ANTHROPIC_KEY,
+            &GOOGLE_KEY,
+            &OPENROUTER_KEY,
+            &CUSTOM_KEY,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert_ne!(a.id, b.id);
+                assert_ne!(a.keyring_service, b.keyring_service);
+                assert_ne!(a.file, b.file);
+            }
+        }
     }
 
     #[test]

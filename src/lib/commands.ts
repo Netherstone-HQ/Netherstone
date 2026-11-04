@@ -795,3 +795,130 @@ export async function connectAiApp(id: string): Promise<void> {
 export async function getMcpSetup(): Promise<string> {
   return invoke("mcp_setup");
 }
+
+// ── AI assistant ──────────────────────────────────────────────────────────────
+
+/** How an address's API is spoken. */
+export type AssistantApi =
+  | "openAi"
+  | "anthropic"
+  | "google"
+  | "openRouter"
+  | "ollama";
+
+export type KeyStorage = "keyring" | "file" | "memory";
+
+export interface AssistantModel {
+  id: string;
+  /** The name people know it by, when the catalog knows it. */
+  name?: string;
+  context?: number;
+  output?: number;
+  reasoning: boolean;
+  tools: boolean;
+  images: boolean;
+  pdfs: boolean;
+  caching: boolean;
+  responsesOnly: boolean;
+}
+
+export interface LocalServer {
+  kind: "ollama" | "lmStudio" | "llamaCpp" | "other";
+  /** Like `http://localhost:11434`. */
+  address: string;
+}
+
+export interface FoundServer extends LocalServer {
+  models: AssistantModel[];
+}
+
+export interface AssistantProvider {
+  id: string;
+  name: string;
+  setup: "key" | "local" | "custom";
+  keyPage: string | null;
+  /** Where its key is kept, once saved. */
+  key: KeyStorage | null;
+  servers: LocalServer[];
+  custom: { address: string; api: AssistantApi } | null;
+}
+
+export interface ModelChoice {
+  provider: string;
+  /** The local server's address, for a local model. */
+  server: string | null;
+  model: string;
+}
+
+export interface AssistantStatus {
+  enabled: boolean;
+  keyringAvailable: boolean;
+  model: ModelChoice | null;
+  providers: AssistantProvider[];
+}
+
+/** Why a provider couldn't be used, as the app reports it. */
+export interface ProviderError {
+  kind:
+    | "keyRefused"
+    | "unreachable"
+    | "noModels"
+    | "rateLimited"
+    | "insecure"
+    | "notLocal"
+    | "badAddress"
+    | "failed"
+    | "storage";
+}
+
+export async function getAssistantStatus(): Promise<AssistantStatus> {
+  return invoke("assistant_status");
+}
+
+export async function setAssistantEnabled(enabled: boolean): Promise<void> {
+  await invoke("assistant_set_enabled", { enabled });
+}
+
+export async function setAssistantModel(
+  choice: ModelChoice | null,
+): Promise<void> {
+  await invoke("assistant_set_model", { choice });
+}
+
+export async function listAssistantModels(
+  provider: string,
+  server: string | null = null,
+): Promise<AssistantModel[]> {
+  return invoke("assistant_models", { provider, server });
+}
+
+/** Checks the key with its provider, then saves it. */
+export async function saveAssistantKey(
+  provider: string,
+  key: string,
+  remember: boolean,
+): Promise<AssistantModel[]> {
+  return invoke("assistant_save_key", { provider, key, remember });
+}
+
+/** Looks for servers on their usual ports and keeps the ones found. */
+export async function findLocalServers(): Promise<FoundServer[]> {
+  return invoke("assistant_find_local");
+}
+
+export async function saveLocalServer(address: string): Promise<FoundServer> {
+  return invoke("assistant_save_local", { address });
+}
+
+export async function saveCustomProvider(
+  address: string,
+  api: AssistantApi,
+  key: string | null,
+  remember: boolean,
+): Promise<AssistantModel[]> {
+  return invoke("assistant_save_custom", { address, api, key, remember });
+}
+
+export async function removeAssistantProvider(provider: string): Promise<void> {
+  await invoke("assistant_remove", { provider });
+}

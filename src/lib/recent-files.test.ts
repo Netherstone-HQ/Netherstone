@@ -20,7 +20,11 @@ vi.mock("@/lib/open-vault-file", () => ({
 
 const entry = (name: string) => ({ path: `C:/Vault/${name}`, name });
 const opened = () => vi.mocked(openVaultFile).mock.calls.map(([path]) => path);
-const settle = () => new Promise((resolve) => setTimeout(resolve));
+/** Waits for every open so far, and the ones they lead to. */
+async function settle() {
+  const { results } = vi.mocked(openVaultFile).mock;
+  for (let i = 0; i < results.length; i++) await results[i].value;
+}
 
 describe("shownRecentFiles", () => {
   const files = [

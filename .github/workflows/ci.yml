@@ -42,6 +42,10 @@ jobs:
       - name: Unused code
         run: pnpm exec knip
 
+      # Tests wait on signals, never on the clock (scripts/test-sleeps.mjs).
+      - name: No sleeps in tests
+        run: node scripts/test-sleeps.mjs web
+
       - name: Test
         run: pnpm test
 
@@ -232,6 +236,11 @@ jobs:
         if: env.BUMP != 'true'
         working-directory: src-tauri
         run: cargo fmt --check
+
+      # Tests wait on signals, never on the clock (scripts/test-sleeps.mjs).
+      - name: No sleeps in tests
+        if: env.BUMP != 'true'
+        run: node scripts/test-sleeps.mjs rust
 
       - uses: Swatinem/rust-cache@v2
         if: env.BUMP != 'true'

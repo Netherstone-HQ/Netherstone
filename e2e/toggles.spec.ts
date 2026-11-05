@@ -1,13 +1,12 @@
-import { caretAfter, editor, expect, lastSave, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, pickOption, test } from "./vault";
 
 test("a toggle typed through the / menu is saved with its content", async ({ page }) => {
   await mockVault(page, { files: { "Note.md": "# Note\n\nStart\n" }, open: "Note.md" });
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await page.keyboard.type("/toggle", { delay: 40 });
-  await expect(page.getByRole("option", { name: "Toggle" })).toBeVisible();
-  await page.keyboard.press("Enter");
+  await page.keyboard.type("/toggle");
+  await pickOption(page, page.getByRole("option", { name: "Toggle", exact: true }));
   await page.keyboard.type("My toggle title");
   // A new toggle starts open, so Enter starts a line inside it.
   await page.keyboard.press("Enter");

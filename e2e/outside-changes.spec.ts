@@ -236,6 +236,12 @@ test("deleting the text under the cursor outside keeps the scroll", async ({ pag
 
   await changeOutside(page, "Long.md", `# Long\n\n${body}\n`);
   await expect(editor(page).getByText("The end.")).toHaveCount(0);
-  await page.waitForTimeout(300);
+  // The editor scrolls to a moved caret by the next frame.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
   expect(await scroller.evaluate((element: Element) => element.scrollTop)).toBe(0);
 });

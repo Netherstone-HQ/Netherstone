@@ -501,22 +501,22 @@ export async function caretAfter(page: Page, text: string) {
     .locator("[data-slate-node='element']")
     .filter({ hasText: text })
     .last();
-  await block.click();
-  // A click lands mid-text; move the caret to the block's end through the
-  // DOM selection, which the editor follows.
-  await block.evaluate((element) => {
+  await block.scrollIntoViewIfNeeded();
+  // One click on the end of the text, so the editor sees a single caret
+  // move, as when someone clicks there.
+  const end = await block.evaluate((element) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let last: Text | null = null;
-    while (walker.nextNode()) last = walker.currentNode as Text;
-    if (!last) return;
+    while (walker.nextNode()) {
+      if ((walker.currentNode as Text).length > 0) last = walker.currentNode as Text;
+    }
     const range = document.createRange();
-    range.setStart(last, last.length);
-    range.collapse(true);
-    const selection = window.getSelection()!;
-    selection.removeAllRanges();
-    selection.addRange(range);
+    range.selectNodeContents(last!);
+    const rects = range.getClientRects();
+    const rect = rects[rects.length - 1];
+    return { x: rect.right - 1, y: rect.top + rect.height / 2 };
   });
-  await page.waitForTimeout(100);
+  await page.mouse.click(end.x, end.y);
 }
 
 /** The cells of a table's first row (the row handle column is not a cell). */
@@ -535,6 +535,16 @@ export async function changeOutside(page: Page, name: string, content: string) {
     },
     { filePath: `${VAULT_PATH}/${name}`, name, content },
   );
+}
+
+/**
+ * Picks an option in an open / or @ menu with Enter, once it is the
+ * highlighted one. The menu filters as you type, so an option can show
+ * before Enter would pick it.
+ */
+export async function pickOption(page: Page, option: Locator) {
+  await expect(option).toHaveAttribute("data-active-item", "true");
+  await page.keyboard.press("Enter");
 }
 
 /** Waits for autosave and returns the content it wrote for the shard. */

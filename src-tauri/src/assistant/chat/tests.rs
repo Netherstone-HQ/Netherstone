@@ -10,8 +10,9 @@ pub struct Answer {
     pub content_type: &'static str,
     pub body: Vec<u8>,
     pub headers: String,
-    /// Sends the first `hold.0` bytes, then waits `hold.1` before the rest.
-    pub hold: Option<(usize, Duration)>,
+    /// Sends only the first `hold` bytes, then keeps the connection open
+    /// until the client hangs up.
+    pub hold: Option<usize>,
 }
 
 impl Answer {
@@ -88,12 +89,12 @@ pub fn serve(answers: Vec<Answer>) -> FakeServer {
                     answer.status, answer.content_type, answer.headers
                 );
                 match answer.hold {
-                    Some((first, wait)) => {
+                    Some(first) => {
                         let first = first.min(answer.body.len());
                         let _ = stream.write_all(&answer.body[..first]);
                         let _ = stream.flush();
-                        std::thread::sleep(wait);
-                        let _ = stream.write_all(&answer.body[first..]);
+                        // Ends when the client hangs up.
+                        let _ = reader.read_to_end(&mut Vec::new());
                     }
                     None => {
                         let _ = stream.write_all(&answer.body);
@@ -243,16 +244,12 @@ async fn refused_keys_and_offline_providers_are_reported_without_the_key() {
 #[tokio::test]
 async fn stop_ends_a_stream_at_once() {
     let mut slow = Answer::ok("text/event-stream", OPENAI_TEXT);
-    slow.hold = Some((
-        OPENAI_TEXT.find("\n\n").unwrap() + 2,
-        Duration::from_secs(30),
-    ));
+    slow.hold = Some(OPENAI_TEXT.find("\n\n").unwrap() + 2);
     let server = serve(vec![slow]);
     let stop = StopToken::default();
     let stopper = stop.clone();
     let target = server.target(Api::OpenAi, Some(KEY));
     let messages = hello();
-    let started = std::time::Instant::now();
     let error = stream(
         &target,
         &request(&messages),
@@ -266,7 +263,6 @@ async fn stop_ends_a_stream_at_once() {
     .await
     .unwrap_err();
     assert_eq!(error, ChatError::Stopped);
-    assert!(started.elapsed() < Duration::from_secs(5));
 }
 
 #[test]

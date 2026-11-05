@@ -794,5 +794,56 @@ async fn summarize(
     }
 }
 
+const TITLE_PROMPT: &str = "You name a chat between a user and the assistant of their \
+notes app, for a list of chats. Give a name of at most six words that says what the chat is \
+about, in the language of the chat, with no quotes and no full stop. Give only the name.";
+
+/// The longest piece of the chat a title is made from.
+const TITLE_PIECE: usize = 2_000;
+
+/// A short name for a chat, from its first question and answer.
+pub async fn short_title(
+    model: &Model,
+    chat: &str,
+    question: &str,
+    answer: &str,
+) -> Result<String, ChatError> {
+    let piece = |text: &str| -> String { text.chars().take(TITLE_PIECE).collect() };
+    let messages = [Message::user(format!(
+        "User: {}\n\nAssistant: {}",
+        piece(question),
+        piece(answer)
+    ))];
+    let request = Request {
+        system: TITLE_PROMPT,
+        messages: &messages,
+        tools: &[],
+        model: &model.id,
+        thinking: false,
+        cache_key: chat,
+    };
+    let reply = chat::stream(&model.target, &request, &mut |_| {}, &StopToken::default()).await?;
+    clean_title(&reply.text).ok_or(ChatError::Failed)
+}
+
+/// A model's name for a chat as a title: its first line, without the
+/// quotes, label or full stop models add anyway.
+fn clean_title(reply: &str) -> Option<String> {
+    let line = reply.lines().map(str::trim).find(|line| !line.is_empty())?;
+    let line = line
+        .strip_prefix("Title:")
+        .or_else(|| line.strip_prefix("Name:"))
+        .unwrap_or(line);
+    let quotes = |c: char| matches!(c, '"' | '\'' | '*' | '`' | '“' | '”' | '«' | '»');
+    let stops = ['.', '。'];
+    let title = line
+        .trim()
+        .trim_end_matches(stops)
+        .trim_matches(quotes)
+        .trim_end_matches(stops)
+        .trim();
+    (!title.is_empty()).then(|| title.to_string())
+}
+
 #[cfg(test)]
 mod tests;

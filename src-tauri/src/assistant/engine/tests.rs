@@ -764,3 +764,42 @@ async fn added_shards_go_with_the_message_and_count_as_read() {
         "only paths are saved"
     );
 }
+
+#[tokio::test]
+async fn a_short_title_comes_from_the_first_question_and_answer() {
+    let named = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\\"Open items before 0.7.\\\"\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+    let server = serve(vec![Answer::ok("text/event-stream", named)]);
+    let turn = turn(
+        "engine-short-title",
+        server.target(Api::OpenAi, Some(KEY)),
+        "gpt-5.5",
+    );
+    let title = short_title(
+        &turn.model,
+        &turn.chat,
+        "What's still open before the 0.7 tag?",
+        "Two things are open.",
+    )
+    .await
+    .unwrap();
+    assert_eq!(title, "Open items before 0.7");
+    let asked = &server.requests()[0];
+    assert!(
+        asked.contains("What's still open before the 0.7 tag?")
+            && asked.contains("Two things are open.")
+    );
+    assert!(!asked.contains("\"tools\""));
+}
+
+#[test]
+fn titles_lose_what_models_wrap_them_in() {
+    assert_eq!(
+        clean_title("\n Title: «Trip plans». \nmore").as_deref(),
+        Some("Trip plans")
+    );
+    assert_eq!(
+        clean_title("**Bread water**").as_deref(),
+        Some("Bread water")
+    );
+    assert_eq!(clean_title("  \n \"\" "), None);
+}

@@ -297,6 +297,11 @@ async fn assistant_chats() -> Result<Vec<assistant::ChatInfo>, assistant::ChatEr
 }
 
 #[tauri::command]
+async fn assistant_retitle(chat: String) -> Result<String, assistant::ChatError> {
+    assistant::retitle(chat).await
+}
+
+#[tauri::command]
 async fn assistant_chat(chat: String) -> Result<assistant::ChatView, assistant::ChatError> {
     assistant::chat_view(chat).await
 }
@@ -2118,6 +2123,7 @@ pub fn run() {
             assistant_stop,
             assistant_chats,
             assistant_chat,
+            assistant_retitle,
             assistant_delete_chat,
             assistant_delete_chats,
             #[cfg(feature = "updater")]

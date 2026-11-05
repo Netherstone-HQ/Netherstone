@@ -1031,6 +1031,11 @@ export async function listChats(): Promise<ChatInfo[]> {
   return invoke("assistant_chats");
 }
 
+/** Gives a new chat a short title from its first answer, and returns it. */
+export async function retitleChat(chat: string): Promise<string> {
+  return invoke("assistant_retitle", { chat });
+}
+
 export async function getChat(chat: string): Promise<ChatView> {
   return invoke("assistant_chat", { chat });
 }

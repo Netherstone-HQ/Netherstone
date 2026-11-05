@@ -143,6 +143,8 @@ type MockAssistant = {
   answer?: string[];
   /** The shards every answer reads. */
   reads?: string[];
+  /** The short title a new chat gets after its answer, if any. */
+  title?: string;
 };
 
 declare global {
@@ -514,6 +516,12 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             const found = chats.find((c) => c.id === (args as unknown as { chat: string }).chat);
             if (!found) throw { kind: "noChat" };
             return found;
+          },
+          assistant_retitle: (args) => {
+            const found = chats.find((c) => c.id === (args as unknown as { chat: string }).chat);
+            if (!found || !setup.title) throw { kind: "failed" };
+            found.title = setup.title;
+            return setup.title;
           },
           assistant_delete_chat: (args) => {
             const at = chats.findIndex((c) => c.id === (args as unknown as { chat: string }).chat);

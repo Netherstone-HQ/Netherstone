@@ -641,6 +641,32 @@ pub async fn chats() -> Result<Vec<ChatInfo>, ChatError> {
     engine::saved(&store()?, |store| store.list()).await
 }
 
+/// Gives a new chat a short name from its first question and answer, with
+/// one small call to the model. Its first title stays when that fails.
+pub async fn retitle(chat: String) -> Result<String, ChatError> {
+    let store = store()?;
+    let id = chat.clone();
+    let messages = engine::saved(&store, move |store| store.messages(&id)).await?;
+    let question = messages.iter().find_map(|saved| match &saved.message {
+        Message::User { text, .. } => Some(text.clone()),
+        _ => None,
+    });
+    let answer = messages.iter().find_map(|saved| match &saved.message {
+        Message::Assistant { text, .. } if !text.trim().is_empty() => Some(text.clone()),
+        _ => None,
+    });
+    let (Some(question), Some(answer)) = (question, answer) else {
+        return Err(ChatError::Failed);
+    };
+    let model = tauri::async_runtime::spawn_blocking(picked_model)
+        .await
+        .map_err(|_| ChatError::Failed)??;
+    let title = engine::short_title(&model, &chat, &question, &answer).await?;
+    let kept = title.clone();
+    engine::saved(&store, move |store| store.set_title(&chat, &kept)).await?;
+    Ok(sessions::title_of(&title))
+}
+
 pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
     let found = engine::saved(&store()?, move |store| {
         Ok(store.info(&chat)?.map(|info| (info, store.messages(&chat))))

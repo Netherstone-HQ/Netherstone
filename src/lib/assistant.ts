@@ -5,6 +5,7 @@ import {
   deleteChat,
   getAssistantStatus,
   getChat,
+  retitleChat,
   sendChat,
   stopChat,
 } from "@/lib/commands";
@@ -150,6 +151,8 @@ export async function sendMessage(text: string, shards: string[]) {
       answering: null,
       ending,
     });
+    // A new chat that got its answer gets a short title, without waiting.
+    if (state.chat === null && ending === null) void retitle(id);
   } catch (error) {
     if (run !== followed) return;
     // Nothing was saved: the message goes back to the box.
@@ -161,6 +164,16 @@ export async function sendMessage(text: string, shards: string[]) {
       answering: null,
       ending: { kind: "error", error: chatErrorKind(error) },
     });
+  }
+}
+
+async function retitle(id: string) {
+  try {
+    const title = await retitleChat(id);
+    const { chat } = store.getState();
+    if (chat?.id === id) store.setState({ chat: { id, title } });
+  } catch {
+    // The first message's start stays the title.
   }
 }
 

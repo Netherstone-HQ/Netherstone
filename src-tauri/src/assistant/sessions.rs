@@ -78,8 +78,8 @@ pub fn path() -> Result<PathBuf, String> {
     Ok(crate::db::get_db_path()?.with_file_name("assistant.db"))
 }
 
-/// A chat's title: the start of its first message, on one line.
-fn title_of(text: &str) -> String {
+/// A chat's title: the start of `text`, on one line.
+pub fn title_of(text: &str) -> String {
     let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
     match line.char_indices().nth(TITLE_LENGTH) {
         Some((end, _)) => format!("{}…", line[..end].trim_end()),
@@ -234,6 +234,17 @@ impl Store {
         })
     }
 
+    /// Gives the chat a new title, cut like the first one.
+    pub fn set_title(&self, chat: &str, title: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE chats SET title = ?2 WHERE id = ?1",
+                params![chat, title_of(title)],
+            )
+            .map_err(sql)?;
+        Ok(())
+    }
+
     pub fn set_summary(&self, chat: &str, summary: &Summary) -> Result<(), String> {
         self.conn
             .execute(
@@ -338,6 +349,17 @@ mod tests {
     fn long_titles_are_cut() {
         let title = title_of(&"word ".repeat(40));
         assert!(title.ends_with('…') && title.chars().count() <= TITLE_LENGTH + 1);
+    }
+
+    #[test]
+    fn a_chat_can_be_renamed() {
+        let store = store("sessions-rename");
+        let chat = store.create(Path::new("/v"), "What's still open?").unwrap();
+        store.set_title(&chat, "Open items\nbefore 0.7").unwrap();
+        assert_eq!(
+            store.info(&chat).unwrap().unwrap().title,
+            "Open items before 0.7"
+        );
     }
 
     #[test]

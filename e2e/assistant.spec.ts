@@ -93,6 +93,20 @@ test("answers with the open shard, cited", async ({ page }) => {
   await expect(editor(page)).toContainText("Lisbon");
 });
 
+test("names a new chat after its first answer", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, title: "Lisbon trip" },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText("Lisbon trip");
+  await assistant.getByRole("button", { name: "Chats" }).click();
+  await expect(page.getByRole("menuitem", { name: /Lisbon trip/ })).toBeVisible();
+});
+
 test("adds shards with @", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
   await page.getByRole("button", { name: "Show assistant" }).click();

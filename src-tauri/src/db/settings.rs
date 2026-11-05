@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 const MCP_ENABLED: &str = "mcp_enabled";
 /// Whether the assistant is on. Off unless turned on in Settings.
 const ASSISTANT_ENABLED: &str = "assistant_enabled";
+/// Whether a shard's images and PDFs go to the assistant's model with it.
+const ASSISTANT_SEND_FILES: &str = "assistant_send_files";
 
 pub(crate) fn get(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     conn.query_row(
@@ -41,6 +43,14 @@ pub fn assistant_enabled(conn: &Connection) -> rusqlite::Result<bool> {
 
 pub fn set_assistant_enabled(conn: &Connection, enabled: bool) -> rusqlite::Result<()> {
     set(conn, ASSISTANT_ENABLED, if enabled { "1" } else { "0" })
+}
+
+pub fn assistant_send_files(conn: &Connection) -> rusqlite::Result<bool> {
+    Ok(get(conn, ASSISTANT_SEND_FILES)?.as_deref() == Some("1"))
+}
+
+pub fn set_assistant_send_files(conn: &Connection, on: bool) -> rusqlite::Result<()> {
+    set(conn, ASSISTANT_SEND_FILES, if on { "1" } else { "0" })
 }
 
 pub fn mcp_enabled(conn: &Connection) -> rusqlite::Result<bool> {
@@ -175,6 +185,9 @@ mod tests {
     fn the_assistant_stays_off_until_turned_on() {
         let conn = db();
         assert!(!assistant_enabled(&conn).unwrap());
+        assert!(!assistant_send_files(&conn).unwrap());
+        set_assistant_send_files(&conn, true).unwrap();
+        assert!(assistant_send_files(&conn).unwrap());
         set_assistant_enabled(&conn, true).unwrap();
         assert!(assistant_enabled(&conn).unwrap());
         // Apart from AI apps.

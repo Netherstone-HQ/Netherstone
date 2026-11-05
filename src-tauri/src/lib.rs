@@ -201,6 +201,11 @@ fn assistant_set_enabled(enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command(async)]
+fn assistant_set_send_files(on: bool) -> Result<(), String> {
+    assistant::set_send_files(on)
+}
+
+#[tauri::command(async)]
 fn assistant_set_model(choice: Option<assistant::ModelChoice>) -> Result<(), String> {
     assistant::set_model(choice)
 }
@@ -2093,6 +2098,7 @@ pub fn run() {
             splash::show_main_window,
             assistant_status,
             assistant_set_enabled,
+            assistant_set_send_files,
             assistant_set_model,
             assistant_models,
             assistant_save_key,

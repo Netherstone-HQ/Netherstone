@@ -95,7 +95,7 @@ fn normalize_slashes(value: &str) -> String {
     value.replace('\\', "/")
 }
 
-fn normalize_attachment_path(value: &str) -> Option<String> {
+pub(crate) fn normalize_attachment_path(value: &str) -> Option<String> {
     let stripped = value
         .split('#')
         .next()
@@ -365,7 +365,7 @@ fn html_reference_kind(html: &str) -> AttachmentReferenceKind {
     }
 }
 
-fn extract_html_attr_value(html: &str, attr_name: &str) -> Option<String> {
+pub(crate) fn extract_html_attr_value(html: &str, attr_name: &str) -> Option<String> {
     let lower_html = html.to_ascii_lowercase();
     let lower_attr = attr_name.to_ascii_lowercase();
     let mut search_start = 0;

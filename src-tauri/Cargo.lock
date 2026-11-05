@@ -6,6 +6,7 @@ version = 4
 name = "Netherstone"
 version = "0.6.0-beta.5"
 dependencies = [
+ "base64 0.23.1",
  "blake3",
  "chrono",
  "dirs",

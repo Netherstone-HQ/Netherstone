@@ -11,8 +11,8 @@ use super::providers::Api;
 use futures_util::StreamExt;
 use genai::adapter::AdapterKind;
 use genai::chat::{
-    CacheControl, ChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent, ContentPart,
-    CustomPart, MessageContent, ReasoningEffort, StopReason, ToolCall, ToolResponse,
+    Binary, CacheControl, ChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
+    ContentPart, CustomPart, MessageContent, ReasoningEffort, StopReason, ToolCall, ToolResponse,
 };
 use genai::resolver::{AuthData, Endpoint};
 use genai::{ModelIden, ModelSpec, ServiceTarget};
@@ -41,7 +41,25 @@ pub enum Message {
     },
     Tool {
         results: Vec<CallResult>,
+        /// Images and PDFs from the shards read, sent after the results.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        files: Vec<File>,
     },
+}
+
+/// A file from the vault that goes with a tool's results. Only where it is
+/// is saved; its data is read again for each request.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct File {
+    /// Vault-relative.
+    pub path: String,
+    pub mime: String,
+    /// About how many tokens a model reads for it.
+    pub tokens: u64,
+    /// Base64, once read for a request. None when it isn't sent.
+    #[serde(skip)]
+    pub data: Option<Arc<str>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -495,62 +513,91 @@ fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatReques
     let messages = request
         .messages
         .iter()
-        .filter_map(|message| match message {
-            Message::User { text } => Some(ChatMessage::user(text.as_str())),
-            Message::Assistant {
-                text,
-                calls,
-                reasoning,
-            } => {
-                // Reasoning goes back only to the family it came from.
-                let same = reasoning.as_ref().filter(|r| r.family == family);
-                let mut parts: Vec<ContentPart> = same
-                    .map(|reasoning| {
-                        reasoning
-                            .parts
-                            .iter()
-                            .map(|part| match part {
-                                ReasoningPart::Text(text) => {
-                                    ContentPart::ReasoningContent(text.clone())
-                                }
-                                ReasoningPart::Signature(sig) => {
-                                    ContentPart::ThoughtSignature(sig.clone())
-                                }
-                                ReasoningPart::Block(data) => ContentPart::Custom(CustomPart {
-                                    model_iden: Some(iden.clone()),
-                                    data: data.clone(),
-                                }),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if !text.is_empty() {
-                    parts.push(ContentPart::Text(text.clone()));
-                }
-                parts.extend(calls.iter().map(|call| {
-                    ContentPart::ToolCall(ToolCall {
-                        call_id: call.id.clone(),
-                        fn_name: call.name.clone(),
-                        fn_arguments: call.arguments.clone(),
-                        thought_signatures: (same.is_some() && !call.signatures.is_empty())
-                            .then(|| call.signatures.clone()),
-                    })
-                }));
-                Some(ChatMessage::assistant(MessageContent::from_parts(parts)))
-                    .filter(|message| !message.content.is_empty())
-            }
-            Message::Tool { results } => Some(ChatMessage::new(
-                ChatRole::Tool,
-                MessageContent::from_tool_responses(
-                    results
-                        .iter()
-                        .map(|result| {
-                            ToolResponse::new(result.id.clone(), result.output.clone())
-                                .with_fn_name(result.name.clone())
+        .flat_map(|message| -> Vec<ChatMessage> {
+            match message {
+                Message::User { text } => vec![ChatMessage::user(text.as_str())],
+                Message::Assistant {
+                    text,
+                    calls,
+                    reasoning,
+                } => {
+                    // Reasoning goes back only to the family it came from.
+                    let same = reasoning.as_ref().filter(|r| r.family == family);
+                    let mut parts: Vec<ContentPart> = same
+                        .map(|reasoning| {
+                            reasoning
+                                .parts
+                                .iter()
+                                .map(|part| match part {
+                                    ReasoningPart::Text(text) => {
+                                        ContentPart::ReasoningContent(text.clone())
+                                    }
+                                    ReasoningPart::Signature(sig) => {
+                                        ContentPart::ThoughtSignature(sig.clone())
+                                    }
+                                    ReasoningPart::Block(data) => ContentPart::Custom(CustomPart {
+                                        model_iden: Some(iden.clone()),
+                                        data: data.clone(),
+                                    }),
+                                })
+                                .collect()
                         })
-                        .collect(),
-                ),
-            )),
+                        .unwrap_or_default();
+                    if !text.is_empty() {
+                        parts.push(ContentPart::Text(text.clone()));
+                    }
+                    parts.extend(calls.iter().map(|call| {
+                        ContentPart::ToolCall(ToolCall {
+                            call_id: call.id.clone(),
+                            fn_name: call.name.clone(),
+                            fn_arguments: call.arguments.clone(),
+                            thought_signatures: (same.is_some() && !call.signatures.is_empty())
+                                .then(|| call.signatures.clone()),
+                        })
+                    }));
+                    let message = ChatMessage::assistant(MessageContent::from_parts(parts));
+                    if message.content.is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![message]
+                    }
+                }
+                Message::Tool { results, files } => {
+                    let mut messages = vec![ChatMessage::new(
+                        ChatRole::Tool,
+                        MessageContent::from_tool_responses(
+                            results
+                                .iter()
+                                .map(|result| {
+                                    ToolResponse::new(result.id.clone(), result.output.clone())
+                                        .with_fn_name(result.name.clone())
+                                })
+                                .collect(),
+                        ),
+                    )];
+                    // Not every provider takes files in a tool result, so they
+                    // follow it as the user's.
+                    let sent: Vec<ContentPart> = files
+                        .iter()
+                        .filter_map(|file| {
+                            let data = file.data.clone()?;
+                            Some(ContentPart::Binary(Binary::from_base64(
+                                file.mime.clone(),
+                                data,
+                                Some(file.path.clone()),
+                            )))
+                        })
+                        .collect();
+                    if !sent.is_empty() {
+                        let mut parts = vec![ContentPart::Text(
+                            "The images and PDFs of the shards just read:".to_string(),
+                        )];
+                        parts.extend(sent);
+                        messages.push(ChatMessage::user(MessageContent::from_parts(parts)));
+                    }
+                    messages
+                }
+            }
         })
         .collect();
     let mut chat = ChatRequest::new(messages).with_system(request.system);

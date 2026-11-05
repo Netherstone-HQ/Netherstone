@@ -456,14 +456,11 @@ mod tests {
 
     #[tokio::test]
     async fn an_address_with_nothing_running_is_unreachable() {
-        let port = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
+        // Port 0 can't take a connection, so nothing running in parallel
+        // can answer there.
         let target = Target {
             api: Api::OpenAi,
-            base_url: format!("http://127.0.0.1:{port}/v1/"),
+            base_url: "http://127.0.0.1:0/v1/".to_string(),
             key: Some(KEY.to_string()),
         };
         assert_eq!(list(&target).await.unwrap_err(), ProviderError::Unreachable);

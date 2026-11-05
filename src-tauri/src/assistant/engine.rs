@@ -6,10 +6,12 @@
 
 use super::catalog::Facts;
 use super::chat::{
-    self, Call, CallResult, ChatError, Delta, Message, Request, Stop, StopToken, ToolSpec, Usage,
+    self, Call, CallResult, ChatError, Delta, File, Message, Request, Stop, StopToken, ToolSpec,
+    Usage,
 };
+use super::files;
 use super::models::Target;
-use super::providers::Api;
+use super::providers::{Api, Limits};
 use super::sessions::{Saved, Store, Summary};
 use crate::tools::{self, Caller, Tool, Vault};
 use serde::Serialize;
@@ -149,6 +151,8 @@ pub struct Turn {
     pub stop: StopToken,
     /// Whether the assistant may still use the vault, asked before tools run.
     pub allowed: Arc<dyn Fn() -> bool + Send + Sync>,
+    /// The send-images-and-PDFs switch.
+    pub send_files: bool,
 }
 
 /// Batches streamed text into events, and stops the chat when nobody's
@@ -234,25 +238,26 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
                 Some(room) => room,
                 None => load(&turn.store, &chat_id).await?,
             };
-        let system = with_summary(&system, summary.as_ref());
-        let messages = answered(history.into_iter().map(|saved| saved.message).collect());
-        let request = Request {
-            system: &system,
-            messages: &messages,
-            tools: &specs,
-            model: &turn.model.id,
-            thinking: turn.model.facts.reasoning,
-            cache_key: &chat_id,
-        };
-
-        out.step_text.clear();
-        let result = chat::stream(
-            &turn.model.target,
-            &request,
-            &mut |delta| out.delta(delta),
-            &turn.stop,
+        let mut system = with_summary(&system, summary.as_ref());
+        let mut messages = with_files(
+            turn,
+            answered(history.into_iter().map(|saved| saved.message).collect()),
+            system.len() as u64,
         )
         .await;
+
+        out.step_text.clear();
+        let mut result = stream_step(turn, &system, &messages, &specs, &mut out).await;
+        // A provider may turn down a file, like a PDF with too many pages:
+        // the step goes again without them, and the model is told.
+        if matches!(result, Err(ChatError::Failed | ChatError::TooLong))
+            && files::any_sent(&messages)
+            && out.step_text.is_empty()
+        {
+            files::without_data(&mut messages);
+            system.push_str(FILES_REFUSED);
+            result = stream_step(turn, &system, &messages, &specs, &mut out).await;
+        }
         out.flush();
         let reply = match result {
             Ok(reply) => reply,
@@ -299,9 +304,9 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         {
             return Err(ChatError::VaultClosed);
         }
-        let results = run_calls(turn, &tools, &calls, over, &mut out, &mut sources).await;
+        let (results, files) = run_calls(turn, &tools, &calls, over, &mut out, &mut sources).await;
         let chat = chat_id.clone();
-        let message = Message::Tool { results };
+        let message = Message::Tool { results, files };
         saved(&turn.store, move |store| {
             store.add(&chat, &message, &[], None).map(|_| ())
         })
@@ -312,6 +317,58 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         }
     }
     Ok((Stop::Done, usage))
+}
+
+const FILES_REFUSED: &str = "\n\nThe provider turned down the images and PDFs of \
+this chat, so they weren't sent this time. If the answer needs them, tell the user.";
+
+async fn stream_step(
+    turn: &Turn,
+    system: &str,
+    messages: &[Message],
+    specs: &[ToolSpec],
+    out: &mut Out<'_>,
+) -> Result<chat::Reply, ChatError> {
+    let request = Request {
+        system,
+        messages,
+        tools: specs,
+        model: &turn.model.id,
+        thinking: turn.model.facts.reasoning,
+        cache_key: &turn.chat,
+    };
+    chat::stream(
+        &turn.model.target,
+        &request,
+        &mut |delta| out.delta(delta),
+        &turn.stop,
+    )
+    .await
+}
+
+/// `messages` with their files' data read, off the async threads.
+async fn with_files(turn: &Turn, mut messages: Vec<Message>, system_bytes: u64) -> Vec<Message> {
+    let has_files = messages
+        .iter()
+        .any(|m| matches!(m, Message::Tool { files, .. } if !files.is_empty()));
+    if !turn.send_files || !has_files {
+        return messages;
+    }
+    let root = turn.vault.root.clone();
+    let limits = Limits::of(turn.model.target.api);
+    let text_bytes = system_bytes
+        + messages
+            .iter()
+            .map(|m| serde_json::to_string(m).map_or(0, |json| json.len() as u64))
+            .sum::<u64>();
+    let plain = messages.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        files::load(&root, &mut messages, &limits, text_bytes);
+        messages
+    })
+    .await
+    // Without its files rather than without the chat.
+    .unwrap_or(plain)
 }
 
 /// Saves what streamed of an answer that was stopped.
@@ -339,8 +396,9 @@ async fn run_calls(
     over: bool,
     out: &mut Out<'_>,
     sources: &mut Vec<String>,
-) -> Vec<CallResult> {
+) -> (Vec<CallResult>, Vec<File>) {
     let mut results = Vec::new();
+    let mut files: Vec<File> = Vec::new();
     for call in calls {
         let output = if over {
             "Not run: the answer reached its step limit.".to_string()
@@ -352,7 +410,7 @@ async fn run_calls(
                 paths: paths_in(&call.arguments),
             });
             match run_tool(turn, tools, call).await {
-                Ok(output) => {
+                Ok(mut output) => {
                     if matches!(call.name.as_str(), "read" | "read_drawing") {
                         let before = sources.len();
                         for path in paths_in(&call.arguments) {
@@ -366,6 +424,18 @@ async fn run_calls(
                             });
                         }
                     }
+                    if call.name == "read" {
+                        let (found, note) = shard_files(turn, &call.arguments).await;
+                        for file in found {
+                            if !files.iter().any(|f| f.path == file.path) {
+                                files.push(file);
+                            }
+                        }
+                        if let Some(note) = note {
+                            output.push_str("\n\n");
+                            output.push_str(&note);
+                        }
+                    }
                     output
                 }
                 Err(error) => format!("Error: {error}"),
@@ -377,7 +447,34 @@ async fn run_calls(
             output,
         });
     }
-    results
+    (results, files)
+}
+
+/// The images, drawings and PDFs of the shards a read named that go to the
+/// model, and what the model is told about them.
+async fn shard_files(turn: &Turn, arguments: &Value) -> (Vec<File>, Option<String>) {
+    let vault = turn.vault.clone();
+    let shards = paths_in(arguments);
+    let sending = files::Sending::new(turn.send_files, turn.model.target.api, &turn.model.facts);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut sent = Vec::new();
+        let mut notes = Vec::new();
+        for shard in shards {
+            let Ok(path) = vault.resolve(&shard) else {
+                continue;
+            };
+            let Ok(markdown) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let (found, note) =
+                files::choose(&vault.root, &shard, files::in_shard(&markdown), &sending);
+            sent.extend(found);
+            notes.extend(note);
+        }
+        (sent, (!notes.is_empty()).then(|| notes.join("\n")))
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// The paths a call names.
@@ -457,12 +554,13 @@ fn answered(messages: Vec<Message>) -> Vec<Message> {
     let mut out: Vec<Message> = Vec::with_capacity(messages.len());
     let mut open: Vec<Call> = Vec::new();
     for mut message in messages {
-        if let Message::Tool { results } = &mut message {
+        if let Message::Tool { results, .. } = &mut message {
             open.retain(|call| results.iter().all(|result| result.id != call.id));
             results.extend(not_run(std::mem::take(&mut open)));
         } else if !open.is_empty() {
             out.push(Message::Tool {
                 results: not_run(std::mem::take(&mut open)).collect(),
+                files: Vec::new(),
             });
         }
         if let Message::Assistant { calls, .. } = &message {
@@ -473,6 +571,7 @@ fn answered(messages: Vec<Message>) -> Vec<Message> {
     if !open.is_empty() {
         out.push(Message::Tool {
             results: not_run(open).collect(),
+            files: Vec::new(),
         });
     }
     out
@@ -528,7 +627,14 @@ fn tokens_of(
         .iter()
         .map(|saved| serde_json::to_string(&saved.message).map_or(0, |json| json.len()))
         .sum();
-    estimate(system.len() + tools + summary.map_or(0, |s| s.text.len()) + messages)
+    let files: u64 = history
+        .iter()
+        .filter_map(|saved| match &saved.message {
+            Message::Tool { files, .. } => Some(files.iter().map(|f| f.tokens).sum::<u64>()),
+            _ => None,
+        })
+        .sum();
+    estimate(system.len() + tools + summary.map_or(0, |s| s.text.len()) + messages) + files
 }
 
 /// Where older messages end: before a user message, keeping the latest
@@ -601,7 +707,7 @@ async fn summarize(
                     ));
                 }
             }
-            Message::Tool { results } => {
+            Message::Tool { results, .. } => {
                 for result in results {
                     transcript.push_str(&format!(
                         "{} gave: {}\n\n",

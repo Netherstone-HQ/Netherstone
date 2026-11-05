@@ -1,4 +1,5 @@
 mod ai_apps;
+mod ai_vaults;
 mod asset_scope;
 mod assistant;
 mod browser;
@@ -248,6 +249,54 @@ async fn assistant_save_custom(
 #[tauri::command(async)]
 fn assistant_remove(provider: String) -> Result<(), String> {
     assistant::remove(&provider)
+}
+
+/// Streams a chat's events to the webview, until it stops listening.
+struct ChatEvents(tauri::ipc::Channel<assistant::Event>);
+
+impl assistant::Sink for ChatEvents {
+    fn send(&self, event: assistant::Event) -> bool {
+        self.0.send(event).is_ok()
+    }
+}
+
+/// Sends a message in a chat, or starts one about `vault`, streaming the
+/// answer over `events`. Gives the chat's id.
+#[tauri::command]
+async fn assistant_send(
+    window: tauri::Window,
+    chat: Option<String>,
+    vault: String,
+    text: String,
+    events: tauri::ipc::Channel<assistant::Event>,
+) -> Result<String, assistant::ChatError> {
+    let label = window.label().to_string();
+    assistant::send(chat, vault, text, label, ChatEvents(events)).await
+}
+
+#[tauri::command(async)]
+fn assistant_stop(chat: String) {
+    assistant::stop(&chat)
+}
+
+#[tauri::command]
+async fn assistant_chats() -> Result<Vec<assistant::ChatInfo>, assistant::ChatError> {
+    assistant::chats().await
+}
+
+#[tauri::command]
+async fn assistant_chat(chat: String) -> Result<assistant::ChatView, assistant::ChatError> {
+    assistant::chat_view(chat).await
+}
+
+#[tauri::command]
+async fn assistant_delete_chat(chat: String) -> Result<(), assistant::ChatError> {
+    assistant::delete_chat(chat).await
+}
+
+#[tauri::command]
+async fn assistant_delete_chats() -> Result<(), assistant::ChatError> {
+    assistant::delete_chats().await
 }
 
 /// The AI apps Settings can connect, and which are installed and connected.
@@ -2029,9 +2078,15 @@ pub fn run() {
             std::thread::spawn(open_source::remove_leftovers);
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::ScaleFactorChanged { .. } = event {
-                window_icon::apply(window);
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::ScaleFactorChanged { .. } => window_icon::apply(window),
+            // A chat stops with the window it streams to.
+            tauri::WindowEvent::Destroyed => assistant::stop_window(window.label()),
+            _ => {}
+        })
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                assistant::stop_window(webview.window().label());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -2045,6 +2100,12 @@ pub fn run() {
             assistant_save_local,
             assistant_save_custom,
             assistant_remove,
+            assistant_send,
+            assistant_stop,
+            assistant_chats,
+            assistant_chat,
+            assistant_delete_chat,
+            assistant_delete_chats,
             #[cfg(feature = "updater")]
             updater::updater_check,
             #[cfg(feature = "updater")]

@@ -1,0 +1,632 @@
+//! The assistant's loop: send the chat, stream the answer, run the vault
+//! tools the model calls, and go again until it answers, within a step
+//! limit. Only read tools in this version, checked here and not left to
+//! the model. Shards it reads are the answer's sources. A chat that grows
+//! near the model's limit has its older messages summarized first.
+
+use super::catalog::Facts;
+use super::chat::{
+    self, Call, CallResult, ChatError, Delta, Message, Request, Stop, StopToken, ToolSpec, Usage,
+};
+use super::models::Target;
+use super::providers::Api;
+use super::sessions::{Saved, Store, Summary};
+use crate::tools::{self, Caller, Tool, Vault};
+use serde::Serialize;
+use serde_json::Value;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+/// What the webview hears while a chat answers, in order.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum Event {
+    /// The chat this answer belongs to, first.
+    Chat {
+        id: String,
+    },
+    Text {
+        text: String,
+    },
+    Reasoning {
+        text: String,
+    },
+    /// A tool started, with the shards or folders it's about.
+    Tool {
+        name: String,
+        paths: Vec<String>,
+    },
+    /// The shards read so far.
+    Sources {
+        shards: Vec<String>,
+    },
+    /// Older messages were summarized to make room.
+    Summarized,
+    Done {
+        stop: Stop,
+        usage: Usage,
+    },
+    /// The model kept calling tools past the step limit.
+    StepLimit,
+    Failed {
+        error: ChatError,
+    },
+    Stopped,
+}
+
+/// Where events go. False once nobody's listening, which stops the chat.
+pub trait Sink: Send + Sync {
+    fn send(&self, event: Event) -> bool;
+}
+
+/// The model a chat talks to.
+#[derive(Clone)]
+pub struct Model {
+    pub target: Target,
+    pub id: String,
+    pub facts: Facts,
+}
+
+pub type SharedStore = Arc<Mutex<Store>>;
+
+/// Runs `work` on the saved chats, off the async threads.
+pub async fn saved<T: Send + 'static>(
+    store: &SharedStore,
+    work: impl FnOnce(&Store) -> Result<T, String> + Send + 'static,
+) -> Result<T, ChatError> {
+    let store = store.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = store
+            .lock()
+            .map_err(|_| "Saved chats are locked".to_string())?;
+        work(&store)
+    })
+    .await
+    .map_err(|_| ChatError::Storage)?
+    .map_err(|error| {
+        eprintln!("[Netherstone] {error}");
+        ChatError::Storage
+    })
+}
+
+/// Model calls in one answer, tool rounds included.
+pub const MAX_STEPS: usize = 12;
+/// A tool's output longer than this is cut, so one read can't fill the chat.
+const MAX_TOOL_OUTPUT: usize = 60_000;
+/// Text is sent in small batches rather than token by token.
+const BATCH_BYTES: usize = 256;
+const BATCH_WAIT: Duration = Duration::from_millis(50);
+
+/// The tools the assistant may call in this version.
+const READ_TOOLS: [&str; 7] = [
+    "search",
+    "list_folder",
+    "read",
+    "links",
+    "list_tags",
+    "read_drawing",
+    "vault_overview",
+];
+
+pub fn tools() -> Vec<Tool> {
+    tools::all()
+        .into_iter()
+        .filter(|tool| tool.read_only && READ_TOOLS.contains(&tool.name))
+        .collect()
+}
+
+fn specs(tools: &[Tool]) -> Vec<ToolSpec> {
+    tools
+        .iter()
+        .map(|tool| ToolSpec {
+            name: tool.name.to_string(),
+            description: tool.description.clone(),
+            schema: Value::Object(tool.input_schema.clone()),
+        })
+        .collect()
+}
+
+fn system_prompt(vault: &str) -> String {
+    format!(
+        "You are the assistant in Netherstone, an app where the user keeps shards \
+(Markdown notes) in a vault, a folder on their computer. This chat is about the vault \
+\"{vault}\". Answer from the vault: search and read shards with the tools before \
+answering about the user's notes, and never guess what they say. Cite the shards you \
+used as Markdown links to their vault paths, like [Trip plan](Travel/Trip%20plan.md). \
+You can only read in this version: you can't create, change or move anything. Reply in \
+the language the user writes in, and keep answers short unless asked for more. Today \
+is {}.",
+        chrono::Local::now().format("%Y-%m-%d")
+    )
+}
+
+/// One answer in a chat whose user message is already saved.
+pub struct Turn {
+    pub store: SharedStore,
+    pub chat: String,
+    pub vault: Arc<Vault>,
+    pub model: Model,
+    pub stop: StopToken,
+    /// Whether the assistant may still use the vault, asked before tools run.
+    pub allowed: Arc<dyn Fn() -> bool + Send + Sync>,
+}
+
+/// Batches streamed text into events, and stops the chat when nobody's
+/// listening anymore.
+struct Out<'a> {
+    sink: &'a dyn Sink,
+    stop: &'a StopToken,
+    text: String,
+    reasoning: String,
+    last: Instant,
+    /// All the text of the step streaming now.
+    step_text: String,
+}
+
+impl<'a> Out<'a> {
+    fn new(sink: &'a dyn Sink, stop: &'a StopToken) -> Self {
+        Self {
+            sink,
+            stop,
+            text: String::new(),
+            reasoning: String::new(),
+            last: Instant::now(),
+            step_text: String::new(),
+        }
+    }
+
+    fn send(&self, event: Event) {
+        if !self.sink.send(event) {
+            self.stop.stop();
+        }
+    }
+
+    fn delta(&mut self, delta: Delta) {
+        match delta {
+            Delta::Text(text) => {
+                self.text.push_str(text);
+                self.step_text.push_str(text);
+            }
+            Delta::Reasoning(text) => self.reasoning.push_str(text),
+        }
+        if self.text.len() + self.reasoning.len() >= BATCH_BYTES
+            || self.last.elapsed() >= BATCH_WAIT
+        {
+            self.flush();
+        }
+    }
+
+    fn flush(&mut self) {
+        self.last = Instant::now();
+        if !self.reasoning.is_empty() {
+            let text = std::mem::take(&mut self.reasoning);
+            self.send(Event::Reasoning { text });
+        }
+        if !self.text.is_empty() {
+            let text = std::mem::take(&mut self.text);
+            self.send(Event::Text { text });
+        }
+    }
+}
+
+pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatError> {
+    let tools = Arc::new(tools());
+    let specs = specs(&tools);
+    let vault_name = turn
+        .vault
+        .root
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let system = system_prompt(&vault_name);
+    let mut out = Out::new(sink, &turn.stop);
+    let mut sources: Vec<String> = Vec::new();
+    let mut usage = Usage::default();
+    let chat_id = turn.chat.clone();
+
+    for step in 0..MAX_STEPS {
+        if turn.stop.is_stopped() {
+            return Err(ChatError::Stopped);
+        }
+        let (summary, history) = load(&turn.store, &chat_id).await?;
+        let (summary, history) =
+            match make_room(turn, &system, &specs, summary, history, &mut out).await? {
+                Some(room) => room,
+                None => load(&turn.store, &chat_id).await?,
+            };
+        let system = with_summary(&system, summary.as_ref());
+        let messages = answered(history.into_iter().map(|saved| saved.message).collect());
+        let request = Request {
+            system: &system,
+            messages: &messages,
+            tools: &specs,
+            model: &turn.model.id,
+            thinking: turn.model.facts.reasoning,
+            cache_key: &chat_id,
+        };
+
+        out.step_text.clear();
+        let result = chat::stream(
+            &turn.model.target,
+            &request,
+            &mut |delta| out.delta(delta),
+            &turn.stop,
+        )
+        .await;
+        out.flush();
+        let reply = match result {
+            Ok(reply) => reply,
+            Err(error) => {
+                // What streamed before a stop stays in the chat.
+                if error == ChatError::Stopped {
+                    keep_partial(turn, std::mem::take(&mut out.step_text)).await?;
+                }
+                return Err(error);
+            }
+        };
+        usage.input += reply.usage.input;
+        usage.output += reply.usage.output;
+
+        let calls = reply.calls.clone();
+        let done = calls.is_empty();
+        // An empty answer isn't kept: providers refuse empty messages.
+        if done && reply.text.is_empty() {
+            return Ok((reply.stop, usage));
+        }
+        let message = Message::Assistant {
+            text: reply.text.clone(),
+            calls: reply.calls,
+            reasoning: reply.reasoning,
+        };
+        let cited = if done { sources.clone() } else { Vec::new() };
+        let model = turn.model.id.clone();
+        let chat = chat_id.clone();
+        saved(&turn.store, move |store| {
+            store.add(&chat, &message, &cited, Some(&model)).map(|_| ())
+        })
+        .await?;
+        if done {
+            return Ok((reply.stop, usage));
+        }
+
+        // Past the limit, the calls are answered as not run, so the chat
+        // stays one a provider takes.
+        let over = step + 1 == MAX_STEPS;
+        let allowed = turn.allowed.clone();
+        if !tauri::async_runtime::spawn_blocking(move || allowed())
+            .await
+            .unwrap_or(false)
+        {
+            return Err(ChatError::VaultClosed);
+        }
+        let results = run_calls(turn, &tools, &calls, over, &mut out, &mut sources).await;
+        let chat = chat_id.clone();
+        let message = Message::Tool { results };
+        saved(&turn.store, move |store| {
+            store.add(&chat, &message, &[], None).map(|_| ())
+        })
+        .await?;
+        if over {
+            out.send(Event::StepLimit);
+            return Ok((Stop::Done, usage));
+        }
+    }
+    Ok((Stop::Done, usage))
+}
+
+/// Saves what streamed of an answer that was stopped.
+async fn keep_partial(turn: &Turn, text: String) -> Result<(), ChatError> {
+    if text.trim().is_empty() {
+        return Ok(());
+    }
+    let chat = turn.chat.clone();
+    let model = turn.model.id.clone();
+    saved(&turn.store, move |store| {
+        let message = Message::Assistant {
+            text,
+            calls: Vec::new(),
+            reasoning: None,
+        };
+        store.add(&chat, &message, &[], Some(&model)).map(|_| ())
+    })
+    .await
+}
+
+async fn run_calls(
+    turn: &Turn,
+    tools: &Arc<Vec<Tool>>,
+    calls: &[Call],
+    over: bool,
+    out: &mut Out<'_>,
+    sources: &mut Vec<String>,
+) -> Vec<CallResult> {
+    let mut results = Vec::new();
+    for call in calls {
+        let output = if over {
+            "Not run: the answer reached its step limit.".to_string()
+        } else if turn.stop.is_stopped() {
+            "Not run: the user stopped the answer.".to_string()
+        } else {
+            out.send(Event::Tool {
+                name: call.name.clone(),
+                paths: paths_in(&call.arguments),
+            });
+            match run_tool(turn, tools, call).await {
+                Ok(output) => {
+                    if matches!(call.name.as_str(), "read" | "read_drawing") {
+                        let before = sources.len();
+                        for path in paths_in(&call.arguments) {
+                            if !sources.contains(&path) {
+                                sources.push(path);
+                            }
+                        }
+                        if sources.len() > before {
+                            out.send(Event::Sources {
+                                shards: sources.clone(),
+                            });
+                        }
+                    }
+                    output
+                }
+                Err(error) => format!("Error: {error}"),
+            }
+        };
+        results.push(CallResult {
+            id: call.id.clone(),
+            name: call.name.clone(),
+            output,
+        });
+    }
+    results
+}
+
+/// The paths a call names.
+fn paths_in(arguments: &Value) -> Vec<String> {
+    let mut paths: Vec<String> = Vec::new();
+    for key in ["path", "folder"] {
+        if let Some(path) = arguments.get(key).and_then(Value::as_str) {
+            paths.push(path.to_string());
+        }
+    }
+    if let Some(list) = arguments.get("paths").and_then(Value::as_array) {
+        paths.extend(list.iter().filter_map(Value::as_str).map(str::to_string));
+    }
+    paths
+}
+
+async fn run_tool(turn: &Turn, tools: &Arc<Vec<Tool>>, call: &Call) -> Result<String, String> {
+    // The model only gets the read tools, but it may name any.
+    if !READ_TOOLS.contains(&call.name.as_str()) || !tools.iter().any(|t| t.name == call.name) {
+        return Err(format!("There's no tool called {}", call.name));
+    }
+    let tools = tools.clone();
+    let vault = turn.vault.clone();
+    let name = call.name.clone();
+    let arguments = call.arguments.clone();
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        let tool = tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .ok_or_else(|| "There's no such tool".to_string())?;
+        let caller = Caller {
+            app: "Assistant".to_string(),
+        };
+        tool.call(&vault, &caller, arguments)
+            .map_err(|error| error.0)
+    })
+    .await
+    .map_err(|_| "The tool stopped".to_string())??;
+    let mut text = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+    if text.len() > MAX_TOOL_OUTPUT {
+        let mut end = MAX_TOOL_OUTPUT;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        text.truncate(end);
+        text.push_str("… [cut: ask for less, like one section or a smaller page]");
+    }
+    Ok(text)
+}
+
+async fn load(store: &SharedStore, chat: &str) -> Result<(Option<Summary>, Vec<Saved>), ChatError> {
+    let chat = chat.to_string();
+    saved(store, move |store| {
+        let summary = store.summary(&chat)?;
+        let through = summary.as_ref().map_or(0, |s| s.through);
+        let messages = store
+            .messages(&chat)?
+            .into_iter()
+            .filter(|saved| saved.seq > through)
+            .collect();
+        Ok((summary, messages))
+    })
+    .await
+}
+
+/// `messages` with every tool call answered: a call whose result was
+/// never saved, as when the app quit while a tool ran, gets a "not run"
+/// one, so providers take the chat.
+fn answered(messages: Vec<Message>) -> Vec<Message> {
+    fn not_run(calls: Vec<Call>) -> impl Iterator<Item = CallResult> {
+        calls.into_iter().map(|call| CallResult {
+            id: call.id,
+            name: call.name,
+            output: "Not run.".to_string(),
+        })
+    }
+    let mut out: Vec<Message> = Vec::with_capacity(messages.len());
+    let mut open: Vec<Call> = Vec::new();
+    for mut message in messages {
+        if let Message::Tool { results } = &mut message {
+            open.retain(|call| results.iter().all(|result| result.id != call.id));
+            results.extend(not_run(std::mem::take(&mut open)));
+        } else if !open.is_empty() {
+            out.push(Message::Tool {
+                results: not_run(std::mem::take(&mut open)).collect(),
+            });
+        }
+        if let Message::Assistant { calls, .. } = &message {
+            open = calls.clone();
+        }
+        out.push(message);
+    }
+    if !open.is_empty() {
+        out.push(Message::Tool {
+            results: not_run(open).collect(),
+        });
+    }
+    out
+}
+
+fn with_summary(system: &str, summary: Option<&Summary>) -> String {
+    match summary {
+        Some(summary) => format!(
+            "{system}\n\nEarlier messages of this chat, summarized:\n{}",
+            summary.text
+        ),
+        None => system.to_string(),
+    }
+}
+
+// ── Long chats ───────────────────────────────────────────────────────────────
+
+/// Tokens a model reads when the catalog doesn't say.
+const UNKNOWN_CONTEXT: u64 = 32_000;
+/// A server on this computer that doesn't say: Ollama's usual size.
+const UNKNOWN_LOCAL_CONTEXT: u64 = 8_192;
+/// The share of what's left after the answer's room at which a chat is
+/// summarized.
+const SUMMARY_AT: f64 = 0.75;
+/// The latest messages always sent as they are.
+const KEEP_LATEST: usize = 4;
+
+/// A rough count: about four characters a token.
+fn estimate(text_len: usize) -> u64 {
+    (text_len as u64).div_ceil(4)
+}
+
+fn context_of(model: &Model) -> (u64, u64) {
+    let context = model.facts.context.unwrap_or(match model.target.api {
+        Api::Ollama => UNKNOWN_LOCAL_CONTEXT,
+        _ => UNKNOWN_CONTEXT,
+    });
+    let answer_room = model.facts.output.unwrap_or(4096).min(context / 4);
+    (context, answer_room)
+}
+
+fn tokens_of(
+    system: &str,
+    specs: &[ToolSpec],
+    summary: Option<&Summary>,
+    history: &[Saved],
+) -> u64 {
+    let tools: usize = specs
+        .iter()
+        .map(|spec| spec.name.len() + spec.description.len() + spec.schema.to_string().len())
+        .sum();
+    let messages: usize = history
+        .iter()
+        .map(|saved| serde_json::to_string(&saved.message).map_or(0, |json| json.len()))
+        .sum();
+    estimate(system.len() + tools + summary.map_or(0, |s| s.text.len()) + messages)
+}
+
+/// Where older messages end: before a user message, keeping the latest
+/// ones, so a tool call never parts from its results.
+fn split_point(history: &[Saved]) -> Option<usize> {
+    let last_allowed = history.len().checked_sub(KEEP_LATEST)?;
+    (1..=last_allowed)
+        .rev()
+        .find(|&i| matches!(history[i].message, Message::User { .. }))
+}
+
+/// Summarizes older messages when the chat nears the model's limit. Gives
+/// the chat as it now stands when it did.
+async fn make_room(
+    turn: &Turn,
+    system: &str,
+    specs: &[ToolSpec],
+    summary: Option<Summary>,
+    history: Vec<Saved>,
+    out: &mut Out<'_>,
+) -> Result<Option<(Option<Summary>, Vec<Saved>)>, ChatError> {
+    let (context, answer_room) = context_of(&turn.model);
+    let budget = ((context - answer_room) as f64 * SUMMARY_AT) as u64;
+    if tokens_of(system, specs, summary.as_ref(), &history) <= budget {
+        return Ok(Some((summary, history)));
+    }
+    let Some(split) = split_point(&history) else {
+        return Ok(Some((summary, history)));
+    };
+    let through = history[split - 1].seq;
+    let text = summarize(turn, summary.as_ref(), &history[..split]).await?;
+    let summary = Summary { text, through };
+    let chat = turn.chat.clone();
+    let kept = summary.clone();
+    saved(&turn.store, move |store| store.set_summary(&chat, &kept)).await?;
+    out.send(Event::Summarized);
+    Ok(None)
+}
+
+const SUMMARY_PROMPT: &str = "You summarize a chat between a user and the assistant \
+of their notes app so the chat can go on without its older messages. Keep what the user \
+asked and wants, the facts found in their shards with the shard paths they came from, \
+decisions made, and anything left open. Write it in the language of the chat, as short \
+as it can be while keeping all of that. Give only the summary.";
+
+/// The longest a message's text gets in what's summarized.
+const SUMMARY_PIECE: usize = 4_000;
+
+async fn summarize(
+    turn: &Turn,
+    earlier: Option<&Summary>,
+    messages: &[Saved],
+) -> Result<String, ChatError> {
+    let piece = |text: &str| -> String { text.chars().take(SUMMARY_PIECE).collect() };
+    let mut transcript = String::new();
+    if let Some(earlier) = earlier {
+        transcript.push_str(&format!("Summary so far:\n{}\n\n", earlier.text));
+    }
+    for saved in messages {
+        match &saved.message {
+            Message::User { text } => transcript.push_str(&format!("User: {}\n\n", piece(text))),
+            Message::Assistant { text, calls, .. } => {
+                if !text.is_empty() {
+                    transcript.push_str(&format!("Assistant: {}\n\n", piece(text)));
+                }
+                for call in calls {
+                    transcript.push_str(&format!(
+                        "Assistant used {} with {}\n",
+                        call.name, call.arguments
+                    ));
+                }
+            }
+            Message::Tool { results } => {
+                for result in results {
+                    transcript.push_str(&format!(
+                        "{} gave: {}\n\n",
+                        result.name,
+                        piece(&result.output)
+                    ));
+                }
+            }
+        }
+    }
+    let messages = [Message::User { text: transcript }];
+    let request = Request {
+        system: SUMMARY_PROMPT,
+        messages: &messages,
+        tools: &[],
+        model: &turn.model.id,
+        thinking: false,
+        cache_key: &turn.chat,
+    };
+    let reply = chat::stream(&turn.model.target, &request, &mut |_| {}, &turn.stop).await?;
+    match reply.text.trim() {
+        "" => Err(ChatError::Failed),
+        text => Ok(text.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests;

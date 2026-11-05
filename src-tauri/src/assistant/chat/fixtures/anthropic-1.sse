@@ -1,0 +1,72 @@
+event: message_start
+data: {"type":"message_start","message":{"model":"claude-haiku-5-5","id":"msg_011Cgism5fakNwveKhDWmvf5","type":"message","role":"assistant","content":[],"container":null,"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":105,"cache_creation_input_tokens":2407,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":2407,"ephemeral_1h_input_tokens":0},"output_tokens":5,"service_tier":"standard","inference_geo":"global","speed":"standard"},"diagnostics":null}   }
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}    }
+
+event: ping
+data: {"type": "ping"}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"I'll check for"}           }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Trip.md first"}      }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":", though"}               }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" I"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" don't know its ex"}  }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"act path since"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" it's vault-relative."} }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" I'll start by"}  }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" looking for it at the top level"}  }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" of the vault."}  }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\n"}               }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"CAQS3QUKEAgTGAI4AUIIdGhpbmtpbmcSDE+agZlNav9VSd+cXxoMVCdGyJeRWYJWRh6NIjBzf969sMVIVAnnhQN6DwhXHOhHSrDels2im27m4t8BI/5K2HMlepyqLEsA+GC8hGwq+gStqxOasTxsxW7ILZScdP4aE1tZ8H8oneRnv3SXRuWuvrP1lzBisyQi+NIg2b8b5DKg10QRLduDKeZT/d+lL5o2XuqDkHy6OS1tU/X3sd6f4IdKPvctf7EmYEYwgriDE99bNXl3t5G1F6qhq0Pwj8gotKbDVD+9o89lHESoLxmTjR1dlDKtmrq9cVx1Tt8tjhvV/8dYgfBE6wcd+jYqHoDHH4arfGPFup40RkLeLwAlzKXdRh36QPg5fwKP2ON0u0uzbUSdN4jOQyqgxq6tKTK+lUPomIijyag2JdWby3aNJ7Mdu9l7t+pdTJqXYn9xeRXNUjVqtnM376VbrP5d4tc1wmqTF2pVsfb8MWPpzyJTkNsk54bjgmGLoaUln879Ed2qxDRgqSv/QxdsUEx1d+1TdND0NmNpKzOSEN+D/9YJgakInIdrbNqPdM5nw5Z//vmIb08lRc7mFjqHBjWcd3JIgAuadl8ejupNNYy64+zA/rAaCuabvrTwKyrd84V5eXd7q2CY00TIGmLa9Ikc/2h1zhU/4D8314BbcK7rDxZoCqf8VNbiGe1qZPNj3+4YC9pLeALVheuDdeFcYxsIhO/fKpq2FOV40cuzw0vqLhh0OdgCqGtj0Cn09Wb8AbtH9twL6Zbvq/PIIwWiJewSFpgooAZ3Jz8Nnu3slgv3rQB/A9TW8hCCzlB+4Ik7gL+wO9AXeX6kTNwJDoNtY5ia6xNA1SLrihQ0J9iOvTUlf1AMC1WKYA4VBIxtdWTlWPZQteEzqG3O7r2iJhgN9MWZ+s1OPummLdQj18DhzcA0CG/7qJonqOVJ4rTVPbO2Y+nIDDV7MB2Dtxgst+I0GAE="}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0             }
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_01CqZK2Aa2B6eNHmCMpBe7Af","name":"read","input":{},"caller":{"type":"direct"}}        }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":""}          }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\""}           }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":": \"Trip"}        }
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":".md\"}"}      }
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1       }
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null,"stop_details":null,"container":null},"usage":{"input_tokens":105,"cache_creation_input_tokens":2407,"cache_read_input_tokens":0,"output_tokens":92,"output_tokens_details":{"thinking_tokens":42}}             }
+
+event: message_stop
+data: {"type":"message_stop"  }
+

@@ -64,6 +64,8 @@ CREATE INDEX IF NOT EXISTS chats_by_update ON chats (updated DESC);
 ";
 
 const TITLE_LENGTH: usize = 60;
+/// About how long a first title gets, cut between words.
+const FIRST_TITLE_LENGTH: usize = 40;
 
 fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -85,6 +87,35 @@ pub fn title_of(text: &str) -> String {
         Some((end, _)) => format!("{}…", line[..end].trim_end()),
         None => line,
     }
+}
+
+/// A new chat's title until it gets a short one, and if that fails: the
+/// first sentence of its first message, cut between words.
+fn first_title(text: &str) -> String {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = line.char_indices().peekable();
+    let mut sentence = line.as_str();
+    while let Some((at, c)) = chars.next() {
+        let ends = chars.peek().is_none_or(|&(_, next)| next == ' ');
+        if ends && matches!(c, '.' | '?' | '!' | '。' | '？' | '！') {
+            let keep = if c == '.' { at } else { at + c.len_utf8() };
+            sentence = &line[..keep];
+            break;
+        }
+    }
+    if sentence.chars().count() <= FIRST_TITLE_LENGTH {
+        return sentence.to_string();
+    }
+    let end = sentence
+        .char_indices()
+        .nth(FIRST_TITLE_LENGTH)
+        .map_or(sentence.len(), |(end, _)| end);
+    // A word longer than the whole title is cut inside.
+    let cut = sentence[..end]
+        .rfind(' ')
+        .filter(|&at| at > 0)
+        .unwrap_or(end);
+    format!("{}…", sentence[..cut].trim_end())
 }
 
 fn new_id() -> String {
@@ -122,7 +153,7 @@ impl Store {
         self.conn
             .execute(
                 "INSERT INTO chats (id, title, vault, created, updated) VALUES (?1, ?2, ?3, ?4, ?4)",
-                params![id, title_of(first), vault.to_string_lossy(), time],
+                params![id, first_title(first), vault.to_string_lossy(), time],
             )
             .map_err(sql)?;
         Ok(id)
@@ -343,6 +374,26 @@ mod tests {
         let info = store.info(&chat).unwrap().unwrap();
         assert_eq!(info.title, "What did I plan for the trip?");
         assert_eq!(info.vault, "/vaults/Notes");
+    }
+
+    #[test]
+    fn a_first_title_is_the_first_sentence_cut_between_words() {
+        assert_eq!(
+            first_title("What's still open before the 0.7 tag? And the notes."),
+            "What's still open before the 0.7 tag?"
+        );
+        assert_eq!(
+            first_title("Summarize this shard. Keep it short."),
+            "Summarize this shard"
+        );
+        assert_eq!(
+            first_title("Tell me everything I wrote about the trip to Lisbon in May"),
+            "Tell me everything I wrote about the…"
+        );
+        assert_eq!(
+            first_title(&"a".repeat(50)).chars().count(),
+            FIRST_TITLE_LENGTH + 1
+        );
     }
 
     #[test]

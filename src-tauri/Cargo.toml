@@ -61,6 +61,11 @@ tokio = { version = "1", features = ["time", "sync", "rt", "macros", "io-std", "
 # Pinned exactly: each upgrade is checked against every provider. native-tls
 # like our own reqwest.
 genai = { version = "=0.7.3", default-features = false, features = ["native-tls"] }
+# Search finds other forms of a word: each paragraph's language is detected,
+# then its words are stemmed. Pinned exactly, with only the languages the
+# detector names.
+whatlang = "=0.18.0"
+frostem = { version = "=2.20261016.1", default-features = false, features = ["arabic", "armenian", "catalan", "czech", "danish", "dutch", "english", "esperanto", "estonian", "finnish", "french", "german", "greek", "hindi", "hungarian", "indonesian", "italian", "lithuanian", "nepali", "norwegian", "persian", "polish", "portuguese", "romanian", "russian", "serbian", "spanish", "swedish", "tamil", "turkish", "ukrainian", "yiddish"] }
 # The MCP server (`Netherstone mcp`), which AI apps start over stdio.
 rmcp = { version = "3.7", default-features = false, features = ["server", "transport-io"] }
 schemars = "1"

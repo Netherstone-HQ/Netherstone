@@ -163,28 +163,6 @@ pub fn text_blocks(markdown: &str) -> Vec<TextBlock> {
     blocks.done
 }
 
-/// The words in `text` that start with any of `terms` (lowercase), as byte
-/// ranges. Words are runs of letters and digits, as the search index splits
-/// them.
-pub fn word_matches(text: &str, terms: &[String]) -> Vec<Range<usize>> {
-    let mut matches = Vec::new();
-    let mut word_start = None;
-    for (index, c) in text.char_indices().chain([(text.len(), ' ')]) {
-        match (c.is_alphanumeric(), word_start) {
-            (true, None) => word_start = Some(index),
-            (false, Some(start)) => {
-                let word = text[start..index].to_lowercase();
-                if terms.iter().any(|term| word.starts_with(term.as_str())) {
-                    matches.push(start..index);
-                }
-                word_start = None;
-            }
-            _ => {}
-        }
-    }
-    matches
-}
-
 /// A stretch of text, highlighted or not.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextPart {
@@ -453,14 +431,6 @@ mod tests {
             links,
             [("Sam", "mention:Sam.md"), ("the plan", "./Plan.md")]
         );
-    }
-
-    #[test]
-    fn matches_words_by_prefix_ignoring_case() {
-        let text = "Autosave runs; auto-save too. Cars";
-        let matches = word_matches(text, &["auto".into(), "car".into()]);
-        let words: Vec<_> = matches.iter().map(|r| &text[r.clone()]).collect();
-        assert_eq!(words, ["Autosave", "auto", "Cars"]);
     }
 
     #[test]

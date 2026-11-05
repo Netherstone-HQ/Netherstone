@@ -1,6 +1,7 @@
 use super::queries::locate_tags;
-use crate::markdown_text::text_blocks;
-use rusqlite::{Connection, params};
+use super::words::shard_words;
+use crate::markdown_text::{TextBlock, text_blocks};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -268,8 +269,9 @@ fn store_shard(
     }
 
     // Insert tags (deduplicated), with the text around each one
+    let blocks = text_blocks(&content);
     let unique_tags: HashSet<String> = parsed.tags.into_iter().collect();
-    insert_tags(conn, file_id, &content, unique_tags.into_iter().collect())
+    insert_tags(conn, file_id, &blocks, unique_tags.into_iter().collect())
         .map_err(|e| format!("Failed to insert tag: {}", e))?;
 
     for title in &parsed.charts {
@@ -285,16 +287,60 @@ fn store_shard(
 
     super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
 
-    // The search index: the old row, if any, goes first.
-    conn.execute("DELETE FROM fts_search WHERE rowid = ?1", params![file_id])
-        .ok();
+    insert_search(conn, file_id, path_str, file_name, &content, &blocks)
+        .map_err(|e| format!("Failed to insert into search index: {}", e))
+}
 
+/// Replaces the search rows of the shard `file_id`: its text with its word
+/// stems, its text in scripts without spaces, and its languages.
+fn insert_search(
+    conn: &Connection,
+    file_id: i64,
+    path: &str,
+    name: &str,
+    content: &str,
+    blocks: &[TextBlock],
+) -> rusqlite::Result<()> {
+    let vault_language: Option<String> = conn
+        .prepare_cached(
+            "SELECT l.language FROM file_languages l JOIN files f ON f.id = l.file_id
+             WHERE f.vault_path = (SELECT vault_path FROM files WHERE id = ?1) AND f.id != ?1
+             GROUP BY l.language ORDER BY COUNT(*) DESC, l.language LIMIT 1",
+        )?
+        .query_row(params![file_id], |row| row.get(0))
+        .optional()?;
+    let vault_language = vault_language.and_then(whatlang::Lang::from_code);
+    let words = shard_words(name, blocks, vault_language);
+    forget_search(conn, file_id)?;
     conn.execute(
-        "INSERT INTO fts_search(rowid, path, name, content) VALUES (?1, ?2, ?3, ?4)",
-        params![file_id, path_str, file_name, content],
-    )
-    .map_err(|e| format!("Failed to insert into search index: {}", e))?;
+        "DELETE FROM file_languages WHERE file_id = ?1",
+        params![file_id],
+    )?;
+    conn.execute(
+        "INSERT INTO fts_search (rowid, path, name, content, stems) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![file_id, path, name, content, words.stems],
+    )?;
+    if !words.unspaced.is_empty() {
+        conn.execute(
+            "INSERT INTO fts_unspaced (rowid, text) VALUES (?1, ?2)",
+            params![file_id, words.unspaced],
+        )?;
+    }
+    let mut language =
+        conn.prepare_cached("INSERT INTO file_languages (file_id, language) VALUES (?1, ?2)")?;
+    for code in words.languages {
+        language.execute(params![file_id, code])?;
+    }
+    Ok(())
+}
 
+/// Deletes the search text of the shard `file_id`, which isn't tied to its
+/// file, so it goes before the file does.
+fn forget_search(conn: &Connection, file_id: i64) -> rusqlite::Result<()> {
+    conn.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?
+        .execute(params![file_id])?;
+    conn.prepare_cached("DELETE FROM fts_unspaced WHERE rowid = ?1")?
+        .execute(params![file_id])?;
     Ok(())
 }
 
@@ -304,16 +350,13 @@ fn store_shard(
 fn insert_tags(
     conn: &Connection,
     file_id: i64,
-    content: &str,
+    blocks: &[TextBlock],
     tags: Vec<String>,
 ) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare_cached(
         "INSERT INTO tags (file_id, tag, position, excerpt) VALUES (?1, ?2, ?3, ?4)",
     )?;
-    for (position, tag) in locate_tags(&text_blocks(content), tags)
-        .into_iter()
-        .enumerate()
-    {
+    for (position, tag) in locate_tags(blocks, tags).into_iter().enumerate() {
         let excerpt = tag
             .excerpt
             .map(|parts| serde_json::to_string(&parts))
@@ -374,11 +417,9 @@ fn forget_ids(conn: &Connection, ids: &[i64]) -> rusqlite::Result<()> {
     }
     let tx = conn.unchecked_transaction()?;
     {
-        // The search text isn't tied to its file, so it goes first.
-        let mut search = tx.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?;
         let mut files = tx.prepare_cached("DELETE FROM files WHERE id = ?1")?;
         for id in ids {
-            search.execute(params![id])?;
+            forget_search(&tx, *id)?;
             files.execute(params![id])?;
         }
     }
@@ -461,12 +502,14 @@ pub fn forget_path(conn: &Connection, vault_path: &Path, path: &Path) -> Result<
     let matching = "vault_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)";
     let forget = || -> rusqlite::Result<usize> {
         // The search text isn't tied to its file, so it goes first.
-        conn.execute(
-            &format!(
-                "DELETE FROM fts_search WHERE rowid IN (SELECT id FROM files WHERE {matching})"
-            ),
-            params![vault, path_str, inside],
-        )?;
+        for table in ["fts_search", "fts_unspaced"] {
+            conn.execute(
+                &format!(
+                    "DELETE FROM {table} WHERE rowid IN (SELECT id FROM files WHERE {matching})"
+                ),
+                params![vault, path_str, inside],
+            )?;
+        }
         conn.execute(
             &format!("DELETE FROM files WHERE {matching}"),
             params![vault, path_str, inside],

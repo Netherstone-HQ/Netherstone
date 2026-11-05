@@ -51,19 +51,29 @@ describe("SearchModal", () => {
     expect(openVaultFile).toHaveBeenCalledWith(`${VAULT}/Projects/Kitchen quote.md`);
   });
 
-  it("highlights the searched words in a result's name", async () => {
+  it("shows a result's name and snippet with the searched words highlighted, and its section", async () => {
     vi.mocked(invoke).mockResolvedValue([
       {
         path: `${VAULT}/Kitchen quote.md`,
         name: "Kitchen quote.md",
-        snippet: [],
+        title: [
+          { text: "Kitchen ", highlight: false },
+          { text: "quote", highlight: true },
+        ],
+        snippet: [
+          { text: "The ", highlight: false },
+          { text: "quotes", highlight: true },
+          { text: " came in.", highlight: false },
+        ],
+        section: "Costs",
         rank: -1,
       },
     ]);
     search("quo");
     expect(await screen.findByText("1 shard")).toBeTruthy();
     expect(screen.getByText("quote").tagName).toBe("MARK");
-    expect(screen.getByText("Kitchen").tagName).not.toBe("MARK");
+    expect(screen.getByText("quotes").tagName).toBe("MARK");
+    expect(screen.getByText("Costs ·", { exact: false })).toBeTruthy();
   });
 
   it("says when nothing matches", async () => {

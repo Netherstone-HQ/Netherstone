@@ -74,15 +74,25 @@ test("the rail stays on top while the sidebar slides away", async ({ page }) => 
   const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 
   await page.getByRole("button", { name: "Hide left sidebar" }).click();
-  // Mid-slide, the sidebar passes under the rail, never over it.
-  for (let i = 0; i < 5; i++) {
-    const onTop = await page.evaluate(
-      ({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[aria-label="Editor"]'),
-      center,
-    );
-    expect(onTop).toBe(true);
-    await page.waitForTimeout(40);
-  }
+  // Held at points along the slide, the sidebar passes under the rail, never
+  // over it.
+  const onTop = await page.evaluate(async ({ x, y }) => {
+    let slide = document.getAnimations();
+    while (slide.length === 0) {
+      await new Promise(requestAnimationFrame);
+      slide = document.getAnimations();
+    }
+    const seen: boolean[] = [];
+    for (const part of [0, 0.25, 0.5, 0.75, 1]) {
+      for (const animation of slide) {
+        animation.pause();
+        animation.currentTime = Number(animation.effect!.getTiming().duration) * part;
+      }
+      seen.push(!!document.elementFromPoint(x, y)?.closest('[aria-label="Editor"]'));
+    }
+    return seen;
+  }, center);
+  expect(onTop).toEqual([true, true, true, true, true]);
 });
 
 test("a file with a sync conflict is marked by its name and asks for the choice on opening", async ({ page }) => {

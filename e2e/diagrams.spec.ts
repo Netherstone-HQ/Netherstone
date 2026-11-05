@@ -52,7 +52,7 @@ test("a diagram from the / menu starts with its code and drawing, and saves as a
   });
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
-  await page.keyboard.type("/diagram", { delay: 40 });
+  await page.keyboard.type("/diagram");
   await expect(page.getByRole("option").first()).toBeVisible();
   await page.keyboard.press("Enter");
 

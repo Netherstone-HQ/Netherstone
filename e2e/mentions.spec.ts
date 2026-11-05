@@ -10,7 +10,7 @@ test("an @ link to another shard is inserted and saved as a link", async ({
 }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
   await caretAfter(page, "Start");
-  await page.keyboard.type(" see @Oth", { delay: 40 });
+  await page.keyboard.type(" see @Oth");
   await expect(page.getByRole("option", { name: "Other Note" })).toBeVisible();
   await page.keyboard.press("Enter");
   await page.keyboard.type(" now");

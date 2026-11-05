@@ -158,7 +158,9 @@ struct Out<'a> {
     stop: &'a StopToken,
     text: String,
     reasoning: String,
-    last: Instant,
+    /// When text was last sent. None at the start of a step, so its first
+    /// words show at once instead of waiting for the next ones.
+    last: Option<Instant>,
     /// All the text of the step streaming now.
     step_text: String,
 }
@@ -170,7 +172,7 @@ impl<'a> Out<'a> {
             stop,
             text: String::new(),
             reasoning: String::new(),
-            last: Instant::now(),
+            last: None,
             step_text: String::new(),
         }
     }
@@ -190,14 +192,20 @@ impl<'a> Out<'a> {
             Delta::Reasoning(text) => self.reasoning.push_str(text),
         }
         if self.text.len() + self.reasoning.len() >= BATCH_BYTES
-            || self.last.elapsed() >= BATCH_WAIT
+            || self.last.is_none_or(|last| last.elapsed() >= BATCH_WAIT)
         {
             self.flush();
         }
     }
 
+    /// A new step: its first words show at once.
+    fn start_step(&mut self) {
+        self.step_text.clear();
+        self.last = None;
+    }
+
     fn flush(&mut self) {
-        self.last = Instant::now();
+        self.last = Some(Instant::now());
         if !self.reasoning.is_empty() {
             let text = std::mem::take(&mut self.reasoning);
             self.send(Event::Reasoning { text });
@@ -245,7 +253,7 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
             cache_key: &chat_id,
         };
 
-        out.step_text.clear();
+        out.start_step();
         let result = chat::stream(
             &turn.model.target,
             &request,

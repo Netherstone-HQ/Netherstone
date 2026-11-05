@@ -5,7 +5,7 @@ test("a toggle typed through the / menu is saved with its content", async ({ pag
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await page.keyboard.type("/toggle", { delay: 40 });
+  await page.keyboard.type("/toggle");
   await expect(page.getByRole("option", { name: "Toggle" })).toBeVisible();
   await page.keyboard.press("Enter");
   await page.keyboard.type("My toggle title");

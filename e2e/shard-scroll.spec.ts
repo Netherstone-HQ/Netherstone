@@ -86,8 +86,21 @@ test("the place comes back when the window is restored", async ({ page }) => {
   const size = page.viewportSize()!;
 
   // A minimized window leaves the editor no height.
-  await page.setViewportSize({ width: size.width, height: 0 });
-  await page.waitForTimeout(300);
+  await page.setViewportSize({ width: size.width, height: 1 });
+  // Observers are told in the order they started, so once this one sees no
+  // height, the editor's own has too.
+  await editor(page).evaluate(
+    (el) =>
+      new Promise<void>((resolve) => {
+        const main = el.closest("main")!;
+        const seen = new ResizeObserver(() => {
+          if (main.clientHeight >= 1) return;
+          seen.disconnect();
+          resolve();
+        });
+        seen.observe(main);
+      }),
+  );
   await page.setViewportSize(size);
 
   await expect(heading(page, 120)).toBeInViewport();

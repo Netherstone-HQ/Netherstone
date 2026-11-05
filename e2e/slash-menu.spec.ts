@@ -5,7 +5,7 @@ const FILES = {
 };
 
 async function slash(page: import("@playwright/test").Page, query: string) {
-  await page.keyboard.type(`/${query}`, { delay: 40 });
+  await page.keyboard.type(`/${query}`);
   await expect(page.getByRole("option").first()).toBeVisible();
   await page.keyboard.press("Enter");
 }
@@ -69,7 +69,7 @@ test("/block finds Blockquote, not every block in the menu", async ({ page }) =>
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await page.keyboard.type("/block", { delay: 40 });
+  await page.keyboard.type("/block");
   const options = page.getByRole("option");
   await expect(options.filter({ hasText: "Blockquote" })).toBeVisible();
   await expect(options.filter({ hasText: "Heading 1" })).toHaveCount(0);
@@ -80,7 +80,7 @@ test("/blo lists Blockquote before Code block", async ({ page }) => {
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await page.keyboard.type("/blo", { delay: 40 });
+  await page.keyboard.type("/blo");
   const options = page.getByRole("option");
   await expect(options).toHaveText(["Blockquote", "Code block"]);
 });

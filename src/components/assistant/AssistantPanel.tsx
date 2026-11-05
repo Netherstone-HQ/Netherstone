@@ -113,7 +113,9 @@ function openShard(citation: Citation) {
   );
 }
 
+/** Opens web links only: an answer could hold any kind of link. */
 function openLink(href: string) {
+  if (!/^(https?:|mailto:)/i.test(href)) return;
   void openWebLink(href).catch(() => toast.error("Couldn't open the link"));
 }
 

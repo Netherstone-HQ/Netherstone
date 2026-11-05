@@ -537,6 +537,16 @@ export async function changeOutside(page: Page, name: string, content: string) {
   );
 }
 
+/**
+ * Picks an option in an open / or @ menu with Enter, once it is the
+ * highlighted one. The menu filters as you type, so an option can show
+ * before Enter would pick it.
+ */
+export async function pickOption(page: Page, option: Locator) {
+  await expect(option).toHaveAttribute("data-active-item", "true");
+  await page.keyboard.press("Enter");
+}
+
 /** Waits for autosave and returns the content it wrote for the shard. */
 export async function lastSave(page: Page, name: string): Promise<string> {
   const filePath = `${VAULT_PATH}/${name}`;

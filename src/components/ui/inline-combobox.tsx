@@ -178,11 +178,12 @@ const InlineCombobox = ({
   const items = store.useState('items');
 
   /**
-   * If there is no active ID and the list of items changes, select the first
-   * item.
+   * When the items change and none of them is active (typing filtered the
+   * active one out), make the first one active, so Enter always picks it.
    */
   React.useEffect(() => {
-    if (!store.getState().activeId) {
+    const { activeId } = store.getState();
+    if (!activeId || !items.some((item) => item.id === activeId)) {
       store.setActiveId(store.first());
     }
   }, [items, store]);

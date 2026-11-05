@@ -1,4 +1,4 @@
-import { caretAfter, editor, expect, lastSave, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, pickOption, test } from "./vault";
 
 const FILES = {
   "Note.md": "# Note\n\nStart\n",
@@ -6,8 +6,7 @@ const FILES = {
 
 async function slash(page: import("@playwright/test").Page, query: string) {
   await page.keyboard.type(`/${query}`);
-  await expect(page.getByRole("option").first()).toBeVisible();
-  await page.keyboard.press("Enter");
+  await pickOption(page, page.getByRole("option").first());
 }
 
 test("blocks from the / menu are saved as Markdown", async ({ page }) => {

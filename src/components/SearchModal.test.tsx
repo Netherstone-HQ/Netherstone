@@ -73,7 +73,7 @@ describe("SearchModal", () => {
     expect(await screen.findByText("1 shard")).toBeTruthy();
     expect(screen.getByText("quote").tagName).toBe("MARK");
     expect(screen.getByText("quotes").tagName).toBe("MARK");
-    expect(screen.getByText("Costs ·", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Costs")).toBeTruthy();
   });
 
   it("says when nothing matches", async () => {

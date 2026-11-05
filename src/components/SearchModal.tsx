@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Dot } from "@/components/ui/dot";
 import {
   getFolderInVault,
   getVaultFileDisplayName,
@@ -339,7 +340,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
                 {row.snippet && row.snippet.length > 0 ? (
                   <span className="truncate text-muted-foreground text-ui-sm">
                     {row.section ? (
-                      <span className="text-foreground/80">{row.section} · </span>
+                      <>
+                        <span className="text-foreground/80">{row.section}</span>
+                        <Dot />
+                      </>
                     ) : null}
                     <HighlightedText parts={row.snippet} />
                   </span>

@@ -163,7 +163,7 @@ pub fn find_files(
     let fts = search.fts();
     if let Some(fts) = &fts {
         joins.push_str(
-            " LEFT JOIN (SELECT rowid, rank FROM fts_search WHERE fts_search MATCH ?) m
+            " INNER JOIN (SELECT rowid, rank FROM fts_search WHERE fts_search MATCH ?) m
                ON m.rowid = f.id",
         );
         values.push(fts.clone().into());
@@ -171,27 +171,6 @@ pub fn find_files(
 
     let mut conditions = vec!["f.vault_path = ?".to_string()];
     values.push(vault_key(vault_path).into());
-    if !search.is_empty() {
-        let mut found = Vec::new();
-        if fts.is_some() {
-            found.push("m.rowid IS NOT NULL".to_string());
-        }
-        // The trigram index finds three characters or more; shorter words
-        // are looked for in its text.
-        for term in search.unspaced() {
-            if term.text.chars().count() >= 3 {
-                found.push(
-                    "f.id IN (SELECT rowid FROM fts_unspaced WHERE fts_unspaced MATCH ?)".into(),
-                );
-                values.push(format!("\"{}\"", term.text).into());
-            } else {
-                found.push("f.id IN (SELECT rowid FROM fts_unspaced WHERE text LIKE ?)".into());
-                values.push(format!("%{}%", term.text).into());
-            }
-        }
-        let joiner = if search.any { " OR " } else { " AND " };
-        conditions.push(format!("({})", found.join(joiner)));
-    }
     if let Some(folder) = filter.folder {
         let inside = format!("{}{}", folder.to_string_lossy(), std::path::MAIN_SEPARATOR);
         conditions.push("substr(f.path, 1, length(?)) = ?".to_string());
@@ -212,11 +191,7 @@ pub fn find_files(
         values.push(before.into());
     }
 
-    let rank = if fts.is_some() {
-        "COALESCE(m.rank, 0.0)"
-    } else {
-        "0.0"
-    };
+    let rank = if fts.is_some() { "m.rank" } else { "0.0" };
     let order = match (search.exact(), search.is_empty()) {
         (Some(exact), _) => {
             values.push(exact.into());
@@ -878,6 +853,8 @@ mod tests {
         assert_eq!(names(&found), ["Tokyo.md"]);
         assert_eq!(shown(&found[0].snippet), "今日は[東京]へ行きます。");
         assert_eq!(names(&find("東京へ行", false)), ["Tokyo.md"]);
+        assert_eq!(names(&find("京", false)), ["Tokyo.md"], "inside a run");
+        assert_eq!(names(&find("す", false)), ["Tokyo.md"], "at its end");
         assert_eq!(names(&find("大阪", false)), Vec::<String>::new());
 
         std::fs::remove_dir_all(&vault).unwrap();

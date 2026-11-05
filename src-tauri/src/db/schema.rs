@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 /// SQL schema for the Netherstone knowledge base index.
 ///
@@ -22,9 +22,7 @@ use rusqlite::Connection;
 /// - `vaults`: Every vault the app has opened on this device, in the order
 ///   it last opened them, and whether AI apps may use each (see `settings.rs`)
 /// - `fts_search`: FTS5 virtual table for full-text search, with each
-///   shard's word stems (see `words.rs`)
-/// - `fts_unspaced`: Each shard's text in scripts written without spaces,
-///   found by any three characters of it
+///   shard's word stems and character pairs (see `words.rs`)
 /// - `file_languages`: The languages each shard's words were stemmed in
 pub const SCHEMA: &str = r#"
 -- ── Files ──────────────────────────────────────────────────────────────────
@@ -224,17 +222,15 @@ CREATE INDEX IF NOT EXISTS idx_vaults_open_order ON vaults(open_order DESC);
 -- ── Full-Text Search ────────────────────────────────────────────────────────
 
 -- Rows share their file's id. `stems` holds the stems of the shard's words
--- that differ from the word.
+-- that differ from the word, and the character pairs of text without spaces.
+-- Marks count as part of a word, so scripts that write vowels as marks
+-- (Hindi, Thai) keep their words whole.
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_search USING fts5(
     path UNINDEXED,
     name,
     content,
-    stems
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS fts_unspaced USING fts5(
-    text,
-    tokenize = 'trigram'
+    stems,
+    tokenize = "unicode61 categories 'L* N* Co M*'"
 );
 
 CREATE TABLE IF NOT EXISTS file_languages (
@@ -295,10 +291,17 @@ fn drop_index_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Er
     Ok(())
 }
 
-/// Drops the search index from before it held word stems, and has every
-/// shard indexed again when its vault next opens.
-fn drop_search_without_stems(conn: &Connection) -> Result<(), rusqlite::Error> {
-    if table_exists(conn, "fts_search")? && !column_exists(conn, "fts_search", "stems")? {
+/// Drops the search index from before it held word stems and kept marks in
+/// words, and has every shard indexed again when its vault next opens.
+fn drop_old_search(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let sql: Option<String> = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'fts_search'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if sql.is_some_and(|sql| !sql.contains("M*")) {
         conn.execute_batch(
             "BEGIN;
              UPDATE files SET last_modified = 0;
@@ -316,7 +319,7 @@ fn drop_search_without_stems(conn: &Connection) -> Result<(), rusqlite::Error> {
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     drop_attachment_tables_without_vault(conn)?;
     drop_index_tables_without_vault(conn)?;
-    drop_search_without_stems(conn)?;
+    drop_old_search(conn)?;
     let fill_drawing_embeds = !table_exists(conn, "drawing_embeds")?;
     conn.execute_batch(SCHEMA)?;
     if !column_exists(conn, "vaults", "drive")? {
@@ -390,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn search_without_stems_is_indexed_again() {
+    fn old_search_is_indexed_again() {
         let conn = Connection::open_in_memory().unwrap();
         init_schema(&conn).unwrap();
         conn.execute_batch(

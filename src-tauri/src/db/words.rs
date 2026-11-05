@@ -1,6 +1,6 @@
 //! Word forms for search. Each paragraph's words are stemmed in its own
 //! language, so "running" finds "runs", and text in scripts written without
-//! spaces is kept apart to be found by any part of it.
+//! spaces is indexed by its pairs of characters, so any part of it is found.
 
 use super::attachments::vault_key;
 use crate::markdown_text::{BlockKind, TextBlock};
@@ -61,7 +61,7 @@ fn stemmed_language(text: &str) -> Option<(Lang, Stemmer)> {
 
 /// Whether `c` is in a script written without spaces between words (Chinese,
 /// Japanese kana, Thai, Lao, Khmer, Myanmar), where the index can't find
-/// words and text is matched by its parts instead.
+/// words and text is matched by its pairs of characters instead.
 pub fn is_unspaced(c: char) -> bool {
     matches!(c as u32,
         0x0E00..=0x0EFF
@@ -92,16 +92,16 @@ fn unspaced_runs(text: &str) -> impl Iterator<Item = &str> {
 /// What a shard adds to the index besides its text.
 #[derive(Debug, Default, PartialEq)]
 pub struct ShardWords {
-    /// The stems of its words that differ from the word, in order.
+    /// The stems of its words that differ from the word, then for each run
+    /// of text without spaces, its pairs of characters side by side and its
+    /// last character, so a phrase of pairs finds any part of the run.
     pub stems: String,
-    /// Its text in scripts without spaces, a run per line.
-    pub unspaced: String,
     /// The languages its words were stemmed in, as whatlang codes, so the
     /// vault's searches are stemmed in them too.
     pub languages: Vec<&'static str>,
 }
 
-/// The stems, languages and unspaced text of a shard named `name` whose
+/// The stems, character pairs and languages of a shard named `name` whose
 /// text is `blocks`. A paragraph whatlang can't tell is taken to be in the
 /// shard's main language, or with none, in `vault_language`. With neither,
 /// only its words as written are indexed.
@@ -120,14 +120,17 @@ pub fn shard_words(name: &str, blocks: &[TextBlock], vault_language: Option<Lang
 
     let mut words = ShardWords::default();
     let mut add = |text: &str, language: Option<(Lang, Stemmer)>| {
+        let mut push = |token: &str| {
+            if !words.stems.is_empty() {
+                words.stems.push(' ');
+            }
+            words.stems.push_str(token);
+        };
         if let Some((lang, stemmer)) = language {
             for word in split_words(text).filter(|w| !w.chars().any(is_unspaced)) {
                 let stem = stemmer.stem(&word);
                 if stem != word {
-                    if !words.stems.is_empty() {
-                        words.stems.push(' ');
-                    }
-                    words.stems.push_str(&stem);
+                    push(&stem);
                     if !words.languages.contains(&lang.code()) {
                         words.languages.push(lang.code());
                     }
@@ -135,8 +138,11 @@ pub fn shard_words(name: &str, blocks: &[TextBlock], vault_language: Option<Lang
             }
         }
         for run in unspaced_runs(text) {
-            words.unspaced.push_str(run);
-            words.unspaced.push('\n');
+            let chars: Vec<char> = run.chars().collect();
+            for pair in chars.windows(2) {
+                push(&pair.iter().collect::<String>());
+            }
+            push(&chars[chars.len() - 1].to_string());
         }
     };
     let title = name.strip_suffix(".md").unwrap_or(name);
@@ -268,14 +274,25 @@ impl Search {
         if self.any { " OR " } else { " AND " }
     }
 
-    /// The FTS5 query for the words with spaces: each as a word start, or
-    /// any of its stems as a whole word. None when there are no such words.
+    /// The FTS5 query for the words: each as a word start, or any of its
+    /// stems as a whole word. A word without spaces is its character pairs
+    /// side by side, or one character starting a pair. None for no words.
     pub fn fts(&self) -> Option<String> {
         let groups: Vec<String> = self
             .terms
             .iter()
-            .filter(|term| !term.unspaced)
             .map(|term| {
+                if term.unspaced {
+                    let chars: Vec<char> = term.text.chars().collect();
+                    return match chars.len() {
+                        1 => format!("stems : {}*", quoted(&term.text)),
+                        _ => {
+                            let pairs: Vec<String> =
+                                chars.windows(2).map(|pair| pair.iter().collect()).collect();
+                            format!("stems : {}", quoted(&pairs.join(" ")))
+                        }
+                    };
+                }
                 let mut forms = vec![format!("{}*", quoted(&term.text))];
                 forms.extend(term.stems.iter().map(|stem| quoted(stem)));
                 format!("({})", forms.join(" OR "))
@@ -297,11 +314,6 @@ impl Search {
             .map(|term| format!("{}*", quoted(&term.text)))
             .collect();
         (!groups.is_empty()).then(|| format!("{{name content}} : ({})", groups.join(" AND ")))
-    }
-
-    /// The words in scripts without spaces.
-    pub fn unspaced(&self) -> impl Iterator<Item = &Term> {
-        self.terms.iter().filter(|term| term.unspaced)
     }
 
     /// Where the words appear in `text`, each with the index of its term in
@@ -436,7 +448,6 @@ mod tests {
         let mut languages = words.languages.clone();
         languages.sort();
         assert_eq!(languages, ["eng", "spa"]);
-        assert_eq!(words.unspaced, "");
     }
 
     #[test]
@@ -467,13 +478,9 @@ mod tests {
     }
 
     #[test]
-    fn unspaced_text_is_kept_by_runs() {
-        let words = shard_words(
-            "東京.md",
-            &text_blocks("今日は東京へ行きます。Then home.\n"),
-            None,
-        );
-        assert_eq!(words.unspaced, "東京\n今日は東京へ行きます\n");
+    fn unspaced_text_is_kept_by_character_pairs() {
+        let words = shard_words("東京.md", &text_blocks("今日は東京へ。Then home.\n"), None);
+        assert_eq!(words.stems, "東京 京 今日 日は は東 東京 京へ へ");
     }
 
     #[test]
@@ -527,8 +534,11 @@ mod tests {
 
     #[test]
     fn unspaced_terms_match_anywhere() {
+        assert_eq!(
+            search("東京へ 日", &[]).fts().unwrap(),
+            "stems : \"東京 京へ\" AND stems : \"日\"*"
+        );
         let search = search("東京", &[]);
-        assert_eq!(search.fts(), None);
         let text = "今日は東京へ。";
         let found: Vec<&str> = search
             .matches(text)

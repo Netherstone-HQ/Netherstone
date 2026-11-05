@@ -292,7 +292,7 @@ fn store_shard(
 }
 
 /// Replaces the search rows of the shard `file_id`: its text with its word
-/// stems, its text in scripts without spaces, and its languages.
+/// stems and character pairs, and its languages.
 fn insert_search(
     conn: &Connection,
     file_id: i64,
@@ -311,7 +311,7 @@ fn insert_search(
         .optional()?;
     let vault_language = vault_language.and_then(whatlang::Lang::from_code);
     let words = shard_words(name, blocks, vault_language);
-    forget_search(conn, file_id)?;
+    conn.execute("DELETE FROM fts_search WHERE rowid = ?1", params![file_id])?;
     conn.execute(
         "DELETE FROM file_languages WHERE file_id = ?1",
         params![file_id],
@@ -320,27 +320,11 @@ fn insert_search(
         "INSERT INTO fts_search (rowid, path, name, content, stems) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![file_id, path, name, content, words.stems],
     )?;
-    if !words.unspaced.is_empty() {
-        conn.execute(
-            "INSERT INTO fts_unspaced (rowid, text) VALUES (?1, ?2)",
-            params![file_id, words.unspaced],
-        )?;
-    }
     let mut language =
         conn.prepare_cached("INSERT INTO file_languages (file_id, language) VALUES (?1, ?2)")?;
     for code in words.languages {
         language.execute(params![file_id, code])?;
     }
-    Ok(())
-}
-
-/// Deletes the search text of the shard `file_id`, which isn't tied to its
-/// file, so it goes before the file does.
-fn forget_search(conn: &Connection, file_id: i64) -> rusqlite::Result<()> {
-    conn.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?
-        .execute(params![file_id])?;
-    conn.prepare_cached("DELETE FROM fts_unspaced WHERE rowid = ?1")?
-        .execute(params![file_id])?;
     Ok(())
 }
 
@@ -417,9 +401,11 @@ fn forget_ids(conn: &Connection, ids: &[i64]) -> rusqlite::Result<()> {
     }
     let tx = conn.unchecked_transaction()?;
     {
+        // The search text isn't tied to its file, so it goes first.
+        let mut search = tx.prepare_cached("DELETE FROM fts_search WHERE rowid = ?1")?;
         let mut files = tx.prepare_cached("DELETE FROM files WHERE id = ?1")?;
         for id in ids {
-            forget_search(&tx, *id)?;
+            search.execute(params![id])?;
             files.execute(params![id])?;
         }
     }
@@ -502,14 +488,12 @@ pub fn forget_path(conn: &Connection, vault_path: &Path, path: &Path) -> Result<
     let matching = "vault_path = ?1 AND (path = ?2 OR substr(path, 1, length(?3)) = ?3)";
     let forget = || -> rusqlite::Result<usize> {
         // The search text isn't tied to its file, so it goes first.
-        for table in ["fts_search", "fts_unspaced"] {
-            conn.execute(
-                &format!(
-                    "DELETE FROM {table} WHERE rowid IN (SELECT id FROM files WHERE {matching})"
-                ),
-                params![vault, path_str, inside],
-            )?;
-        }
+        conn.execute(
+            &format!(
+                "DELETE FROM fts_search WHERE rowid IN (SELECT id FROM files WHERE {matching})"
+            ),
+            params![vault, path_str, inside],
+        )?;
         conn.execute(
             &format!("DELETE FROM files WHERE {matching}"),
             params![vault, path_str, inside],

@@ -92,7 +92,7 @@ export function CiteNumber({
 }
 
 /**
- * An answer's Markdown. Links to shards show their number from `cited`
+ * An answer's Markdown. Links to shards show as their number from `cited`
  * and open the shard; other links open as links do elsewhere in the app.
  */
 export function AnswerText({
@@ -212,14 +212,12 @@ export function AnswerText({
         if (citation) {
           const index = cited.findIndex((c) => c.path === citation.path);
           return (
-            <Fragment key={key}>
-              {children()}
-              <CiteNumber
-                number={index + 1}
-                label={`Open ${citation.path}`}
-                onClick={() => onOpenShard(citation)}
-              />
-            </Fragment>
+            <CiteNumber
+              key={key}
+              number={index + 1}
+              label={`Open ${citation.path}`}
+              onClick={() => onOpenShard(citation)}
+            />
           );
         }
         return (

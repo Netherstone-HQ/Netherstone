@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { ArrowUpIcon, FileTextIcon, SquareIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, FileIcon, SquareIcon, XIcon } from "lucide-react";
 
+import { DrawingIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { getVaultFileDisplayName, isDrawingPath } from "@/lib/drawing-files";
 import { cn } from "@/lib/utils";
 import { type FileTreeNode, useVaultStore } from "@/store/vault";
 import { toVaultRelativePath } from "@/lib/drawing-files";
@@ -15,12 +16,20 @@ export function shardName(path: string) {
 
 const MAX_MATCHES = 8;
 
+function ShardIcon({ path, className }: { path: string; className: string }) {
+  return isDrawingPath(path) ? (
+    <DrawingIcon className={className} />
+  ) : (
+    <FileIcon className={className} />
+  );
+}
+
 function shardsIn(tree: FileTreeNode[], vault: string): string[] {
   const found: string[] = [];
   const walk = (nodes: FileTreeNode[]) => {
     for (const node of nodes) {
       if (node.kind === "directory") walk(node.children ?? []);
-      else if (/\.md$/i.test(node.name)) {
+      else if (/\.md$/i.test(node.name) || isDrawingPath(node.name)) {
         found.push(toVaultRelativePath(node.path, vault));
       }
     }
@@ -36,27 +45,25 @@ function mentionAt(text: string, caret: number) {
   return { start: caret - match[2].length - 1, query: match[2] };
 }
 
-export function ShardChip({
+function ShardChip({
   path,
   onRemove,
 }: {
   path: string;
-  onRemove?: () => void;
+  onRemove: () => void;
 }) {
   return (
     <span className="inline-flex h-6.5 max-w-full items-center gap-1.5 rounded-md bg-muted pr-1.5 pl-2 text-foreground text-ui-sm">
-      <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <ShardIcon path={path} className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="truncate">{shardName(path)}</span>
-      {onRemove ? (
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${shardName(path)} from this message`}
-          className="-mr-0.5 inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
-        >
-          <XIcon className="size-3.5" />
-        </button>
-      ) : null}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${shardName(path)} from this message`}
+        className="-mr-0.5 inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+      >
+        <XIcon className="size-3.5" />
+      </button>
     </span>
   );
 }
@@ -163,6 +170,9 @@ export function Composer({
     }
   };
 
+  const send =
+    "size-7.5 shrink-0 rounded-[7px] bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50";
+
   return (
     <div className={cn("shrink-0 p-3", disabled && "opacity-50")}>
       <div className="relative flex flex-col gap-2 rounded-[10px] border border-input bg-card p-2 focus-within:border-ring">
@@ -187,7 +197,7 @@ export function Composer({
                   index === active && "bg-accent",
                 )}
               >
-                <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
+                <ShardIcon path={path} className="size-4 shrink-0 text-muted-foreground" />
                 <span className="truncate">{shardName(path)}</span>
                 {path.includes("/") ? (
                   <span className="ml-auto truncate pl-2 text-muted-foreground text-ui-sm">
@@ -198,13 +208,13 @@ export function Composer({
             ))}
           </div>
         ) : null}
-        {shards.length > 0 ? (
+        {shards.length > 0 && !disabled ? (
           <div className="flex flex-wrap gap-1.5">
             {shards.map((path) => (
               <ShardChip
                 key={path}
                 path={path}
-                onRemove={disabled ? undefined : () => onRemove(path)}
+                onRemove={() => onRemove(path)}
               />
             ))}
           </div>
@@ -238,7 +248,7 @@ export function Composer({
               size="icon-sm"
               onClick={onStop}
               aria-label="Stop"
-              className="shrink-0"
+              className={send}
             >
               <SquareIcon className="fill-current" />
             </Button>
@@ -249,7 +259,7 @@ export function Composer({
               onClick={onSend}
               disabled={disabled || !canSend}
               aria-label="Send"
-              className="shrink-0"
+              className={send}
             >
               <ArrowUpIcon />
             </Button>

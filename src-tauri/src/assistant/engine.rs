@@ -134,8 +134,9 @@ fn system_prompt(vault: &str) -> String {
 (Markdown notes) in a vault, a folder on their computer. This chat is about the vault \
 \"{vault}\". Answer from the vault: search and read shards with the tools before \
 answering about the user's notes, and never guess what they say. Cite the shards you \
-used as Markdown links to their vault paths, like [Trip plan](Travel/Trip%20plan.md), \
-or [Trip plan](Travel/Trip%20plan.md#Day%202) for one section. Shards the user adds to a \
+used with a Markdown link to the shard's vault path right after what it backs, like \
+[Trip plan](Travel/Trip%20plan.md), or [Trip plan](Travel/Trip%20plan.md#Day%202) for one \
+section. The app shows each cite as a number, so never use one as a word in a sentence. Shards the user adds to a \
 message come with it inside <shard> tags. You can only read in this version: you can't create, change or move anything. Reply in \
 the language the user writes in, and keep answers short unless asked for more. Today \
 is {}.",
@@ -472,9 +473,10 @@ pub async fn attach(turn: &Turn, shards: &[String]) -> (Vec<Added>, Vec<File>) {
     let mut files: Vec<File> = Vec::new();
     for path in shards {
         let arguments = serde_json::json!({ "path": path });
+        let is_drawing = path.to_ascii_lowercase().ends_with(".excalidraw");
         let call = Call {
             id: String::new(),
-            name: "read".to_string(),
+            name: if is_drawing { "read_drawing" } else { "read" }.to_string(),
             arguments: arguments.clone(),
             signatures: Vec::new(),
         };
@@ -482,7 +484,11 @@ pub async fn attach(turn: &Turn, shards: &[String]) -> (Vec<Added>, Vec<File>) {
             Ok(text) => text,
             Err(error) => format!("Error: {error}"),
         };
-        let (found, note) = shard_files(turn, &arguments).await;
+        let (found, note) = if is_drawing {
+            (Vec::new(), None)
+        } else {
+            shard_files(turn, &arguments).await
+        };
         for file in found {
             if !files.iter().any(|f| f.path == file.path) {
                 files.push(file);

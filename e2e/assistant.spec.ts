@@ -10,6 +10,9 @@ const FILES = {
   "Bread.md": "# Bread\n\nUse 350 g water.\n",
 };
 
+const EMPTY_DRAWING =
+  '{"type":"excalidraw","version":2,"elements":[],"appState":{},"files":{}}';
+
 const READY = {
   provider: true,
   vaultAllowed: true,
@@ -109,6 +112,25 @@ test("adds shards with @", async ({ page }) => {
   ]);
 });
 
+test("adds drawings with @", async ({ page }) => {
+  await mockVault(page, {
+    files: { ...FILES, "Route.excalidraw": EMPTY_DRAWING },
+    open: "Trip.md",
+    assistant: READY,
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  const message = assistant.getByRole("textbox", { name: "Message" });
+  await message.fill("What's on @Rou");
+  await assistant.getByRole("option", { name: "Route" }).click();
+  await expect(assistant.getByRole("button", { name: "Remove Route from this message" })).toBeVisible();
+  await message.press("Enter");
+  await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
+  expect(await page.evaluate(() => window.__sent)).toEqual([
+    { chat: null, text: "What's on", shards: ["Trip.md", "Route.excalidraw"] },
+  ]);
+});
+
 test("lists saved chats, and deletes them all after asking", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
   await page.getByRole("button", { name: "Show assistant" }).click();
@@ -116,8 +138,9 @@ test("lists saved chats, and deletes them all after asking", async ({ page }) =>
   await assistant.getByRole("button", { name: "Summarize this shard" }).click();
   await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
 
+  // A new chat lists the saved ones from its Chats button.
   await assistant.getByRole("button", { name: "New chat" }).click();
-  await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText("New chat");
+  await expect(assistant.getByText("New chat", { exact: true })).toBeVisible();
   await assistant.getByRole("button", { name: "Chats" }).click();
   await page.getByRole("menuitem", { name: /Summarize this shard/ }).click();
   await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
@@ -127,10 +150,9 @@ test("lists saved chats, and deletes them all after asking", async ({ page }) =>
   await assistant.getByRole("button", { name: "Chats" }).click();
   await page.getByRole("menuitem", { name: "Delete all chats" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete all" }).click();
-  await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText("New chat");
-  await expect(page.getByRole("menu")).toHaveCount(0);
-  await assistant.getByRole("button", { name: "Chats" }).click();
-  await expect(page.getByText("No saved chats")).toBeVisible();
+  // With none left, there's nothing to list.
+  await expect(assistant.getByText("New chat", { exact: true })).toBeVisible();
+  await expect(assistant.getByRole("button", { name: "Chats" })).toHaveCount(0);
 });
 
 test("swaps places with History", async ({ page }) => {

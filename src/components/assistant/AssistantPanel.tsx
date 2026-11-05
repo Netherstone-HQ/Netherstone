@@ -7,7 +7,7 @@ import {
   FolderIcon,
   ImageOffIcon,
   KeyRoundIcon,
-  LinkIcon,
+  Link2Icon,
   LoaderCircleIcon,
   NewspaperIcon,
   SquarePenIcon,
@@ -58,7 +58,7 @@ import {
   citationsIn,
 } from "./AnswerText";
 import { ChatsMenu } from "./ChatsMenu";
-import { Composer, ShardChip, shardName } from "./Composer";
+import { Composer, shardName } from "./Composer";
 import { ModelList, isSetUp, useModelLists } from "./models";
 
 /** What the panel needs to know before a chat can start. */
@@ -197,21 +197,23 @@ function Center({
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="xs"
-      className="text-muted-foreground hover:text-foreground"
-      onClick={() =>
-        void navigator.clipboard.writeText(text).then(
-          () => setCopied(true),
-          () => toast.error("Couldn't copy the answer"),
-        )
-      }
-    >
-      {copied ? <CheckIcon /> : <CopyIcon />}
-      {copied ? "Copied" : "Copy"}
-    </Button>
+    <Hint label={copied ? "Copied" : "Copy"} side="bottom">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Copy"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() =>
+          void navigator.clipboard.writeText(text).then(
+            () => setCopied(true),
+            () => toast.error("Couldn't copy the answer"),
+          )
+        }
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </Button>
+    </Hint>
   );
 }
 
@@ -293,7 +295,7 @@ function Answer({ message }: { message: ShownMessage }) {
       ) : null}
       <Sources cited={cited} read={message.sources ?? []} />
       {message.text ? (
-        <div className="-ml-2 flex gap-0.5">
+        <div className="-ml-1.5 flex gap-0.5">
           <CopyButton text={message.text} />
         </div>
       ) : null}
@@ -303,17 +305,8 @@ function Answer({ message }: { message: ShownMessage }) {
 
 function UserMessage({ message }: { message: ShownMessage }) {
   return (
-    <div className="flex max-w-[85%] flex-col items-end gap-1.5 self-end">
-      <div className="whitespace-pre-wrap break-words rounded-[10px] bg-muted px-3 py-2">
-        {message.text}
-      </div>
-      {message.shards?.length ? (
-        <div className="flex flex-wrap justify-end gap-1.5">
-          {message.shards.map((path) => (
-            <ShardChip key={path} path={path} />
-          ))}
-        </div>
-      ) : null}
+    <div className="max-w-[85%] self-end whitespace-pre-wrap break-words rounded-[10px] bg-muted px-3 py-2">
+      {message.text}
     </div>
   );
 }
@@ -403,7 +396,7 @@ function Starters({ onAsk }: { onAsk: (text: string) => void }) {
   const starter =
     "flex h-9 items-center gap-2 rounded-lg border bg-card px-2.5 text-left hover:bg-accent";
   return (
-    <div className="flex flex-1 flex-col justify-end gap-2 p-4">
+    <div className="flex flex-1 flex-col gap-2 p-4">
       <button
         type="button"
         className={starter}
@@ -417,7 +410,7 @@ function Starters({ onAsk }: { onAsk: (text: string) => void }) {
         className={starter}
         onClick={() => onAsk("Find related shards")}
       >
-        <LinkIcon className="size-4 text-muted-foreground" />
+        <Link2Icon className="size-4 text-muted-foreground" />
         Find related shards
       </button>
     </div>
@@ -428,12 +421,15 @@ function Starters({ onAsk }: { onAsk: (text: string) => void }) {
 function ModelButton({
   setup,
   sendFiles,
+  disabled,
   open,
   onOpenChange,
   onPicked,
 }: {
   setup: Setup;
   sendFiles: boolean;
+  /** Shown but not usable, while the panel asks for something first. */
+  disabled: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPicked: () => void;
@@ -464,7 +460,7 @@ function ModelButton({
           <button
             type="button"
             aria-label="Model"
-            disabled={!hasProvider}
+            disabled={!hasProvider || disabled}
             className="flex h-7 min-w-0 items-center gap-1 rounded-md pr-1.5 pl-2 text-muted-foreground text-ui-sm hover:bg-accent hover:text-foreground disabled:pointer-events-none"
           >
             {picked ? (
@@ -478,7 +474,7 @@ function ModelButton({
             ) : (
               <span>{hasProvider ? "Pick a model" : "No model"}</span>
             )}
-            {hasProvider ? (
+            {hasProvider && !disabled ? (
               <ChevronDownIcon className="size-3.5 shrink-0" />
             ) : null}
           </button>
@@ -492,7 +488,7 @@ function ModelButton({
           />
         </PopoverContent>
       </Popover>
-      {picked && !picked.images && sendFiles ? (
+      {picked && !picked.images && sendFiles && !disabled ? (
         <Hint label="This model can't see images" side="top">
           <span
             aria-label="This model can't see images"
@@ -566,7 +562,6 @@ export function AssistantPanel() {
     }
   };
 
-  const title = chat?.title ?? "New chat";
   const isEmpty = messages.length === 0 && !answering;
 
   return (
@@ -574,26 +569,31 @@ export function AssistantPanel() {
       aria-label="Assistant"
       className="flex h-full w-100 flex-col border-l bg-sidebar text-sidebar-foreground text-ui"
     >
-      <div className="flex h-header shrink-0 items-center gap-1 border-sidebar-border border-b pr-2.5 pl-3">
-        {ready ? (
-          <ChatsMenu title={title} />
+      <div className="flex h-toolbar shrink-0 items-center gap-1 border-sidebar-border border-b pr-2.5 pl-3">
+        {ready && chat ? (
+          <>
+            <ChatsMenu title={chat.title} />
+            <Hint label="New chat" side="bottom">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={newChat}
+                aria-label="New chat"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <SquarePenIcon />
+              </Button>
+            </Hint>
+          </>
         ) : (
-          <span className="flex-1 pl-1 font-medium">Assistant</span>
+          <>
+            <span className="flex-1 pl-1 font-medium">
+              {ready ? "New chat" : "Assistant"}
+            </span>
+            {ready ? <ChatsMenu title={null} /> : null}
+          </>
         )}
-        {ready ? (
-          <Hint label="New chat" side="bottom">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={newChat}
-              aria-label="New chat"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <SquarePenIcon />
-            </Button>
-          </Hint>
-        ) : null}
         <Hint label="Hide assistant" side="bottom">
           <Button
             type="button"
@@ -655,7 +655,7 @@ export function AssistantPanel() {
             </Button>
           }
         />
-      ) : isEmpty && openShard && !openShardRemoved ? (
+      ) : isEmpty && openShard && !openShardRemoved && !draft.trim() ? (
         <Starters onAsk={(text) => send(text, [openShard])} />
       ) : isEmpty ? (
         <div className="flex-1" />
@@ -682,6 +682,7 @@ export function AssistantPanel() {
             <ModelButton
               setup={setup}
               sendFiles={setup.status.sendFiles}
+              disabled={state === "noProvider" || state === "vaultOff"}
               open={pickerOpen}
               onOpenChange={setPickerOpen}
               onPicked={() => void reload()}

@@ -53,7 +53,7 @@ test("a diagram from the / menu starts with its code and drawing, and saves as a
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
   await page.keyboard.type("/diagram");
-  await pickOption(page, page.getByRole("option").first());
+  await pickOption(page, page.getByRole("option", { name: "Diagram", exact: true }));
 
   await expect(
     editor(page).getByRole("img", { name: "Diagram" }).getByText("B", { exact: true }),

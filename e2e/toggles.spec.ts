@@ -6,7 +6,7 @@ test("a toggle typed through the / menu is saved with its content", async ({ pag
   await page.keyboard.press("Enter");
 
   await page.keyboard.type("/toggle");
-  await pickOption(page, page.getByRole("option", { name: "Toggle" }));
+  await pickOption(page, page.getByRole("option", { name: "Toggle", exact: true }));
   await page.keyboard.type("My toggle title");
   // A new toggle starts open, so Enter starts a line inside it.
   await page.keyboard.press("Enter");

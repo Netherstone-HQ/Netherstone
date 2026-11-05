@@ -4,9 +4,11 @@ const FILES = {
   "Note.md": "# Note\n\nStart\n",
 };
 
-async function slash(page: import("@playwright/test").Page, query: string) {
+async function slash(page: import("@playwright/test").Page, query: string, option: string) {
   await page.keyboard.type(`/${query}`);
-  await pickOption(page, page.getByRole("option").first());
+  // The list narrows a step behind the typing, so wait for the option this
+  // query ends on, not whichever is first right now.
+  await pickOption(page, page.getByRole("option", { name: option, exact: true }));
 }
 
 test("blocks from the / menu are saved as Markdown", async ({ page }) => {
@@ -14,18 +16,18 @@ test("blocks from the / menu are saved as Markdown", async ({ page }) => {
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await slash(page, "heading 2");
+  await slash(page, "heading 2", "Heading 2");
   await page.keyboard.type("Second level");
   await page.keyboard.press("Enter");
 
-  await slash(page, "bullet");
+  await slash(page, "bullet", "Bulleted list");
   await page.keyboard.type("first item");
   await page.keyboard.press("Enter");
   await page.keyboard.type("second item");
   await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");
 
-  await slash(page, "code");
+  await slash(page, "code", "Code block");
   await page.keyboard.type("const x = 1;");
 
   await expect(editor(page).locator("h2")).toContainText("Second level");
@@ -41,7 +43,7 @@ test("a table from the / menu is saved as a pipe table", async ({ page }) => {
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await slash(page, "table");
+  await slash(page, "table", "Table");
   await expect(editor(page).locator("table")).toHaveCount(1);
   await page.keyboard.type("cell one");
 
@@ -55,7 +57,7 @@ test("a quote from the / menu keeps the caret inside it", async ({ page }) => {
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
 
-  await slash(page, "quote");
+  await slash(page, "quote", "Blockquote");
   await page.keyboard.type("Quoted line");
 
   await expect(editor(page).locator("blockquote")).toContainText("Quoted line");
@@ -92,7 +94,7 @@ test("a code block from the / menu in a list stays in the list item", async ({ p
   await caretAfter(page, "First item");
   await page.keyboard.press("Enter");
 
-  await slash(page, "code");
+  await slash(page, "code", "Code block");
   await page.keyboard.type("x = 1");
 
   const saved = await lastSave(page, "List.md");

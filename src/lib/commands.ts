@@ -924,3 +924,126 @@ export async function saveCustomProvider(
 export async function removeAssistantProvider(provider: string): Promise<void> {
   await invoke("assistant_remove", { provider });
 }
+
+export async function setAssistantSendFiles(on: boolean): Promise<void> {
+  await invoke("assistant_set_send_files", { on });
+}
+
+/** The picked model, as the assistant panel shows it. */
+export interface PickedModel {
+  id: string;
+  /** The name people know it by, when the catalog knows it. */
+  name?: string;
+  provider: string;
+  local: boolean;
+  /** Whether it takes images. */
+  images: boolean;
+}
+
+/** Null when no model is picked or its provider isn't set up anymore. */
+export async function getPickedModel(): Promise<PickedModel | null> {
+  return invoke("assistant_picked");
+}
+
+/** Why a chat couldn't go on, as the app reports it. */
+export interface ChatError {
+  kind:
+    | "keyRefused"
+    | "unreachable"
+    | "rateLimited"
+    | "busy"
+    | "timedOut"
+    | "tooLong"
+    | "failed"
+    | "stopped"
+    | "noModel"
+    | "turnedOff"
+    | "vaultClosed"
+    | "answering"
+    | "noChat"
+    | "storage";
+}
+
+export type ChatStop = "done" | "tools" | "length" | "filtered";
+
+/** What the panel hears while a chat answers, in order. */
+export type ChatEvent =
+  | { type: "chat"; id: string }
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "tool"; name: string; paths: string[] }
+  | { type: "sources"; shards: string[] }
+  | { type: "summarized" }
+  | { type: "done"; stop: ChatStop }
+  | { type: "stepLimit" }
+  | { type: "failed"; error: ChatError }
+  | { type: "stopped" };
+
+export interface ChatInfo {
+  id: string;
+  title: string;
+  vault: string;
+  /** Milliseconds since 1970. */
+  created: number;
+  updated: number;
+}
+
+/** A message as the panel shows it. */
+export interface ShownMessage {
+  seq: number;
+  role: "user" | "assistant";
+  text: string;
+  reasoning?: string;
+  /** Shards added to a user's message, vault-relative. */
+  shards?: string[];
+  tools?: string[];
+  /** Shards the answer read, vault-relative. */
+  sources?: string[];
+  model?: string;
+}
+
+export interface ChatView extends ChatInfo {
+  messages: ShownMessage[];
+}
+
+/**
+ * Sends `text` in `chat`, or starts a chat about `vault`, with `shards`
+ * added. Events stream to `onEvent`; resolves with the chat's id once the
+ * answer ends.
+ */
+export async function sendChat(
+  chat: string | null,
+  vault: string,
+  text: string,
+  shards: string[],
+  onEvent: (event: ChatEvent) => void,
+): Promise<string> {
+  const events = new Channel<ChatEvent>();
+  events.onmessage = onEvent;
+  return invoke("assistant_send", { chat, vault, text, shards, events });
+}
+
+export async function stopChat(chat: string): Promise<void> {
+  await invoke("assistant_stop", { chat });
+}
+
+export async function listChats(): Promise<ChatInfo[]> {
+  return invoke("assistant_chats");
+}
+
+/** Gives a new chat a short title from its first answer, and returns it. */
+export async function retitleChat(chat: string): Promise<string> {
+  return invoke("assistant_retitle", { chat });
+}
+
+export async function getChat(chat: string): Promise<ChatView> {
+  return invoke("assistant_chat", { chat });
+}
+
+export async function deleteChat(chat: string): Promise<void> {
+  await invoke("assistant_delete_chat", { chat });
+}
+
+export async function deleteAllChats(): Promise<void> {
+  await invoke("assistant_delete_chats");
+}

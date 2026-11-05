@@ -6,8 +6,8 @@
 
 use super::catalog::Facts;
 use super::chat::{
-    self, Call, CallResult, ChatError, Delta, File, Message, Request, Stop, StopToken, ToolSpec,
-    Usage,
+    self, Added, Call, CallResult, ChatError, Delta, File, Message, Request, Stop, StopToken,
+    ToolSpec, Usage,
 };
 use super::files;
 use super::models::Target;
@@ -134,8 +134,10 @@ fn system_prompt(vault: &str) -> String {
 (Markdown notes) in a vault, a folder on their computer. This chat is about the vault \
 \"{vault}\". Answer from the vault: search and read shards with the tools before \
 answering about the user's notes, and never guess what they say. Cite the shards you \
-used as Markdown links to their vault paths, like [Trip plan](Travel/Trip%20plan.md). \
-You can only read in this version: you can't create, change or move anything. Reply in \
+used with a Markdown link to the shard's vault path right after what it backs, like \
+[Trip plan](Travel/Trip%20plan.md), or [Trip plan](Travel/Trip%20plan.md#Day%202) for one \
+section. The app shows each cite as a number, so never use one as a word in a sentence. Shards the user adds to a \
+message come with it inside <shard> tags. You can only read in this version: you can't create, change or move anything. Reply in \
 the language the user writes in, and keep answers short unless asked for more. Today \
 is {}.",
         chrono::Local::now().format("%Y-%m-%d")
@@ -153,6 +155,8 @@ pub struct Turn {
     pub allowed: Arc<dyn Fn() -> bool + Send + Sync>,
     /// The send-images-and-PDFs switch.
     pub send_files: bool,
+    /// The shards added to the message being answered, which count as read.
+    pub added: Vec<String>,
 }
 
 /// Batches streamed text into events, and stops the chat when nobody's
@@ -232,7 +236,12 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         .unwrap_or_default();
     let system = system_prompt(&vault_name);
     let mut out = Out::new(sink, &turn.stop);
-    let mut sources: Vec<String> = Vec::new();
+    let mut sources: Vec<String> = turn.added.clone();
+    if !sources.is_empty() {
+        out.send(Event::Sources {
+            shards: sources.clone(),
+        });
+    }
     let mut usage = Usage::default();
     let chat_id = turn.chat.clone();
 
@@ -356,9 +365,7 @@ async fn stream_step(
 
 /// `messages` with their files' data read, off the async threads.
 async fn with_files(turn: &Turn, mut messages: Vec<Message>, system_bytes: u64) -> Vec<Message> {
-    let has_files = messages
-        .iter()
-        .any(|m| matches!(m, Message::Tool { files, .. } if !files.is_empty()));
+    let has_files = messages.iter().any(|m| !m.files().is_empty());
     if !turn.send_files || !has_files {
         return messages;
     }
@@ -456,6 +463,47 @@ async fn run_calls(
         });
     }
     (results, files)
+}
+
+/// The shards added to a message, read now, with their images and PDFs.
+/// A shard that can't be read says so in its text.
+pub async fn attach(turn: &Turn, shards: &[String]) -> (Vec<Added>, Vec<File>) {
+    let tools = Arc::new(tools());
+    let mut added = Vec::new();
+    let mut files: Vec<File> = Vec::new();
+    for path in shards {
+        let arguments = serde_json::json!({ "path": path });
+        let is_drawing = path.to_ascii_lowercase().ends_with(".excalidraw");
+        let call = Call {
+            id: String::new(),
+            name: if is_drawing { "read_drawing" } else { "read" }.to_string(),
+            arguments: arguments.clone(),
+            signatures: Vec::new(),
+        };
+        let mut text = match run_tool(turn, &tools, &call).await {
+            Ok(text) => text,
+            Err(error) => format!("Error: {error}"),
+        };
+        let (found, note) = if is_drawing {
+            (Vec::new(), None)
+        } else {
+            shard_files(turn, &arguments).await
+        };
+        for file in found {
+            if !files.iter().any(|f| f.path == file.path) {
+                files.push(file);
+            }
+        }
+        if let Some(note) = note {
+            text.push_str("\n\n");
+            text.push_str(&note.replace("the next message", "this message"));
+        }
+        added.push(Added {
+            path: path.clone(),
+            text,
+        });
+    }
+    (added, files)
 }
 
 /// The images, drawings and PDFs of the shards a read named that go to the
@@ -637,10 +685,8 @@ fn tokens_of(
         .sum();
     let files: u64 = history
         .iter()
-        .filter_map(|saved| match &saved.message {
-            Message::Tool { files, .. } => Some(files.iter().map(|f| f.tokens).sum::<u64>()),
-            _ => None,
-        })
+        .flat_map(|saved| saved.message.files())
+        .map(|file| file.tokens)
         .sum();
     estimate(system.len() + tools + summary.map_or(0, |s| s.text.len()) + messages) + files
 }
@@ -703,7 +749,13 @@ async fn summarize(
     }
     for saved in messages {
         match &saved.message {
-            Message::User { text } => transcript.push_str(&format!("User: {}\n\n", piece(text))),
+            Message::User { text, shards, .. } => {
+                transcript.push_str(&format!("User: {}\n", piece(text)));
+                for shard in shards {
+                    transcript.push_str(&format!("Added {}: {}\n", shard.path, piece(&shard.text)));
+                }
+                transcript.push('\n');
+            }
             Message::Assistant { text, calls, .. } => {
                 if !text.is_empty() {
                     transcript.push_str(&format!("Assistant: {}\n\n", piece(text)));
@@ -726,7 +778,7 @@ async fn summarize(
             }
         }
     }
-    let messages = [Message::User { text: transcript }];
+    let messages = [Message::user(transcript)];
     let request = Request {
         system: SUMMARY_PROMPT,
         messages: &messages,
@@ -740,6 +792,57 @@ async fn summarize(
         "" => Err(ChatError::Failed),
         text => Ok(text.to_string()),
     }
+}
+
+const TITLE_PROMPT: &str = "You name a chat between a user and the assistant of their \
+notes app, for a list of chats. Give a name of at most six words that says what the chat is \
+about, in the language of the chat, with no quotes and no full stop. Give only the name.";
+
+/// The longest piece of the chat a title is made from.
+const TITLE_PIECE: usize = 2_000;
+
+/// A short name for a chat, from its first question and answer.
+pub async fn short_title(
+    model: &Model,
+    chat: &str,
+    question: &str,
+    answer: &str,
+) -> Result<String, ChatError> {
+    let piece = |text: &str| -> String { text.chars().take(TITLE_PIECE).collect() };
+    let messages = [Message::user(format!(
+        "User: {}\n\nAssistant: {}",
+        piece(question),
+        piece(answer)
+    ))];
+    let request = Request {
+        system: TITLE_PROMPT,
+        messages: &messages,
+        tools: &[],
+        model: &model.id,
+        thinking: false,
+        cache_key: chat,
+    };
+    let reply = chat::stream(&model.target, &request, &mut |_| {}, &StopToken::default()).await?;
+    clean_title(&reply.text).ok_or(ChatError::Failed)
+}
+
+/// A model's name for a chat as a title: its first line, without the
+/// quotes, label or full stop models add anyway.
+fn clean_title(reply: &str) -> Option<String> {
+    let line = reply.lines().map(str::trim).find(|line| !line.is_empty())?;
+    let line = line
+        .strip_prefix("Title:")
+        .or_else(|| line.strip_prefix("Name:"))
+        .unwrap_or(line);
+    let quotes = |c: char| matches!(c, '"' | '\'' | '*' | '`' | '“' | '”' | '«' | '»');
+    let stops = ['.', '。'];
+    let title = line
+        .trim()
+        .trim_end_matches(stops)
+        .trim_matches(quotes)
+        .trim_end_matches(stops)
+        .trim();
+    (!title.is_empty()).then(|| title.to_string())
 }
 
 #[cfg(test)]

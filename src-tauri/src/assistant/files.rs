@@ -251,10 +251,7 @@ pub fn load(root: &Path, messages: &mut [Message], limits: &Limits, text_bytes: 
     // OpenAI caps the PDFs of a request together.
     let mut pdfs_left = limits.pdf_bytes;
     for message in messages.iter_mut().rev() {
-        let Message::Tool { files, .. } = message else {
-            continue;
-        };
-        for file in files.iter_mut().rev() {
+        for file in message.files_mut().iter_mut().rev() {
             file.data = None;
             let Some(Ok(bytes)) = inside(root, &file.path).map(std::fs::read) else {
                 continue;
@@ -278,18 +275,16 @@ pub fn load(root: &Path, messages: &mut [Message], limits: &Limits, text_bytes: 
 
 /// Whether any file in `messages` has its data read.
 pub fn any_sent(messages: &[Message]) -> bool {
-    messages.iter().any(|message| {
-        matches!(message, Message::Tool { files, .. } if files.iter().any(|f| f.data.is_some()))
-    })
+    messages
+        .iter()
+        .any(|message| message.files().iter().any(|f| f.data.is_some()))
 }
 
 /// `messages` with no file data, for a request a provider refused with them.
 pub fn without_data(messages: &mut [Message]) {
     for message in messages {
-        if let Message::Tool { files, .. } = message {
-            for file in files {
-                file.data = None;
-            }
+        for file in message.files_mut() {
+            file.data = None;
         }
     }
 }

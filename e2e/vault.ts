@@ -125,7 +125,34 @@ export type MockVaultOptions = {
   versions?: Record<string, MockVersion[]>;
   /** The versions files as they are now were saved as. */
   current?: Record<string, Omit<MockVersion, "content">>;
+  /** Turns the assistant on, set up as given. Off when left out. */
+  assistant?: MockAssistant;
 };
+
+type MockAssistant = {
+  /** Whether a provider has a key saved. */
+  provider?: boolean;
+  /** Whether the vault is on for AI. */
+  vaultAllowed?: boolean;
+  /** Whether a model is picked. */
+  picked?: boolean;
+  /** Whether the picked model takes images. */
+  images?: boolean;
+  sendFiles?: boolean;
+  /** The answer to every message, in the pieces it streams in. */
+  answer?: string[];
+  /** The shards every answer reads. */
+  reads?: string[];
+  /** The short title a new chat gets after its answer, if any. */
+  title?: string;
+};
+
+declare global {
+  interface Window {
+    /** Every message sent to the assistant. */
+    __sent: { chat: string | null; text: string; shards: string[] }[];
+  }
+}
 
 export type MockVersion = {
   /** Unix seconds. */
@@ -156,10 +183,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     theme = "dark",
     versions = {},
     current = {},
+    assistant = null,
   } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, drawing, noVault, otherVaults, versions, current }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, drawing, noVault, otherVaults, versions, current, assistant }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -403,7 +431,109 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           return { content, undo: { blob: `${name}#0`, time: Number(versionTime) } };
         },
         github_get_account: () => null,
+        ...assistantHandlers(),
       };
+
+      function assistantHandlers(): Record<string, (args: Args) => unknown> {
+        const setup = { ...assistant };
+        const model = {
+          id: "claude-sonnet-5-5",
+          name: "Claude Sonnet 5.5",
+          reasoning: true,
+          tools: true,
+          images: setup.images ?? true,
+          pdfs: true,
+          caching: true,
+          responsesOnly: false,
+        };
+        type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
+        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[] }[] = [];
+        window.__sent = [];
+        return {
+          assistant_status: () => ({
+            enabled: assistant !== null,
+            sendFiles: setup.sendFiles ?? true,
+            keyringAvailable: true,
+            model: setup.picked
+              ? { provider: "anthropic", server: null, model: model.id }
+              : null,
+            providers: [
+              {
+                id: "anthropic",
+                name: "Anthropic",
+                setup: "key",
+                keyPage: null,
+                key: setup.provider ? "keyring" : null,
+                servers: [],
+                custom: null,
+              },
+            ],
+          }),
+          assistant_picked: () =>
+            setup.picked
+              ? { id: model.id, name: model.name, provider: "Anthropic", local: false, images: model.images }
+              : null,
+          assistant_models: () => [model],
+          assistant_set_model: () => {
+            setup.picked = true;
+            return null;
+          },
+          mcp_vaults: () => [{ path: vaultPath, name: "Vault", allowed: setup.vaultAllowed ?? false }],
+          mcp_set_vault_allowed: (args) => {
+            setup.vaultAllowed = (args as unknown as { allowed: boolean }).allowed;
+            return null;
+          },
+          assistant_send: (args) => {
+            const { chat, text, shards, events } = args as unknown as {
+              chat: string | null;
+              text: string;
+              shards: string[];
+              events: { id: number };
+            };
+            window.__sent.push({ chat, text, shards });
+            let index = 0;
+            const send = (message: unknown) => callbacks[events.id]?.({ index: index++, message });
+            const now = Date.now();
+            let found = chats.find((c) => c.id === chat);
+            if (!found) {
+              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [] };
+              chats.unshift(found);
+            }
+            const answer = setup.answer ?? ["Done."];
+            const reads = setup.reads ?? [];
+            found.messages.push({ seq: found.messages.length + 1, role: "user", text, shards });
+            send({ type: "chat", id: found.id });
+            for (const path of reads) send({ type: "tool", name: "read", paths: [path] });
+            if (reads.length) send({ type: "sources", shards: reads });
+            for (const piece of answer) send({ type: "text", text: piece });
+            send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
+            found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: answer.join(""), sources: reads });
+            found.updated = now;
+            return found.id;
+          },
+          assistant_chats: () => chats.map(({ messages: _, ...info }) => info),
+          assistant_chat: (args) => {
+            const found = chats.find((c) => c.id === (args as unknown as { chat: string }).chat);
+            if (!found) throw { kind: "noChat" };
+            return found;
+          },
+          assistant_retitle: (args) => {
+            const found = chats.find((c) => c.id === (args as unknown as { chat: string }).chat);
+            if (!found || !setup.title) throw { kind: "failed" };
+            found.title = setup.title;
+            return setup.title;
+          },
+          assistant_delete_chat: (args) => {
+            const at = chats.findIndex((c) => c.id === (args as unknown as { chat: string }).chat);
+            if (at !== -1) chats.splice(at, 1);
+            return null;
+          },
+          assistant_delete_chats: () => {
+            chats.length = 0;
+            return null;
+          },
+        };
+      }
 
       let callbackId = 0;
       const callbacks: Record<number, (event: unknown) => void> = {};
@@ -454,6 +584,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       otherVaults,
       versions,
       current,
+      assistant,
     },
   );
 

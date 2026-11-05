@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { ListTreeIcon } from "lucide-react";
+import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
+import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { DetailsSection } from "./right-sidebar/DetailsSection";
@@ -26,7 +28,10 @@ function ShardSections({ isOpen }: { isOpen: boolean }) {
   );
 }
 
-/** The open shard's outline, links and details, or its history in their place. */
+/**
+ * The open shard's outline, links and details, or its history or the
+ * assistant in their place.
+ */
 export function RightSidebar() {
   const isSidebarOpen = useUIStore((s) => s.isRightSidebarOpen);
   const openPath = useEditorStore((s) => s.currentFilePath);
@@ -36,18 +41,27 @@ export function RightSidebar() {
   const isHistoryOpen = useHistoryStore((s) => s.openIn === "notes");
   const closeHistory = useHistoryStore((s) => s.closeHistory);
   const showsHistory = isHistoryOpen && filePath !== null;
-  const isOpen = isSidebarOpen && !showsHistory;
-  const isPanelOpen = isSidebarOpen || showsHistory;
+  const showsAssistant = useAssistantStore(
+    (s) => s.isOpen && s.enabled === true && !showsHistory,
+  );
+  const isCovered = showsHistory || showsAssistant;
+  const isOpen = isSidebarOpen && !isCovered;
+  const isPanelOpen = isSidebarOpen || isCovered;
 
-  // The panel slides as it opens or closes; History and the sidebar swap in
-  // place.
-  const [shown, setShown] = useState({ isPanelOpen, showsHistory });
+  // The panel slides as it opens or closes; History, the assistant and the
+  // sidebar swap in place.
+  const [shown, setShown] = useState({
+    isPanelOpen,
+    showsHistory,
+    showsAssistant,
+  });
   const [slides, setSlides] = useState(true);
   if (
     shown.isPanelOpen !== isPanelOpen ||
-    shown.showsHistory !== showsHistory
+    shown.showsHistory !== showsHistory ||
+    shown.showsAssistant !== showsAssistant
   ) {
-    setShown({ isPanelOpen, showsHistory });
+    setShown({ isPanelOpen, showsHistory, showsAssistant });
     setSlides(shown.isPanelOpen !== isPanelOpen);
   }
 
@@ -61,7 +75,7 @@ export function RightSidebar() {
       className={cn(
         "relative shrink-0 overflow-hidden",
         slides && "transition-[width] duration-200 ease-linear",
-        isPanelOpen ? "w-72" : "w-0",
+        !isPanelOpen ? "w-0" : showsAssistant ? "w-100" : "w-72",
       )}
       inert={!isPanelOpen}
     >
@@ -70,13 +84,18 @@ export function RightSidebar() {
           <HistoryPanel place="notes" filePath={filePath} />
         </div>
       ) : null}
+      {showsAssistant ? (
+        <div className="absolute inset-y-0 right-0">
+          <AssistantPanel />
+        </div>
+      ) : null}
       <aside
         aria-label="Right sidebar"
         className={cn(
           "absolute inset-y-0 flex w-72 flex-col gap-3 overflow-y-auto border-l bg-sidebar p-2",
           slides && "transition-[right] duration-200 ease-linear",
           isSidebarOpen ? "right-0" : "-right-72",
-          showsHistory && "invisible",
+          isCovered && "invisible",
         )}
       >
         {hasShard ? (

@@ -389,6 +389,9 @@ pub struct Shown {
     /// The model's shown reasoning, when it gave some.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<String>,
+    /// The shards added to a user's message.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    shards: Vec<String>,
     /// The tools it called, by name.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<String>,
@@ -446,6 +449,51 @@ fn picked_model() -> Result<engine::Model, ChatError> {
     })
 }
 
+/// The picked model, as the panel shows it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Picked {
+    id: String,
+    /// The name people know it by, when the catalog knows it.
+    name: Option<String>,
+    provider: &'static str,
+    local: bool,
+    /// Whether it takes images.
+    images: bool,
+}
+
+/// The picked model, or None when none is picked or its provider isn't
+/// set up anymore.
+pub async fn picked() -> Result<Option<Picked>, ChatError> {
+    let found = tauri::async_runtime::spawn_blocking(|| {
+        let Some(choice) = read::<ModelChoice>(MODEL).map_err(|_| ChatError::Storage)? else {
+            return Ok(None);
+        };
+        match picked_model() {
+            Ok(model) => Ok(Some((choice, model))),
+            Err(ChatError::NoModel) => Ok(None),
+            Err(error) => Err(error),
+        }
+    })
+    .await
+    .map_err(|_| ChatError::Failed)??;
+    let Some((choice, model)) = found else {
+        return Ok(None);
+    };
+    let provider = providers::find(&choice.provider).map_err(|_| ChatError::NoModel)?;
+    let images = match model.target.api {
+        Api::Ollama => local::sees_images(&model.target, &model.id).await,
+        _ => model.facts.images,
+    };
+    Ok(Some(Picked {
+        id: model.id,
+        name: model.facts.name,
+        provider: provider.name,
+        local: provider.setup == Setup::Local,
+        images,
+    }))
+}
+
 /// The vault at `path`, while the assistant is on and may use it.
 fn open_vault(path: &std::path::Path) -> Result<crate::tools::Vault, ChatError> {
     let conn = db::open_connection().map_err(|_| ChatError::Storage)?;
@@ -458,12 +506,13 @@ fn open_vault(path: &std::path::Path) -> Result<crate::tools::Vault, ChatError> 
     ai_vaults::open(known).map_err(|_| ChatError::VaultClosed)
 }
 
-/// Sends `text` in `chat`, or in a new chat about `vault`, and streams the
-/// answer to `sink`. Gives the chat's id once the answer ends.
+/// Sends `text` in `chat`, or in a new chat about `vault`, with `shards`
+/// added to it, and streams the answer to `sink`. Gives the chat's id once the answer ends.
 pub async fn send(
     chat: Option<String>,
     vault: String,
     text: String,
+    shards: Vec<String>,
     window: String,
     sink: impl Sink + 'static,
 ) -> Result<String, ChatError> {
@@ -531,6 +580,7 @@ pub async fn send(
         stop: stop.clone(),
         allowed: Arc::new(move || open_vault(&vault_path).is_ok()),
         send_files,
+        added: shards,
     };
     let result = run(&turn, &text, &sink).await;
     if let Ok(mut running) = running().lock() {
@@ -556,8 +606,11 @@ async fn run(
         return Err(ChatError::Stopped);
     }
     let chat = turn.chat.clone();
+    let (shards, files) = engine::attach(turn, &turn.added).await;
     let message = Message::User {
         text: text.to_string(),
+        shards,
+        files,
     };
     engine::saved(&turn.store, move |store| {
         store.add(&chat, &message, &[], None).map(|_| ())
@@ -588,6 +641,32 @@ pub async fn chats() -> Result<Vec<ChatInfo>, ChatError> {
     engine::saved(&store()?, |store| store.list()).await
 }
 
+/// Gives a new chat a short name from its first question and answer, with
+/// one small call to the model. Its first title stays when that fails.
+pub async fn retitle(chat: String) -> Result<String, ChatError> {
+    let store = store()?;
+    let id = chat.clone();
+    let messages = engine::saved(&store, move |store| store.messages(&id)).await?;
+    let question = messages.iter().find_map(|saved| match &saved.message {
+        Message::User { text, .. } => Some(text.clone()),
+        _ => None,
+    });
+    let answer = messages.iter().find_map(|saved| match &saved.message {
+        Message::Assistant { text, .. } if !text.trim().is_empty() => Some(text.clone()),
+        _ => None,
+    });
+    let (Some(question), Some(answer)) = (question, answer) else {
+        return Err(ChatError::Failed);
+    };
+    let model = tauri::async_runtime::spawn_blocking(picked_model)
+        .await
+        .map_err(|_| ChatError::Failed)??;
+    let title = engine::short_title(&model, &chat, &question, &answer).await?;
+    let kept = title.clone();
+    engine::saved(&store, move |store| store.set_title(&chat, &kept)).await?;
+    Ok(sessions::title_of(&title))
+}
+
 pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
     let found = engine::saved(&store()?, move |store| {
         Ok(store.info(&chat)?.map(|info| (info, store.messages(&chat))))
@@ -602,8 +681,16 @@ pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
 }
 
 fn shown(saved: sessions::Saved) -> Option<Shown> {
+    let mut shards = Vec::new();
     let (role, text, reasoning, tools) = match saved.message {
-        Message::User { text } => ("user", text, None, Vec::new()),
+        Message::User {
+            text,
+            shards: added,
+            ..
+        } => {
+            shards = added.into_iter().map(|shard| shard.path).collect();
+            ("user", text, None, Vec::new())
+        }
         Message::Assistant {
             text,
             calls,
@@ -631,6 +718,7 @@ fn shown(saved: sessions::Saved) -> Option<Shown> {
         role,
         text,
         reasoning,
+        shards,
         tools,
         sources: saved.sources,
         model: saved.model,

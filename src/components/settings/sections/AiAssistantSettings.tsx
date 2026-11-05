@@ -7,18 +7,20 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  type Models,
+  ModelList,
+  errorKind,
+  modelGroups,
+  modelName,
+  sourceKey,
+  useModelLists,
+} from "@/components/assistant/models";
+import { DeleteAllChatsDialog } from "@/components/assistant/ChatsMenu";
 import { HelpDialog } from "@/components/settings/HelpDialog";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Dot } from "@/components/ui/dot";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,33 +49,16 @@ import {
   type ProviderError,
   findLocalServers,
   getAssistantStatus,
-  listAssistantModels,
   removeAssistantProvider,
   saveAssistantKey,
   saveCustomProvider,
   saveLocalServer,
   setAssistantEnabled,
   setAssistantModel,
+  setAssistantSendFiles,
 } from "@/lib/commands";
+import { useAssistantStore } from "@/store/assistant";
 import { cn } from "@/lib/utils";
-
-/** A provider's models, or why they couldn't be listed. */
-type Models =
-  | { state: "loading" }
-  | { state: "ready"; models: AssistantModel[] }
-  | { state: "failed"; error: ProviderError["kind"] };
-
-/** Where a list of models comes from: a provider, or one local server. */
-function sourceKey(provider: string, server: string | null = null): string {
-  return server ? `${provider} ${server}` : provider;
-}
-
-function errorKind(error: unknown): ProviderError["kind"] {
-  if (error && typeof error === "object" && "kind" in error) {
-    return (error as ProviderError).kind;
-  }
-  return "failed";
-}
 
 function showError(error: unknown) {
   toast.error(error instanceof Error ? error.message : String(error));
@@ -94,10 +79,6 @@ function serverName(server: LocalServer): string {
   return SERVER_NAMES[server.kind] ?? hostOf(server.address);
 }
 
-function modelName(model: AssistantModel): string {
-  return model.name ?? model.id;
-}
-
 const API_OPTIONS: { value: AssistantApi; label: string }[] = [
   { value: "openAi", label: "OpenAI-style" },
   { value: "anthropic", label: "Anthropic" },
@@ -106,31 +87,11 @@ const API_OPTIONS: { value: AssistantApi; label: string }[] = [
 
 export function AiAssistantSettings() {
   const switchId = useId();
+  const filesId = useId();
+  const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<AssistantStatus | null>(null);
-  const [models, setModels] = useState<Record<string, Models>>({});
-
-  const setSource = useCallback((key: string, value: Models | null) => {
-    setModels((current) => {
-      const next = { ...current };
-      if (value) next[key] = value;
-      else delete next[key];
-      return next;
-    });
-  }, []);
-
-  const loadModels = useCallback(
-    async (provider: string, server: string | null = null) => {
-      const key = sourceKey(provider, server);
-      setSource(key, { state: "loading" });
-      try {
-        const list = await listAssistantModels(provider, server);
-        setSource(key, { state: "ready", models: list });
-      } catch (error) {
-        setSource(key, { state: "failed", error: errorKind(error) });
-      }
-    },
-    [setSource],
-  );
+  const { models, setModels, setSource, loadModels, loadAll } =
+    useModelLists();
 
   const refresh = useCallback(async () => {
     try {
@@ -143,17 +104,9 @@ export function AiAssistantSettings() {
   useEffect(() => {
     void getAssistantStatus().then((next) => {
       setStatus(next);
-      for (const provider of next?.providers ?? []) {
-        if (provider.setup === "local") {
-          for (const server of provider.servers) {
-            void loadModels(provider.id, server.address);
-          }
-        } else if (provider.key || provider.custom) {
-          void loadModels(provider.id);
-        }
-      }
+      loadAll(next?.providers ?? []);
     }, showError);
-  }, [loadModels]);
+  }, [loadAll]);
 
   if (!status) return null;
 
@@ -161,8 +114,19 @@ export function AiAssistantSettings() {
     setStatus((current) => current && { ...current, enabled });
     try {
       await setAssistantEnabled(enabled);
+      useAssistantStore.getState().setEnabled(enabled);
     } catch (error) {
       setStatus((current) => current && { ...current, enabled: !enabled });
+      showError(error);
+    }
+  }
+
+  async function toggleFiles(sendFiles: boolean) {
+    setStatus((current) => current && { ...current, sendFiles });
+    try {
+      await setAssistantSendFiles(sendFiles);
+    } catch (error) {
+      setStatus((current) => current && { ...current, sendFiles: !sendFiles });
       showError(error);
     }
   }
@@ -241,6 +205,37 @@ export function AiAssistantSettings() {
             models={models}
             value={status.model}
             onPick={(choice) => void pick(choice)}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Send images and PDFs"
+          description="They leave this computer with the shard's text"
+          htmlFor={filesId}
+        >
+          <Switch
+            id={filesId}
+            checked={status.sendFiles}
+            onCheckedChange={(checked) => void toggleFiles(checked)}
+          />
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup title="Chats">
+        <SettingRow
+          label="Saved chats"
+          description="Kept on this computer, outside your vaults and sync"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirming(true)}
+          >
+            Delete all
+          </Button>
+          <DeleteAllChatsDialog
+            open={confirming}
+            onOpenChange={setConfirming}
           />
         </SettingRow>
       </SettingsGroup>
@@ -343,20 +338,7 @@ function ModelPicker({
   onPick: (choice: ModelChoice) => void;
 }) {
   const [open, setOpen] = useState(false);
-
-  const groups = providers.flatMap((provider) => {
-    const sources =
-      provider.setup === "local"
-        ? provider.servers.map((server) => server.address)
-        : [null];
-    const items = sources.flatMap((server) => {
-      const list = models[sourceKey(provider.id, server)];
-      return list?.state === "ready"
-        ? list.models.map((model) => ({ model, server }))
-        : [];
-    });
-    return items.length > 0 ? [{ provider, items }] : [];
-  });
+  const groups = modelGroups(providers, models);
 
   const picked = value
     ? groups
@@ -400,38 +382,15 @@ function ModelPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-75 p-0">
-        <Command>
-          <CommandInput placeholder="Search models" />
-          <CommandList>
-            <CommandEmpty>No models found</CommandEmpty>
-            {groups.map(({ provider, items }) => (
-              <CommandGroup key={provider.id} heading={provider.name}>
-                {items.map(({ model, server }) => (
-                  <CommandItem
-                    key={`${server ?? ""} ${model.id}`}
-                    value={`${provider.id} ${server ?? ""} ${model.id}`}
-                    keywords={[modelName(model), provider.name]}
-                    data-checked={
-                      value?.provider === provider.id &&
-                      value.model === model.id &&
-                      value.server === server
-                    }
-                    onSelect={() => {
-                      onPick({
-                        provider: provider.id,
-                        server,
-                        model: model.id,
-                      });
-                      setOpen(false);
-                    }}
-                  >
-                    <span className="truncate">{modelName(model)}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
+        <ModelList
+          providers={providers}
+          models={models}
+          value={value}
+          onPick={(choice) => {
+            onPick(choice);
+            setOpen(false);
+          }}
+        />
       </PopoverContent>
     </Popover>
   );

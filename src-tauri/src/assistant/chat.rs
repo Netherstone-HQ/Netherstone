@@ -31,6 +31,12 @@ use tokio::sync::Notify;
 pub enum Message {
     User {
         text: String,
+        /// Shards added with @ or as the open shard, as they read when sent.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        shards: Vec<Added>,
+        /// Their images and PDFs.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        files: Vec<File>,
     },
     Assistant {
         text: String,
@@ -47,7 +53,42 @@ pub enum Message {
     },
 }
 
-/// A file from the vault that goes with a tool's results. Only where it is
+impl Message {
+    pub fn user(text: impl Into<String>) -> Self {
+        Message::User {
+            text: text.into(),
+            shards: Vec::new(),
+            files: Vec::new(),
+        }
+    }
+
+    /// The images and PDFs that go with it.
+    pub fn files(&self) -> &[File] {
+        match self {
+            Message::User { files, .. } | Message::Tool { files, .. } => files,
+            Message::Assistant { .. } => &[],
+        }
+    }
+
+    pub fn files_mut(&mut self) -> &mut [File] {
+        match self {
+            Message::User { files, .. } | Message::Tool { files, .. } => files,
+            Message::Assistant { .. } => &mut [],
+        }
+    }
+}
+
+/// A shard added to a user's message.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Added {
+    /// Vault-relative.
+    pub path: String,
+    /// What reading it gave, with any note about its files.
+    pub text: String,
+}
+
+/// A file from the vault that goes with a message. Only where it is
 /// is saved; its data is read again for each request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -509,13 +550,47 @@ fn genai_failure(target: &Target, error: &genai::Error, started: bool) -> Failur
     }
 }
 
+/// The files whose data was read, as parts to send.
+fn binaries(files: &[File]) -> Vec<ContentPart> {
+    files
+        .iter()
+        .filter_map(|file| {
+            let data = file.data.clone()?;
+            Some(ContentPart::Binary(Binary::from_base64(
+                file.mime.clone(),
+                data,
+                Some(file.path.clone()),
+            )))
+        })
+        .collect()
+}
+
 fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatRequest {
     let messages = request
         .messages
         .iter()
         .flat_map(|message| -> Vec<ChatMessage> {
             match message {
-                Message::User { text } => vec![ChatMessage::user(text.as_str())],
+                Message::User {
+                    text,
+                    shards,
+                    files,
+                } => {
+                    let mut full = text.clone();
+                    for shard in shards {
+                        full.push_str(&format!(
+                            "\n\n<shard path=\"{}\">\n{}\n</shard>",
+                            shard.path, shard.text
+                        ));
+                    }
+                    let sent = binaries(files);
+                    if sent.is_empty() {
+                        return vec![ChatMessage::user(full)];
+                    }
+                    let mut parts = vec![ContentPart::Text(full)];
+                    parts.extend(sent);
+                    vec![ChatMessage::user(MessageContent::from_parts(parts))]
+                }
                 Message::Assistant {
                     text,
                     calls,
@@ -577,17 +652,7 @@ fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatReques
                     )];
                     // Not every provider takes files in a tool result, so they
                     // follow it as the user's.
-                    let sent: Vec<ContentPart> = files
-                        .iter()
-                        .filter_map(|file| {
-                            let data = file.data.clone()?;
-                            Some(ContentPart::Binary(Binary::from_base64(
-                                file.mime.clone(),
-                                data,
-                                Some(file.path.clone()),
-                            )))
-                        })
-                        .collect();
+                    let sent = binaries(files);
                     if !sent.is_empty() {
                         let mut parts = vec![ContentPart::Text(
                             "The images and PDFs of the shards just read:".to_string(),

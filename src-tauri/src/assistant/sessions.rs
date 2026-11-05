@@ -64,6 +64,8 @@ CREATE INDEX IF NOT EXISTS chats_by_update ON chats (updated DESC);
 ";
 
 const TITLE_LENGTH: usize = 60;
+/// About how long a first title gets, cut between words.
+const FIRST_TITLE_LENGTH: usize = 40;
 
 fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -78,13 +80,42 @@ pub fn path() -> Result<PathBuf, String> {
     Ok(crate::db::get_db_path()?.with_file_name("assistant.db"))
 }
 
-/// A chat's title: the start of its first message, on one line.
-fn title_of(text: &str) -> String {
+/// A chat's title: the start of `text`, on one line.
+pub fn title_of(text: &str) -> String {
     let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
     match line.char_indices().nth(TITLE_LENGTH) {
         Some((end, _)) => format!("{}…", line[..end].trim_end()),
         None => line,
     }
+}
+
+/// A new chat's title until it gets a short one, and if that fails: the
+/// first sentence of its first message, cut between words.
+fn first_title(text: &str) -> String {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = line.char_indices().peekable();
+    let mut sentence = line.as_str();
+    while let Some((at, c)) = chars.next() {
+        let ends = chars.peek().is_none_or(|&(_, next)| next == ' ');
+        if ends && matches!(c, '.' | '?' | '!' | '。' | '？' | '！') {
+            let keep = if c == '.' { at } else { at + c.len_utf8() };
+            sentence = &line[..keep];
+            break;
+        }
+    }
+    if sentence.chars().count() <= FIRST_TITLE_LENGTH {
+        return sentence.to_string();
+    }
+    let end = sentence
+        .char_indices()
+        .nth(FIRST_TITLE_LENGTH)
+        .map_or(sentence.len(), |(end, _)| end);
+    // A word longer than the whole title is cut inside.
+    let cut = sentence[..end]
+        .rfind(' ')
+        .filter(|&at| at > 0)
+        .unwrap_or(end);
+    format!("{}…", sentence[..cut].trim_end())
 }
 
 fn new_id() -> String {
@@ -122,7 +153,7 @@ impl Store {
         self.conn
             .execute(
                 "INSERT INTO chats (id, title, vault, created, updated) VALUES (?1, ?2, ?3, ?4, ?4)",
-                params![id, title_of(first), vault.to_string_lossy(), time],
+                params![id, first_title(first), vault.to_string_lossy(), time],
             )
             .map_err(sql)?;
         Ok(id)
@@ -234,6 +265,17 @@ impl Store {
         })
     }
 
+    /// Gives the chat a new title, cut like the first one.
+    pub fn set_title(&self, chat: &str, title: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE chats SET title = ?2 WHERE id = ?1",
+                params![chat, title_of(title)],
+            )
+            .map_err(sql)?;
+        Ok(())
+    }
+
     pub fn set_summary(&self, chat: &str, summary: &Summary) -> Result<(), String> {
         self.conn
             .execute(
@@ -302,14 +344,7 @@ mod tests {
             }),
         };
         store
-            .add(
-                &chat,
-                &Message::User {
-                    text: "What did I plan?".into(),
-                },
-                &[],
-                None,
-            )
+            .add(&chat, &Message::user("What did I plan?"), &[], None)
             .unwrap();
         store.add(&chat, &answer, &[], Some("m")).unwrap();
         store
@@ -342,9 +377,40 @@ mod tests {
     }
 
     #[test]
+    fn a_first_title_is_the_first_sentence_cut_between_words() {
+        assert_eq!(
+            first_title("What's still open before the 0.7 tag? And the notes."),
+            "What's still open before the 0.7 tag?"
+        );
+        assert_eq!(
+            first_title("Summarize this shard. Keep it short."),
+            "Summarize this shard"
+        );
+        assert_eq!(
+            first_title("Tell me everything I wrote about the trip to Lisbon in May"),
+            "Tell me everything I wrote about the…"
+        );
+        assert_eq!(
+            first_title(&"a".repeat(50)).chars().count(),
+            FIRST_TITLE_LENGTH + 1
+        );
+    }
+
+    #[test]
     fn long_titles_are_cut() {
         let title = title_of(&"word ".repeat(40));
         assert!(title.ends_with('…') && title.chars().count() <= TITLE_LENGTH + 1);
+    }
+
+    #[test]
+    fn a_chat_can_be_renamed() {
+        let store = store("sessions-rename");
+        let chat = store.create(Path::new("/v"), "What's still open?").unwrap();
+        store.set_title(&chat, "Open items\nbefore 0.7").unwrap();
+        assert_eq!(
+            store.info(&chat).unwrap().unwrap().title,
+            "Open items before 0.7"
+        );
     }
 
     #[test]
@@ -352,9 +418,7 @@ mod tests {
         let store = store("sessions-delete");
         let a = store.create(Path::new("/v"), "a").unwrap();
         let b = store.create(Path::new("/v"), "b").unwrap();
-        store
-            .add(&a, &Message::User { text: "a".into() }, &[], None)
-            .unwrap();
+        store.add(&a, &Message::user("a"), &[], None).unwrap();
         store.delete(&a).unwrap();
         assert!(store.info(&a).unwrap().is_none());
         assert!(store.messages(&a).unwrap().is_empty());

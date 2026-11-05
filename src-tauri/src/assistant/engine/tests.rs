@@ -64,6 +64,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         },
         stop: StopToken::default(),
         allowed: Arc::new(|| true),
+        send_files: false,
     }
 }
 
@@ -143,7 +144,7 @@ async fn a_tool_round_trip_for_every_provider_kind() {
         // answer citing the shard.
         let saved = messages(&turn);
         assert_eq!(saved.len(), 2 * names.len(), "{api:?}");
-        let Some(Message::Tool { results }) = saved
+        let Some(Message::Tool { results, .. }) = saved
             .iter()
             .rev()
             .find(|m| matches!(m, Message::Tool { .. }))
@@ -174,6 +175,155 @@ async fn a_tool_round_trip_for_every_provider_kind() {
     }
 }
 
+/// Trip.md with a picture and a PDF, for a model that takes both.
+fn turn_with_files(name: &str, target: Target, model: &str, send_files: bool) -> Turn {
+    let mut turn = turn(name, target, model);
+    let root = &turn.vault.root;
+    std::fs::create_dir_all(root.join("_attachments")).unwrap();
+    image::RgbImage::new(4, 4)
+        .save(root.join("_attachments/map.png"))
+        .unwrap();
+    std::fs::write(root.join("_attachments/plan.pdf"), b"%PDF-1.4 plan").unwrap();
+    std::fs::write(
+        root.join("Trip.md"),
+        format!("{TRIP}\n![Map](_attachments/map.png)\n\n[Plan](_attachments/plan.pdf)\n"),
+    )
+    .unwrap();
+    turn.model.facts.images = true;
+    turn.model.facts.pdfs = true;
+    turn.send_files = send_files;
+    turn
+}
+
+#[tokio::test]
+async fn images_and_pdfs_go_with_a_read_shard_for_every_provider_kind() {
+    use base64::Engine;
+    let png = base64::engine::general_purpose::STANDARD.encode(
+        std::fs::read({
+            let probe = turn_with_files(
+                "engine-files-probe",
+                serve(vec![]).target(Api::OpenAi, None),
+                "m",
+                true,
+            );
+            probe.vault.root.join("_attachments/map.png")
+        })
+        .unwrap(),
+    );
+    let pdf = base64::engine::general_purpose::STANDARD.encode(b"%PDF-1.4 plan");
+    for (api, model, names) in recorded() {
+        let server = serve(names.iter().map(|name| Answer::recorded(name)).collect());
+        let key = (api != Api::Ollama).then_some(KEY);
+        let turn = turn_with_files(
+            &format!("engine-files-{model}"),
+            server.target(api, key),
+            model,
+            true,
+        );
+        answer(&turn, &Collect::default())
+            .await
+            .unwrap_or_else(|e| panic!("{api:?}: {e:?}"));
+
+        let last = server.requests().pop().unwrap();
+        assert!(last.contains(&png), "{api:?}: the picture goes");
+        let (image, document) = match api {
+            Api::Anthropic => ("\"type\":\"image\"", Some("\"type\":\"document\"")),
+            Api::Google => ("\"inline_data\"", Some("\"inline_data\"")),
+            Api::OpenAi | Api::OpenRouter => ("\"image_url\"", Some("\"file_data\"")),
+            Api::Ollama => ("\"images\"", None),
+        };
+        assert!(last.contains(image), "{api:?}: {last}");
+        match document {
+            Some(document) => {
+                assert!(
+                    last.contains(&pdf) && last.contains(document),
+                    "{api:?}: {last}"
+                )
+            }
+            // Ollama's route would send a PDF as an image.
+            None => assert!(!last.contains(&pdf), "{api:?}"),
+        }
+        let Some(Message::Tool { files, results }) = messages(&turn)
+            .into_iter()
+            .find(|m| matches!(m, Message::Tool { results, .. } if results[0].name == "read"))
+        else {
+            panic!("{api:?}")
+        };
+        assert!(
+            files.iter().all(|file| file.data.is_none()),
+            "only paths are saved"
+        );
+        assert!(
+            results[0].output.contains("come in the next message"),
+            "{api:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_text_only_model_is_told_what_it_cant_see() {
+    let server = serve(
+        ["openrouter-1.sse", "openrouter-2.sse", "openrouter-3.sse"]
+            .iter()
+            .map(|name| Answer::recorded(name))
+            .collect(),
+    );
+    let mut turn = turn_with_files(
+        "engine-files-text-only",
+        server.target(Api::OpenRouter, Some(KEY)),
+        "nvidia/nemotron-3.5-lightning:free",
+        true,
+    );
+    turn.model.facts.images = false;
+    turn.model.facts.pdfs = false;
+    answer(&turn, &Collect::default()).await.unwrap();
+    let last = server.requests().pop().unwrap();
+    assert!(!last.contains("image_url") && !last.contains("file_data"));
+    assert!(last.contains("can't take: _attachments/map.png, _attachments/plan.pdf"));
+
+    // With the switch off, nothing goes either, and the model knows why.
+    let server = serve(
+        ["openrouter-1.sse", "openrouter-2.sse", "openrouter-3.sse"]
+            .iter()
+            .map(|name| Answer::recorded(name))
+            .collect(),
+    );
+    let turn = turn_with_files(
+        "engine-files-off",
+        server.target(Api::OpenRouter, Some(KEY)),
+        "nvidia/nemotron-3.5-lightning:free",
+        false,
+    );
+    answer(&turn, &Collect::default()).await.unwrap();
+    let last = server.requests().pop().unwrap();
+    assert!(!last.contains("image_url") && !last.contains("file_data"));
+    assert!(last.contains("turned off in Settings"));
+}
+
+#[tokio::test]
+async fn files_a_provider_turns_down_are_left_out_and_the_model_told() {
+    let server = serve(vec![
+        Answer::recorded("openrouter-1.sse"),
+        Answer::recorded("openrouter-2.sse"),
+        Answer::status(400, "{\"error\":{\"message\":\"PDF has too many pages\"}}"),
+        Answer::recorded("openrouter-3.sse"),
+    ]);
+    let turn = turn_with_files(
+        "engine-files-refused",
+        server.target(Api::OpenRouter, Some(KEY)),
+        "nvidia/nemotron-3.5-lightning:free",
+        true,
+    );
+    let sink = Collect::default();
+    answer(&turn, &sink).await.unwrap();
+    assert!(sink.text().contains("Lisbon"));
+    let requests = server.requests();
+    assert_eq!(requests.len(), 4);
+    assert!(requests[2].contains("file_data"));
+    assert!(!requests[3].contains("file_data") && !requests[3].contains("image_url"));
+    assert!(requests[3].contains("turned down the images and PDFs"));
+}
+
 #[tokio::test]
 async fn only_read_tools_run_whatever_the_model_asks() {
     let call = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"create_shard\",\"arguments\":\"{\\\"path\\\":\\\"New.md\\\",\\\"content\\\":\\\"x\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
@@ -189,7 +339,7 @@ async fn only_read_tools_run_whatever_the_model_asks() {
     );
     answer(&turn, &Collect::default()).await.unwrap();
     assert!(!turn.vault.root.join("New.md").exists());
-    let Message::Tool { results } = &messages(&turn)[2] else {
+    let Message::Tool { results, .. } = &messages(&turn)[2] else {
         panic!()
     };
     assert!(
@@ -216,7 +366,7 @@ async fn the_step_limit_ends_a_model_that_keeps_calling_tools() {
     assert_eq!(server.requests().len(), MAX_STEPS);
     assert!(sink.events().contains(&Event::StepLimit));
     // Every call has its result, so the chat can go on.
-    let Message::Tool { results } = messages(&turn).pop().unwrap() else {
+    let Message::Tool { results, .. } = messages(&turn).pop().unwrap() else {
         panic!()
     };
     assert!(results[0].output.starts_with("Not run"));
@@ -373,18 +523,19 @@ fn a_call_saved_without_its_result_is_answered_as_not_run() {
             name: "read".into(),
             output: "x".into(),
         }],
+        files: vec![],
     };
     let user = Message::User { text: "q".into() };
     let fixed = answered(vec![user.clone(), asked.clone(), half, user.clone(), asked]);
     assert_eq!(fixed.len(), 6);
-    let Message::Tool { results } = &fixed[2] else {
+    let Message::Tool { results, .. } = &fixed[2] else {
         panic!()
     };
     assert_eq!(
         results.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
         vec!["a", "b"]
     );
-    let Message::Tool { results } = &fixed[5] else {
+    let Message::Tool { results, .. } = &fixed[5] else {
         panic!()
     };
     assert!(results.iter().all(|r| r.output == "Not run."));
@@ -421,7 +572,10 @@ fn older_messages_end_before_a_user_message() {
         calls: vec![],
         reasoning: None,
     };
-    let tool = || Message::Tool { results: vec![] };
+    let tool = || Message::Tool {
+        results: vec![],
+        files: vec![],
+    };
     let history = vec![
         saved(1, user()),
         saved(2, answer()),

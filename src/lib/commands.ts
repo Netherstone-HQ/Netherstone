@@ -852,6 +852,8 @@ export interface ModelChoice {
 
 export interface AssistantStatus {
   enabled: boolean;
+  /** Whether a shard's images and PDFs go to the model with it. */
+  sendFiles: boolean;
   keyringAvailable: boolean;
   model: ModelChoice | null;
   providers: AssistantProvider[];

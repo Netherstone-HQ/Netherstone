@@ -102,6 +102,33 @@ async fn answers(server: &Server) -> Option<Vec<Model>> {
         .ok()
 }
 
+/// Whether the Ollama model `model` at `target` says it sees images, from
+/// the capabilities its server reports. False when it can't be asked.
+pub async fn sees_images(target: &Target, model: &str) -> bool {
+    #[derive(Deserialize)]
+    struct Shown {
+        #[serde(default)]
+        capabilities: Vec<String>,
+    }
+    let Ok(client) = models::http_client(PROBE_CONNECT, Some(PROBE_TOTAL)) else {
+        return false;
+    };
+    let url = format!("{}api/show", target.base_url);
+    let shown = async {
+        client
+            .post(url)
+            .json(&serde_json::json!({ "model": model }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<Shown>()
+            .await
+    };
+    shown
+        .await
+        .is_ok_and(|shown| shown.capabilities.iter().any(|c| c == "vision"))
+}
+
 /// The servers answering on their usual ports, with their models.
 pub async fn find() -> Vec<(Server, Vec<Model>)> {
     let probes = USUAL_PORTS.map(|(kind, port)| async move {
@@ -216,5 +243,25 @@ mod tests {
             server(ServerKind::LmStudio).target().base_url,
             "http://localhost:1/v1/"
         );
+    }
+
+    #[tokio::test]
+    async fn a_local_model_says_whether_it_sees_images() {
+        use crate::assistant::chat::tests::{Answer, serve};
+        let server = serve(vec![
+            Answer::ok(
+                "application/json",
+                r#"{"capabilities":["completion","vision"]}"#,
+            ),
+            Answer::ok("application/json", r#"{"capabilities":["completion"]}"#),
+            Answer::status(404, "{}"),
+        ]);
+        let target = server.target(Api::Ollama, None);
+        assert!(sees_images(&target, "llava").await);
+        assert!(!sees_images(&target, "llama3.2").await);
+        assert!(!sees_images(&target, "gone").await);
+        let requests = server.requests();
+        assert!(requests[0].starts_with("POST /api/show"));
+        assert!(requests[0].contains(r#"{"model":"llava"}"#));
     }
 }

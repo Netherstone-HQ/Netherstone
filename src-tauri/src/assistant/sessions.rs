@@ -321,6 +321,7 @@ mod tests {
                         name: "read".into(),
                         output: "{}".into(),
                     }],
+                    files: vec![],
                 },
                 &["Trip.md".to_string()],
                 None,

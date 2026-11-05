@@ -5,6 +5,7 @@
 mod catalog;
 mod chat;
 mod engine;
+mod files;
 mod local;
 mod models;
 mod providers;
@@ -81,6 +82,8 @@ pub struct Found {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     enabled: bool,
+    /// Whether a shard's images and PDFs go to the model with it.
+    send_files: bool,
     keyring_available: bool,
     model: Option<ModelChoice>,
     providers: Vec<ProviderStatus>,
@@ -153,6 +156,7 @@ pub fn status() -> Result<Status, String> {
         .collect::<Result<_, String>>()?;
     Ok(Status {
         enabled,
+        send_files: db::settings::assistant_send_files(&conn).map_err(|e| e.to_string())?,
         keyring_available: credentials::keyring_available(),
         model: read_in(&conn, MODEL)?,
         providers,
@@ -161,6 +165,10 @@ pub fn status() -> Result<Status, String> {
 
 pub fn set_enabled(enabled: bool) -> Result<(), String> {
     db::settings::set_assistant_enabled(&db::open_connection()?, enabled).map_err(|e| e.to_string())
+}
+
+pub fn set_send_files(on: bool) -> Result<(), String> {
+    db::settings::set_assistant_send_files(&db::open_connection()?, on).map_err(|e| e.to_string())
 }
 
 pub fn set_model(choice: Option<ModelChoice>) -> Result<(), String> {
@@ -464,11 +472,16 @@ pub async fn send(
         return Err(ChatError::Failed);
     }
     let store = store()?;
-    let (chat, vault, model) = {
+    let (chat, vault, mut model, send_files) = {
         let store = store.clone();
         let text = text.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let model = picked_model()?;
+            let send_files = db::open_connection()
+                .and_then(|conn| {
+                    db::settings::assistant_send_files(&conn).map_err(|e| e.to_string())
+                })
+                .map_err(|_| ChatError::Storage)?;
             let store = store.lock().map_err(|_| ChatError::Storage)?;
             let storage = |error: String| {
                 eprintln!("[Netherstone] {error}");
@@ -491,11 +504,15 @@ pub async fn send(
                 }
             };
             let vault = open_vault(&vault_path)?;
-            Ok::<_, ChatError>((chat, vault, model))
+            Ok::<_, ChatError>((chat, vault, model, send_files))
         })
         .await
         .map_err(|_| ChatError::Failed)??
     };
+    // A local model says itself whether it sees images.
+    if send_files && model.target.api == Api::Ollama {
+        model.facts.images = local::sees_images(&model.target, &model.id).await;
+    }
 
     let stop = StopToken::default();
     {
@@ -513,6 +530,7 @@ pub async fn send(
         model,
         stop: stop.clone(),
         allowed: Arc::new(move || open_vault(&vault_path).is_ok()),
+        send_files,
     };
     let result = run(&turn, &text, &sink).await;
     if let Ok(mut running) = running().lock() {

@@ -29,6 +29,7 @@ function provider(
 function status(more: Partial<AssistantStatus> = {}): AssistantStatus {
   return {
     enabled: false,
+    sendFiles: false,
     keyringAvailable: true,
     model: null,
     providers: [

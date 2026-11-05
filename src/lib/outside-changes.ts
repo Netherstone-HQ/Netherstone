@@ -324,6 +324,29 @@ export function showOutsideValue(editor: SlateEditor, value: Descendant[]) {
 }
 
 /**
+ * Shows `value`, just written to the open shard by the app, in place of the
+ * blocks that differ, as one step that Undo in the editor takes back. It's
+ * on disk already, so it isn't an edit to save.
+ */
+export function showWrittenValue(editor: SlateEditor, value: Descendant[]) {
+  const hunks = diffBlocks(editor.children, value);
+  if (!hunks.length) return;
+  outsideChangeEditors.add(editor);
+  editor.tf.withNewBatch(() => {
+    editor.tf.withoutNormalizing(() => {
+      // From the end, so the blocks before each change stay put.
+      for (const hunk of [...hunks].reverse()) {
+        for (let index = hunk.end - 1; index >= hunk.start; index -= 1) {
+          editor.tf.removeNodes({ at: [index] });
+        }
+        const blocks = nextBlocks(value, hunk);
+        if (blocks.length) editor.tf.insertNodes(blocks, { at: [hunk.start] });
+      }
+    });
+  });
+}
+
+/**
  * Applies the outside change (`saved` → `outside`) to `editor` around its
  * unsaved edits (`saved` → `editor.children`), block run by block run.
  * `savedFromDisk` is the saved text read the same way as `outside`, so

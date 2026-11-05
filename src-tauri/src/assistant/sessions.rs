@@ -4,8 +4,9 @@
 //! sent in their place while they stay saved.
 
 use super::chat::Message;
+use crate::tools::proposals::{FileChange, Kind, Op};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub struct Store {
@@ -61,7 +62,91 @@ CREATE TABLE IF NOT EXISTS messages (
     PRIMARY KEY (chat, seq)
 );
 CREATE INDEX IF NOT EXISTS chats_by_update ON chats (updated DESC);
+CREATE TABLE IF NOT EXISTS changes (
+    id TEXT PRIMARY KEY,
+    chat TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    turn INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    path TEXT NOT NULL,
+    ops TEXT NOT NULL,
+    state TEXT NOT NULL,
+    applied TEXT,
+    model TEXT,
+    created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (chat, created);
 ";
+
+/// Where a proposed change stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeState {
+    /// Shown, not made.
+    Pending,
+    Applied,
+    Discarded,
+}
+
+/// A change the assistant proposed to one file, with the calls that make it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Change {
+    pub id: String,
+    #[serde(skip)]
+    pub chat: String,
+    /// The user message it answers.
+    pub turn: i64,
+    pub kind: Kind,
+    /// Vault-relative: the file it changes, or for a new one, where it
+    /// goes; once applied, where it went.
+    pub path: String,
+    #[serde(skip)]
+    pub ops: Vec<Op>,
+    /// How many calls make it.
+    pub count: usize,
+    pub state: ChangeState,
+    /// The files applying changed, as they were and became.
+    #[serde(skip)]
+    pub applied: Vec<FileChange>,
+    /// The name of the model that proposed it.
+    #[serde(skip)]
+    pub model: Option<String>,
+}
+
+fn json_text<T: Serialize>(value: &T) -> Result<String, String> {
+    serde_json::to_string(value).map_err(|e| e.to_string())
+}
+
+const CHANGE_COLUMNS: &str = "id, chat, turn, kind, path, ops, state, applied, model";
+
+fn change_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<Change>> {
+    let kind: String = row.get(3)?;
+    let ops: String = row.get(5)?;
+    let state: String = row.get(6)?;
+    let applied: Option<String> = row.get(7)?;
+    let (Ok(kind), Ok(ops), Ok(state)) = (
+        serde_json::from_str(&kind),
+        serde_json::from_str::<Vec<Op>>(&ops),
+        serde_json::from_str(&state),
+    ) else {
+        // From a newer app: left out.
+        return Ok(None);
+    };
+    Ok(Some(Change {
+        id: row.get(0)?,
+        chat: row.get(1)?,
+        turn: row.get(2)?,
+        kind,
+        path: row.get(4)?,
+        count: ops.len(),
+        ops,
+        state,
+        applied: applied
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default(),
+        model: row.get(8)?,
+    }))
+}
 
 const TITLE_LENGTH: usize = 60;
 /// About how long a first title gets, cut between words.
@@ -295,7 +380,112 @@ impl Store {
 
     pub fn delete_all(&self) -> Result<(), String> {
         self.conn
-            .execute_batch("DELETE FROM messages; DELETE FROM chats; VACUUM;")
+            .execute_batch("DELETE FROM changes; DELETE FROM messages; DELETE FROM chats; VACUUM;")
+            .map_err(sql)
+    }
+
+    // ── Proposed changes ─────────────────────────────────────────────────────
+
+    /// Keeps a new proposed change, pending.
+    pub fn add_change(
+        &self,
+        chat: &str,
+        turn: i64,
+        kind: Kind,
+        path: &str,
+        ops: &[Op],
+        model: Option<&str>,
+    ) -> Result<String, String> {
+        let id = new_id();
+        self.conn
+            .execute(
+                "INSERT INTO changes (id, chat, turn, kind, path, ops, state, model, created) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    id,
+                    chat,
+                    turn,
+                    json_text(&kind)?,
+                    path,
+                    json_text(&ops)?,
+                    json_text(&ChangeState::Pending)?,
+                    model,
+                    now()
+                ],
+            )
+            .map_err(sql)?;
+        Ok(id)
+    }
+
+    /// A chat's changes, in the order they were proposed.
+    pub fn changes(&self, chat: &str) -> Result<Vec<Change>, String> {
+        let mut statement = self
+            .conn
+            .prepare(&format!(
+                "SELECT {CHANGE_COLUMNS} FROM changes WHERE chat = ?1 ORDER BY created, rowid"
+            ))
+            .map_err(sql)?;
+        let rows = statement
+            .query_map(params![chat], change_from_row)
+            .map_err(sql)?;
+        let mut found = Vec::new();
+        for row in rows {
+            found.extend(row.map_err(sql)?);
+        }
+        Ok(found)
+    }
+
+    pub fn change(&self, id: &str) -> Result<Option<Change>, String> {
+        self.conn
+            .query_row(
+                &format!("SELECT {CHANGE_COLUMNS} FROM changes WHERE id = ?1"),
+                params![id],
+                change_from_row,
+            )
+            .optional()
+            .map(Option::flatten)
+            .map_err(sql)
+    }
+
+    pub fn set_ops(&self, id: &str, ops: &[Op]) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE changes SET ops = ?2 WHERE id = ?1",
+                params![id, json_text(&ops)?],
+            )
+            .map(|_| ())
+            .map_err(sql)
+    }
+
+    /// Notes where a change stands, with what applying it changed and where
+    /// its file is.
+    pub fn set_change_state(
+        &self,
+        id: &str,
+        state: ChangeState,
+        applied: &[FileChange],
+        path: &str,
+    ) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE changes SET state = ?2, applied = ?3, path = ?4 WHERE id = ?1",
+                params![id, json_text(&state)?, json_text(&applied)?, path],
+            )
+            .map(|_| ())
+            .map_err(sql)
+    }
+
+    /// Drops every change not made yet.
+    pub fn discard_pending(&self) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE changes SET state = ?1 WHERE state = ?2",
+                params![
+                    json_text(&ChangeState::Discarded)?,
+                    json_text(&ChangeState::Pending)?
+                ],
+            )
+            .map(|_| ())
             .map_err(sql)
     }
 }

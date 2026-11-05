@@ -16,6 +16,17 @@ pub(super) fn change<R>(
     touched: &[PathBuf],
     change: impl FnOnce() -> ToolResult<(R, Vec<PathBuf>)>,
 ) -> ToolResult<R> {
+    recorded(vault, caller, summary, touched, change).map(|(made, _)| made)
+}
+
+/// [`change`], also giving the files it changed as they were and are now.
+pub(super) fn recorded<R>(
+    vault: &Vault,
+    caller: &Caller,
+    summary: Option<&str>,
+    touched: &[PathBuf],
+    change: impl FnOnce() -> ToolResult<(R, Vec<PathBuf>)>,
+) -> ToolResult<(R, Vec<crate::sync::AppChange>)> {
     // Held across the change, so no other version lands in between.
     let _history = crate::locks::history(&vault.sync_root)?;
     let before: Vec<(PathBuf, Option<Vec<u8>>)> = touched
@@ -43,7 +54,7 @@ pub(super) fn change<R>(
         })
         .collect();
     if changes.is_empty() {
-        return Ok(made);
+        return Ok((made, changes));
     }
 
     let summary = summary.map(str::trim).filter(|summary| !summary.is_empty());
@@ -57,7 +68,7 @@ pub(super) fn change<R>(
     for (path, _) in &files {
         reindex(vault, path);
     }
-    Ok(made)
+    Ok((made, changes))
 }
 
 /// Brings the index up to date with the shard at `path`, or forgets it once

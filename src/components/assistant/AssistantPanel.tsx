@@ -4,12 +4,14 @@ import {
   ChevronDownIcon,
   CopyIcon,
   CpuIcon,
+  FileIcon,
   FolderIcon,
   ImageOffIcon,
   KeyRoundIcon,
   Link2Icon,
   LoaderCircleIcon,
   NewspaperIcon,
+  PlusIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react";
@@ -30,7 +32,15 @@ import {
   stopAnswer,
 } from "@/lib/assistant";
 import {
+  addAnswerToShard,
+  applyAssistantChange,
+  discardAssistantChange,
+  openShardPath,
+  undoAssistantChange,
+} from "@/lib/assistant-changes";
+import {
   type AssistantStatus,
+  type ChatChange,
   type ChatError,
   type ModelChoice,
   type PickedModel,
@@ -42,7 +52,7 @@ import {
   setMcpVaultAllowed,
 } from "@/lib/commands";
 import { folderName } from "@/lib/open-vault";
-import { isSamePath, toVaultRelativePath } from "@/lib/drawing-files";
+import { isSamePath } from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
 import { openWebLink } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
@@ -56,6 +66,7 @@ import {
   type Citation,
   CiteNumber,
   citationsIn,
+  withoutCitations,
 } from "./AnswerText";
 import { ChatsMenu } from "./ChatsMenu";
 import { Composer, shardName } from "./Composer";
@@ -169,6 +180,14 @@ function activity(tool: { name: string; paths: string[] }) {
       return "Looking at tags";
     case "vault_overview":
       return "Looking over the vault";
+    case "edit_shard":
+      return name ? `Changing ${name}` : "Changing a shard";
+    case "create_shard":
+      return "Making a shard";
+    case "move":
+      return name ? `Moving ${name}` : "Moving";
+    case "edit_drawing":
+      return name ? `Drawing in ${name}` : "Drawing";
     default:
       return "Working";
   }
@@ -218,6 +237,92 @@ function CopyButton({ text }: { text: string }) {
         )}
       </Button>
     </Hint>
+  );
+}
+
+function AddToShardButton({ text }: { text: string }) {
+  const [added, setAdded] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-7 gap-1.5 px-2 text-muted-foreground text-ui-sm hover:text-foreground"
+      onClick={() =>
+        void addAnswerToShard(withoutCitations(text)).then(
+          (done) => {
+            if (done) setAdded(true);
+            else toast.error("Open a shard to add the answer to");
+          },
+          () => toast.error("Couldn't add the answer to the shard"),
+        )
+      }
+    >
+      {added ? (
+        <CheckIcon className="size-3.5" />
+      ) : (
+        <PlusIcon className="size-3.5" />
+      )}
+      Add to shard
+    </Button>
+  );
+}
+
+function changeCount(count: number) {
+  return count === 1 ? "1 change" : `${count} changes`;
+}
+
+/** A change an answer proposed: to look at in the shard, then apply or not. */
+function ChangeCard({ change }: { change: ChatChange }) {
+  const busy = useAssistantStore((s) => s.busyChanges.includes(change.id));
+  if (change.state === "applied") {
+    return (
+      <div className="flex items-center gap-2 rounded-[10px] border bg-card py-2.5 pr-2 pl-3">
+        <CheckIcon className="size-4 shrink-0 text-brand" />
+        <span className="min-w-0 flex-1 truncate">
+          Applied to {shardName(change.path)}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => void undoAssistantChange(change)}
+        >
+          Undo
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[10px] border bg-card p-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="truncate font-medium">{shardName(change.path)}</span>
+        <span className="shrink-0 text-muted-foreground text-ui-sm">
+          {changeCount(change.count)}
+        </span>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => void discardAssistantChange(change)}
+        >
+          Discard
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy}
+          onClick={() => void applyAssistantChange(change)}
+        >
+          Apply
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -284,8 +389,19 @@ function Sources({ cited, read }: { cited: Citation[]; read: string[] }) {
   );
 }
 
-function Answer({ message }: { message: ShownMessage }) {
+function Answer({
+  message,
+  changes,
+  canAdd,
+}: {
+  message: ShownMessage;
+  /** The changes the answer proposed, under it. */
+  changes: ChatChange[];
+  /** Whether a shard is open to add the answer to. */
+  canAdd: boolean;
+}) {
   const cited = citationsIn(message.text);
+  if (!message.text && !message.reasoning && changes.length === 0) return null;
   return (
     <div className="flex flex-col gap-2.5">
       {message.reasoning ? <Thinking text={message.reasoning} /> : null}
@@ -297,14 +413,36 @@ function Answer({ message }: { message: ShownMessage }) {
           onOpenLink={openLink}
         />
       ) : null}
+      {changes.map((change) => (
+        <ChangeCard key={change.id} change={change} />
+      ))}
       <Sources cited={cited} read={message.sources ?? []} />
-      {message.text ? (
-        <div className="-ml-1.5 flex gap-0.5">
+      {message.text && changes.length === 0 ? (
+        <div className="-ml-1.5 flex items-center gap-0.5">
           <CopyButton text={message.text} />
+          {canAdd ? <AddToShardButton text={message.text} /> : null}
         </div>
       ) : null}
     </div>
   );
+}
+
+/**
+ * Each message, with the changes an answer proposed under the last message
+ * of that answer.
+ */
+function withChanges(messages: ShownMessage[], changes: ChatChange[]) {
+  let turn = 0;
+  return messages.map((message, index) => {
+    if (message.role === "user") turn = message.seq;
+    const next = messages[index + 1];
+    const endsAnswer =
+      message.role === "assistant" && (!next || next.role === "user");
+    return {
+      message,
+      changes: endsAnswer ? changes.filter((c) => c.turn === turn) : [],
+    };
+  });
 }
 
 function UserMessage({ message }: { message: ShownMessage }) {
@@ -363,9 +501,18 @@ function useStickToBottom(deps: unknown[]) {
 
 function Messages() {
   const messages = useAssistantStore((s) => s.messages);
+  const changes = useAssistantStore((s) => s.changes);
   const answering = useAssistantStore((s) => s.answering);
   const ending = useAssistantStore((s) => s.ending);
-  const { ref, onScroll } = useStickToBottom([messages, answering, ending]);
+  const vault = useVaultStore((s) => s.currentVaultPath);
+  const openPath = useEditorStore((s) => s.currentFilePath);
+  const canAdd = openShardPath(vault, openPath) !== null;
+  const { ref, onScroll } = useStickToBottom([
+    messages,
+    changes,
+    answering,
+    ending,
+  ]);
 
   return (
     <div
@@ -373,11 +520,16 @@ function Messages() {
       onScroll={onScroll}
       className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
     >
-      {messages.map((message) =>
+      {withChanges(messages, changes).map(({ message, changes }) =>
         message.role === "user" ? (
           <UserMessage key={message.seq} message={message} />
         ) : (
-          <Answer key={message.seq} message={message} />
+          <Answer
+            key={message.seq}
+            message={message}
+            changes={changes}
+            canAdd={canAdd}
+          />
         ),
       )}
       <Streaming />
@@ -530,10 +682,7 @@ export function AssistantPanel() {
     setOpenShardRemoved(false);
   }, [openPath, setOpenShardRemoved]);
 
-  const openShard =
-    vault && openPath && /\.md$/i.test(openPath)
-      ? toVaultRelativePath(openPath, vault)
-      : null;
+  const openShard = openShardPath(vault, openPath);
   const shards = [
     ...(openShard && !openShardRemoved ? [openShard] : []),
     ...added.filter((path) => path !== openShard),

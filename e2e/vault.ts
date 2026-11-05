@@ -145,6 +145,8 @@ type MockAssistant = {
   reads?: string[];
   /** The short title a new chat gets after its answer, if any. */
   title?: string;
+  /** A change every answer proposes to a shard, by its vault-relative path. */
+  change?: { path: string; after: string };
 };
 
 declare global {
@@ -447,7 +449,16 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           responsesOnly: false,
         };
         type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
-        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[] }[] = [];
+        type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string };
+        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[] }[] = [];
+        const findChange = (id: string) => {
+          for (const chat of chats) {
+            const found = chat.changes.find((change) => change.id === id);
+            if (found) return { chat, change: found };
+          }
+          throw "That change isn't there anymore";
+        };
+        let changes = 0;
         window.__sent = [];
         return {
           assistant_status: () => ({
@@ -496,14 +507,19 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             const now = Date.now();
             let found = chats.find((c) => c.id === chat);
             if (!found) {
-              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [] };
+              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [] };
               chats.unshift(found);
             }
             const answer = setup.answer ?? ["Done."];
             const reads = setup.reads ?? [];
             found.messages.push({ seq: found.messages.length + 1, role: "user", text, shards });
+            const turn = found.messages.length;
             send({ type: "chat", id: found.id });
             for (const path of reads) send({ type: "tool", name: "read", paths: [path] });
+            if (setup.change) {
+              send({ type: "tool", name: "edit_shard", paths: [setup.change.path] });
+              found.changes.push({ id: `change-${++changes}`, turn, kind: "shard", path: setup.change.path, count: 1, state: "pending" });
+            }
             if (reads.length) send({ type: "sources", shards: reads });
             for (const piece of answer) send({ type: "text", text: piece });
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
@@ -515,7 +531,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           assistant_chat: (args) => {
             const found = chats.find((c) => c.id === (args as unknown as { chat: string }).chat);
             if (!found) throw { kind: "noChat" };
-            return found;
+            // A copy, as the app's answer is: changes made later don't reach it.
+            return structuredClone(found);
           },
           assistant_retitle: (args) => {
             const found = chats.find((c) => c.id === (args as unknown as { chat: string }).chat);
@@ -530,6 +547,39 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           },
           assistant_delete_chats: () => {
             chats.length = 0;
+            return null;
+          },
+          assistant_change_preview: (args) => {
+            const { change } = findChange((args as unknown as { change: string }).change);
+            return { path: change.path, before: files[change.path], after: setup.change?.after };
+          },
+          assistant_apply: (args) => {
+            const { change } = findChange((args as unknown as { change: string }).change);
+            const after = setup.change?.after ?? "";
+            change.before = files[change.path];
+            files[change.path] = after;
+            window.__saves.push({ filePath: `${vaultPath}/${change.path}`, content: after });
+            change.state = "applied";
+            return { path: change.path, content: after };
+          },
+          assistant_undo: (args) => {
+            const { change } = findChange((args as unknown as { change: string }).change);
+            const before = change.before ?? "";
+            files[change.path] = before;
+            window.__saves.push({ filePath: `${vaultPath}/${change.path}`, content: before });
+            change.state = "pending";
+            return { path: change.path, content: before };
+          },
+          assistant_discard: (args) => {
+            const { chat, change } = findChange((args as unknown as { change: string }).change);
+            chat.changes = chat.changes.filter((c) => c !== change);
+            return null;
+          },
+          // Off drops every change not applied yet, as the app does.
+          assistant_set_enabled: (args) => {
+            if (!(args as unknown as { enabled: boolean }).enabled) {
+              for (const chat of chats) chat.changes = chat.changes.filter((c) => c.state !== "pending");
+            }
             return null;
           },
         };

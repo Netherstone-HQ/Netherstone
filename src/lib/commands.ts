@@ -1002,8 +1002,55 @@ export interface ShownMessage {
   model?: string;
 }
 
+/** A change an answer proposed to one file. */
+export interface ChatChange {
+  id: string;
+  /** The user message it answers. */
+  turn: number;
+  kind: "shard" | "newShard" | "drawing" | "newDrawing" | "move";
+  /** Vault-relative: the file it changes, or where a new one goes. */
+  path: string;
+  /** How many calls make it. */
+  count: number;
+  state: "pending" | "applied";
+}
+
 export interface ChatView extends ChatInfo {
   messages: ShownMessage[];
+  changes: ChatChange[];
+}
+
+/** A pending change to a shard: its text now and as applying leaves it. */
+export interface ChangePreview {
+  path: string;
+  before: string;
+  after: string;
+}
+
+/** What applying or undoing left the change's file with; null when it's gone. */
+export interface MadeChange {
+  path: string;
+  content: string | null;
+}
+
+export async function previewChange(change: string): Promise<ChangePreview> {
+  return invoke("assistant_change_preview", { change });
+}
+
+/** `expected`: the shard's text as the editor shows it, when it's open. */
+export async function applyChange(
+  change: string,
+  expected: string | null,
+): Promise<MadeChange> {
+  return invoke("assistant_apply", { change, expected });
+}
+
+export async function undoChange(change: string): Promise<MadeChange> {
+  return invoke("assistant_undo", { change });
+}
+
+export async function discardChange(change: string): Promise<void> {
+  await invoke("assistant_discard", { change });
 }
 
 /**

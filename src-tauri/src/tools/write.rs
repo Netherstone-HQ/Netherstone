@@ -1,7 +1,7 @@
 //! Writing shards and folders: creating, editing, moving and renaming.
 //! Nothing here deletes, and each change is saved in History first.
 
-use super::edits::{change, edit_shard as edit_under_lock};
+use super::edits::{change, edit_shard as edit_under_lock, recorded};
 use super::read::find_section;
 use super::{Caller, ToolError, ToolResult, Vault};
 use crate::markdown_text::{has_letter, markdown_options, tags_in};
@@ -46,10 +46,18 @@ pub struct CreateShardParams {
     /// The shard's name, with or without .md.
     name: String,
     /// Its Markdown.
-    content: String,
+    pub(super) content: String,
     /// A short line on what you made, shown in History.
     #[serde(default)]
-    summary: Option<String>,
+    pub(super) summary: Option<String>,
+}
+
+/// Where a new shard would go, before a taken name moves it on.
+pub(super) fn new_shard_path(vault: &Vault, params: &CreateShardParams) -> ToolResult<PathBuf> {
+    let name = file_name(&params.name)?;
+    let name = name.strip_suffix(".md").unwrap_or(name).trim();
+    let folder = folder_or_root(vault, params.folder.as_deref())?;
+    Ok(folder.join(format!("{}.md", file_name(name)?)))
 }
 
 pub fn create_shard(
@@ -57,10 +65,7 @@ pub fn create_shard(
     caller: &Caller,
     params: CreateShardParams,
 ) -> ToolResult<Written> {
-    let name = file_name(&params.name)?;
-    let name = name.strip_suffix(".md").unwrap_or(name).trim();
-    let folder = folder_or_root(vault, params.folder.as_deref())?;
-    let wanted = folder.join(format!("{}.md", file_name(name)?));
+    let wanted = new_shard_path(vault, &params)?;
 
     change(vault, caller, params.summary.as_deref(), &[], || {
         let writes = crate::locks::vault_writes()?;
@@ -101,7 +106,7 @@ pub enum EditAction {
 #[derive(Deserialize, JsonSchema)]
 pub struct EditShardParams {
     /// The shard, vault-relative.
-    path: String,
+    pub(super) path: String,
     action: EditAction,
     /// For append and insert_under_heading: the Markdown to add.
     #[serde(default)]
@@ -120,7 +125,7 @@ pub struct EditShardParams {
     tag: Option<String>,
     /// A short line on what you changed, shown in History.
     #[serde(default)]
-    summary: Option<String>,
+    pub(super) summary: Option<String>,
 }
 
 fn needed<'a>(value: &'a Option<String>, name: &str, action: &str) -> ToolResult<&'a str> {
@@ -213,7 +218,7 @@ fn remove_tag(markdown: String, tag: &str) -> ToolResult<String> {
     Ok(out)
 }
 
-fn edit(markdown: String, params: &EditShardParams) -> ToolResult<String> {
+pub(super) fn edit(markdown: String, params: &EditShardParams) -> ToolResult<String> {
     match params.action {
         EditAction::Append => {
             let text = needed(&params.text, "text", "append")?;
@@ -281,7 +286,7 @@ keep working. Nothing is ever replaced: a name that's taken is refused.";
 #[derive(Deserialize, JsonSchema)]
 pub struct MoveParams {
     /// What to move, vault-relative.
-    path: String,
+    pub(super) path: String,
     /// The folder to move it into. Use "" for the top of the vault.
     #[serde(default)]
     to_folder: Option<String>,
@@ -290,7 +295,7 @@ pub struct MoveParams {
     new_name: Option<String>,
     /// A short line on what you changed, shown in History.
     #[serde(default)]
-    summary: Option<String>,
+    pub(super) summary: Option<String>,
 }
 
 /// The shards and drawings at `path` or inside it.
@@ -326,6 +331,39 @@ fn holds_another_vault(folder: &Path) -> bool {
 }
 
 pub fn move_path(vault: &Vault, caller: &Caller, params: MoveParams) -> ToolResult<Written> {
+    let summary = params.summary.clone();
+    move_recorded(vault, caller, params, summary.as_deref()).map(|(written, _)| written)
+}
+
+/// What to move and where, checked, without moving anything.
+pub(super) fn check_move(vault: &Vault, params: &MoveParams) -> ToolResult<()> {
+    let source = vault.resolve(&params.path)?;
+    if source == vault.root || !source.exists() {
+        return Err(ToolError(format!(
+            "There's nothing to move at '{}'",
+            params.path
+        )));
+    }
+    if let Some(folder) = params.to_folder.as_deref() {
+        folder_or_root(vault, Some(folder))?;
+    }
+    if let Some(name) = params.new_name.as_deref() {
+        file_name(name)?;
+    }
+    if params.to_folder.is_none() && params.new_name.is_none() {
+        return Err(ToolError("Give to_folder, new_name, or both".to_string()));
+    }
+    Ok(())
+}
+
+/// [`move_path`], noted in History with `summary`, and giving the files
+/// it changed.
+pub(super) fn move_recorded(
+    vault: &Vault,
+    caller: &Caller,
+    params: MoveParams,
+    summary: Option<&str>,
+) -> ToolResult<(Written, Vec<crate::sync::AppChange>)> {
     let source = vault.resolve(&params.path)?;
     if source == vault.root || !source.exists() {
         return Err(ToolError(format!(
@@ -369,7 +407,7 @@ pub fn move_path(vault: &Vault, caller: &Caller, params: MoveParams) -> ToolResu
             .map(PathBuf::from),
     );
 
-    change(vault, caller, params.summary.as_deref(), &touched, || {
+    recorded(vault, caller, summary, &touched, || {
         let mut at = source.to_string_lossy().into_owned();
         if let Some(destination) = &destination {
             at = crate::move_path(&vault.root, &at, &destination.to_string_lossy())?;

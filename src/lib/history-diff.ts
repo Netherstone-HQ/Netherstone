@@ -43,12 +43,14 @@ function markAll(node: Node, change: BlockChange): Node {
  * The version `version` of a shard laid over the shard as it is now
  * (`current`): what's in both as it is in the version, what only the version
  * has marked as added, what only the shard has now marked as removed. Blocks
- * that changed are compared word by word when they're the same kind.
+ * that changed are compared word by word when they're the same kind, unless
+ * `wholeBlocks` asks for each changed block to show whole.
  */
 export function diffShardValues(
   version: Node[],
   current: Node[],
   isInline: (element: Node) => boolean,
+  { wholeBlocks = false }: { wholeBlocks?: boolean } = {},
 ): Node[] {
   const inlineOnly = (element: Node) =>
     (element.children ?? []).every(
@@ -65,7 +67,7 @@ export function diffShardValues(
     let added: Node[] = [];
 
     const flush = () => {
-      const paired = Math.min(removed.length, added.length);
+      const paired = wholeBlocks ? 0 : Math.min(removed.length, added.length);
       for (let i = 0; i < paired; i += 1) {
         merged.push(...diffBlock(added[i], removed[i]));
       }

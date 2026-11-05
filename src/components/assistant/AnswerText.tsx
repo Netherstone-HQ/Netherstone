@@ -9,6 +9,7 @@ const parser = unified().use(remarkParse).use(remarkGfm);
 
 type Node = {
   type: string;
+  position?: { start: { offset?: number }; end: { offset?: number } };
   value?: string;
   url?: string;
   alt?: string | null;
@@ -65,6 +66,26 @@ export function citationsIn(markdown: string): Citation[] {
     }
   });
   return found;
+}
+
+/** `markdown` without its cites, for text that goes into a shard. */
+export function withoutCitations(markdown: string): string {
+  const cuts: [number, number][] = [];
+  walk(parser.parse(markdown) as Node, (node) => {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (node.type !== "link" || !node.url || start === undefined || end === undefined) {
+      return;
+    }
+    if (citationOf(node.url)) cuts.push([start, end]);
+  });
+  let text = markdown;
+  for (const [start, end] of cuts.reverse()) {
+    // With the space before it, so no gap is left behind.
+    const from = text[start - 1] === " " ? start - 1 : start;
+    text = text.slice(0, from) + text.slice(end);
+  }
+  return text;
 }
 
 export function CiteNumber({

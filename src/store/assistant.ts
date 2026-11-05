@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import type { ChatError, ChatStop, ShownMessage } from "@/lib/commands";
+import type {
+  ChatChange,
+  ChatError,
+  ChatStop,
+  ShownMessage,
+} from "@/lib/commands";
 
 /** An answer streaming in. */
 interface Answering {
@@ -26,6 +31,10 @@ interface AssistantState {
   /** The chat shown, or null for a new one. */
   chat: { id: string; title: string } | null;
   messages: ShownMessage[];
+  /** The changes the chat's answers proposed, pending or applied. */
+  changes: ChatChange[];
+  /** Changes being applied, undone or discarded now. */
+  busyChanges: string[];
   answering: Answering | null;
   ending: Ending | null;
   /** What's typed but not sent. */
@@ -47,6 +56,8 @@ export const useAssistantStore = create<AssistantState>((set) => ({
   isOpen: false,
   chat: null,
   messages: [],
+  changes: [],
+  busyChanges: [],
   answering: null,
   ending: null,
   draft: "",

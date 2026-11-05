@@ -218,10 +218,18 @@ const InlineComboboxInput = ({
     trigger,
   } = React.useContext(InlineComboboxContext);
 
+  const editor = useEditorRef();
   const store = useComboboxContext()!;
   const value = store.useState('value');
 
   const ref = useComposedRef(propRef, contextRef);
+
+  /**
+   * Slate ignores the editor's blur while it is setting the selection, which
+   * is when this input takes focus. Then it still counts the editor as
+   * focused, and skips focusing it again when the menu closes.
+   */
+  const onFocus = () => editor.tf.blur();
 
   /**
    * Ariakit learns which options are shown on the next animation frame, so
@@ -272,6 +280,7 @@ const InlineComboboxInput = ({
           )}
           value={value}
           autoSelect
+          onFocus={onFocus}
           onKeyDownCapture={onKeyDownCapture}
           {...inputProps}
           {...props}

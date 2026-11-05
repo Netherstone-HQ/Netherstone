@@ -100,3 +100,20 @@ test("a code block from the / menu in a list stays in the list item", async ({ p
   const saved = await lastSave(page, "List.md");
   expect(saved).toContain("- First item\n\n  ```\n  x = 1\n  ```\n- Second item");
 });
+
+test("Enter right after fast typing picks the match for the whole text", async ({
+  page,
+}) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await caretAfter(page, "Start");
+  await page.keyboard.press("Enter");
+
+  // No pause between keys: "/co" would pick Code block, "/col" 3 columns.
+  await page.keyboard.type("/col");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Left");
+
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toContain("<!-- netherstone columns: ");
+  expect(saved).toContain("Left");
+});

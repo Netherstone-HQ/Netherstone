@@ -13,6 +13,10 @@ import { PlateElement, useReadOnly, withHOC } from "platejs/react";
 import { toast } from "sonner";
 
 import { useVaultStore } from "@/store";
+import {
+  canShowInBrowserPanel,
+  openFileInBrowserPanel,
+} from "@/lib/browser-panel-files";
 import { openFile } from "@/lib/commands";
 import {
   resolveMediaSource,
@@ -251,6 +255,15 @@ export const FileElement = withHOC(
     }, [displayName, resolvedSource, source]);
 
     const shownPath = useVaultRelativePath(attachmentPath);
+    const openInPanel =
+      attachmentPath && canShowInBrowserPanel(attachmentPath)
+        ? [
+            {
+              label: "Open in browser panel",
+              onSelect: () => openFileInBrowserPanel(attachmentPath),
+            },
+          ]
+        : [];
     const remove = mediaActions.canEdit
       ? [
           {
@@ -304,6 +317,7 @@ export const FileElement = withHOC(
           action={{ label: "Open", onSelect: () => void handleOpen() }}
           onReveal={() => void handleReveal()}
           menu={[
+            ...openInPanel,
             ...(mediaActions.canLinkOriginalFile
               ? [
                   {
@@ -326,6 +340,7 @@ export const FileElement = withHOC(
           action={{ label: "Open", onSelect: () => void handleOpen() }}
           onReveal={() => void handleReveal()}
           menu={[
+            ...openInPanel,
             ...(mediaActions.canImportToVault
               ? [
                   {

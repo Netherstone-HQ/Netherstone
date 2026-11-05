@@ -453,6 +453,14 @@ test("sound, video and other files outside the vault show and open", async ({ pa
       ),
     )
     .toBe(true);
+
+  // Or in the browser panel, from the row's menu.
+  await file.hover();
+  await editor(page).getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Open in browser panel" }).click();
+  await expect(page.getByRole("textbox", { name: "Browser address" })).toHaveValue(
+    "file:///home/me/Documents/Report.pdf",
+  );
 });
 
 test("dropped sound, video and other files are added and show", async ({ page }) => {

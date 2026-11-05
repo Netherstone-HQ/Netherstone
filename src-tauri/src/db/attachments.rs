@@ -117,7 +117,9 @@ fn normalize_attachment_path(value: &str) -> Option<String> {
         .trim_start_matches('/')
         .to_string();
 
-    if normalized == ATTACHMENTS_DIR_NAME || normalized.starts_with("_attachments/") {
+    // A `..` segment leads out of the attachment folder.
+    let inside = normalized.split('/').all(|segment| segment != "..");
+    if inside && (normalized == ATTACHMENTS_DIR_NAME || normalized.starts_with("_attachments/")) {
         Some(normalized)
     } else {
         None
@@ -1871,6 +1873,33 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(ref_count(&conn, &vault, &used), 1);
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn a_link_out_of_the_attachment_folder_is_not_an_attachment() {
+        for link in ["_attachments/../note.md", "_attachments/ab/%2E%2E/../x.png"] {
+            assert_eq!(normalize_attachment_path(link), None, "{link}");
+        }
+
+        let vault = temp_vault("parent-link");
+        let used = format!("_attachments/ab/{USED_HASH}.png");
+        std::fs::write(vault.join(&used), b"png").unwrap();
+        std::fs::write(vault.join("x.png"), b"png").unwrap();
+        let note = path_string(vault.join("note.md"));
+        std::fs::write(
+            &note,
+            format!("![out](_attachments/../x.png)\n\n![a]({used})\n"),
+        )
+        .unwrap();
+
+        let conn = Connection::open_in_memory().unwrap();
+        super::super::init_schema(&conn).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+
+        let report = reconcile_vault_attachments(&conn, &vault, &[note]).unwrap();
+        assert!(report.missing.is_empty());
         assert_eq!(ref_count(&conn, &vault, &used), 1);
         std::fs::remove_dir_all(&vault).unwrap();
     }

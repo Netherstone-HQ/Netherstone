@@ -66,6 +66,8 @@ genai = { version = "=0.7.3", default-features = false, features = ["native-tls"
 # detector names.
 whatlang = "=0.18.0"
 frostem = { version = "=2.20261016.1", default-features = false, features = ["arabic", "armenian", "catalan", "czech", "danish", "dutch", "english", "esperanto", "estonian", "finnish", "french", "german", "greek", "hindi", "hungarian", "indonesian", "italian", "lithuanian", "nepali", "norwegian", "persian", "polish", "portuguese", "romanian", "russian", "serbian", "spanish", "swedish", "tamil", "turkish", "ukrainian", "yiddish"] }
+# Tells marks in words by their Unicode category.
+unicode-properties = { version = "0.1", default-features = false, features = ["general-category"] }
 # The MCP server (`Netherstone mcp`), which AI apps start over stdio.
 rmcp = { version = "3.7", default-features = false, features = ["server", "transport-io"] }
 schemars = "1"

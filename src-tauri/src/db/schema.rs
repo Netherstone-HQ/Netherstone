@@ -291,8 +291,9 @@ fn drop_index_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Er
     Ok(())
 }
 
-/// Drops the search index from before it held word stems and kept marks in
-/// words, and has every shard indexed again when its vault next opens.
+/// Drops the search index from before it held word stems and character
+/// pairs and kept marks in words, and has every shard indexed again when its
+/// vault next opens.
 fn drop_old_search(conn: &Connection) -> Result<(), rusqlite::Error> {
     let sql: Option<String> = conn
         .query_row(
@@ -306,6 +307,7 @@ fn drop_old_search(conn: &Connection) -> Result<(), rusqlite::Error> {
             "BEGIN;
              UPDATE files SET last_modified = 0;
              DROP TABLE fts_search;
+             DROP TABLE IF EXISTS fts_unspaced;
              COMMIT;",
         )?;
     }

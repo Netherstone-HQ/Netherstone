@@ -9,6 +9,7 @@ use rusqlite::{Connection, params};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::Path;
+use unicode_properties::{GeneralCategory, GeneralCategoryGroup, UnicodeGeneralCategory};
 use whatlang::Lang;
 
 /// How much of a shard is read to tell its main language.
@@ -76,16 +77,25 @@ pub fn is_unspaced(c: char) -> bool {
         | 0x20000..=0x323AF)
 }
 
+/// Whether the index keeps `c` in a word: letters, digits, marks and
+/// private-use characters.
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric()
+        || matches!(c.general_category_group(), GeneralCategoryGroup::Mark)
+        || c.general_category() == GeneralCategory::PrivateUse
+}
+
 /// The words of `text` as the index splits them, lowercase.
 fn split_words(text: &str) -> impl Iterator<Item = String> + '_ {
-    text.split(|c: char| !c.is_alphanumeric())
+    text.split(|c: char| !is_word_char(c))
         .filter(|word| !word.is_empty())
         .map(str::to_lowercase)
 }
 
-/// The runs of `text` in scripts without spaces.
+/// The runs of `text` in scripts without spaces, split where the index
+/// splits words too.
 fn unspaced_runs(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| !is_unspaced(c))
+    text.split(|c: char| !is_unspaced(c) || !is_word_char(c))
         .filter(|run| !run.is_empty())
 }
 
@@ -324,7 +334,7 @@ impl Search {
         let mut stems: HashMap<String, Vec<String>> = HashMap::new();
         let mut word_start = None;
         for (index, c) in text.char_indices().chain([(text.len(), ' ')]) {
-            let in_word = c.is_alphanumeric() && !is_unspaced(c);
+            let in_word = is_word_char(c) && !is_unspaced(c);
             match (in_word, word_start) {
                 (true, None) => word_start = Some(index),
                 (false, Some(start)) => {
@@ -481,6 +491,16 @@ mod tests {
     fn unspaced_text_is_kept_by_character_pairs() {
         let words = shard_words("東京.md", &text_blocks("今日は東京へ。Then home.\n"), None);
         assert_eq!(words.stems, "東京 京 今日 日は は東 東京 京へ へ");
+    }
+
+    #[test]
+    fn marks_stay_in_words() {
+        assert_eq!(search_words("हिंदी"), [("हिंदी".to_string(), false)]);
+        let thai = Search::with_stemmers(search_words("ไม่ดี"), false, Vec::new());
+        assert_eq!(thai.fts().unwrap(), "stems : \"ไม ม่ ่ด ดี\"");
+        // Punctuation splits a run, as it splits words.
+        let words = shard_words("a.md", &text_blocks("東・京\n"), None);
+        assert_eq!(words.stems, "東 京");
     }
 
     #[test]

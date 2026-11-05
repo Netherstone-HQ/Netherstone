@@ -43,8 +43,10 @@ pub(super) fn local_date(unix_seconds: i64) -> String {
 // ── search ───────────────────────────────────────────────────────────────────
 
 pub const SEARCH: &str = "Find shards in the vault. With a query, finds the shards \
-whose text has all its words (as word starts), best matches first, each with a \
-snippet where the words are **bold**. Without one, lists the shards the filters \
+whose text has all its words, as word starts or in other forms (\"running\" finds \
+\"runs\"), best matches first, those with the words exactly as typed ahead of \
+the rest. Each comes with a snippet where the words are **bold** and the \
+section it's in. Set any_words when all of them find too little. Without a query, lists the shards the filters \
 match, newest first: use it for recently changed shards (modified_after) or \
 shards with a tag. Results come a page at a time: pass next_cursor back as \
 cursor for more.";
@@ -54,6 +56,9 @@ pub struct SearchParams {
     /// Words to find. Leave out to list by the filters alone.
     #[serde(default)]
     query: Option<String>,
+    /// Find shards with any of the words instead of all of them.
+    #[serde(default)]
+    any_words: bool,
     /// Only shards in this folder (vault-relative), at any depth.
     #[serde(default)]
     folder: Option<String>,
@@ -77,6 +82,9 @@ pub struct SearchParams {
 pub struct Found {
     path: String,
     snippet: String,
+    /// The heading the snippet is under, to read with read's section.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    section: Option<String>,
     modified: String,
     words: i64,
 }
@@ -98,6 +106,7 @@ pub fn search(vault: &Vault, _: &Caller, params: SearchParams) -> ToolResult<Fou
         .transpose()?;
     let filter = crate::db::queries::FileFilter {
         query: params.query.as_deref().unwrap_or(""),
+        any: params.any_words,
         folder: folder.as_deref(),
         tag: params.tag.as_deref().filter(|tag| !tag.trim().is_empty()),
         modified_after: params
@@ -121,6 +130,7 @@ pub fn search(vault: &Vault, _: &Caller, params: SearchParams) -> ToolResult<Fou
             .map(|file| Found {
                 path: vault.relative(std::path::Path::new(&file.path)),
                 snippet: snippet_text(&file.snippet),
+                section: file.section,
                 modified: local_date(file.last_modified),
                 words: file.word_count,
             })

@@ -7,6 +7,7 @@ pub mod parser;
 pub mod queries;
 mod schema;
 pub mod settings;
+pub mod words;
 
 use rusqlite::{Connection, Result};
 use std::path::PathBuf;

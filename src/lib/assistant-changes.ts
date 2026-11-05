@@ -13,7 +13,11 @@ import {
 } from "@/lib/commands";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
-import { rememberSavedValue, showWrittenValue } from "@/lib/outside-changes";
+import {
+  reloadOpenShardIfChanged,
+  rememberSavedValue,
+  showWrittenValue,
+} from "@/lib/outside-changes";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
@@ -103,14 +107,20 @@ async function writeChange(
 
   // Outside-change checks wait while this is set, then find the written
   // text already on screen.
+  const shown = state.plateEditor?.children;
+  let typed = false;
   state.setIsSaving(true);
   try {
     suppressVaultChangePath(filePath);
     const made = await write(state.markdownContent);
-    if (made.content !== null) await showWritten(filePath, made.content);
+    // Typed while it was written: what's typed stays, and the written text
+    // comes in around it as an outside change does.
+    typed = useEditorStore.getState().plateEditor?.children !== shown;
+    if (made.content !== null && !typed) await showWritten(filePath, made.content);
   } finally {
     useEditorStore.getState().setIsSaving(false);
   }
+  if (typed) await reloadOpenShardIfChanged();
   return true;
 }
 
@@ -183,7 +193,10 @@ export function discardAssistantChange(change: ChatChange) {
     try {
       await discardChange(change.id);
     } catch (error) {
+      // The card stays, as the change is still pending.
       console.error("[Netherstone] Couldn't discard a change:", error);
+      toast.error("Couldn't discard the change", { description: errorText(error) });
+      return;
     }
     store.setState({
       changes: store.getState().changes.filter((c) => c.id !== change.id),

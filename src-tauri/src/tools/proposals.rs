@@ -239,9 +239,11 @@ pub fn apply(
         Kind::Drawing => {
             let path = vault.resolve(&target.path)?;
             recorded(vault, caller, summary, std::slice::from_ref(&path), || {
+                // Held from the read, so a canvas save can't land in between.
+                let writes = crate::locks::vault_writes()?;
                 let content =
                     replay(vault, Some(read_text(&path)?), ops).map_err(changed(&target.path))?;
-                drawings::write_scene(&path, &content)?;
+                crate::vault::write_atomically(&writes, &path, content.as_bytes())?;
                 Ok(((), Vec::new()))
             })?
             .1
@@ -292,6 +294,8 @@ pub fn undo(
         .iter()
         .map(|file| vault.resolve(&file.path))
         .collect::<ToolResult<_>>()?;
+    // Held from the check, so nothing lands between it and the writes.
+    let writes = crate::locks::vault_writes()?;
     for (file, path) in applied.iter().zip(&paths) {
         let now = std::fs::read(path).ok();
         if now.as_deref() != file.after.as_deref().map(str::as_bytes) {
@@ -310,7 +314,6 @@ pub fn undo(
     let mut order: Vec<usize> = (0..applied.len()).collect();
     order.sort_by_key(|&index| applied[index].before.is_some());
     {
-        let writes = crate::locks::vault_writes()?;
         for index in order {
             let (file, path) = (&applied[index], &paths[index]);
             match &file.before {
@@ -331,6 +334,7 @@ pub fn undo(
             }
         }
     }
+    drop(writes);
 
     let undone: Vec<crate::sync::AppChange> = applied
         .iter()

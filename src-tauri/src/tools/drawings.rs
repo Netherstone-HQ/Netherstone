@@ -851,16 +851,6 @@ pub(super) fn target(vault: &Vault, params: &EditDrawingParams) -> ToolResult<Dr
     })
 }
 
-/// Writes a drawing's text.
-pub(super) fn write_scene(path: &Path, content: &str) -> ToolResult<()> {
-    let writes = crate::locks::vault_writes()?;
-    Ok(crate::vault::write_atomically(
-        &writes,
-        path,
-        content.as_bytes(),
-    )?)
-}
-
 /// Where a new drawing named for `wanted` goes: its folder, made if
 /// needed, under the next free name.
 pub(super) fn new_drawing_path(vault: &Vault, wanted: &Path) -> ToolResult<PathBuf> {

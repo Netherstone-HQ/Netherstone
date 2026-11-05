@@ -366,6 +366,34 @@ async fn write_tools_only_propose_and_other_tools_dont_run() {
 }
 
 #[tokio::test]
+async fn a_stopped_answer_proposes_nothing() {
+    let server = serve(Vec::new());
+    let turn = turn(
+        "engine-stopped-proposes-nothing",
+        server.target(Api::OpenAi, Some(KEY)),
+        "gpt-5.5",
+    );
+    turn.stop.stop();
+    let call = Call {
+        id: "call_1".to_string(),
+        name: "edit_shard".to_string(),
+        arguments: serde_json::json!({
+            "path": "Trip.md", "action": "replace", "find": "by train", "replace_with": "by bus"
+        }),
+        signatures: Vec::new(),
+    };
+    assert!(propose(&turn, &call).await.is_err());
+    assert!(
+        turn.store
+            .lock()
+            .unwrap()
+            .changes(&turn.chat)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn the_step_limit_ends_a_model_that_keeps_calling_tools() {
     let call = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"list_tags\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
     let server = serve(vec![Answer::ok("text/event-stream", call)]);

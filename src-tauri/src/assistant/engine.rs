@@ -615,6 +615,7 @@ async fn propose(turn: &Turn, call: &Call) -> Result<String, String> {
     let vault = turn.vault.clone();
     let store = turn.store.clone();
     let chat = turn.chat.clone();
+    let stop = turn.stop.clone();
     let asked = turn.asked.load(Ordering::SeqCst);
     let model = turn
         .model
@@ -631,6 +632,11 @@ async fn propose(turn: &Turn, call: &Call) -> Result<String, String> {
         let store = store
             .lock()
             .map_err(|_| "Saved chats are locked".to_string())?;
+        // Turning the assistant off stops the answer, then drops what's
+        // pending under this lock: a stopped answer adds nothing after it.
+        if stop.is_stopped() {
+            return Err("The answer was stopped".to_string());
+        }
         let earlier = store.changes(&chat)?.into_iter().find(|change| {
             change.turn == asked
                 && change.state == ChangeState::Pending

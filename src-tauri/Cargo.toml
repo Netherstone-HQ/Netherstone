@@ -57,6 +57,10 @@ git2 = { version = "0.21", default-features = false, features = ["vendored-libgi
 keyring = "4.2"
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "native-tls"] }
 tokio = { version = "1", features = ["time", "sync", "rt", "macros", "io-std", "io-util", "fs"] }
+# The assistant's providers, behind our own types in assistant/models.rs.
+# Pinned exactly: each upgrade is checked against every provider. native-tls
+# like our own reqwest.
+genai = { version = "=0.7.3", default-features = false, features = ["native-tls"] }
 # The MCP server (`Netherstone mcp`), which AI apps start over stdio.
 rmcp = { version = "3.7", default-features = false, features = ["server", "transport-io"] }
 schemars = "1"

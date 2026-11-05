@@ -17,6 +17,7 @@ export type SettingsCategory =
   | "sync"
   | "vault"
   | "ai-apps"
+  | "ai-assistant"
   | "shortcuts"
   | "about";
 /** The editor is "notes"; the rail calls it Editor. */

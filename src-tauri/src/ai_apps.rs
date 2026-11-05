@@ -489,7 +489,7 @@ mod tests {
 
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
-            "{\n    // Mine.\n    \"zeta\": 1,\n    \"servers\": {\n        \"other\": { \"command\": \"x\" }, // Keep.\n        \"netherstone\": {\n            \"args\": [\"mcp\"],\n            \"command\": \"/apps/Netherstone\",\n            \"type\": \"stdio\",\n        },\n    },\n    \"alpha\": 2,\n}\n"
+            "{\n    // Mine.\n    \"zeta\": 1,\n    \"servers\": {\n        \"other\": { \"command\": \"x\" }, // Keep.\n        \"netherstone\": {\n            \"command\": \"/apps/Netherstone\",\n            \"args\": [\"mcp\"],\n            \"type\": \"stdio\",\n        },\n    },\n    \"alpha\": 2,\n}\n"
         );
         assert!(is_connected(format, &path, "/apps/Netherstone"));
     }

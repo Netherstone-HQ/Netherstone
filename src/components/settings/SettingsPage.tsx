@@ -3,6 +3,7 @@ import {
   FolderIcon,
   InfoIcon,
   KeyboardIcon,
+  MessageSquareIcon,
   PaintbrushIcon,
   PaperclipIcon,
   PencilLineIcon,
@@ -14,6 +15,7 @@ import {
 
 import { AboutSettings } from "@/components/settings/sections/AboutSettings";
 import { AiAppsSettings } from "@/components/settings/sections/AiAppsSettings";
+import { AiAssistantSettings } from "@/components/settings/sections/AiAssistantSettings";
 import { AppearanceSettings } from "@/components/settings/sections/AppearanceSettings";
 import { EditorSettings } from "@/components/settings/sections/EditorSettings";
 import { FilesSettings } from "@/components/settings/sections/FilesSettings";
@@ -90,6 +92,12 @@ export const SETTINGS_CATEGORIES: Category[] = [
     label: "AI apps",
     icon: PlugIcon,
     Content: AiAppsSettings,
+  },
+  {
+    id: "ai-assistant",
+    label: "AI assistant",
+    icon: MessageSquareIcon,
+    Content: AiAssistantSettings,
   },
   {
     id: "about",

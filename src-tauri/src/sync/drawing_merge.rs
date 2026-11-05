@@ -177,15 +177,21 @@ fn merge_app_state(
         |drawing: &Map<String, Value>| drawing.get("appState").and_then(Value::as_object).cloned();
     let (base, theirs) = (state_of(base).unwrap_or_default(), state_of(theirs)?);
     let mut merged = state_of(ours).unwrap_or_default();
-    let keys: HashSet<String> = base.keys().chain(theirs.keys()).cloned().collect();
+    // In the order the drawings list them, so every device writes the same
+    // file: keys added here go at the end, in their order.
+    let mut keys: Vec<&String> = base.keys().collect();
+    keys.extend(theirs.keys().filter(|key| !base.contains_key(*key)));
     for key in keys {
-        if merged.get(&key) != base.get(&key) {
+        if merged.get(key) != base.get(key) {
             continue;
         }
-        match theirs.get(&key) {
-            Some(value) => merged.insert(key, value.clone()),
-            None => merged.remove(&key),
-        };
+        match theirs.get(key) {
+            Some(value) => {
+                merged.insert(key.clone(), value.clone());
+            }
+            // Keeps the other keys where they are, unlike `remove`.
+            None => merged.retain(|kept, _| kept != key),
+        }
     }
     Some(merged)
 }
@@ -285,6 +291,29 @@ mod tests {
             value["appState"],
             json!({ "viewBackgroundColor": "#000", "gridSize": 10 })
         );
+    }
+
+    #[test]
+    fn writes_keys_in_the_drawings_order_the_same_every_time() {
+        let base = r#"{"type":"excalidraw","elements":[],"appState":{"zoom":1,"gridSize":20,"theme":"dark"}}"#;
+        let ours = r#"{"type":"excalidraw","elements":[],"appState":{"zoom":1,"gridSize":20,"theme":"dark"}}"#;
+        // They removed the grid and added three settings.
+        let theirs = r#"{"type":"excalidraw","elements":[],"appState":{"zoom":1,"theme":"dark","c":3,"a":1,"b":2}}"#;
+        let first = merge(base, ours, theirs).unwrap().content;
+        for _ in 0..20 {
+            assert_eq!(merge(base, ours, theirs).unwrap().content, first);
+        }
+        let value: Value = serde_json::from_str(&first).unwrap();
+        let keys: Vec<_> = value["appState"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        assert_eq!(keys, ["zoom", "theme", "c", "a", "b"]);
+        // The top-level keys stay where the drawing had them.
+        let top: Vec<_> = value.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(top, ["type", "elements", "appState"]);
     }
 
     #[test]

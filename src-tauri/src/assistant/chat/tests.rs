@@ -154,9 +154,7 @@ async fn stream_text(target: &Target, messages: &[Message]) -> Result<(Reply, St
 }
 
 fn hello() -> Vec<Message> {
-    vec![Message::User {
-        text: "Hi".to_string(),
-    }]
+    vec![Message::user("Hi")]
 }
 
 #[tokio::test]
@@ -274,7 +272,7 @@ fn reasoning_goes_back_only_to_its_own_family() {
     };
     let same = family(&target, "model-a");
     let messages = vec![
-        Message::User { text: "Hi".into() },
+        Message::user("Hi"),
         Message::Assistant {
             text: "Let me look.".into(),
             calls: vec![Call {

@@ -43,14 +43,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
     let store = Store::open_at(&vault.root.parent().unwrap().join("assistant.db")).unwrap();
     let chat = store.create(&vault.root, QUESTION).unwrap();
     store
-        .add(
-            &chat,
-            &Message::User {
-                text: QUESTION.into(),
-            },
-            &[],
-            None,
-        )
+        .add(&chat, &Message::user(QUESTION), &[], None)
         .unwrap();
     let facts = catalog::facts(target.api, model);
     Turn {
@@ -65,6 +58,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         stop: StopToken::default(),
         allowed: Arc::new(|| true),
         send_files: false,
+        added: Vec::new(),
     }
 }
 
@@ -454,14 +448,7 @@ async fn a_long_chat_is_summarized_and_carries_on() {
                 )
                 .unwrap();
             store
-                .add(
-                    &turn.chat,
-                    &Message::User {
-                        text: "And then?".into(),
-                    },
-                    &[],
-                    None,
-                )
+                .add(&turn.chat, &Message::user("And then?"), &[], None)
                 .unwrap();
         }
         for _ in 0..2 {
@@ -478,14 +465,7 @@ async fn a_long_chat_is_summarized_and_carries_on() {
                 )
                 .unwrap();
             store
-                .add(
-                    &turn.chat,
-                    &Message::User {
-                        text: QUESTION.into(),
-                    },
-                    &[],
-                    None,
-                )
+                .add(&turn.chat, &Message::user(QUESTION), &[], None)
                 .unwrap();
         }
     }
@@ -525,7 +505,7 @@ fn a_call_saved_without_its_result_is_answered_as_not_run() {
         }],
         files: vec![],
     };
-    let user = Message::User { text: "q".into() };
+    let user = Message::user("q");
     let fixed = answered(vec![user.clone(), asked.clone(), half, user.clone(), asked]);
     assert_eq!(fixed.len(), 6);
     let Message::Tool { results, .. } = &fixed[2] else {
@@ -566,7 +546,7 @@ fn older_messages_end_before_a_user_message() {
         sources: vec![],
         model: None,
     };
-    let user = || Message::User { text: "q".into() };
+    let user = || Message::user("q");
     let answer = || Message::Assistant {
         text: "a".into(),
         calls: vec![],
@@ -719,18 +699,68 @@ async fn live_chats() {
         turn.store
             .lock()
             .unwrap()
-            .add(
-                &chat,
-                &Message::User {
-                    text: "And when?".into(),
-                },
-                &[],
-                None,
-            )
+            .add(&chat, &Message::user("And when?"), &[], None)
             .unwrap();
         let again = Collect::default();
         answer(&turn, &again).await.unwrap();
         println!("{id} again: {:?}", again.text());
         assert!(again.text().contains("May"), "{id}");
     }
+}
+
+#[tokio::test]
+async fn added_shards_go_with_the_message_and_count_as_read() {
+    use base64::Engine;
+    let server = serve(
+        ["anthropic-1.sse", "anthropic-2.sse"]
+            .iter()
+            .map(|name| Answer::recorded(name))
+            .collect(),
+    );
+    let mut turn = turn_with_files(
+        "engine-added",
+        server.target(Api::Anthropic, Some(KEY)),
+        "claude-haiku-5-5",
+        true,
+    );
+    turn.added = vec!["Trip.md".to_string(), "Gone.md".to_string()];
+    let (shards, files) = attach(&turn, &turn.added).await;
+    assert!(shards[0].text.contains("Lisbon"));
+    assert!(shards[0].text.contains("come in this message"));
+    assert!(shards[1].text.starts_with("Error:"), "{}", shards[1].text);
+    assert_eq!(files.len(), 2);
+
+    let message = Message::User {
+        text: "Sum this up".to_string(),
+        shards,
+        files,
+    };
+    let chat = {
+        let store = turn.store.lock().unwrap();
+        let chat = store.create(&turn.vault.root, "Sum this up").unwrap();
+        store.add(&chat, &message, &[], None).unwrap();
+        chat
+    };
+    turn.chat = chat;
+    let events = Collect::default();
+    answer(&turn, &events).await.unwrap();
+
+    assert_eq!(
+        events.events()[0],
+        Event::Sources {
+            shards: vec!["Trip.md".to_string(), "Gone.md".to_string()]
+        }
+    );
+    let png = base64::engine::general_purpose::STANDARD
+        .encode(std::fs::read(turn.vault.root.join("_attachments/map.png")).unwrap());
+    let first = &server.requests()[0];
+    assert!(first.contains("<shard path=\\\"Trip.md\\\">"), "{first}");
+    assert!(first.contains(&png) && first.contains("\"type\":\"document\""));
+    let Some(Message::User { files, .. }) = messages(&turn).into_iter().next() else {
+        panic!("the message is saved");
+    };
+    assert!(
+        files.iter().all(|file| file.data.is_none()),
+        "only paths are saved"
+    );
 }

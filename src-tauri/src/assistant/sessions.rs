@@ -302,14 +302,7 @@ mod tests {
             }),
         };
         store
-            .add(
-                &chat,
-                &Message::User {
-                    text: "What did I plan?".into(),
-                },
-                &[],
-                None,
-            )
+            .add(&chat, &Message::user("What did I plan?"), &[], None)
             .unwrap();
         store.add(&chat, &answer, &[], Some("m")).unwrap();
         store
@@ -352,9 +345,7 @@ mod tests {
         let store = store("sessions-delete");
         let a = store.create(Path::new("/v"), "a").unwrap();
         let b = store.create(Path::new("/v"), "b").unwrap();
-        store
-            .add(&a, &Message::User { text: "a".into() }, &[], None)
-            .unwrap();
+        store.add(&a, &Message::user("a"), &[], None).unwrap();
         store.delete(&a).unwrap();
         assert!(store.info(&a).unwrap().is_none());
         assert!(store.messages(&a).unwrap().is_empty());

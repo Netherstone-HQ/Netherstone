@@ -273,10 +273,17 @@ async fn assistant_send(
     chat: Option<String>,
     vault: String,
     text: String,
+    shards: Vec<String>,
     events: tauri::ipc::Channel<assistant::Event>,
 ) -> Result<String, assistant::ChatError> {
     let label = window.label().to_string();
-    assistant::send(chat, vault, text, label, ChatEvents(events)).await
+    assistant::send(chat, vault, text, shards, label, ChatEvents(events)).await
+}
+
+/// The picked model, as the assistant panel shows it.
+#[tauri::command]
+async fn assistant_picked() -> Result<Option<assistant::Picked>, assistant::ChatError> {
+    assistant::picked().await
 }
 
 #[tauri::command(async)]
@@ -2107,6 +2114,7 @@ pub fn run() {
             assistant_save_custom,
             assistant_remove,
             assistant_send,
+            assistant_picked,
             assistant_stop,
             assistant_chats,
             assistant_chat,

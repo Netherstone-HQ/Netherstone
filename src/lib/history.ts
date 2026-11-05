@@ -122,6 +122,11 @@ function dateFormat(seconds: number, now: Date, month: "long" | "short") {
   }).format(date);
 }
 
+/** "12 Oct", with the year when it isn't this year's. */
+export function formatShortDay(seconds: number, now = new Date()) {
+  return dateFormat(seconds, now, "short");
+}
+
 export function formatTime(seconds: number) {
   return timeFormat.format(new Date(seconds * 1000));
 }

@@ -3,6 +3,7 @@ import { GlobeIcon, PanelLeftIcon, PanelRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useUIStore } from "@/store";
+import { useAssistantStore } from "@/store/assistant";
 import { useHistoryStore } from "@/store/history";
 
 function PanelToggle({
@@ -48,16 +49,23 @@ export function LeftSidebarToggle() {
   );
 }
 
-/** History takes the right sidebar's place; showing the sidebar closes it. */
+/**
+ * History and the assistant take the right sidebar's place; showing the
+ * sidebar closes them.
+ */
 export function RightSidebarToggle() {
   const isHistoryOpen = useHistoryStore((s) => s.openIn === "notes");
-  const isOpen = useUIStore((s) => s.isRightSidebarOpen) && !isHistoryOpen;
+  const isAssistantOpen = useAssistantStore((s) => s.isOpen);
+  const isCovered = isHistoryOpen || isAssistantOpen;
+  const isOpen = useUIStore((s) => s.isRightSidebarOpen) && !isCovered;
   const toggleSidebar = useUIStore((s) => s.toggleRightSidebar);
   const setSidebarOpen = useUIStore((s) => s.setRightSidebarOpen);
   const closeHistory = useHistoryStore((s) => s.closeHistory);
+  const setAssistantOpen = useAssistantStore((s) => s.setOpen);
   const toggle = () => {
-    if (!isHistoryOpen) return toggleSidebar();
-    closeHistory();
+    if (!isCovered) return toggleSidebar();
+    if (isHistoryOpen) closeHistory();
+    setAssistantOpen(false);
     setSidebarOpen(true);
   };
 

@@ -10,6 +10,7 @@ import {
   LeftSidebarToggle,
   RightSidebarToggle,
 } from "./PanelToggles";
+import { AssistantToggle } from "./assistant/AssistantToggle";
 import { HistoryToggle } from "./history/HistoryToggle";
 import { FileBreadcrumb } from "./vault/FileBreadcrumb";
 
@@ -57,6 +58,7 @@ export function AppHeader() {
           <HistoryToggle place="notes" />
         ) : null}
         <BrowserPanelToggle />
+        <AssistantToggle />
         <Separator
           orientation="vertical"
           className="mx-0.5 h-4 data-vertical:self-center"

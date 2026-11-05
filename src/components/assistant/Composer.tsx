@@ -105,6 +105,7 @@ export function Composer({
     [tree, vault],
   );
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const [mention, setMention] = useState<{
     start: number;
     query: string;
@@ -219,27 +220,52 @@ export function Composer({
             ))}
           </div>
         ) : null}
-        <TextareaAutosize
-          ref={textRef}
-          aria-label="Message"
-          placeholder={
-            disabled ? "Ask about your vault" : "Ask about your vault, @ to add a shard"
-          }
-          disabled={disabled}
-          value={draft}
-          minRows={2}
-          maxRows={10}
-          onChange={(event) => {
-            onDraft(event.target.value);
-            track(event.target.value, event.target.selectionStart);
-          }}
-          onSelect={(event) =>
-            track(event.currentTarget.value, event.currentTarget.selectionStart)
-          }
-          onBlur={() => setMention(null)}
-          onKeyDown={onKeyDown}
-          className="resize-none bg-transparent px-1 text-ui outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-        />
+        <div className="relative flex flex-col">
+          {mention ? (
+            // The @ being typed is tinted: the text is drawn here, under the
+            // box's own text, which is clear meanwhile.
+            <div
+              ref={backdropRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-1 text-ui"
+            >
+              {draft.slice(0, mention.start)}
+              <span className="text-brand">
+                {draft.slice(mention.start, mention.start + mention.query.length + 1)}
+              </span>
+              {draft.slice(mention.start + mention.query.length + 1)}
+            </div>
+          ) : null}
+          <TextareaAutosize
+            ref={textRef}
+            aria-label="Message"
+            placeholder={
+              disabled ? "Ask about your vault" : "Ask about your vault, @ to add a shard"
+            }
+            disabled={disabled}
+            value={draft}
+            minRows={2}
+            maxRows={10}
+            onChange={(event) => {
+              onDraft(event.target.value);
+              track(event.target.value, event.target.selectionStart);
+            }}
+            onSelect={(event) =>
+              track(event.currentTarget.value, event.currentTarget.selectionStart)
+            }
+            onBlur={() => setMention(null)}
+            onKeyDown={onKeyDown}
+            onScroll={(event) => {
+              if (backdropRef.current) {
+                backdropRef.current.scrollTop = event.currentTarget.scrollTop;
+              }
+            }}
+            className={cn(
+              "relative resize-none break-words bg-transparent px-1 text-ui outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed",
+              mention && "text-transparent caret-foreground",
+            )}
+          />
+        </div>
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">{model}</div>
           {answering ? (

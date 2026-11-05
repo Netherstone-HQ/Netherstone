@@ -211,7 +211,11 @@ function CopyButton({ text }: { text: string }) {
           )
         }
       >
-        {copied ? <CheckIcon /> : <CopyIcon />}
+        {copied ? (
+          <CheckIcon className="size-3.5" />
+        ) : (
+          <CopyIcon className="size-3.5" />
+        )}
       </Button>
     </Hint>
   );

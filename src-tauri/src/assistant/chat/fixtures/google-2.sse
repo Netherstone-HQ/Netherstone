@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "read","args": {"path": "Trip.md"},"id": "call_9114120895525307307"},"thoughtSignature": "EmAKXgFpFH0TnsnGXY/1cTOWN3nxqZzfQAsoabDzyAK2Ks5KUvdsnMeGKjTCIhvV7OpFu2nCOsgAiPOLRaC/wZluMylEdJbFxPgS5FHOmPEQCWuPLZQA9fIDR+xgxIC+KKM="}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 1415,"candidatesTokenCount": 16,"totalTokenCount": 1431,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 1415}],"serviceTier": "standard"},"modelVersion": "gemini-3.5-flash-lite","responseId": "ddXravDuJLiO1sgP8fzpqQQ"}
+
+data: {"candidates": [{"content": {"parts": [{"text": ""}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 1415,"candidatesTokenCount": 16,"totalTokenCount": 1431,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 1415}],"serviceTier": "standard"},"modelVersion": "gemini-3.5-flash-lite","responseId": "ddXravDuJLiO1sgP8fzpqQQ"}
+

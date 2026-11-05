@@ -1,0 +1,12 @@
+data: {"id":"gen-1793840511-6iyO62njqXXi3FMpdm6H","object":"chat.completion.chunk","created":1793840511,"model":"nvidia/nemotron-3.5-lightning:free","provider":"Nvidia","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"Great, found it: path \"Trip.md\". Now I need to read it. Use `read` with path \"Trip.md\".","reasoning_details":[{"type":"reasoning.text","text":"Great, found it: path \"Trip.md\". Now I need to read it. Use `read` with path \"Trip.md\".","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1793840511-6iyO62njqXXi3FMpdm6H","object":"chat.completion.chunk","created":1793840511,"model":"nvidia/nemotron-3.5-lightning:free","provider":"Nvidia","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"id":"call-78a021d7-d8bf-4cdf-92f0-1e45dd84f8ec","type":"function","function":{"name":"read","arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1793840511-6iyO62njqXXi3FMpdm6H","object":"chat.completion.chunk","created":1793840511,"model":"nvidia/nemotron-3.5-lightning:free","provider":"Nvidia","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"{\"path\":\"Trip.md\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1793840511-6iyO62njqXXi3FMpdm6H","object":"chat.completion.chunk","created":1793840511,"model":"nvidia/nemotron-3.5-lightning:free","provider":"Nvidia","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}]}
+
+data: {"id":"gen-1793840511-6iyO62njqXXi3FMpdm6H","object":"chat.completion.chunk","created":1793840511,"model":"nvidia/nemotron-3.5-lightning:free","provider":"Nvidia","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}],"usage":{"prompt_tokens":2637,"completion_tokens":53,"total_tokens":2690,"cost":0,"is_byok":false,"prompt_tokens_details":{"cached_tokens":2096,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0,"upstream_inference_prompt_cost":0,"upstream_inference_completions_cost":0},"completion_tokens_details":{"reasoning_tokens":27,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

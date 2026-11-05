@@ -1,0 +1,6 @@
+data: {"candidates": [{"content": {"parts": [{"text": "[Trip"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 1526,"candidatesTokenCount": 2,"totalTokenCount": 1528,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 1526}],"serviceTier": "standard"},"modelVersion": "gemini-3.5-flash-lite","responseId": "dtXrasjDFPXCiLMPi_aK2QM"}
+
+data: {"candidates": [{"content": {"parts": [{"text": ".md](Trip.md) says you go to Lisbon in May by train."}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 1526,"candidatesTokenCount": 19,"totalTokenCount": 1545,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 1526}],"serviceTier": "standard"},"modelVersion": "gemini-3.5-flash-lite","responseId": "dtXrasjDFPXCiLMPi_aK2QM"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "","thoughtSignature": "EmAKXgFpFH0Tqi53Fpmm7EbFS+uUR3VXRScT/bbl66J6EjJ0VCNWXB1fHF5LHSn9nFKbd/LRqwp9HHa5QNAgf6L3Q+7KT+IsRMQP6ik2XyyEdhpRR2UcSBHP64OuCvZbIrw="}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 1526,"candidatesTokenCount": 19,"totalTokenCount": 1545,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 1526}],"serviceTier": "standard"},"modelVersion": "gemini-3.5-flash-lite","responseId": "dtXrasjDFPXCiLMPi_aK2QM"}
+

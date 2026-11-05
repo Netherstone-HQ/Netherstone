@@ -4,6 +4,7 @@
 //! offers the vault tools (`crate::tools`), the shard format guide and a few
 //! ready-made prompts. It does nothing while "Connect your AI apps" is off.
 
+use crate::ai_vaults::{self, Way};
 use crate::db::settings::{self, KnownVault};
 use crate::tools::{self, Caller, Page, Tool, Vault, guide};
 use rmcp::model::{
@@ -60,7 +61,7 @@ impl Server {
     /// Opens the database, once AI apps may use it.
     fn settings(&self) -> Result<rusqlite::Connection, String> {
         let conn = crate::db::open_connection()?;
-        if !settings::mcp_enabled(&conn).map_err(|e| e.to_string())? {
+        if !ai_vaults::is_on(&conn, Way::AiApps)? {
             return Err(TURNED_OFF.to_string());
         }
         Ok(conn)
@@ -70,11 +71,9 @@ impl Server {
     /// apps may use it.
     fn vault(&self, asked: Option<&str>) -> Result<Vault, String> {
         let conn = self.settings()?;
-        let picked = |vault: Option<KnownVault>| vault.filter(|vault| vault.ai_allowed);
         let known = match asked {
             Some(asked) => {
-                let path = Path::new(asked);
-                picked(settings::known_vault(&conn, path).map_err(|e| e.to_string())?).ok_or_else(|| {
+                ai_vaults::picked(&conn, Path::new(asked))?.ok_or_else(|| {
                     format!("'{}' isn't a vault Netherstone lets AI apps use. list_vaults gives the ones it does.", asked)
                 })?
             }
@@ -95,14 +94,7 @@ impl Server {
                 last
             }
         };
-        if !known.path.is_dir() {
-            return Err(format!(
-                "The vault {} isn't at {} anymore",
-                known.name(),
-                known.path.display()
-            ));
-        }
-        Ok(Vault::new(known.path, crate::sync::sync_root()?))
+        ai_vaults::open(known)
     }
 
     /// The vaults AI apps may use, a page at a time.

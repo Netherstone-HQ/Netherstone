@@ -3,18 +3,30 @@
 //! own provider, and nothing here hands them back to the webview.
 
 mod catalog;
+mod chat;
+mod engine;
 mod local;
 mod models;
 mod providers;
+mod sessions;
 
+use crate::ai_vaults::{self, Way};
 use crate::credentials::{self, Storage};
 use crate::db;
+pub use chat::ChatError;
+use chat::{Message, ReasoningPart, StopToken};
+pub use engine::{Event, Sink};
+use engine::{SharedStore, Turn};
 use local::Server;
 use models::Target;
 pub use models::{Model, ProviderError};
 pub use providers::Api;
 use providers::{Limits, Provider, Setup};
 use serde::{Deserialize, Serialize};
+pub use sessions::ChatInfo;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 /// The servers found on this computer, as JSON.
 const LOCAL_SERVERS: &str = "assistant_local_servers";
@@ -354,4 +366,269 @@ pub fn remove(provider: &str) -> Result<(), String> {
         Setup::Key => {}
     }
     forget_model_of(provider.id).map_err(|_| "Couldn't forget the model".to_string())
+}
+
+// ── Chats ────────────────────────────────────────────────────────────────────
+
+/// A message as the panel shows it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Shown {
+    seq: i64,
+    /// "user" or "assistant".
+    role: &'static str,
+    text: String,
+    /// The model's shown reasoning, when it gave some.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<String>,
+    /// The tools it called, by name.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    sources: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatView {
+    #[serde(flatten)]
+    info: ChatInfo,
+    messages: Vec<Shown>,
+}
+
+/// The chats answering now: their window, and how to stop them.
+fn running() -> &'static Mutex<HashMap<String, (String, StopToken)>> {
+    static RUNNING: std::sync::OnceLock<Mutex<HashMap<String, (String, StopToken)>>> =
+        std::sync::OnceLock::new();
+    RUNNING.get_or_init(Default::default)
+}
+
+fn store() -> Result<SharedStore, ChatError> {
+    static STORE: std::sync::OnceLock<SharedStore> = std::sync::OnceLock::new();
+    if let Some(store) = STORE.get() {
+        return Ok(store.clone());
+    }
+    let opened = sessions::Store::open().map_err(|error| {
+        eprintln!("[Netherstone] {error}");
+        ChatError::Storage
+    })?;
+    Ok(STORE.get_or_init(|| Arc::new(Mutex::new(opened))).clone())
+}
+
+/// The picked model, ready to call.
+fn picked_model() -> Result<engine::Model, ChatError> {
+    let choice: ModelChoice = read(MODEL)
+        .map_err(|_| ChatError::Storage)?
+        .ok_or(ChatError::NoModel)?;
+    let provider = providers::find(&choice.provider).map_err(|_| ChatError::NoModel)?;
+    let target = target(provider, choice.server.as_deref()).map_err(|error| match error {
+        ProviderError::Storage => ChatError::Storage,
+        _ => ChatError::NoModel,
+    })?;
+    if provider.setup == Setup::Key && target.key.is_none() {
+        return Err(ChatError::NoModel);
+    }
+    let facts = catalog::facts(target.api, &choice.model);
+    Ok(engine::Model {
+        target,
+        id: choice.model,
+        facts,
+    })
+}
+
+/// The vault at `path`, while the assistant is on and may use it.
+fn open_vault(path: &std::path::Path) -> Result<crate::tools::Vault, ChatError> {
+    let conn = db::open_connection().map_err(|_| ChatError::Storage)?;
+    if !ai_vaults::is_on(&conn, Way::Assistant).map_err(|_| ChatError::Storage)? {
+        return Err(ChatError::TurnedOff);
+    }
+    let known = ai_vaults::picked(&conn, path)
+        .map_err(|_| ChatError::Storage)?
+        .ok_or(ChatError::VaultClosed)?;
+    ai_vaults::open(known).map_err(|_| ChatError::VaultClosed)
+}
+
+/// Sends `text` in `chat`, or in a new chat about `vault`, and streams the
+/// answer to `sink`. Gives the chat's id once the answer ends.
+pub async fn send(
+    chat: Option<String>,
+    vault: String,
+    text: String,
+    window: String,
+    sink: impl Sink + 'static,
+) -> Result<String, ChatError> {
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err(ChatError::Failed);
+    }
+    let store = store()?;
+    let (chat, vault, model) = {
+        let store = store.clone();
+        let text = text.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let model = picked_model()?;
+            let store = store.lock().map_err(|_| ChatError::Storage)?;
+            let storage = |error: String| {
+                eprintln!("[Netherstone] {error}");
+                ChatError::Storage
+            };
+            // A chat stays with the vault it was started in.
+            let (chat, vault_path) = match chat {
+                Some(chat) => {
+                    let info = store
+                        .info(&chat)
+                        .map_err(storage)?
+                        .ok_or(ChatError::NoChat)?;
+                    (chat, PathBuf::from(info.vault))
+                }
+                None => {
+                    let path = PathBuf::from(&vault);
+                    let vault = open_vault(&path)?;
+                    let chat = store.create(&vault.root, &text).map_err(storage)?;
+                    (chat, path)
+                }
+            };
+            let vault = open_vault(&vault_path)?;
+            Ok::<_, ChatError>((chat, vault, model))
+        })
+        .await
+        .map_err(|_| ChatError::Failed)??
+    };
+
+    let stop = StopToken::default();
+    {
+        let mut running = running().lock().map_err(|_| ChatError::Failed)?;
+        if running.contains_key(&chat) {
+            return Err(ChatError::Answering);
+        }
+        running.insert(chat.clone(), (window, stop.clone()));
+    }
+    let vault_path = vault.root.clone();
+    let turn = Turn {
+        store,
+        chat: chat.clone(),
+        vault: Arc::new(vault),
+        model,
+        stop: stop.clone(),
+        allowed: Arc::new(move || open_vault(&vault_path).is_ok()),
+    };
+    let result = run(&turn, &text, &sink).await;
+    if let Ok(mut running) = running().lock() {
+        running.remove(&chat);
+    }
+    let event = match result {
+        Ok((stop, usage)) => Event::Done { stop, usage },
+        Err(ChatError::Stopped) => Event::Stopped,
+        Err(error) => Event::Failed { error },
+    };
+    sink.send(event);
+    Ok(chat)
+}
+
+async fn run(
+    turn: &Turn,
+    text: &str,
+    sink: &dyn Sink,
+) -> Result<(chat::Stop, chat::Usage), ChatError> {
+    if !sink.send(Event::Chat {
+        id: turn.chat.clone(),
+    }) {
+        return Err(ChatError::Stopped);
+    }
+    let chat = turn.chat.clone();
+    let message = Message::User {
+        text: text.to_string(),
+    };
+    engine::saved(&turn.store, move |store| {
+        store.add(&chat, &message, &[], None).map(|_| ())
+    })
+    .await?;
+    engine::answer(turn, sink).await
+}
+
+/// Stops `chat` if it's answering.
+pub fn stop(chat: &str) {
+    if let Some((_, stop)) = running().lock().ok().and_then(|r| r.get(chat).cloned()) {
+        stop.stop();
+    }
+}
+
+/// Stops every chat answering in `window`, as it reloads or closes.
+pub fn stop_window(window: &str) {
+    if let Ok(running) = running().lock() {
+        for (owner, stop) in running.values() {
+            if owner == window {
+                stop.stop();
+            }
+        }
+    }
+}
+
+pub async fn chats() -> Result<Vec<ChatInfo>, ChatError> {
+    engine::saved(&store()?, |store| store.list()).await
+}
+
+pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
+    let found = engine::saved(&store()?, move |store| {
+        Ok(store.info(&chat)?.map(|info| (info, store.messages(&chat))))
+    })
+    .await?;
+    let (info, messages) = found.ok_or(ChatError::NoChat)?;
+    let messages = messages.map_err(|_| ChatError::Storage)?;
+    Ok(ChatView {
+        info,
+        messages: messages.into_iter().filter_map(shown).collect(),
+    })
+}
+
+fn shown(saved: sessions::Saved) -> Option<Shown> {
+    let (role, text, reasoning, tools) = match saved.message {
+        Message::User { text } => ("user", text, None, Vec::new()),
+        Message::Assistant {
+            text,
+            calls,
+            reasoning,
+        } => {
+            let reasoning: String = reasoning
+                .iter()
+                .flat_map(|r| &r.parts)
+                .filter_map(|part| match part {
+                    ReasoningPart::Text(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            (
+                "assistant",
+                text,
+                Some(reasoning).filter(|r| !r.is_empty()),
+                calls.into_iter().map(|call| call.name).collect(),
+            )
+        }
+        Message::Tool { .. } => return None,
+    };
+    Some(Shown {
+        seq: saved.seq,
+        role,
+        text,
+        reasoning,
+        tools,
+        sources: saved.sources,
+        model: saved.model,
+    })
+}
+
+pub async fn delete_chat(chat: String) -> Result<(), ChatError> {
+    stop(&chat);
+    engine::saved(&store()?, move |store| store.delete(&chat)).await
+}
+
+pub async fn delete_chats() -> Result<(), ChatError> {
+    if let Ok(running) = running().lock() {
+        for (_, stop) in running.values() {
+            stop.stop();
+        }
+    }
+    engine::saved(&store()?, |store| store.delete_all()).await
 }

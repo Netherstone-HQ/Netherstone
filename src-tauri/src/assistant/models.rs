@@ -53,18 +53,26 @@ pub enum ProviderError {
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-fn http_client(connect: Duration, total: Duration) -> Result<reqwest::Client, ProviderError> {
-    reqwest::Client::builder()
+/// The client every provider request goes through. `total` caps the whole
+/// request; a streamed chat leaves it out and times itself.
+pub(super) fn http_client(
+    connect: Duration,
+    total: Option<Duration>,
+) -> Result<reqwest::Client, ProviderError> {
+    let builder = reqwest::Client::builder()
         .user_agent(concat!("Netherstone/", env!("CARGO_PKG_VERSION")))
         // A redirect could carry the key's header to another host.
         .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(connect)
-        .timeout(total)
-        .build()
-        .map_err(|_| ProviderError::Failed)
+        .connect_timeout(connect);
+    match total {
+        Some(total) => builder.timeout(total),
+        None => builder,
+    }
+    .build()
+    .map_err(|_| ProviderError::Failed)
 }
 
-fn adapter(api: Api) -> AdapterKind {
+pub(super) fn adapter(api: Api) -> AdapterKind {
     match api {
         Api::OpenAi => AdapterKind::OpenAI,
         Api::Anthropic => AdapterKind::Anthropic,
@@ -85,7 +93,7 @@ pub async fn list_within(
     connect: Duration,
     total: Duration,
 ) -> Result<Vec<Model>, ProviderError> {
-    let http = http_client(connect, total)?;
+    let http = http_client(connect, Some(total))?;
     // OpenRouter lists its models to anyone, so its key is checked apart.
     if target.api == Api::OpenRouter
         && let Some(key) = &target.key
@@ -170,7 +178,7 @@ fn is_unreachable(error: &genai::Error) -> bool {
     )
 }
 
-fn from_status(api: Api, status: Option<u16>, unreachable: bool) -> ProviderError {
+pub(super) fn from_status(api: Api, status: Option<u16>, unreachable: bool) -> ProviderError {
     match status {
         // Google answers a key it doesn't know with a 400.
         Some(401 | 403) => ProviderError::KeyRefused,

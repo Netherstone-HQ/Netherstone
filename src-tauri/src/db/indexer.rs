@@ -1,6 +1,7 @@
 use super::queries::locate_tags;
-use crate::markdown_text::text_blocks;
-use rusqlite::{Connection, params};
+use super::words::shard_words;
+use crate::markdown_text::{TextBlock, text_blocks};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -268,8 +269,9 @@ fn store_shard(
     }
 
     // Insert tags (deduplicated), with the text around each one
+    let blocks = text_blocks(&content);
     let unique_tags: HashSet<String> = parsed.tags.into_iter().collect();
-    insert_tags(conn, file_id, &content, unique_tags.into_iter().collect())
+    insert_tags(conn, file_id, &blocks, unique_tags.into_iter().collect())
         .map_err(|e| format!("Failed to insert tag: {}", e))?;
 
     for title in &parsed.charts {
@@ -285,16 +287,44 @@ fn store_shard(
 
     super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
 
-    // The search index: the old row, if any, goes first.
-    conn.execute("DELETE FROM fts_search WHERE rowid = ?1", params![file_id])
-        .ok();
+    insert_search(conn, file_id, path_str, file_name, &content, &blocks)
+        .map_err(|e| format!("Failed to insert into search index: {}", e))
+}
 
+/// Replaces the search rows of the shard `file_id`: its text with its word
+/// stems and character pairs, and its languages.
+fn insert_search(
+    conn: &Connection,
+    file_id: i64,
+    path: &str,
+    name: &str,
+    content: &str,
+    blocks: &[TextBlock],
+) -> rusqlite::Result<()> {
+    let vault_language: Option<String> = conn
+        .prepare_cached(
+            "SELECT l.language FROM file_languages l JOIN files f ON f.id = l.file_id
+             WHERE f.vault_path = (SELECT vault_path FROM files WHERE id = ?1) AND f.id != ?1
+             GROUP BY l.language ORDER BY COUNT(*) DESC, l.language LIMIT 1",
+        )?
+        .query_row(params![file_id], |row| row.get(0))
+        .optional()?;
+    let vault_language = vault_language.and_then(whatlang::Lang::from_code);
+    let words = shard_words(name, blocks, vault_language);
+    conn.execute("DELETE FROM fts_search WHERE rowid = ?1", params![file_id])?;
     conn.execute(
-        "INSERT INTO fts_search(rowid, path, name, content) VALUES (?1, ?2, ?3, ?4)",
-        params![file_id, path_str, file_name, content],
-    )
-    .map_err(|e| format!("Failed to insert into search index: {}", e))?;
-
+        "DELETE FROM file_languages WHERE file_id = ?1",
+        params![file_id],
+    )?;
+    conn.execute(
+        "INSERT INTO fts_search (rowid, path, name, content, stems) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![file_id, path, name, content, words.stems],
+    )?;
+    let mut language =
+        conn.prepare_cached("INSERT INTO file_languages (file_id, language) VALUES (?1, ?2)")?;
+    for code in words.languages {
+        language.execute(params![file_id, code])?;
+    }
     Ok(())
 }
 
@@ -304,16 +334,13 @@ fn store_shard(
 fn insert_tags(
     conn: &Connection,
     file_id: i64,
-    content: &str,
+    blocks: &[TextBlock],
     tags: Vec<String>,
 ) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare_cached(
         "INSERT INTO tags (file_id, tag, position, excerpt) VALUES (?1, ?2, ?3, ?4)",
     )?;
-    for (position, tag) in locate_tags(&text_blocks(content), tags)
-        .into_iter()
-        .enumerate()
-    {
+    for (position, tag) in locate_tags(blocks, tags).into_iter().enumerate() {
         let excerpt = tag
             .excerpt
             .map(|parts| serde_json::to_string(&parts))

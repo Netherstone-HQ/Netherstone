@@ -182,6 +182,7 @@ describe("Word import", () => {
 describe("Word import in its worker", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("asks the window for links, pictures and warnings, in document order", async () => {
@@ -284,7 +285,15 @@ describe("Word import in its worker", () => {
     const long = () => wordFile(body, { rels: links.join("") });
     const vault = memoryImport({ "Long.docx": await long(), "Long 2.docx": await long(), "Other.docx": await wordFile(para(run("Other"))) });
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 150);
+    // The import looks for a cancel on an interval: here, on each message to
+    // the worker once a worker is reading.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const post = DocxWorker.prototype.postMessage;
+    vi.spyOn(DocxWorker.prototype, "postMessage").mockImplementation(function (this: DocxWorker, message) {
+      post.call(this, message);
+      if (message.type !== "read") controller.abort();
+      if (controller.signal.aborted) vi.runOnlyPendingTimers();
+    });
     const report = await vault.run({ signal: controller.signal });
 
     expect(report.cancelled).toBe(true);
@@ -351,7 +360,7 @@ describe("Word import in its worker", () => {
 
   it("reports a worker that stops on its own", async () => {
     vi.spyOn(DocxWorker.prototype, "postMessage").mockImplementation(function (this: DocxWorker) {
-      setTimeout(() => this.onerror?.({ message: "" } as ErrorEvent));
+      queueMicrotask(() => this.onerror?.({ message: "" } as ErrorEvent));
     });
     const vault = memoryImport({ "Doc.docx": await wordFile(para(run("Text"))), "Next.docx": await wordFile(para(run("Next"))) });
     const report = await vault.run();

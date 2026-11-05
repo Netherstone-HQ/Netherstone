@@ -34,7 +34,7 @@ test("a shard with 400 tables opens and takes edits", async ({ page }) => {
 
   await caretAfter(page, "Paragraph 0 with");
   const typingStarted = Date.now();
-  await page.keyboard.type(" xxxxx", { delay: 50 });
+  await page.keyboard.type(" xxxxx");
   await expect(editor(page)).toContainText("xxxxx");
   const typingMs = Date.now() - typingStarted;
 

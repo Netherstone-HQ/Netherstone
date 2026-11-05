@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 /// SQL schema for the Netherstone knowledge base index.
 ///
@@ -21,7 +21,9 @@ use rusqlite::Connection;
 ///   whether AI apps may connect (see `settings.rs`)
 /// - `vaults`: Every vault the app has opened on this device, in the order
 ///   it last opened them, and whether AI apps may use each (see `settings.rs`)
-/// - `fts_search`: FTS5 virtual table for full-text search
+/// - `fts_search`: FTS5 virtual table for full-text search, with each
+///   shard's word stems and character pairs (see `words.rs`)
+/// - `file_languages`: The languages each shard's words were stemmed in
 pub const SCHEMA: &str = r#"
 -- ── Files ──────────────────────────────────────────────────────────────────
 
@@ -219,10 +221,24 @@ CREATE INDEX IF NOT EXISTS idx_vaults_open_order ON vaults(open_order DESC);
 
 -- ── Full-Text Search ────────────────────────────────────────────────────────
 
+-- Rows share their file's id. `stems` holds the stems of the shard's words
+-- that differ from the word, and the character pairs of text without spaces.
+-- Marks count as part of a word, so scripts that write vowels as marks
+-- (Hindi, Thai) keep their words whole.
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_search USING fts5(
     path UNINDEXED,
     name,
-    content
+    content,
+    stems,
+    tokenize = "unicode61 categories 'L* N* Co M*'"
+);
+
+CREATE TABLE IF NOT EXISTS file_languages (
+    file_id INTEGER NOT NULL,
+    -- A whatlang code, like eng.
+    language TEXT NOT NULL,
+    PRIMARY KEY (file_id, language),
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 "#;
 
@@ -275,6 +291,29 @@ fn drop_index_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Er
     Ok(())
 }
 
+/// Drops the search index from before it held word stems and character
+/// pairs and kept marks in words, and has every shard indexed again when its
+/// vault next opens.
+fn drop_old_search(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let sql: Option<String> = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'fts_search'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if sql.is_some_and(|sql| !sql.contains("M*")) {
+        conn.execute_batch(
+            "BEGIN;
+             UPDATE files SET last_modified = 0;
+             DROP TABLE fts_search;
+             DROP TABLE IF EXISTS fts_unspaced;
+             COMMIT;",
+        )?;
+    }
+    Ok(())
+}
+
 /// Initialize the database schema.
 ///
 /// Creates all tables and indexes if they don't exist, and brings older
@@ -282,6 +321,7 @@ fn drop_index_tables_without_vault(conn: &Connection) -> Result<(), rusqlite::Er
 pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     drop_attachment_tables_without_vault(conn)?;
     drop_index_tables_without_vault(conn)?;
+    drop_old_search(conn)?;
     let fill_drawing_embeds = !table_exists(conn, "drawing_embeds")?;
     conn.execute_batch(SCHEMA)?;
     if !column_exists(conn, "vaults", "drive")? {
@@ -352,6 +392,27 @@ mod tests {
                 .unwrap();
             assert_eq!(rows, 0, "{table}");
         }
+    }
+
+    #[test]
+    fn old_search_is_indexed_again() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        conn.execute_batch(
+            "DROP TABLE fts_search;
+             CREATE VIRTUAL TABLE fts_search USING fts5(path UNINDEXED, name, content);
+             INSERT INTO files (id, vault_path, path, name, last_modified, last_indexed, content_hash) VALUES (1, '/v', '/v/a.md', 'a.md', 5, 5, '');
+             INSERT INTO fts_search (rowid, path, name, content) VALUES (1, '/v/a.md', 'a.md', 'a');",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        assert!(column_exists(&conn, "fts_search", "stems").unwrap());
+        let modified: i64 = conn
+            .query_row("SELECT last_modified FROM files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(modified, 0);
     }
 
     #[test]

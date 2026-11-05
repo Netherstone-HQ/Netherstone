@@ -1,11 +1,12 @@
 use super::attachments::vault_key;
 use super::indexer::resolve_link_target;
 use super::parser::{LinkType, classify_link_target};
-use crate::markdown_text::{BlockKind, TextBlock, TextPart, excerpt, text_blocks, word_matches};
+use super::words::Search;
+use crate::markdown_text::{BlockKind, TextBlock, TextPart, excerpt, text_blocks};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
-use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
+use std::ops::Range;
 use std::path::Path;
 
 /// Characters an excerpt keeps before and after what it highlights.
@@ -16,8 +17,13 @@ const EXCERPT_AFTER: usize = 200;
 pub struct SearchResult {
     pub path: String,
     pub name: String,
+    /// The name without its extension, with the words searched for
+    /// highlighted.
+    pub title: Vec<TextPart>,
     /// The text around the words searched for, which are highlighted.
     pub snippet: Vec<TextPart>,
+    /// The heading the snippet is under, if any.
+    pub section: Option<String>,
     pub rank: f64,
 }
 
@@ -67,7 +73,8 @@ pub fn search_files(
     limit: usize,
 ) -> rusqlite::Result<Vec<SearchResult>> {
     eprintln!("[Netherstone] Searching for: '{}'", query);
-    if search_terms(query).is_empty() {
+    let search = Search::new(conn, vault_path, query, false)?;
+    if search.is_empty() {
         return Ok(Vec::new());
     }
     let filter = FileFilter {
@@ -77,9 +84,11 @@ pub fn search_files(
     let results: Vec<SearchResult> = find_files(conn, vault_path, &filter, 0, limit)?
         .into_iter()
         .map(|file| SearchResult {
+            title: highlighted(file.name.strip_suffix(".md").unwrap_or(&file.name), &search),
             path: file.path,
             name: file.name,
             snippet: file.snippet,
+            section: file.section,
             rank: file.rank,
         })
         .collect();
@@ -87,12 +96,34 @@ pub fn search_files(
     Ok(results)
 }
 
+/// `text` with the words `search` matches highlighted.
+fn highlighted(text: &str, search: &Search) -> Vec<TextPart> {
+    let mut parts = Vec::new();
+    let mut last = 0;
+    for (range, _) in search.matches(text) {
+        parts.push((&text[last..range.start], false));
+        parts.push((&text[range.clone()], true));
+        last = range.end;
+    }
+    parts.push((&text[last..], false));
+    parts
+        .into_iter()
+        .filter(|(text, _)| !text.is_empty())
+        .map(|(text, highlight)| TextPart {
+            text: text.to_string(),
+            highlight,
+        })
+        .collect()
+}
+
 /// Which files of a vault to find. Everything left out matches any file.
 #[derive(Debug, Default)]
 pub struct FileFilter<'a> {
-    /// Words the text must have, matched as prefixes. Empty finds files by
-    /// the rest of the filter, newest first.
+    /// Words the text must have, matched as word starts or by their stems.
+    /// Empty finds files by the rest of the filter, newest first.
     pub query: &'a str,
+    /// Whether one of the words is enough, instead of all of them.
+    pub any: bool,
     /// A folder the files must be in, at any depth.
     pub folder: Option<&'a Path>,
     pub tag: Option<&'a str>,
@@ -108,6 +139,8 @@ pub struct FoundFile {
     /// The text around the words searched for, which are highlighted, or
     /// around the tag, or the start of the text.
     pub snippet: Vec<TextPart>,
+    /// The heading the snippet is under, if any.
+    pub section: Option<String>,
     /// Lower is better; 0 when nothing was searched for.
     pub rank: f64,
     pub last_modified: i64,
@@ -115,8 +148,8 @@ pub struct FoundFile {
 }
 
 /// The files of the vault at `vault_path` that `filter` finds: by relevance
-/// when it has words, otherwise newest first. `offset` and `limit` page
-/// through them.
+/// when it has words, the ones with the words as typed first, otherwise
+/// newest first. `offset` and `limit` page through them.
 pub fn find_files(
     conn: &Connection,
     vault_path: &Path,
@@ -124,21 +157,20 @@ pub fn find_files(
     offset: usize,
     limit: usize,
 ) -> rusqlite::Result<Vec<FoundFile>> {
-    let terms = search_terms(filter.query);
-    let mut conditions = vec!["f.vault_path = ?".to_string()];
-    let mut values: Vec<rusqlite::types::Value> = vec![vault_key(vault_path).into()];
-
-    if !terms.is_empty() {
-        // Each term quoted, so nothing typed is read as query syntax, and
-        // matched as a prefix: "auto save" becomes "auto"* "save"*.
-        let fts_query = terms
-            .iter()
-            .map(|term| format!("\"{}\"*", term))
-            .collect::<Vec<_>>()
-            .join(" ");
-        conditions.push("fts_search MATCH ?".to_string());
-        values.push(fts_query.into());
+    let search = Search::new(conn, vault_path, filter.query, filter.any)?;
+    let mut values: Vec<rusqlite::types::Value> = Vec::new();
+    let mut joins = String::new();
+    let fts = search.fts();
+    if let Some(fts) = &fts {
+        joins.push_str(
+            " INNER JOIN (SELECT rowid, rank FROM fts_search WHERE fts_search MATCH ?) m
+               ON m.rowid = f.id",
+        );
+        values.push(fts.clone().into());
     }
+
+    let mut conditions = vec!["f.vault_path = ?".to_string()];
+    values.push(vault_key(vault_path).into());
     if let Some(folder) = filter.folder {
         let inside = format!("{}{}", folder.to_string_lossy(), std::path::MAIN_SEPARATOR);
         conditions.push("substr(f.path, 1, length(?)) = ?".to_string());
@@ -158,35 +190,46 @@ pub fn find_files(
         conditions.push("f.last_modified < ?".to_string());
         values.push(before.into());
     }
+
+    let rank = if fts.is_some() { "m.rank" } else { "0.0" };
+    let order = match (search.exact(), search.is_empty()) {
+        (Some(exact), _) => {
+            values.push(exact.into());
+            "f.id IN (SELECT rowid FROM fts_search WHERE fts_search MATCH ?) DESC, score, \
+             f.last_modified DESC, f.path"
+        }
+        (None, false) => "score, f.last_modified DESC, f.path",
+        (None, true) => "f.last_modified DESC, f.path",
+    };
     values.push((limit as i64).into());
     values.push((offset as i64).into());
-
-    let (rank, order) = if terms.is_empty() {
-        ("0.0", "f.last_modified DESC, f.path")
-    } else {
-        ("rank", "rank")
-    };
     let sql = format!(
-        "SELECT f.path, f.name, fts_search.content, {rank}, f.last_modified, f.word_count
+        "SELECT f.path, f.name, s.content, {rank} AS score, f.last_modified, f.word_count
          FROM files f
-         INNER JOIN fts_search ON fts_search.rowid = f.id
+         INNER JOIN fts_search s ON s.rowid = f.id{joins}
          WHERE {}
          ORDER BY {order}
          LIMIT ? OFFSET ?",
         conditions.join(" AND ")
     );
 
-    let highlighted: Vec<String> = match (&terms, filter.tag) {
-        (terms, Some(tag)) if terms.is_empty() => vec![tag.trim_start_matches('#').to_lowercase()],
-        _ => terms.clone(),
+    let tag = filter
+        .tag
+        .filter(|_| search.is_empty())
+        .map(|tag| tag.trim_start_matches('#').to_lowercase());
+    let highlight = match &tag {
+        Some(tag) => Search::new(conn, vault_path, tag, false)?,
+        None => search,
     };
     let mut stmt = conn.prepare(&sql)?;
     stmt.query_map(rusqlite::params_from_iter(values), |row| {
         let content: String = row.get(2)?;
+        let (snippet, section) = search_snippet(&content, &highlight);
         Ok(FoundFile {
             path: row.get(0)?,
             name: row.get(1)?,
-            snippet: search_snippet(&content, &highlighted),
+            snippet,
+            section,
             rank: row.get(3)?,
             last_modified: row.get(4)?,
             word_count: row.get(5)?,
@@ -195,57 +238,48 @@ pub fn find_files(
     .collect()
 }
 
-/// The words of a search, lowercase, split as the index splits text: at
-/// anything but letters and digits, so "contractor's" gives "contractor".
-/// Single letters, like the "s" left from that, are dropped when there are
-/// longer words, since they would match nearly everything.
-fn search_terms(query: &str) -> Vec<String> {
-    let words: Vec<String> = query
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .map(str::to_lowercase)
-        .collect();
-    let is_letter = |word: &String| word.chars().count() == 1;
-    if words.iter().all(is_letter) {
-        return words;
-    }
-    words.into_iter().filter(|word| !is_letter(word)).collect()
-}
-
-/// The block matching the most search terms, around its first match. With no
-/// match in the text (the name matched), the start of the first non-heading
-/// block.
-fn search_snippet(content: &str, terms: &[String]) -> Vec<TextPart> {
+/// The block matching the most search terms, around its first match, with
+/// the heading it's under. With no match in the text (the name matched),
+/// the start of the first non-heading block.
+fn search_snippet(content: &str, search: &Search) -> (Vec<TextPart>, Option<String>) {
     let blocks = text_blocks(content);
-    let best = blocks
-        .iter()
-        .enumerate()
-        .filter_map(|(index, block)| {
-            let matches = word_matches(&block.text, terms);
-            let found = terms
-                .iter()
-                .filter(|term| {
-                    matches.iter().any(|m| {
-                        block.text[m.clone()]
-                            .to_lowercase()
-                            .starts_with(term.as_str())
-                    })
-                })
-                .count();
-            (found > 0).then_some((index, found, block, matches))
-        })
-        // The earliest of the blocks with the most terms.
-        .max_by_key(|(index, found, ..)| (*found, Reverse(*index)));
+    let mut heading = None;
+    // The earliest of the blocks with the most terms, with its matches and
+    // the heading it's under.
+    let mut best = None;
+    let mut best_found = 0;
+    for block in &blocks {
+        if matches!(block.kind, BlockKind::Heading { .. }) {
+            heading = Some(block.text.as_str());
+        }
+        let matches = search.matches(&block.text);
+        let found = matches
+            .iter()
+            .map(|(_, term)| *term)
+            .collect::<HashSet<_>>()
+            .len();
+        if found > best_found {
+            best_found = found;
+            best = Some((block, matches, heading));
+        }
+    }
 
     match best {
-        Some((_, _, block, matches)) => {
-            excerpt(&block.text, &matches, EXCERPT_BEFORE, EXCERPT_AFTER)
+        Some((block, matches, section)) => {
+            let ranges: Vec<Range<usize>> = matches.into_iter().map(|(range, _)| range).collect();
+            (
+                excerpt(&block.text, &ranges, EXCERPT_BEFORE, EXCERPT_AFTER),
+                section.map(str::to_string),
+            )
         }
-        None => blocks
-            .iter()
-            .find(|block| !matches!(block.kind, BlockKind::Heading { .. }))
-            .map(|block| excerpt(&block.text, &[], EXCERPT_BEFORE, EXCERPT_AFTER))
-            .unwrap_or_default(),
+        None => (
+            blocks
+                .iter()
+                .find(|block| !matches!(block.kind, BlockKind::Heading { .. }))
+                .map(|block| excerpt(&block.text, &[], EXCERPT_BEFORE, EXCERPT_AFTER))
+                .unwrap_or_default(),
+            None,
+        ),
     }
 }
 
@@ -644,19 +678,9 @@ mod tests {
     fn snippets_show_the_block_with_the_most_search_terms() {
         let content =
             "# Trip\n\nPack the bags.\n\nBook the **train** for the trip.\n\nTrain snacks.";
-        let terms = ["train".to_string(), "trip".to_string()];
-        assert_eq!(
-            shown(&search_snippet(content, &terms)),
-            "Book the [train] for the [trip]."
-        );
-    }
-
-    #[test]
-    fn splits_searches_as_the_index_splits_text() {
-        assert_eq!(search_terms("Contractor's quote"), ["contractor", "quote"]);
-        assert_eq!(search_terms("auto-save"), ["auto", "save"]);
-        assert_eq!(search_terms("a b"), ["a", "b"]);
-        assert!(search_terms(" ' \" ").is_empty());
+        let (snippet, section) = search_snippet(content, &Search::unstemmed("train trip"));
+        assert_eq!(shown(&snippet), "Book the [train] for the [trip].");
+        assert_eq!(section.as_deref(), Some("Trip"));
     }
 
     #[test]
@@ -776,10 +800,71 @@ mod tests {
     }
 
     #[test]
+    fn finds_other_word_forms_and_scripts_without_spaces() {
+        let vault = crate::sync::state::tests::temp_dir("queries-word-forms");
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&conn).unwrap();
+        for (name, text) in [
+            (
+                "Garden.md",
+                "# Spring\n\nThe gardeners were planting flowers along the paths while \
+                 we talked about the season ahead of us.\n",
+            ),
+            (
+                "Plants.md",
+                "# Notes\n\nWe plant flowers in the garden every spring, and the paths \
+                 stay open all season for everyone.\n",
+            ),
+            ("Tokyo.md", "# 旅行\n\n今日は東京へ行きます。\n"),
+        ] {
+            let path = vault.join(name);
+            std::fs::write(&path, text).unwrap();
+            crate::db::indexer::index_file(&conn, &vault, &path).unwrap();
+        }
+        let find = |query: &str, any: bool| {
+            let filter = FileFilter {
+                query,
+                any,
+                ..FileFilter::default()
+            };
+            find_files(&conn, &vault, &filter, 0, 20).unwrap()
+        };
+        let names = |found: &[FoundFile]| -> Vec<String> {
+            found.iter().map(|file| file.name.clone()).collect()
+        };
+
+        // The shard with the word as typed comes first.
+        let found = find("planting", false);
+        assert_eq!(names(&found), ["Garden.md", "Plants.md"]);
+        assert_eq!(
+            shown(&found[1].snippet),
+            "We [plant] flowers in the garden every spring, and the paths stay open all season for everyone."
+        );
+        assert_eq!(found[1].section.as_deref(), Some("Notes"));
+
+        assert_eq!(names(&find("talked everyone", false)), Vec::<String>::new());
+        assert_eq!(
+            names(&find("talked everyone", true)).len(),
+            2,
+            "any of the words"
+        );
+
+        let found = find("東京", false);
+        assert_eq!(names(&found), ["Tokyo.md"]);
+        assert_eq!(shown(&found[0].snippet), "今日は[東京]へ行きます。");
+        assert_eq!(names(&find("東京へ行", false)), ["Tokyo.md"]);
+        assert_eq!(names(&find("京", false)), ["Tokyo.md"], "inside a run");
+        assert_eq!(names(&find("す", false)), ["Tokyo.md"], "at its end");
+        assert_eq!(names(&find("大阪", false)), Vec::<String>::new());
+
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
     fn snippets_fall_back_to_the_first_paragraph() {
         let content = "# Trip\n\nPack the bags.";
         assert_eq!(
-            shown(&search_snippet(content, &["zebra".to_string()])),
+            shown(&search_snippet(content, &Search::unstemmed("zebra")).0),
             "Pack the bags."
         );
     }

@@ -377,7 +377,7 @@ async fn a_stopped_answer_keeps_what_streamed() {
     let text = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"We go\"}}]}\n\n\
 data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" far\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
     let mut slow = Answer::ok("text/event-stream", text);
-    slow.hold = Some((text.find("\n\n").unwrap() + 2, Duration::from_secs(30)));
+    slow.hold = Some(text.find("\n\n").unwrap() + 2);
     let server = serve(vec![slow]);
     let turn = turn(
         "engine-stop",
@@ -395,7 +395,7 @@ data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" far\"},\
         }
     }
     let sink = StopOnText(Collect::default(), turn.stop.clone());
-    // The first batch waits for more text, so stop comes with the next one.
+    // A step's first words are sent at once, and stop with them.
     let error = answer(&turn, &sink).await.unwrap_err();
     assert_eq!(error, ChatError::Stopped);
     let saved = messages(&turn);
@@ -413,7 +413,7 @@ async fn a_listener_that_leaves_stops_the_chat() {
     }
     let text = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"We go\"}}]}\n\n";
     let mut slow = Answer::ok("text/event-stream", text.repeat(200));
-    slow.hold = Some((text.len() * 100, Duration::from_secs(30)));
+    slow.hold = Some(text.len() * 100);
     let server = serve(vec![slow]);
     let turn = turn(
         "engine-gone",

@@ -1,4 +1,4 @@
-import { caretAfter, editor, expect, lastSave, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, pickOption, test } from "./vault";
 
 const FENCE = "```mermaid\nflowchart LR\n  Draft --> Review\n```";
 
@@ -52,9 +52,8 @@ test("a diagram from the / menu starts with its code and drawing, and saves as a
   });
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
-  await page.keyboard.type("/diagram", { delay: 40 });
-  await expect(page.getByRole("option").first()).toBeVisible();
-  await page.keyboard.press("Enter");
+  await page.keyboard.type("/diagram");
+  await pickOption(page, page.getByRole("option", { name: "Diagram", exact: true }));
 
   await expect(
     editor(page).getByRole("img", { name: "Diagram" }).getByText("B", { exact: true }),

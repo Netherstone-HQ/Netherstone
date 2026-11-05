@@ -1,4 +1,4 @@
-import { caretAfter, editor, expect, lastSave, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, lastSave, mockVault, pickOption, test } from "./vault";
 
 const FILES = {
   "Note.md": "# Note\n\nStart\n",
@@ -10,9 +10,8 @@ test("an @ link to another shard is inserted and saved as a link", async ({
 }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
   await caretAfter(page, "Start");
-  await page.keyboard.type(" see @Oth", { delay: 40 });
-  await expect(page.getByRole("option", { name: "Other Note" })).toBeVisible();
-  await page.keyboard.press("Enter");
+  await page.keyboard.type(" see @Oth");
+  await pickOption(page, page.getByRole("option", { name: "Other Note" }));
   await page.keyboard.type(" now");
 
   await expect(editor(page)).toContainText("Other Note");

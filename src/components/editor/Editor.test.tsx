@@ -102,8 +102,10 @@ async function openNote(content: string, plateValue: any[] | null = null) {
     return mounted as SlateEditor;
   });
 
-  // Let the mount frames pass; from then on changes count as user edits.
-  await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+  // After the mount's frame, changes count as user edits.
+  await act(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
 
   return editor;
 }
@@ -487,7 +489,6 @@ describe("Editor", () => {
 
         const event = createEvent.click(screen.getByText("Site"));
         fireEvent(screen.getByText("Site"), event);
-        await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
         expect(event.defaultPrevented).toBe(true);
         expect(useUIStore.getState().isBrowserPanelOpen).toBe(false);
@@ -540,8 +541,9 @@ describe("Editor", () => {
       await openNote(`${LINKS}\n`);
 
       click("Anchor");
-      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
+      // Opening a file starts during the click.
+      expect(useEditorStore.getState().openingFilePath).toBeNull();
       expect(openMarkdownFile).not.toHaveBeenCalled();
       expect(useUIStore.getState().browserUrlRequest).toBeNull();
       expect(useEditorStore.getState().currentFilePath).toBe(NOTE_PATH);

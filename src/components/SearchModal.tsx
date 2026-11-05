@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Dot } from "@/components/ui/dot";
 import {
   getFolderInVault,
   getVaultFileDisplayName,
@@ -35,8 +36,12 @@ import { HighlightedText, type TextPart } from "./HighlightedText";
 interface SearchResult {
   path: string;
   name: string;
+  /** The name without its extension, with the words searched for highlighted. */
+  title: TextPart[];
   /** The text around the words searched for, which are highlighted. */
   snippet: TextPart[];
+  /** The heading the snippet is under. */
+  section: string | null;
   rank: number;
 }
 
@@ -45,6 +50,7 @@ interface Row {
   path: string;
   name: TextPart[];
   snippet?: TextPart[];
+  section?: string | null;
   /** Shows the file's history instead of opening it. */
   isHistory?: boolean;
 }
@@ -79,45 +85,6 @@ const MAX_RECENT = 5;
 
 /** How long a search runs before the spinner shows, so a quick one doesn't flicker. */
 const SPINNER_DELAY_MS = 200;
-
-/**
- * The words of a search as the backend splits them (`search_terms` in
- * `db/queries.rs`), so a name is highlighted where the search matched it.
- */
-function searchTerms(query: string) {
-  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  const isLetter = (word: string) => [...word].length === 1;
-  return words.every(isLetter) ? words : words.filter((w) => !isLetter(w));
-}
-
-/**
- * `text` with each word that starts with a searched word highlighted, as
- * `word_matches` does for snippets.
- */
-function highlightWords(text: string, terms: string[]): TextPart[] {
-  if (terms.length === 0) return [{ text, highlight: false }];
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}])(?:${escaped.join("|")})[\\p{L}\\p{N}]*`,
-    "giu",
-  );
-
-  const parts: TextPart[] = [];
-  const plain = (from: number, to?: number) => {
-    if (to === undefined || to > from) {
-      parts.push({ text: text.slice(from, to), highlight: false });
-    }
-  };
-  let last = 0;
-  for (const match of text.matchAll(pattern)) {
-    const start = match.index ?? 0;
-    plain(last, start);
-    parts.push({ text: match[0], highlight: true });
-    last = start + match[0].length;
-  }
-  if (last < text.length) plain(last);
-  return parts;
-}
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
@@ -243,7 +210,6 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   }, [query, performSearch]);
 
   const hasQuery = query.trim().length > 0;
-  const terms = searchTerms(query);
   const historyRows: Row[] =
     hasQuery && openFilePath && asksForHistory(query)
       ? [
@@ -257,9 +223,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const rows: Row[] = hasQuery
     ? historyRows.concat(
         results.map((result) => ({
-        path: result.path,
-        name: highlightWords(getVaultFileDisplayName(result.name), terms),
+          path: result.path,
+          name: result.title,
           snippet: result.snippet,
+          section: result.section,
         })),
       )
     : recentFiles
@@ -372,6 +339,12 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
                 </span>
                 {row.snippet && row.snippet.length > 0 ? (
                   <span className="truncate text-muted-foreground text-ui-sm">
+                    {row.section ? (
+                      <>
+                        <span className="text-foreground/80">{row.section}</span>
+                        <Dot />
+                      </>
+                    ) : null}
                     <HighlightedText parts={row.snippet} />
                   </span>
                 ) : null}

@@ -75,27 +75,17 @@ pub fn sync(sync_root: &Path) -> Result<LockGuard, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
-    fn a_second_holder_waits_for_the_first() {
+    fn another_thread_cannot_take_a_held_lock() {
         let dir = crate::sync::state::tests::temp_dir("locks");
         let first = history(&dir).unwrap();
-        let released = Arc::new(AtomicBool::new(false));
-
-        let waiter = {
-            let (dir, released) = (dir.clone(), released.clone());
-            std::thread::spawn(move || {
-                let _second = history(&dir).unwrap();
-                assert!(released.load(Ordering::SeqCst));
-            })
-        };
-
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        released.store(true, Ordering::SeqCst);
+        let refused = std::thread::spawn(|| HISTORY.try_lock().is_err())
+            .join()
+            .unwrap();
+        assert!(refused);
         drop(first);
-        waiter.join().unwrap();
+        history(&dir).unwrap();
     }
 
     #[test]

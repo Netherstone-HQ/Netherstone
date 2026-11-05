@@ -218,10 +218,40 @@ const InlineComboboxInput = ({
     trigger,
   } = React.useContext(InlineComboboxContext);
 
+  const editor = useEditorRef();
   const store = useComboboxContext()!;
   const value = store.useState('value');
 
   const ref = useComposedRef(propRef, contextRef);
+
+  /**
+   * Slate ignores the editor's blur while it is setting the selection, which
+   * is when this input takes focus. Then it still counts the editor as
+   * focused, and skips focusing it again when the menu closes.
+   */
+  const onFocus = () => editor.tf.blur();
+
+  /**
+   * Ariakit learns which options are shown on the next animation frame, so
+   * Enter right after typing can find the highlight on the previous list.
+   * Then Enter picks the first option shown now, as autoSelect would.
+   */
+  const onKeyDownCapture = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+
+    const { contentElement, renderedItems } = store.getState();
+    const shown = Array.from(
+      contentElement?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
+    );
+    const isCurrent =
+      shown.length === renderedItems.length &&
+      shown.every((element, index) => element === renderedItems[index].element);
+
+    if (isCurrent) return;
+
+    event.preventDefault();
+    shown[0]?.click();
+  };
 
   /**
    * To create an auto-resizing input, we render a visually hidden span
@@ -250,6 +280,8 @@ const InlineComboboxInput = ({
           )}
           value={value}
           autoSelect
+          onFocus={onFocus}
+          onKeyDownCapture={onKeyDownCapture}
           {...inputProps}
           {...props}
         />

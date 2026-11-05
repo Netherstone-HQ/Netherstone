@@ -1,4 +1,13 @@
-import { caretAfter, editor, expect, lastSave, mockVault, pickOption, test } from "./vault";
+import {
+  caretAfter,
+  editor,
+  expect,
+  lastSave,
+  menuClosed,
+  mockVault,
+  pickOption,
+  test,
+} from "./vault";
 
 const FILES = {
   "Note.md": "# Note\n\nStart\n",
@@ -101,16 +110,32 @@ test("a code block from the / menu in a list stays in the list item", async ({ p
   expect(saved).toContain("- First item\n\n  ```\n  x = 1\n  ```\n- Second item");
 });
 
-test("Enter right after fast typing picks the match for the whole text", async ({
+test("Enter before the menu's next frame picks the match for the whole text", async ({
   page,
 }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
   await caretAfter(page, "Start");
   await page.keyboard.press("Enter");
+  await page.keyboard.type("/");
+  await expect(page.getByRole("option").first()).toHaveAttribute("data-active-item", "true");
 
-  // No pause between keys: "/co" would pick Code block, "/col" 3 columns.
-  await page.keyboard.type("/col");
+  // The menu's list catches up with the typing on the next animation frame.
+  // Hold frames so Enter comes first, as on a busy machine. The highlight is
+  // still on the list for "/" then, but Enter must pick 3 columns.
+  await page.evaluate(() => {
+    const held: FrameRequestCallback[] = [];
+    const requestFrame = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => held.push(callback);
+    window.__releaseFrames = () => {
+      window.requestAnimationFrame = requestFrame;
+      for (const callback of held) callback(performance.now());
+    };
+  });
+  await page.keyboard.type("col");
   await page.keyboard.press("Enter");
+  await page.evaluate(() => window.__releaseFrames());
+
+  await menuClosed(page);
   await page.keyboard.type("Left");
 
   const saved = await lastSave(page, "Note.md");

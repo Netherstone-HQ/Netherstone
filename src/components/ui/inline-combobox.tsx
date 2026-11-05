@@ -224,6 +224,28 @@ const InlineComboboxInput = ({
   const ref = useComposedRef(propRef, contextRef);
 
   /**
+   * Ariakit learns which options are shown on the next animation frame, so
+   * Enter right after typing can find the highlight on the previous list.
+   * Then Enter picks the first option shown now, as autoSelect would.
+   */
+  const onKeyDownCapture = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+
+    const { contentElement, renderedItems } = store.getState();
+    const shown = Array.from(
+      contentElement?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
+    );
+    const isCurrent =
+      shown.length === renderedItems.length &&
+      shown.every((element, index) => element === renderedItems[index].element);
+
+    if (isCurrent) return;
+
+    event.preventDefault();
+    shown[0]?.click();
+  };
+
+  /**
    * To create an auto-resizing input, we render a visually hidden span
    * containing the input value and position the input element on top of it.
    * This works well for all cases except when input exceeds the width of the
@@ -250,6 +272,7 @@ const InlineComboboxInput = ({
           )}
           value={value}
           autoSelect
+          onKeyDownCapture={onKeyDownCapture}
           {...inputProps}
           {...props}
         />

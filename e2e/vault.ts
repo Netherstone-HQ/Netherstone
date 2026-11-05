@@ -101,6 +101,8 @@ declare global {
     __assetScope: { folders: string[]; files: string[] };
     __vaultFiles: VaultFiles;
     __emit: (event: string, payload: unknown) => void;
+    /** Runs the animation frames a test held back, and stops holding them. */
+    __releaseFrames: () => void;
   }
 }
 
@@ -545,6 +547,15 @@ export async function changeOutside(page: Page, name: string, content: string) {
 export async function pickOption(page: Page, option: Locator) {
   await expect(option).toHaveAttribute("data-active-item", "true");
   await page.keyboard.press("Enter");
+  await menuClosed(page);
+}
+
+/**
+ * Waits for the editor to take focus back from a closed / or @ menu. Until
+ * then, keys go nowhere.
+ */
+export async function menuClosed(page: Page) {
+  await expect(editor(page)).toBeFocused();
 }
 
 /** Waits for autosave and returns the content it wrote for the shard. */

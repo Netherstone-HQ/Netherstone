@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { ArrowUpIcon, FileIcon, SquareIcon, XIcon } from "lucide-react";
 
@@ -6,6 +6,7 @@ import { DrawingIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { getVaultFileDisplayName, isDrawingPath } from "@/lib/drawing-files";
 import { cn } from "@/lib/utils";
+import { useAssistantStore } from "@/store/assistant";
 import { type FileTreeNode, useVaultStore } from "@/store/vault";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 
@@ -84,6 +85,7 @@ export function Composer({
   onSend,
   onStop,
   model,
+  cardRef,
 }: {
   draft: string;
   onDraft: (draft: string) => void;
@@ -97,6 +99,7 @@ export function Composer({
   onSend: () => void;
   onStop: () => void;
   model: React.ReactNode;
+  cardRef?: React.Ref<HTMLDivElement>;
 }) {
   const vault = useVaultStore((s) => s.currentVaultPath);
   const tree = useVaultStore((s) => s.fileTree);
@@ -111,6 +114,13 @@ export function Composer({
     query: string;
   } | null>(null);
   const [active, setActive] = useState(0);
+
+  const focusAsked = useAssistantStore((s) => s.focusComposer);
+  useEffect(() => {
+    if (!focusAsked) return;
+    textRef.current?.focus();
+    useAssistantStore.setState({ focusComposer: false });
+  }, [focusAsked]);
 
   const matches = useMemo(() => {
     if (!mention) return [];
@@ -176,7 +186,10 @@ export function Composer({
 
   return (
     <div className={cn("shrink-0 p-3", disabled && "opacity-50")}>
-      <div className="relative flex flex-col gap-2 rounded-[10px] border border-input bg-card p-2 focus-within:border-ring">
+      <div
+        ref={cardRef}
+        className="relative flex flex-col gap-2 rounded-[10px] border border-input bg-card p-2 focus-within:border-ring"
+      >
         {mention && matches.length > 0 ? (
           <div
             role="listbox"

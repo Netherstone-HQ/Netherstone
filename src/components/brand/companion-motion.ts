@@ -2,6 +2,10 @@
 // only run while a tween is in flight; breathing and the floating z's are CSS
 // animations (see App.css), so a sitting or sleeping companion costs no script
 // time between the odd blink or glance.
+//
+// He has two lives. On his own he walks in, sits, lies down and sleeps, and
+// answers a poke. As the assistant he answers a click with a menu, hops onto
+// the panel's composer and back, and shows what the assistant is doing.
 
 /** Stage size in SVG units; it's drawn at `scale` CSS pixels per unit. */
 export const STAGE = {
@@ -24,6 +28,13 @@ const PACE = import.meta.env.DEV
   : { sit: [40, 120], minSit: 20, sleep: [90, 240], idle: 60, nodGap: 20 };
 /** How long after the last edit he keeps watching the editor. */
 const WATCH_MS = 8000;
+/** As the assistant: seconds between glances, and how long until he dozes. */
+const GLANCE = [3.5, 7.5];
+const DOZE_MS = 24_000;
+/** The panel slides in before he hops onto it. */
+const HOP_DELAY = 220;
+/** Two clicks this close together are a double click. */
+const DOUBLE_CLICK_MS = 220;
 
 type Ease = (p: number) => number;
 const linear: Ease = (p) => p;
@@ -41,6 +52,9 @@ const MOUTHS = {
     fill: "var(--companion-ink)",
   },
   flat: { d: "M-1,-59Q2,-58.4 5,-59", fill: "none" },
+  /** Unsure, for a shrug. */
+  wobble: { d: "M-2,-58.8q1.5,-1.8 3,0t3,0", fill: "none" },
+  grin: { d: "M-3,-60.5Q2,-54.5 7,-60.5Z", fill: "var(--companion-ink)" },
 };
 type Mouth = keyof typeof MOUTHS;
 
@@ -54,18 +68,27 @@ interface Pose {
   /** Horizontal scale while turning around; 0 is edge-on. */
   turn: number;
   faceX: number;
+  faceY: number;
   eye: number;
   blink: number;
+  /** Closed, happy eyes once past 0.5. */
+  happy: number;
   armsUpL: number;
   armsUpR: number;
   armsIn: number;
   /** The raised right arm swinging side to side, from -1 to 1. */
   wiggle: number;
   nod: number;
+  /** Leaning sideways, from -1 to 1. */
+  tilt: number;
   /** 0 holds the gem in his lap, 1 has it on the ground beside him. */
   gemDown: number;
+  /** Holding the gem up to read it. */
+  gemUp: number;
   /** 1 keeps the gem in his back; on the way out it rides in his right hand. */
   stow: number;
+  /** How far along a hop is, from 0 to 1. */
+  hopP: number;
   gemHidden: boolean;
   /** Showing the back view. */
   back: boolean;
@@ -77,6 +100,28 @@ type Animatable = Exclude<
   "back" | "phase" | "mouth" | "gemHidden"
 >;
 type Target = Partial<Record<Animatable, number>>;
+
+/** Sitting still with the gem in his lap. */
+const NEUTRAL: Target = {
+  sit: 1,
+  turn: 1,
+  walk: 0,
+  squash: 0,
+  lie: 0,
+  faceX: 0,
+  faceY: 0,
+  eye: 1,
+  happy: 0,
+  armsUpL: 0,
+  armsUpR: 0,
+  armsIn: 0,
+  wiggle: 0,
+  nod: 0,
+  tilt: 0,
+  gemDown: 0,
+  gemUp: 0,
+  stow: 0,
+};
 
 interface Tween {
   from: Target;
@@ -106,6 +151,7 @@ const PARTS = [
   "eyeL",
   "eyeR",
   "shine",
+  "happy",
   "mouth",
   "shadow",
   "gem",
@@ -115,114 +161,261 @@ const PARTS = [
 
 type Parts = Record<(typeof PARTS)[number], SVGElement>;
 
-export interface CompanionControls {
-  /** A save finished. */
-  nod: () => void;
-  /** The open shard was edited. */
-  noticeEdit: () => void;
-  stop: () => void;
+/** Where his feet are, in viewport pixels. */
+export interface Spot {
+  x: number;
+  y: number;
 }
+
+/** What the assistant is doing, as he shows it. */
+export type Work = "idle" | "search" | "read" | "done" | "shrug" | "sleep";
+
+/** His menu, which lives in React. */
+export interface CompanionMenu {
+  isOpen: () => boolean;
+  open: () => void;
+  close: () => void;
+}
+
+const CANCEL = Symbol("cancel");
+/** Awaits a move, and ends the sequence if a newer one has started. */
+type Step = <T>(move: Promise<T>) => Promise<T>;
 
 const between = ([min, max]: readonly number[]) =>
   (min + Math.random() * (max - min)) * 1000;
 const clamp = (value: number, limit: number) =>
   Math.max(-limit, Math.min(limit, value));
 
-/** Starts the walk-in and the sit and sleep loop, and listens for pokes. */
-export function runCompanion(
-  host: HTMLElement,
-  { reducedMotion }: { reducedMotion: boolean },
-): CompanionControls {
-  const parts = Object.fromEntries(
-    PARTS.map((name) => [
-      name,
-      host.querySelector<SVGElement>(`[data-part="${name}"]`),
-    ]),
-  ) as Parts;
+export class CompanionRig {
+  private readonly parts: Parts;
+  private readonly reduced: boolean;
+  private readonly pose: Pose;
+  private readonly timers = new Set<number>();
+  private readonly cleanups: (() => void)[] = [];
+  private alive = true;
+  private tweens: Tween[] = [];
+  private frameId = 0;
+  private last = 0;
+  /** Bumped by every new sequence; older ones end at their next step. */
+  private gen = 0;
 
-  const pose: Pose = {
-    x: ENTRY_X,
-    walk: 1,
-    phase: 0,
-    sit: 0,
-    squash: 0,
-    lie: 0,
-    turn: 1,
-    faceX: 0,
-    eye: 1,
-    blink: 1,
-    armsUpL: 0,
-    armsUpR: 0,
-    armsIn: 0,
-    wiggle: 0,
-    nod: 0,
-    gemDown: 0,
-    stow: 1,
-    gemHidden: true,
-    back: false,
-    mouth: "smile",
-  };
+  // Where he is, in viewport pixels, and the hop he's on.
+  private spot: Spot;
+  private hop: { from: Spot; to: Spot; height: number } | null = null;
+  private home: () => Spot;
+  /** Where he belongs: on the panel, or his corner when null. */
+  private target: (() => Spot) | null = null;
+  /** Where he sits now; "between" once a hop is under way. */
+  private at: "home" | "panel" | "between" = "home";
 
-  const timers = new Set<number>();
-  const cleanups: (() => void)[] = [];
-  let alive = true;
-  const later = (ms: number, fn: () => void) => {
-    const id = window.setTimeout(() => {
-      timers.delete(id);
-      if (alive) fn();
-    }, ms);
-    timers.add(id);
-  };
-  const wait = (ms: number) => new Promise<void>((r) => later(ms, r));
+  // As the assistant.
+  private assistant = false;
+  private work: Work = "idle";
+  /** Asked for while he couldn't play it yet. */
+  private workWaiting = false;
+  /** What he's showing now, which can differ from `work` for a moment. */
+  private state: Work | "hello" | "enter" | "hop" | "leave" = "enter";
+  private menu: CompanionMenu | null = null;
 
-  const listen = <K extends keyof WindowEventMap>(
+  // On his own.
+  private sitting = false;
+  private reacting = false;
+  private wakeEarly: (() => void) | null = null;
+  private pointerX: number | null = null;
+  private lastActivity = performance.now();
+  private lastEdit = -Infinity;
+  private lastNod = -Infinity;
+  private pendingClick = 0;
+
+  constructor(
+    private readonly host: HTMLElement,
+    { reducedMotion, home }: { reducedMotion: boolean; home: () => Spot },
+  ) {
+    this.parts = Object.fromEntries(
+      PARTS.map((name) => [
+        name,
+        host.querySelector<SVGElement>(`[data-part="${name}"]`),
+      ]),
+    ) as Parts;
+    this.reduced = reducedMotion;
+    this.home = home;
+    this.spot = home();
+    this.pose = {
+      ...(NEUTRAL as Record<Animatable, number>),
+      x: ENTRY_X,
+      walk: 1,
+      sit: 0,
+      phase: 0,
+      turn: 1,
+      blink: 1,
+      hopP: 0,
+      stow: 1,
+      gemHidden: true,
+      back: false,
+      mouth: "smile",
+    };
+    host.toggleAttribute("data-still", reducedMotion);
+
+    this.listen(window, "pointermove", (e) => {
+      this.pointerX = e.clientX;
+      this.lastActivity = performance.now();
+    });
+    this.listen(this.parts.hit, "click", (e) => this.clicked(e.detail));
+    this.cleanups.push(() => {
+      clearTimeout(this.pendingClick);
+      this.tweens = [];
+      if (this.frameId) cancelAnimationFrame(this.frameId);
+    });
+
+    if (reducedMotion) {
+      this.state = "idle";
+      Object.assign(this.pose, NEUTRAL, { x: STAGE.restX, gemHidden: false });
+      this.render();
+      return;
+    }
+    this.render();
+    this.blinkLater();
+    void this.run((step) => this.walkIn(step));
+  }
+
+  // ── Outside ───────────────────────────────────────────────────────────────
+
+  stop() {
+    this.alive = false;
+    this.gen++;
+    for (const cleanup of this.cleanups) cleanup();
+    for (const id of this.timers) clearTimeout(id);
+    this.timers.clear();
+  }
+
+  /** Whether he's the assistant, rather than on his own. */
+  setAssistant(on: boolean, menu: CompanionMenu | null) {
+    this.menu = menu;
+    if (on === this.assistant) return;
+    this.assistant = on;
+    if (!on) {
+      this.target = null;
+      this.work = "idle";
+    }
+    this.direct();
+  }
+
+  /** Wakes him if he was asleep for want of a provider. */
+  wakeFromSleep() {
+    if (this.work === "sleep") this.setWork("idle");
+  }
+
+  /** Where he sits: on the panel (`spot`), or his corner when null. */
+  setSpot(spot: (() => Spot) | null) {
+    if (!this.assistant) return;
+    const before = this.where();
+    this.target = spot;
+    if (this.where() === before && this.at !== "between") {
+      this.relocate();
+      return;
+    }
+    // The panel slides in first.
+    this.direct(this.at === "home" && spot !== null ? HOP_DELAY : 0);
+  }
+
+  /** His corner or his spot moved: he moves with it, unless mid-hop. */
+  relocate() {
+    if (this.at !== this.where()) return;
+    this.spot = (this.target ?? this.home)();
+    this.render();
+  }
+
+  /** What the assistant is doing now. */
+  setWork(work: Work) {
+    if (!this.assistant) return;
+    if (work === this.work && work !== "done" && work !== "shrug") return;
+    this.work = work;
+    this.workWaiting = true;
+    if (this.busy() || this.at !== this.where()) return;
+    this.play(work);
+  }
+
+  /** Waves, walks off to the right, and then `gone` runs. */
+  leave(gone: () => void) {
+    // Mid-hop, he lands where he was going first.
+    if (this.at === "between") {
+      this.at = this.where();
+      this.relocate();
+    }
+    this.state = "leave";
+    void this.run(async (step) => {
+      await this.settle(step);
+      const p = this.pose;
+      p.mouth = "grin";
+      if (!this.reduced) {
+        await step(this.tween({ armsUpR: 0.85 }, 260));
+        for (const s of [1, -1, 1]) await step(this.tween({ wiggle: s }, 130));
+        await step(this.tween({ wiggle: 0, armsUpR: 0 }, 260));
+      }
+      p.mouth = "smile";
+      await this.stowGem(step);
+      if (!this.reduced) {
+        await step(this.tween({ armsUpR: 0, faceX: 6 }, 200));
+        await step(this.tween({ sit: 0, walk: 1 }, 300));
+        await step(this.tween({ x: ENTRY_X + 40 }, 1900, linear));
+      }
+      gone();
+    });
+  }
+
+  /** A save finished. */
+  nod() {
+    if (this.assistant) return;
+    this.react(async (step) => {
+      if (performance.now() - this.lastNod < PACE.nodGap * 1000) return;
+      this.lastNod = performance.now();
+      await step(this.tween({ nod: 1 }, 150));
+      await step(this.tween({ nod: 0 }, 260));
+    });
+  }
+
+  /** The open shard was edited. */
+  noticeEdit() {
+    const now = performance.now();
+    const wasQuiet = now - this.lastEdit > WATCH_MS;
+    this.lastEdit = this.lastActivity = now;
+    if (this.assistant || this.reduced) return;
+    if (wasQuiet && this.sitting && !this.reacting) {
+      void this.tween({ faceX: -7 }, 450);
+    }
+  }
+
+  // ── Engine ────────────────────────────────────────────────────────────────
+
+  private listen<K extends keyof WindowEventMap>(
     target: EventTarget,
     type: K,
     fn: (e: WindowEventMap[K]) => void,
-  ) => {
+  ) {
     target.addEventListener(type, fn as EventListener, { passive: true });
-    cleanups.push(() =>
+    this.cleanups.push(() =>
       target.removeEventListener(type, fn as EventListener),
     );
-  };
-
-  const stop = () => {
-    alive = false;
-    for (const cleanup of cleanups) cleanup();
-    for (const id of timers) clearTimeout(id);
-    timers.clear();
-  };
-
-  if (reducedMotion) {
-    Object.assign(pose, {
-      x: STAGE.restX,
-      walk: 0,
-      sit: 1,
-      stow: 0,
-      gemHidden: false,
-    });
-    render(pose, parts);
-    // Still answers a poke, just without moving.
-    listen(parts.hit, "click", () => {
-      pose.mouth = "o";
-      render(pose, parts);
-      later(600, () => {
-        pose.mouth = "smile";
-        render(pose, parts);
-      });
-    });
-    return { nod: () => {}, noticeEdit: () => {}, stop };
   }
 
-  let tweens: Tween[] = [];
-  let frameId = 0;
-  let last = 0;
+  private later(ms: number, fn: () => void) {
+    const id = window.setTimeout(() => {
+      this.timers.delete(id);
+      if (this.alive) fn();
+    }, ms);
+    this.timers.add(id);
+  }
 
-  const frame = (now: number) => {
-    frameId = 0;
-    const dt = Math.min(now - last, 64);
-    last = now;
-    tweens = tweens.filter((t) => {
+  private wait(ms: number) {
+    return new Promise<void>((resolve) => this.later(ms, resolve));
+  }
+
+  private frame = (now: number) => {
+    this.frameId = 0;
+    const dt = Math.min(now - this.last, 64);
+    this.last = now;
+    const pose = this.pose;
+    this.tweens = this.tweens.filter((t) => {
       const p = Math.min(1, (now - t.start) / t.ms);
       const keys = Object.keys(t.to) as Animatable[];
       for (const key of keys) {
@@ -234,370 +427,893 @@ export function runCompanion(
       return false;
     });
     pose.phase += dt * 0.0085 * pose.walk;
-    render(pose, parts);
-    if (tweens.length) frameId = requestAnimationFrame(frame);
+    this.render();
+    if (this.tweens.length) this.frameId = requestAnimationFrame(this.frame);
   };
 
   // Promises from a stopped run never settle, so the sequence just ends.
   // A newer tween takes over any values an older one was still moving.
-  const tween = (to: Target, ms: number, ease: Ease = inOut) =>
-    new Promise<void>((resolve) => {
-      if (!alive) return;
+  // With reduced motion, he goes straight to each pose.
+  private tween(to: Target, ms: number, ease: Ease = inOut) {
+    return new Promise<void>((resolve) => {
+      if (!this.alive) return;
+      if (this.reduced) {
+        Object.assign(this.pose, to);
+        this.render();
+        resolve();
+        return;
+      }
       const from: Target = {};
       for (const key of Object.keys(to) as Animatable[]) {
-        from[key] = pose[key];
-        for (const t of tweens) delete t.to[key];
+        from[key] = this.pose[key];
+        for (const t of this.tweens) delete t.to[key];
       }
-      tweens.push({ from, to, start: performance.now(), ms, ease, done: resolve });
-      if (!frameId) {
-        last = performance.now();
-        frameId = requestAnimationFrame(frame);
+      this.tweens.push({
+        from,
+        to,
+        start: performance.now(),
+        ms,
+        ease,
+        done: resolve,
+      });
+      if (!this.frameId) {
+        this.last = performance.now();
+        this.frameId = requestAnimationFrame(this.frame);
       }
     });
+  }
 
-  const setMouth = (mouth: Mouth) => {
-    pose.mouth = mouth;
-    render(pose, parts);
-  };
+  private setMouth(mouth: Mouth) {
+    this.pose.mouth = mouth;
+    this.render();
+  }
 
-  const setFlag = (name: string, on: boolean) =>
-    host.toggleAttribute(`data-${name}`, on);
+  private flag(name: string, on: boolean) {
+    this.host.toggleAttribute(`data-${name}`, on);
+  }
 
-  // ── What he notices ───────────────────────────────────────────────────────
+  private stepFor(gen: number): Step {
+    return async (move) => {
+      const value = await move;
+      if (gen !== this.gen || !this.alive) throw CANCEL;
+      return value;
+    };
+  }
 
-  let pointerX: number | null = null;
-  let lastActivity = performance.now();
-  let lastEdit = -Infinity;
-  listen(window, "pointermove", (e) => {
-    pointerX = e.clientX;
-    lastActivity = performance.now();
-  });
-
-  const drowsy = () => performance.now() - lastActivity > PACE.idle * 1000;
-
-  /** Toward the editor while you write, otherwise toward the pointer. */
-  const lookTarget = () => {
-    if (performance.now() - lastEdit < WATCH_MS) return -7;
-    if (pointerX === null || Math.random() < 0.3) {
-      return (Math.random() * 2 - 1) * 7;
+  /**
+   * Starts a new sequence. The one running stops where it is: its moves
+   * end, and a hop under way leaves him wherever he is in the air.
+   */
+  private async run(sequence: (step: Step) => Promise<void>) {
+    const gen = ++this.gen;
+    this.tweens = this.tweens.filter((t) =>
+      Object.keys(t.to).every((key) => key === "blink"),
+    );
+    if (this.hop) {
+      this.spot = this.hopPoint();
+      this.hop = null;
+      this.pose.hopP = 0;
     }
-    const rect = host.getBoundingClientRect();
-    const dx = pointerX - (rect.left + STAGE.restX * STAGE.scale);
-    return clamp(dx / 30 + (Math.random() - 0.5) * 2, 7);
-  };
+    this.wakeEarly = null;
+    this.sitting = false;
+    this.reacting = false;
+    try {
+      await sequence(this.stepFor(gen));
+    } catch (error) {
+      if (error !== CANCEL) throw error;
+    }
+  }
 
-  // ── Moves ─────────────────────────────────────────────────────────────────
+  /** A quick reaction alongside the sequence running, ended with it. */
+  private react(move: (step: Step) => Promise<void>) {
+    if (!this.sitting || this.reacting) return;
+    this.reacting = true;
+    const step = this.stepFor(this.gen);
+    void move(step)
+      .catch((error) => {
+        if (error !== CANCEL) throw error;
+      })
+      .finally(() => {
+        this.reacting = false;
+      });
+  }
 
-  /** True while he's sitting up and free to react to you. */
-  let sitting = false;
-  let reacting = false;
-  const react = async (move: () => Promise<void>) => {
-    if (!sitting || reacting) return;
-    reacting = true;
-    await move();
-    reacting = false;
-  };
-
-  /** Ends the current sleep early; only set while he's asleep. */
-  let wakeEarly: (() => void) | null = null;
-  const doze = (ms: number) =>
-    new Promise<void>((resolve) => {
-      wakeEarly = resolve;
-      later(ms, resolve);
-    }).then(() => {
-      wakeEarly = null;
+  private blinkLater() {
+    this.later(between([3, 7]), async () => {
+      const p = this.pose;
+      if (!p.back && p.lie === 0 && p.eye > 0.9 && p.happy < 0.5) {
+        await this.tween({ blink: 0 }, 80, linear);
+        await this.tween({ blink: 1 }, 110, linear);
+      }
+      this.blinkLater();
     });
+  }
 
-  const turnAround = async (back: boolean, sleepy = false) => {
-    await tween({ turn: 0 }, 200, easeIn);
-    pose.back = back;
-    pose.faceX = 0;
-    if (sleepy) {
-      pose.eye = 0.25;
-      pose.mouth = "flat";
-    }
-    await tween({ turn: 1 }, 220, easeOut);
-  };
+  // ── Where he goes ─────────────────────────────────────────────────────────
 
-  const plop = () =>
-    Promise.all([
-      tween({ sit: 1 }, 500),
-      tween({ squash: 1 }, 220).then(() => tween({ squash: 0 }, 420, overshoot)),
-    ]);
+  private where() {
+    return this.target ? "panel" : "home";
+  }
 
-  const sitAwhile = async () => {
-    sitting = true;
-    const start = performance.now();
-    const until = start + between(PACE.sit);
-    // Left alone, he lies down early, but never straight after getting up.
-    const restless = () =>
-      drowsy() && performance.now() - start > PACE.minSit * 1000;
-    while (performance.now() < until && !restless()) {
-      await wait(between([4, 10]));
-      if (!reacting) await tween({ faceX: lookTarget() }, 500);
-    }
-    while (reacting) await wait(200);
-    sitting = false;
-    await tween({ faceX: 0 }, 400);
-  };
+  /** Walking in or out: he finishes that first. */
+  private busy() {
+    return this.state === "enter" || this.state === "leave";
+  }
 
-  const setGemDown = async () => {
-    await tween({ faceX: -6 }, 350);
-    await Promise.all([
-      tween({ gemDown: 1 }, 650),
-      tween({ squash: 0.4 }, 300).then(() => tween({ squash: 0 }, 350)),
-    ]);
-    await wait(250);
-  };
-
-  const pickGemUp = async () => {
-    await tween({ faceX: -6 }, 350);
-    await tween({ gemDown: 0 }, 650);
-    await tween({ faceX: 0 }, 300);
-  };
-
-  // Reaches over his shoulder, rummages, and brings the gem round to his lap.
-  const pullGem = async () => {
-    await tween({ faceX: 6 }, 300);
-    await tween({ armsUpR: 1 }, 450);
-    for (const side of [1, -1, 1]) await tween({ wiggle: side * 0.4 }, 120);
-    await tween({ wiggle: 0 }, 100);
-    pose.gemHidden = false;
-    await Promise.all([
-      tween({ armsUpR: 0, stow: 0 }, 700),
-      tween({ faceX: 0 }, 450),
-    ]);
-  };
-
-  const lieDown = async () => {
-    await setGemDown();
-    await tween({ faceX: 8 }, 400);
-    await wait(300);
-    await turnAround(true);
-    await wait(350);
-    await Promise.all([tween({ lie: 1 }, 1100), tween({ armsIn: 1 }, 900)]);
-    await tween({ squash: 0.6 }, 160);
-    await tween({ squash: 0 }, 380, overshoot);
-    setFlag("breathing", true);
-    setFlag("zz", true);
-  };
-
-  const wakeUp = async () => {
-    setFlag("zz", false);
-    await wait(700);
-    setFlag("breathing", false);
-    await tween({ lie: 0.93 }, 300);
-    await tween({ lie: 1 }, 300);
-    await wait(400);
-    await Promise.all([tween({ lie: 0 }, 900), tween({ armsIn: 0 }, 900)]);
-    await wait(300);
-    await turnAround(false, true);
-    await wait(300);
-    // A big stretch and a yawn, with both hands free.
-    pose.mouth = "o";
-    await Promise.all([
-      tween({ armsUpL: 1, armsUpR: 1 }, 550),
-      tween({ eye: 0 }, 300),
-    ]);
-    await wait(500);
-    pose.mouth = "flat";
-    await tween({ armsUpL: 0, armsUpR: 0 }, 500);
-    await tween({ eye: 1 }, 250);
-    setMouth("smile");
-    await pickGemUp();
-  };
-
-  const poke = () => {
-    if (wakeEarly) {
-      wakeEarly();
+  /** Starts what he should be doing now, after hopping wherever he belongs. */
+  private direct(delay = 0) {
+    if (this.busy()) return;
+    if (this.at === this.where()) {
+      if (this.assistant) this.resume();
+      else void this.run((step) => this.onHisOwn(step));
       return;
     }
-    void react(async () => {
-      pose.mouth = "o";
-      await tween({ squash: 1, eye: 0.15 }, 110, easeOut);
-      await tween({ squash: 0 }, 420, overshoot);
-      await tween({ eye: 1 }, 160);
-      setMouth("smile");
+    this.state = "hop";
+    void this.run(async (step) => {
+      if (delay && !this.reduced) await step(this.wait(delay));
+      const going = this.where();
+      this.at = "between";
+      await this.hopTo(step, (this.target ?? this.home)());
+      this.at = going;
+      // His spot may have moved while he was in the air.
+      this.relocate();
+      if (this.assistant) this.resume();
+      else await this.onHisOwn(step);
     });
-  };
+  }
+
+  /** Hops to `to`, picking his shard up first so it never floats along. */
+  private async hopTo(step: Step, to: Spot) {
+    await this.getUp(step);
+    const p = this.pose;
+    if (p.gemDown > 0 || p.gemHidden) {
+      p.mouth = "smile";
+      if (p.gemHidden) await this.pullGem(step);
+      else {
+        await step(
+          this.tween({ faceX: -6, armsUpL: 0, armsUpR: 0, tilt: 0 }, 260),
+        );
+        await step(this.tween({ gemDown: 0 }, 520));
+      }
+    }
+    if (this.reduced) {
+      this.spot = to;
+      this.render();
+      return;
+    }
+    const from = { ...this.spot };
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    await step(
+      this.tween(
+        { faceX: Math.sign(dx || 1) * 5, faceY: dy < 0 ? -3 : 2, gemUp: 0, happy: 0 },
+        220,
+      ),
+    );
+    p.mouth = "smile";
+    await step(this.tween({ squash: 1 }, 200, easeOut));
+    this.hop = { from, to, height: 36 + Math.abs(dy) * 0.35 };
+    p.hopP = 0;
+    p.mouth = "o";
+    const flight = hopFlight(from, to);
+    await step(
+      Promise.all([
+        this.tween({ hopP: 1 }, flight, linear),
+        this.tween({ squash: -0.9 }, 110, easeOut).then(() =>
+          this.tween({ squash: 0 }, flight - 110, inOut),
+        ),
+      ]),
+    );
+    this.spot = to;
+    this.hop = null;
+    p.hopP = 0;
+    p.mouth = "smile";
+    await step(this.tween({ squash: 1 }, 90, easeOut));
+    await step(
+      Promise.all([
+        this.tween({ squash: 0 }, 420, overshoot),
+        this.tween({ faceX: 0, faceY: 0 }, 300),
+      ]),
+    );
+  }
+
+  private hopPoint(): Spot {
+    const hop = this.hop;
+    if (!hop) return this.spot;
+    const k = this.pose.hopP;
+    return {
+      x: hop.from.x + (hop.to.x - hop.from.x) * k,
+      y:
+        hop.from.y +
+        (hop.to.y - hop.from.y) * k -
+        hop.height * Math.sin(Math.PI * k),
+    };
+  }
+
+  // ── Clicks ────────────────────────────────────────────────────────────────
+
+  private clicked(detail: number) {
+    clearTimeout(this.pendingClick);
+    // A double click is one gesture, not two clicks.
+    const now = (fn: () => void) =>
+      detail >= 2
+        ? fn()
+        : (this.pendingClick = window.setTimeout(
+            () => this.alive && fn(),
+            DOUBLE_CLICK_MS,
+          ));
+    if (this.assistant) now(() => void this.menuClick());
+    else if (this.reduced) this.blinkPoke();
+    else if (detail >= 2) this.wave();
+    else now(() => this.poke());
+  }
+
+  private async menuClick() {
+    const menu = this.menu;
+    if (!menu) return;
+    if (menu.isOpen()) {
+      menu.close();
+      return;
+    }
+    if (this.state === "hop" || this.busy()) {
+      menu.open();
+      return;
+    }
+    const resting = this.work === "idle" || this.work === "sleep";
+    if (this.state === "sleep") {
+      this.work = "idle";
+      const waking = this.wakeUpQuick();
+      const gen = this.gen;
+      await waking;
+      // Something else came first, like the assistant going off.
+      if (gen !== this.gen || !this.assistant) return;
+    }
+    menu.open();
+    if (resting) this.hello();
+  }
+
+  // ── On his own ────────────────────────────────────────────────────────────
+
+  private drowsy() {
+    return performance.now() - this.lastActivity > PACE.idle * 1000;
+  }
+
+  /** Toward the editor while you write, otherwise toward the pointer. */
+  private lookTarget() {
+    if (performance.now() - this.lastEdit < WATCH_MS) return -7;
+    return this.lookAtPointer(0.3);
+  }
+
+  /** Toward the pointer, or now and then anywhere. */
+  private lookAtPointer(wander: number) {
+    if (this.pointerX === null || Math.random() < wander) {
+      return (Math.random() * 2 - 1) * 7;
+    }
+    const rect = this.host.getBoundingClientRect();
+    const dx = this.pointerX - (rect.left + STAGE.restX * STAGE.scale);
+    return clamp(dx / 30 + (Math.random() - 0.5) * 2, 7);
+  }
+
+  private async walkIn(step: Step) {
+    const distance = ENTRY_X - STAGE.restX;
+    await step(
+      Promise.all([
+        this.tween({ x: STAGE.restX }, distance * 14, linear),
+        this.tween({ faceX: -6 }, 300),
+      ]),
+    );
+    await step(this.tween({ walk: 0 }, 250));
+    await step(this.tween({ faceX: 0 }, 300));
+    await step(this.plop());
+    await step(this.wait(400));
+    await this.pullGem(step);
+    await step(this.wait(800));
+    this.state = "idle";
+    this.direct();
+  }
+
+  /** Today's loop: sits awhile, lies down, sleeps, wakes. */
+  private async onHisOwn(step: Step) {
+    this.state = "idle";
+    if (this.reduced) {
+      await this.settle(step);
+      return;
+    }
+    // Asleep already, he sleeps on; caught half way, he sits up first.
+    let asleep = this.pose.lie === 1 && this.host.hasAttribute("data-zz");
+    if (!asleep) await this.settle(step);
+    for (;;) {
+      if (!asleep) {
+        await this.sitAwhile(step);
+        await this.lieDown(step);
+      }
+      await this.doze(step, between(PACE.sleep));
+      await this.wakeUp(step);
+      asleep = false;
+    }
+  }
+
+  private async turnAround(step: Step, back: boolean, sleepy = false) {
+    await step(this.tween({ turn: 0 }, 200, easeIn));
+    this.pose.back = back;
+    this.pose.faceX = 0;
+    if (sleepy) {
+      this.pose.eye = 0.25;
+      this.pose.mouth = "flat";
+    }
+    await step(this.tween({ turn: 1 }, 220, easeOut));
+  }
+
+  private plop() {
+    return Promise.all([
+      this.tween({ sit: 1 }, 500),
+      this.tween({ squash: 1 }, 220).then(() =>
+        this.tween({ squash: 0 }, 420, overshoot),
+      ),
+    ]);
+  }
+
+  private async sitAwhile(step: Step) {
+    this.sitting = true;
+    try {
+      const start = performance.now();
+      const until = start + between(PACE.sit);
+      // Left alone, he lies down early, but never straight after getting up.
+      const restless = () =>
+        this.drowsy() && performance.now() - start > PACE.minSit * 1000;
+      while (performance.now() < until && !restless()) {
+        await step(this.wait(between([4, 10])));
+        if (!this.reacting) {
+          await step(this.tween({ faceX: this.lookTarget() }, 500));
+        }
+      }
+      while (this.reacting) await step(this.wait(200));
+    } finally {
+      this.sitting = false;
+    }
+    await step(this.tween({ faceX: 0 }, 400));
+  }
+
+  private async lieDown(step: Step) {
+    await step(this.tween({ faceX: -6 }, 350));
+    await step(
+      Promise.all([
+        this.tween({ gemDown: 1 }, 650),
+        this.tween({ squash: 0.4 }, 300).then(() =>
+          this.tween({ squash: 0 }, 350),
+        ),
+      ]),
+    );
+    await step(this.wait(250));
+    await step(this.tween({ faceX: 8 }, 400));
+    await step(this.wait(300));
+    await this.turnAround(step, true);
+    await step(this.wait(350));
+    await step(
+      Promise.all([this.tween({ lie: 1 }, 1100), this.tween({ armsIn: 1 }, 900)]),
+    );
+    await step(this.tween({ squash: 0.6 }, 160));
+    await step(this.tween({ squash: 0 }, 380, overshoot));
+    this.flag("breathing", true);
+    this.flag("zz", true);
+  }
+
+  /** Sleeps for `ms`, or until he's poked. */
+  private doze(step: Step, ms: number) {
+    let wake = () => {};
+    return step(
+      new Promise<void>((resolve) => {
+        wake = resolve;
+        this.wakeEarly = resolve;
+        this.later(ms, resolve);
+      }),
+    ).finally(() => {
+      if (this.wakeEarly === wake) this.wakeEarly = null;
+    });
+  }
+
+  private async wakeUp(step: Step) {
+    this.flag("zz", false);
+    await step(this.wait(700));
+    this.flag("breathing", false);
+    await step(this.tween({ lie: 0.93 }, 300));
+    await step(this.tween({ lie: 1 }, 300));
+    await step(this.wait(400));
+    await step(
+      Promise.all([this.tween({ lie: 0 }, 900), this.tween({ armsIn: 0 }, 900)]),
+    );
+    await step(this.wait(300));
+    await this.turnAround(step, false, true);
+    await step(this.wait(300));
+    // A big stretch and a yawn, with both hands free.
+    this.pose.mouth = "o";
+    await step(
+      Promise.all([
+        this.tween({ armsUpL: 1, armsUpR: 1 }, 550),
+        this.tween({ eye: 0 }, 300),
+      ]),
+    );
+    await step(this.wait(500));
+    this.pose.mouth = "flat";
+    await step(this.tween({ armsUpL: 0, armsUpR: 0 }, 500));
+    await step(this.tween({ eye: 1 }, 250));
+    this.setMouth("smile");
+    await step(this.tween({ faceX: -6 }, 350));
+    await step(this.tween({ gemDown: 0 }, 650));
+    await step(this.tween({ faceX: 0 }, 300));
+  }
+
+  private poke() {
+    if (this.wakeEarly) {
+      this.wakeEarly();
+      return;
+    }
+    this.react(async (step) => {
+      this.pose.mouth = "o";
+      await step(this.tween({ squash: 1, eye: 0.15 }, 110, easeOut));
+      await step(this.tween({ squash: 0 }, 420, overshoot));
+      await step(this.tween({ eye: 1 }, 160));
+      this.setMouth("smile");
+    });
+  }
+
+  /** With reduced motion, a poke only opens his mouth for a moment. */
+  private blinkPoke() {
+    this.setMouth("o");
+    this.later(600, () => this.setMouth("smile"));
+  }
 
   // He waves with his right hand and keeps the gem in his left.
-  const wave = () =>
-    void react(async () => {
-      await tween({ armsUpR: 0.85 }, 320);
-      for (const side of [1, -1, 1, -1]) await tween({ wiggle: side }, 150);
-      await tween({ wiggle: 0 }, 120);
-      await tween({ armsUpR: 0 }, 360);
-    });
-
-  let lastNod = -Infinity;
-  const nod = () =>
-    void react(async () => {
-      if (performance.now() - lastNod < PACE.nodGap * 1000) return;
-      lastNod = performance.now();
-      await tween({ nod: 1 }, 150);
-      await tween({ nod: 0 }, 260);
-    });
-
-  const noticeEdit = () => {
-    const now = performance.now();
-    const wasQuiet = now - lastEdit > WATCH_MS;
-    lastEdit = lastActivity = now;
-    if (wasQuiet && sitting && !reacting) void tween({ faceX: -7 }, 450);
-  };
-
-  // A double click waves instead of poking twice.
-  let pendingPoke = 0;
-  listen(parts.hit, "click", (e) => {
-    clearTimeout(pendingPoke);
-    if (e.detail >= 2) wave();
-    else pendingPoke = window.setTimeout(() => alive && poke(), 220);
-  });
-
-  const live = async () => {
-    const distance = ENTRY_X - STAGE.restX;
-    await Promise.all([
-      tween({ x: STAGE.restX }, distance * 14, linear),
-      tween({ faceX: -6 }, 300),
-    ]);
-    await tween({ walk: 0 }, 250);
-    await tween({ faceX: 0 }, 300);
-    await plop();
-    await wait(400);
-    await pullGem();
-    await wait(800);
-    for (;;) {
-      await sitAwhile();
-      await lieDown();
-      await doze(between(PACE.sleep));
-      await wakeUp();
-    }
-  };
-
-  const blinkNow = () =>
-    later(between([3, 7]), async () => {
-      if (!pose.back && pose.lie === 0 && pose.eye > 0.9) {
-        await tween({ blink: 0 }, 80, linear);
-        await tween({ blink: 1 }, 110, linear);
+  private wave() {
+    this.react(async (step) => {
+      await step(this.tween({ armsUpR: 0.85 }, 320));
+      for (const side of [1, -1, 1, -1]) {
+        await step(this.tween({ wiggle: side }, 150));
       }
-      blinkNow();
+      await step(this.tween({ wiggle: 0 }, 120));
+      await step(this.tween({ armsUpR: 0 }, 360));
     });
+  }
 
-  render(pose, parts);
-  blinkNow();
-  void live();
+  // ── As the assistant ──────────────────────────────────────────────────────
 
-  cleanups.push(() => {
-    clearTimeout(pendingPoke);
-    tweens = [];
-    if (frameId) cancelAnimationFrame(frameId);
-  });
-  return { nod, noticeEdit, stop };
+  private play(work: Work) {
+    this.workWaiting = false;
+    switch (work) {
+      case "idle":
+        return this.idle();
+      case "search":
+        return this.search();
+      case "read":
+        return this.read();
+      case "done":
+        return this.done();
+      case "shrug":
+        return this.shrug();
+      case "sleep":
+        return this.sleep();
+    }
+  }
+
+  /**
+   * Back to what's asked of him. A Done or a shrug he was already playing
+   * isn't played again.
+   */
+  private resume() {
+    const once = this.work === "done" || this.work === "shrug";
+    if (once && !this.workWaiting) this.work = "idle";
+    this.play(this.work);
+  }
+
+  private async getUp(step: Step) {
+    const p = this.pose;
+    if (p.lie > 0 || p.back) {
+      this.flag("zz", false);
+      this.flag("breathing", false);
+      await step(this.tween({ lie: 0, armsIn: 0 }, 700));
+      await this.turnAround(step, false, true);
+      p.mouth = "flat";
+      await step(this.tween({ eye: 1 }, 250));
+      p.mouth = "smile";
+    } else if (p.turn < 1) {
+      await step(this.tween({ turn: 1 }, 220, easeOut));
+    } else if (p.eye < 1) {
+      // Asleep where he sat, with reduced motion.
+      this.flag("zz", false);
+      p.mouth = "smile";
+      await step(this.tween({ eye: 1 }, 250));
+    }
+  }
+
+  /** Back to sitting with the gem in his lap, from whatever he was doing. */
+  private async settle(step: Step) {
+    const p = this.pose;
+    await this.getUp(step);
+    if (p.gemHidden) await this.pullGem(step);
+    p.mouth = "smile";
+    await step(this.tween({ ...NEUTRAL, x: STAGE.restX }, 380));
+  }
+
+  // Reaches over his shoulder, rummages, and brings the gem round to his lap.
+  // On his own he takes his time over it.
+  private async pullGem(step: Step) {
+    const slow = !this.assistant;
+    const p = this.pose;
+    await step(this.tween({ faceX: 6, stow: 1 }, 300));
+    await step(this.tween({ armsUpR: 1 }, slow ? 450 : 400));
+    if (!this.reduced) {
+      for (const side of [1, -1, 1]) {
+        await step(this.tween({ wiggle: side * 0.4 }, slow ? 120 : 110));
+      }
+    }
+    await step(this.tween({ wiggle: 0 }, slow ? 100 : 90));
+    p.gemHidden = false;
+    await step(
+      Promise.all([
+        this.tween({ armsUpR: 0, stow: 0 }, slow ? 700 : 600),
+        this.tween({ faceX: 0 }, slow ? 450 : 420),
+      ]),
+    );
+  }
+
+  private async stowGem(step: Step) {
+    await step(this.tween({ faceX: 6 }, 260));
+    await step(this.tween({ stow: 1, armsUpR: 1 }, 520));
+    this.pose.gemHidden = true;
+  }
+
+  /** Glances around, and dozes off when left alone long enough. */
+  private idle() {
+    this.state = "idle";
+    void this.run(async (step) => {
+      await this.settle(step);
+      const until = performance.now() + DOZE_MS;
+      while (performance.now() < until) {
+        await step(this.wait(between(GLANCE)));
+        if (this.reduced) continue;
+        await step(this.tween({ faceX: this.lookAtPointer(0.3) }, 500));
+      }
+      if (!this.reduced) await this.sleepNow(step);
+    });
+  }
+
+  private sleep() {
+    void this.run(async (step) => {
+      await this.settle(step);
+      await this.sleepNow(step);
+    });
+  }
+
+  private async sleepNow(step: Step) {
+    this.state = "sleep";
+    const p = this.pose;
+    if (this.reduced) {
+      // His eyes close where he sits, and the z's stand still.
+      p.mouth = "flat";
+      await step(this.tween({ ...NEUTRAL, eye: 0 }, 0));
+      this.flag("zz", true);
+      return;
+    }
+    await step(this.tween({ faceX: -6 }, 350));
+    await step(
+      Promise.all([
+        this.tween({ gemDown: 1 }, 650),
+        this.tween({ squash: 0.4 }, 300).then(() =>
+          this.tween({ squash: 0 }, 350),
+        ),
+      ]),
+    );
+    await step(this.tween({ faceX: 8 }, 400));
+    await step(this.wait(300));
+    await this.turnAround(step, true);
+    await step(this.wait(300));
+    await step(
+      Promise.all([this.tween({ lie: 1 }, 1100), this.tween({ armsIn: 1 }, 900)]),
+    );
+    await step(this.tween({ squash: 0.6 }, 160));
+    await step(this.tween({ squash: 0 }, 380, overshoot));
+    this.flag("breathing", true);
+    this.flag("zz", true);
+  }
+
+  /** Wakes from a click, quicker than when he wakes on his own. */
+  private wakeUpQuick() {
+    this.state = "idle";
+    return this.run(async (step) => {
+      const p = this.pose;
+      this.flag("zz", false);
+      if (this.reduced) {
+        p.mouth = "smile";
+        await step(this.tween({ eye: 1 }, 0));
+        return;
+      }
+      await step(this.wait(300));
+      this.flag("breathing", false);
+      await step(this.tween({ lie: 0.93 }, 260));
+      await step(this.tween({ lie: 1 }, 260));
+      await step(
+        Promise.all([this.tween({ lie: 0 }, 800), this.tween({ armsIn: 0 }, 800)]),
+      );
+      await this.turnAround(step, false, true);
+      p.mouth = "o";
+      await step(
+        Promise.all([
+          this.tween({ armsUpL: 1, armsUpR: 1 }, 500),
+          this.tween({ eye: 0 }, 280),
+        ]),
+      );
+      await step(this.wait(350));
+      p.mouth = "flat";
+      await step(this.tween({ armsUpL: 0, armsUpR: 0 }, 450));
+      await step(this.tween({ eye: 1 }, 220));
+      p.mouth = "smile";
+      await step(this.tween({ faceX: -6 }, 300));
+      await step(this.tween({ gemDown: 0 }, 600));
+      await step(this.tween({ faceX: 0 }, 280));
+    });
+  }
+
+  /** Hello: a quick wave with his right hand, the gem kept in his left. */
+  private hello() {
+    this.state = "hello";
+    void this.run(async (step) => {
+      await this.settle(step);
+      const p = this.pose;
+      p.mouth = "grin";
+      if (this.reduced) {
+        this.render();
+        await step(this.wait(500));
+      } else {
+        await step(this.tween({ armsUpR: 0.85 }, 260));
+        for (const s of [1, -1, 1, -1]) {
+          await step(this.tween({ wiggle: s }, 130));
+        }
+        await step(this.tween({ wiggle: 0 }, 110));
+        await step(this.tween({ armsUpR: 0 }, 300));
+      }
+      this.setMouth("smile");
+      this.resume();
+    });
+  }
+
+  /** Searching: rummages behind his back while the vault is searched. */
+  private search() {
+    this.state = "search";
+    void this.run(async (step) => {
+      await this.settle(step);
+      this.pose.mouth = "flat";
+      await this.stowGem(step);
+      if (this.reduced) {
+        await step(this.tween({ faceX: 6, faceY: -2 }, 0));
+        return;
+      }
+      for (let i = 0; ; i++) {
+        await step(this.tween({ faceX: i % 4 < 2 ? 6 : 3, faceY: -2 }, 260));
+        for (const s of [1, -1, 1, -1]) {
+          await step(
+            this.tween({ wiggle: s * 0.5, squash: s > 0 ? 0.15 : 0 }, 140),
+          );
+        }
+        await step(this.wait(160));
+      }
+    });
+  }
+
+  /** Reading: holds the shard up and reads it, eyes moving along lines. */
+  private read() {
+    this.state = "read";
+    void this.run(async (step) => {
+      await this.settle(step);
+      this.pose.mouth = "o";
+      await step(this.tween({ gemUp: 0.75, faceY: 2, nod: 0.4 }, 420));
+      if (this.reduced) return;
+      for (;;) {
+        await step(this.tween({ faceX: -3 }, 120));
+        await step(this.tween({ faceX: 3 }, 900, linear));
+        await step(this.wait(120));
+      }
+    });
+  }
+
+  /** Done: happy eyes and a nod as the answer lands, then back to idle. */
+  private done() {
+    this.state = "done";
+    void this.run(async (step) => {
+      const p = this.pose;
+      if (p.gemHidden || p.lie > 0 || p.back || p.eye < 1) {
+        await this.settle(step);
+      }
+      p.mouth = "smile";
+      await step(
+        this.tween(
+          {
+            gemUp: 0,
+            faceX: 0,
+            faceY: 0,
+            nod: 0,
+            wiggle: 0,
+            armsUpR: 0,
+            stow: 0,
+            tilt: 0,
+          },
+          320,
+        ),
+      );
+      await step(this.tween({ happy: 1 }, 1, linear));
+      await step(this.tween({ nod: 1, squash: 0.25 }, 150));
+      await step(this.tween({ nod: 0, squash: 0 }, 300, overshoot));
+      await step(this.wait(1400));
+      await step(this.tween({ happy: 0 }, 1, linear));
+      this.resume();
+    });
+  }
+
+  /** Something went wrong: sets the shard down and shrugs. */
+  private shrug() {
+    this.state = "shrug";
+    void this.run(async (step) => {
+      await this.settle(step);
+      const p = this.pose;
+      p.mouth = "wobble";
+      await step(this.tween({ faceX: -6 }, 260));
+      await step(this.tween({ gemDown: 1 }, 520));
+      await step(
+        this.tween(
+          { armsUpL: 0.3, armsUpR: 0.3, faceX: 0, tilt: 1, squash: -0.35 },
+          380,
+          easeOut,
+        ),
+      );
+      if (!this.reduced) {
+        await step(this.tween({ squash: -0.6 }, 160));
+        await step(this.tween({ squash: -0.35 }, 300, overshoot));
+      }
+      await step(this.wait(1800));
+      await step(
+        this.tween({ armsUpL: 0, armsUpR: 0, tilt: 0, squash: 0 }, 360),
+      );
+      p.mouth = "flat";
+      await step(this.tween({ faceX: -6 }, 260));
+      await step(this.tween({ gemDown: 0 }, 520));
+      this.resume();
+    });
+  }
+
+  // ── Drawing ───────────────────────────────────────────────────────────────
+
+  private render() {
+    const p = this.pose;
+    const el = this.parts;
+    const { ground, restX, scale } = STAGE;
+
+    const at = this.hopPoint();
+    this.host.style.transform = `translate(${at.x - restX * scale}px, ${at.y - ground * scale}px)`;
+
+    const w = p.walk;
+    const ph = p.phase;
+    // A heavy pebble waddles: it rocks side to side more than it bounces,
+    // and squashes a little each time a foot lands.
+    const bob = -Math.abs(Math.sin(ph)) * 3 * w;
+    const land = (1 - Math.abs(Math.sin(ph))) * w;
+
+    place(
+      el.root,
+      `translate(${p.x} ${ground - (HALF_WIDTH + 1) * p.lie}) rotate(${90 * p.lie + Math.sin(ph) * 5 * w}) scale(${p.turn} 1)`,
+    );
+
+    const armsUp = (p.armsUpL + p.armsUpR) / 2;
+    const sx = 1 + 0.03 * p.sit + 0.07 * p.squash + 0.02 * land;
+    const sy =
+      1 -
+      0.05 * p.sit -
+      0.09 * p.squash +
+      0.06 * armsUp -
+      0.03 * p.nod -
+      0.03 * land;
+    const lift = 8 * p.sit + bob;
+    const body = `translate(0 ${lift}) rotate(${p.tilt * 6} 0 -40) scale(${sx} ${sy})`;
+    place(el.frontBody, body);
+    place(el.backBody, body);
+
+    const down = p.gemDown;
+    const holds = { L: 0, R: 0 };
+    let handAngle = 0;
+    for (const [side, s] of [
+      ["L", -1],
+      ["R", 1],
+    ] as const) {
+      const up = s < 0 ? p.armsUpL : p.armsUpR;
+      const hold = (1 - down) * (1 - up) * (1 - p.stow);
+      holds[side] = hold;
+      const swing = Math.sin(ph + (s > 0 ? Math.PI : 0));
+      const step = Math.max(0, swing) * 6 * w;
+      place(
+        el[`frontLeg${side}`],
+        `translate(${s * (17 + 4 * p.sit)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 10 * w}) scale(1 ${1 - 0.45 * p.sit})`,
+      );
+      const wiggle = s > 0 ? p.wiggle * 22 : 0;
+      const angle =
+        -s *
+          (12 -
+            44 * hold -
+            52 * p.gemUp * hold +
+            150 * up -
+            18 * p.armsIn +
+            wiggle) +
+        Math.sin(ph) * 12 * w * (1 - hold);
+      if (s > 0) handAngle = angle;
+      const arm = `translate(${s * 30} -50) rotate(${angle})`;
+      place(el[`frontArm${side}`], arm);
+      place(el[`backArm${side}`], arm);
+    }
+
+    // The gem sits in his lap, rises to read, and arcs down to the ground
+    // beside him. Coming out of his back, it starts in his right hand.
+    const arc = Math.sin(Math.PI * down);
+    const rad = (handAngle * Math.PI) / 180;
+    const handX = p.x + p.turn * sx * (30 - 26 * Math.sin(rad));
+    const handY = ground + lift + sy * (-50 + 26 * Math.cos(rad));
+    const lapX = p.x + 2 * sx;
+    const lapY = ground + lift - 30 * sy - p.gemUp * 21;
+    const heldX = lapX + (handX - lapX) * p.stow;
+    const heldY = lapY + (handY - lapY) * p.stow;
+    const gemX = heldX + (GEM_GROUND.x - heldX) * down;
+    const gemY = heldY + (GEM_GROUND.y - heldY) * down - arc * 16;
+    place(el.gem, `translate(${gemX} ${gemY}) rotate(${-arc * 20})`);
+    show(el.gem, !p.gemHidden);
+
+    for (const [side, s] of [
+      ["L", -1],
+      ["R", 1],
+    ] as const) {
+      const hand = el[`hand${side}`];
+      place(hand, `translate(${gemX + s * 13} ${gemY + 3})`);
+      show(hand, holds[side] > 0.5 && !p.back && !p.gemHidden);
+    }
+
+    // Lying on his side, the lower leg rests along the floor and the upper
+    // one slants down across it, so they cross near the feet.
+    const legScale = 0.4 + 1.2 * p.lie;
+    place(
+      el.backLegR,
+      `translate(11 ${-12 + 4 * p.lie}) rotate(${-22 * p.lie}) scale(1 ${legScale})`,
+    );
+    place(
+      el.backLegL,
+      `translate(-11 ${-12 + 4 * p.lie}) rotate(${-44 * p.lie}) scale(1 ${legScale})`,
+    );
+
+    place(el.face, `translate(${p.faceX} ${4 * p.nod + p.faceY})`);
+    const open = p.eye * p.blink;
+    const happy = p.happy > 0.5;
+    el.eyeL.setAttribute("ry", String(5.5 * open + 0.8));
+    el.eyeR.setAttribute("ry", String(5.5 * open + 0.8));
+    show(el.eyeL, !happy);
+    show(el.eyeR, !happy);
+    show(el.happy, happy);
+    show(el.shine, open > 0.6 && !happy);
+    const mouth = MOUTHS[p.mouth];
+    if (el.mouth.getAttribute("d") !== mouth.d) {
+      el.mouth.setAttribute("d", mouth.d);
+      el.mouth.style.fill = mouth.fill;
+    }
+
+    show(el.front, !p.back);
+    show(el.back, p.back);
+
+    // His shadow shrinks while he's in the air.
+    const air = this.hop ? 1 - 0.4 * Math.sin(Math.PI * p.hopP) : 1;
+    el.shadow.setAttribute("cx", String(p.x + 27 * p.lie));
+    el.shadow.setAttribute("rx", String((42 + 46 * p.lie) * air));
+  }
+}
+
+/** How long a hop from `from` to `to` is in the air, in ms. */
+export function hopFlight(from: Spot, to: Spot) {
+  return 300 + Math.min(260, Math.hypot(to.x - from.x, to.y - from.y) * 1.4);
 }
 
 const place = (el: SVGElement, transform: string) =>
   el.setAttribute("transform", transform);
 const show = (el: SVGElement, visible: boolean) =>
   el.setAttribute("visibility", visible ? "visible" : "hidden");
-
-function render(p: Pose, el: Parts) {
-  const { ground } = STAGE;
-  const w = p.walk;
-  const ph = p.phase;
-  // A heavy pebble waddles: it rocks side to side more than it bounces,
-  // and squashes a little each time a foot lands.
-  const bob = -Math.abs(Math.sin(ph)) * 3 * w;
-  const land = (1 - Math.abs(Math.sin(ph))) * w;
-
-  place(
-    el.root,
-    `translate(${p.x} ${ground - (HALF_WIDTH + 1) * p.lie}) rotate(${90 * p.lie + Math.sin(ph) * 5 * w}) scale(${p.turn} 1)`,
-  );
-
-  const armsUp = (p.armsUpL + p.armsUpR) / 2;
-  const sx = 1 + 0.03 * p.sit + 0.07 * p.squash + 0.02 * land;
-  const sy =
-    1 -
-    0.05 * p.sit -
-    0.09 * p.squash +
-    0.06 * armsUp -
-    0.03 * p.nod -
-    0.03 * land;
-  const lift = 8 * p.sit + bob;
-  const body = `translate(0 ${lift}) scale(${sx} ${sy})`;
-  place(el.frontBody, body);
-  place(el.backBody, body);
-
-  const down = p.gemDown;
-  const holds = { L: 0, R: 0 };
-  let handAngle = 0;
-  for (const [side, s] of [["L", -1], ["R", 1]] as const) {
-    const up = s < 0 ? p.armsUpL : p.armsUpR;
-    const hold = (1 - down) * (1 - up) * (1 - p.stow);
-    holds[side] = hold;
-    const swing = Math.sin(ph + (s > 0 ? Math.PI : 0));
-    const step = Math.max(0, swing) * 6 * w;
-    place(
-      el[`frontLeg${side}`],
-      `translate(${s * (17 + 4 * p.sit)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 10 * w}) scale(1 ${1 - 0.45 * p.sit})`,
-    );
-    const wiggle = s > 0 ? p.wiggle * 22 : 0;
-    const angle =
-      -s * (12 - 44 * hold + 150 * up - 18 * p.armsIn + wiggle) +
-      Math.sin(ph) * 12 * w * (1 - hold);
-    if (s > 0) handAngle = angle;
-    const arm = `translate(${s * 30} -50) rotate(${angle})`;
-    place(el[`frontArm${side}`], arm);
-    place(el[`backArm${side}`], arm);
-  }
-
-  // The gem sits in his lap and arcs down to the ground beside him. Coming
-  // out of his back, it starts in his right hand.
-  const arc = Math.sin(Math.PI * down);
-  const rad = (handAngle * Math.PI) / 180;
-  const handX = p.x + p.turn * sx * (30 - 26 * Math.sin(rad));
-  const handY = ground + lift + sy * (-50 + 26 * Math.cos(rad));
-  const lapX = p.x + 2 * sx;
-  const lapY = ground + lift - 30 * sy;
-  const heldX = lapX + (handX - lapX) * p.stow;
-  const heldY = lapY + (handY - lapY) * p.stow;
-  const gemX = heldX + (GEM_GROUND.x - heldX) * down;
-  const gemY = heldY + (GEM_GROUND.y - heldY) * down - arc * 16;
-  place(el.gem, `translate(${gemX} ${gemY}) rotate(${-arc * 20})`);
-  show(el.gem, !p.gemHidden);
-
-  for (const [side, s] of [["L", -1], ["R", 1]] as const) {
-    const hand = el[`hand${side}`];
-    place(hand, `translate(${gemX + s * 13} ${gemY + 3})`);
-    show(hand, holds[side] > 0.5 && !p.back);
-  }
-
-  // Lying on his side, the lower leg rests along the floor and the upper
-  // one slants down across it, so they cross near the feet.
-  const legScale = 0.4 + 1.2 * p.lie;
-  place(
-    el.backLegR,
-    `translate(11 ${-12 + 4 * p.lie}) rotate(${-22 * p.lie}) scale(1 ${legScale})`,
-  );
-  place(
-    el.backLegL,
-    `translate(-11 ${-12 + 4 * p.lie}) rotate(${-44 * p.lie}) scale(1 ${legScale})`,
-  );
-
-  place(el.face, `translate(${p.faceX} ${4 * p.nod})`);
-  const open = p.eye * p.blink;
-  el.eyeL.setAttribute("ry", String(5.5 * open + 0.8));
-  el.eyeR.setAttribute("ry", String(5.5 * open + 0.8));
-  show(el.shine, open > 0.6);
-  const mouth = MOUTHS[p.mouth];
-  if (el.mouth.getAttribute("d") !== mouth.d) {
-    el.mouth.setAttribute("d", mouth.d);
-    el.mouth.style.fill = mouth.fill;
-  }
-
-  show(el.front, !p.back);
-  show(el.back, p.back);
-
-  el.shadow.setAttribute("cx", String(p.x + 27 * p.lie));
-  el.shadow.setAttribute("rx", String(42 + 46 * p.lie));
-}

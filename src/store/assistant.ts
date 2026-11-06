@@ -46,6 +46,8 @@ interface AssistantState {
   added: string[];
   /** Whether the open shard was taken out of the next message. */
   openShardRemoved: boolean;
+  /** Asks the composer to take focus once it's shown. */
+  focusComposer: boolean;
 
   setEnabled: (enabled: boolean) => void;
   setOpen: (isOpen: boolean) => void;
@@ -67,6 +69,7 @@ export const useAssistantStore = create<AssistantState>((set) => ({
   draft: "",
   added: [],
   openShardRemoved: false,
+  focusComposer: false,
 
   setEnabled: (enabled) =>
     set((state) => ({ enabled, isOpen: enabled && state.isOpen })),

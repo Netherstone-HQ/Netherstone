@@ -426,6 +426,18 @@
         transition-duration: 120ms !important;
     }
 
+    /* The companion's menu fades and scales in, without a slide. */
+    [data-slot="dropdown-menu-content"].companion-menu {
+        --tw-enter-translate-y: 0 !important;
+        animation-duration: 150ms !important;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        [data-slot="dropdown-menu-content"].companion-menu {
+            animation: none !important;
+        }
+    }
+
     /* Editor chunks (10 blocks) use `content-visibility: auto`; off-screen
        chunks need a placeholder height until they're measured in the
        background (see chunk-heights.ts) or rendered, instead of collapsing
@@ -659,6 +671,19 @@
 .companion-z {
     position: absolute;
     opacity: 0;
+}
+
+/* With reduced motion, the z's stand still. */
+.companion[data-still] .companion-z {
+    opacity: 1;
+}
+
+.companion[data-still] .companion-z:nth-child(2) {
+    transform: translate(7px, -9px);
+}
+
+.companion[data-still] .companion-z:nth-child(3) {
+    transform: translate(14px, -18px);
 }
 
 .companion[data-breathing] .companion-z {

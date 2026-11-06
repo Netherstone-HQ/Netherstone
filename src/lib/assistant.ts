@@ -57,6 +57,7 @@ export function newChat() {
     chat: null,
     messages: [],
     changes: [],
+    memories: [],
     answering: null,
     ending: null,
     added: [],
@@ -74,6 +75,7 @@ export async function openChat(id: string) {
     chat: { id: view.id, title: view.title },
     messages: view.messages,
     changes: view.changes,
+    memories: view.memories,
     answering: null,
     ending: null,
   });
@@ -151,6 +153,7 @@ export async function sendMessage(text: string, shards: string[]) {
       chat: { id: view.id, title: view.title },
       messages: view.messages,
       changes: view.changes,
+      memories: view.memories,
       answering: null,
       ending,
     });
@@ -197,13 +200,15 @@ export async function removeAllChats() {
   newChat();
 }
 
-// Turned off: the answer stops and the changes not applied go, so nothing
-// is left in the shard or the panel. The app drops them too.
+// Turned off: the answer stops and the changes and memory items not
+// applied go, so nothing is left in the shard or the panel. The app drops
+// them too.
 store.subscribe((state, previous) => {
   if (state.enabled === false && previous.enabled === true) {
     stopAnswer();
     store.setState({
       changes: state.changes.filter((change) => change.state !== "pending"),
+      memories: state.memories.filter((memory) => memory.state !== "pending"),
     });
   }
 });

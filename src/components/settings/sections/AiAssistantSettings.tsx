@@ -18,6 +18,7 @@ import {
 } from "@/components/assistant/models";
 import { DeleteAllChatsDialog } from "@/components/assistant/ChatsMenu";
 import { HelpDialog } from "@/components/settings/HelpDialog";
+import { MemorySection } from "@/components/settings/MemorySection";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -239,6 +240,8 @@ export function AiAssistantSettings() {
           />
         </SettingRow>
       </SettingsGroup>
+
+      <MemorySection />
 
       <SettingsGroup title="Providers" description={<FreeWaysToStart />} bare>
         <div className="space-y-5">

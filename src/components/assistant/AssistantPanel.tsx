@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BrainIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -39,9 +40,15 @@ import {
   undoAssistantChange,
 } from "@/lib/assistant-changes";
 import {
+  applyMemory,
+  discardMemory,
+  undoMemory,
+} from "@/lib/assistant-memory";
+import {
   type AssistantStatus,
   type ChatChange,
   type ChatError,
+  type ChatMemory,
   type ModelChoice,
   type PickedModel,
   type ShownMessage,
@@ -326,6 +333,56 @@ function ChangeCard({ change }: { change: ChatChange }) {
   );
 }
 
+/** An item an answer offered to remember: to add to memory or not. */
+function MemoryCard({ memory }: { memory: ChatMemory }) {
+  const busy = useAssistantStore((s) => s.busyChanges.includes(memory.id));
+  if (memory.state === "applied") {
+    return (
+      <div className="flex items-center gap-2 rounded-[10px] border bg-card py-2.5 pr-2 pl-3">
+        <CheckIcon className="size-4 shrink-0 text-brand" />
+        <span className="min-w-0 flex-1 truncate">Added to memory</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => void undoMemory(memory)}
+        >
+          Undo
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[10px] border bg-card p-3">
+      <div className="flex items-center gap-2">
+        <BrainIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium">Add to memory</span>
+      </div>
+      <p className="break-words">{memory.text}</p>
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => void discardMemory(memory)}
+        >
+          Discard
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy}
+          onClick={() => void applyMemory(memory)}
+        >
+          Apply
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Thinking({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -392,16 +449,20 @@ function Sources({ cited, read }: { cited: Citation[]; read: string[] }) {
 function Answer({
   message,
   changes,
+  memories,
   canAdd,
 }: {
   message: ShownMessage;
   /** The changes the answer proposed, under it. */
   changes: ChatChange[];
+  /** The memory items the answer offered, under it. */
+  memories: ChatMemory[];
   /** Whether a shard is open to add the answer to. */
   canAdd: boolean;
 }) {
   const cited = citationsIn(message.text);
-  if (!message.text && !message.reasoning && changes.length === 0) return null;
+  const cards = changes.length + memories.length;
+  if (!message.text && !message.reasoning && cards === 0) return null;
   return (
     <div className="flex flex-col gap-2.5">
       {message.reasoning ? <Thinking text={message.reasoning} /> : null}
@@ -416,8 +477,11 @@ function Answer({
       {changes.map((change) => (
         <ChangeCard key={change.id} change={change} />
       ))}
+      {memories.map((memory) => (
+        <MemoryCard key={memory.id} memory={memory} />
+      ))}
       <Sources cited={cited} read={message.sources ?? []} />
-      {message.text && changes.length === 0 ? (
+      {message.text && cards === 0 ? (
         <div className="-ml-1.5 flex items-center gap-0.5">
           <CopyButton text={message.text} />
           {canAdd ? <AddToShardButton text={message.text} /> : null}
@@ -428,10 +492,14 @@ function Answer({
 }
 
 /**
- * Each message, with the changes an answer proposed under the last message
- * of that answer.
+ * Each message, with the changes and memory items an answer offered under
+ * the last message of that answer.
  */
-function withChanges(messages: ShownMessage[], changes: ChatChange[]) {
+function withChanges(
+  messages: ShownMessage[],
+  changes: ChatChange[],
+  memories: ChatMemory[],
+) {
   let turn = 0;
   return messages.map((message, index) => {
     if (message.role === "user") turn = message.seq;
@@ -441,6 +509,7 @@ function withChanges(messages: ShownMessage[], changes: ChatChange[]) {
     return {
       message,
       changes: endsAnswer ? changes.filter((c) => c.turn === turn) : [],
+      memories: endsAnswer ? memories.filter((m) => m.turn === turn) : [],
     };
   });
 }
@@ -502,6 +571,7 @@ function useStickToBottom(deps: unknown[]) {
 function Messages() {
   const messages = useAssistantStore((s) => s.messages);
   const changes = useAssistantStore((s) => s.changes);
+  const memories = useAssistantStore((s) => s.memories);
   const answering = useAssistantStore((s) => s.answering);
   const ending = useAssistantStore((s) => s.ending);
   const vault = useVaultStore((s) => s.currentVaultPath);
@@ -510,6 +580,7 @@ function Messages() {
   const { ref, onScroll } = useStickToBottom([
     messages,
     changes,
+    memories,
     answering,
     ending,
   ]);
@@ -520,7 +591,8 @@ function Messages() {
       onScroll={onScroll}
       className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
     >
-      {withChanges(messages, changes).map(({ message, changes }) =>
+      {withChanges(messages, changes, memories).map(
+        ({ message, changes, memories }) =>
         message.role === "user" ? (
           <UserMessage key={message.seq} message={message} />
         ) : (
@@ -528,6 +600,7 @@ function Messages() {
             key={message.seq}
             message={message}
             changes={changes}
+            memories={memories}
             canAdd={canAdd}
           />
         ),

@@ -342,6 +342,43 @@ async fn assistant_discard(change: String) -> Result<(), String> {
     assistant::discard(change).await
 }
 
+/// What the assistant remembers, for Settings.
+#[tauri::command(async)]
+fn assistant_memory() -> Result<assistant::Memory, String> {
+    assistant::memory()
+}
+
+#[tauri::command(async)]
+fn assistant_memory_edit(item: String, text: String) -> Result<assistant::Memory, String> {
+    assistant::edit_memory(&item, &text)
+}
+
+#[tauri::command(async)]
+fn assistant_memory_delete(item: String) -> Result<assistant::Memory, String> {
+    assistant::delete_memory(&item)
+}
+
+#[tauri::command(async)]
+fn assistant_memory_delete_all() -> Result<(), String> {
+    assistant::delete_all_memory()
+}
+
+/// Adds an item the assistant offered to memory.
+#[tauri::command]
+async fn assistant_remember(offer: String) -> Result<(), String> {
+    assistant::remember(offer).await
+}
+
+#[tauri::command]
+async fn assistant_forget(offer: String) -> Result<(), String> {
+    assistant::forget(offer).await
+}
+
+#[tauri::command]
+async fn assistant_discard_offer(offer: String) -> Result<(), String> {
+    assistant::discard_offer(offer).await
+}
+
 /// The AI apps Settings can connect, and which are installed and connected.
 #[tauri::command(async)]
 fn ai_apps() -> Result<Vec<ai_apps::AppStatus>, String> {
@@ -2156,6 +2193,13 @@ pub fn run() {
             assistant_apply,
             assistant_undo,
             assistant_discard,
+            assistant_memory,
+            assistant_memory_edit,
+            assistant_memory_delete,
+            assistant_memory_delete_all,
+            assistant_remember,
+            assistant_forget,
+            assistant_discard_offer,
             #[cfg(feature = "updater")]
             updater::updater_check,
             #[cfg(feature = "updater")]

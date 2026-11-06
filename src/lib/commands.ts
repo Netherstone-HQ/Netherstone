@@ -1015,9 +1015,19 @@ export interface ChatChange {
   state: "pending" | "applied";
 }
 
+/** An item an answer offered to add to memory. */
+export interface ChatMemory {
+  id: string;
+  /** The user message it answers. */
+  turn: number;
+  text: string;
+  state: "pending" | "applied";
+}
+
 export interface ChatView extends ChatInfo {
   messages: ShownMessage[];
   changes: ChatChange[];
+  memories: ChatMemory[];
 }
 
 /** A pending change to a shard: its text now and as applying leaves it. */
@@ -1093,4 +1103,45 @@ export async function deleteChat(chat: string): Promise<void> {
 
 export async function deleteAllChats(): Promise<void> {
   await invoke("assistant_delete_chats");
+}
+
+/** What the assistant remembers, kept on this computer. */
+export interface AssistantMemory {
+  items: string[];
+  maxItems: number;
+  /** The longest an item gets, in characters. */
+  maxLength: number;
+}
+
+export async function getMemory(): Promise<AssistantMemory> {
+  return invoke("assistant_memory");
+}
+
+export async function editMemory(
+  item: string,
+  text: string,
+): Promise<AssistantMemory> {
+  return invoke("assistant_memory_edit", { item, text });
+}
+
+export async function deleteMemory(item: string): Promise<AssistantMemory> {
+  return invoke("assistant_memory_delete", { item });
+}
+
+export async function deleteAllMemory(): Promise<void> {
+  await invoke("assistant_memory_delete_all");
+}
+
+/** Adds an item an answer offered to memory. */
+export async function rememberOffer(offer: string): Promise<void> {
+  await invoke("assistant_remember", { offer });
+}
+
+/** Takes an added item back out of memory. */
+export async function forgetOffer(offer: string): Promise<void> {
+  await invoke("assistant_forget", { offer });
+}
+
+export async function discardOffer(offer: string): Promise<void> {
+  await invoke("assistant_discard_offer", { offer });
 }

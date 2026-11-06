@@ -39,6 +39,7 @@ const QUESTION: &str =
 /// first message.
 fn turn(name: &str, target: Target, model: &str) -> Turn {
     let vault = crate::tools::tests::vault(name);
+    let vault_dir = vault.root.parent().unwrap().to_path_buf();
     std::fs::write(vault.root.join("Trip.md"), TRIP).unwrap();
     let store = Store::open_at(&vault.root.parent().unwrap().join("assistant.db")).unwrap();
     let chat = store.create(&vault.root, QUESTION).unwrap();
@@ -60,6 +61,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         send_files: false,
         added: Vec::new(),
         asked: Default::default(),
+        memory: Arc::new(List::at(vault_dir.join("memory.txt"))),
     }
 }
 
@@ -363,6 +365,74 @@ async fn write_tools_only_propose_and_other_tools_dont_run() {
     let offered = &server.requests()[0];
     assert!(offered.contains("\"read\"") && offered.contains("\"edit_shard\""));
     assert!(!offered.contains("\"fix_link\"") && !offered.contains("\"create_folder\""));
+}
+
+#[tokio::test]
+async fn memory_goes_with_the_chat_and_the_model_only_offers_items() {
+    let call = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"remember\",\"arguments\":\"{\\\"text\\\":\\\"I write in British English\\\"}\"}},{\"index\":1,\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"remember\",\"arguments\":\"{\\\"text\\\":\\\"keep answers short\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
+    let done = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Will do.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+    let server = serve(vec![
+        Answer::ok("text/event-stream", call),
+        Answer::ok("text/event-stream", done),
+    ]);
+    let turn = turn(
+        "engine-memory",
+        server.target(Api::OpenAi, Some(KEY)),
+        "gpt-5.5",
+    );
+    turn.asked.store(1, Ordering::SeqCst);
+    turn.memory.add("Keep answers short").unwrap();
+    answer(&turn, &Collect::default()).await.unwrap();
+
+    // Sent with the chat, and the tool offered.
+    let sent = &server.requests()[0];
+    assert!(sent.contains("- Keep answers short") && sent.contains("\"remember\""));
+    // Offered, not added; what's in memory already isn't offered again.
+    assert_eq!(turn.memory.items().unwrap(), vec!["Keep answers short"]);
+    let Message::Tool { results, .. } = &messages(&turn)[2] else {
+        panic!()
+    };
+    assert!(results[0].output.starts_with("Offered, not added yet"));
+    assert!(results[1].output.starts_with("That's in memory already"));
+    let offers = turn.store.lock().unwrap().offers(&turn.chat).unwrap();
+    assert_eq!(offers.len(), 1);
+    assert_eq!(
+        (offers[0].text.as_str(), offers[0].turn, offers[0].state),
+        ("I write in British English", 1, ChangeState::Pending)
+    );
+}
+
+#[tokio::test]
+async fn a_full_memory_takes_no_more_offers() {
+    let server = serve(Vec::new());
+    let turn = turn(
+        "engine-memory-full",
+        server.target(Api::OpenAi, Some(KEY)),
+        "gpt-5.5",
+    );
+    for n in 0..memory::MAX_ITEMS {
+        turn.memory.add(&format!("Item {n}")).unwrap();
+    }
+    let call = Call {
+        id: "call_1".to_string(),
+        name: "remember".to_string(),
+        arguments: serde_json::json!({ "text": "One more" }),
+        signatures: Vec::new(),
+    };
+    assert!(
+        offer(&turn, &call)
+            .await
+            .unwrap_err()
+            .starts_with("Memory is full")
+    );
+    assert!(
+        turn.store
+            .lock()
+            .unwrap()
+            .offers(&turn.chat)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]

@@ -141,16 +141,16 @@ async function showWritten(filePath: string, markdown: string) {
   );
 }
 
-/** Marks `change` as being worked on while `work` runs. */
-async function busy(change: ChatChange, work: () => Promise<void>) {
+/** Marks a change or memory item as being worked on while `work` runs. */
+export async function busy(item: { id: string }, work: () => Promise<void>) {
   const { busyChanges } = store.getState();
-  if (busyChanges.includes(change.id)) return;
-  store.setState({ busyChanges: [...busyChanges, change.id] });
+  if (busyChanges.includes(item.id)) return;
+  store.setState({ busyChanges: [...busyChanges, item.id] });
   try {
     await work();
   } finally {
     store.setState({
-      busyChanges: store.getState().busyChanges.filter((id) => id !== change.id),
+      busyChanges: store.getState().busyChanges.filter((id) => id !== item.id),
     });
   }
 }

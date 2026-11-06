@@ -7,6 +7,7 @@ mod chat;
 mod engine;
 mod files;
 mod local;
+mod memory;
 mod models;
 mod providers;
 mod sessions;
@@ -19,13 +20,14 @@ use chat::{Message, ReasoningPart, StopToken};
 pub use engine::{Event, Sink};
 use engine::{SharedStore, Turn};
 use local::Server;
+pub use memory::Memory;
 use models::Target;
 pub use models::{Model, ProviderError};
 pub use providers::Api;
 use providers::{Limits, Provider, Setup};
 use serde::{Deserialize, Serialize};
 pub use sessions::ChatInfo;
-use sessions::{Change, ChangeState};
+use sessions::{Change, ChangeState, Offer};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -425,6 +427,9 @@ pub struct ChatView {
     /// The changes its answers proposed, applied or not; discarded ones
     /// are left out.
     changes: Vec<Change>,
+    /// The memory items its answers offered, added or not; discarded ones
+    /// are left out.
+    memories: Vec<Offer>,
 }
 
 /// The chats answering now: their window, and how to stop them.
@@ -600,6 +605,10 @@ pub async fn send(
         send_files,
         added: shards,
         asked: Default::default(),
+        memory: Arc::new(memory::List::open().map_err(|error| {
+            eprintln!("[Netherstone] {error}");
+            ChatError::Storage
+        })?),
     };
     let result = run(&turn, &text, &sink).await;
     if let Ok(mut running) = running().lock() {
@@ -697,20 +706,30 @@ pub async fn retitle(chat: String) -> Result<String, ChatError> {
 
 pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
     let found = engine::saved(&store()?, move |store| {
-        Ok(store
-            .info(&chat)?
-            .map(|info| (info, store.messages(&chat), store.changes(&chat))))
+        Ok(store.info(&chat)?.map(|info| {
+            (
+                info,
+                store.messages(&chat),
+                store.changes(&chat),
+                store.offers(&chat),
+            )
+        }))
     })
     .await?;
-    let (info, messages, changes) = found.ok_or(ChatError::NoChat)?;
+    let (info, messages, changes, offers) = found.ok_or(ChatError::NoChat)?;
     let messages = messages.map_err(|_| ChatError::Storage)?;
     let changes = changes.map_err(|_| ChatError::Storage)?;
+    let offers = offers.map_err(|_| ChatError::Storage)?;
     Ok(ChatView {
         info,
         messages: messages.into_iter().filter_map(shown).collect(),
         changes: changes
             .into_iter()
             .filter(|change| change.state != ChangeState::Discarded)
+            .collect(),
+        memories: offers
+            .into_iter()
+            .filter(|offer| offer.state != ChangeState::Discarded)
             .collect(),
     })
 }
@@ -968,6 +987,96 @@ pub async fn discard(id: String) -> Result<(), String> {
             .ok_or_else(|| "That change isn't there anymore".to_string())?;
         store
             .set_change_state(&id, ChangeState::Discarded, &[], &change.path)
+            .map_err(store_error)
+    })
+    .await
+}
+
+// ── Memory ───────────────────────────────────────────────────────────────────
+
+fn memory_list() -> Result<memory::List, String> {
+    memory::List::open().map_err(|error| {
+        eprintln!("[Netherstone] {error}");
+        "Couldn't open memory".to_string()
+    })
+}
+
+/// The memory list, for Settings. It stays saved while the assistant is off.
+pub fn memory() -> Result<Memory, String> {
+    memory_list()?.shown()
+}
+
+/// Puts `text` in `item`'s place, and gives the list as it now is.
+pub fn edit_memory(item: &str, text: &str) -> Result<Memory, String> {
+    let list = memory_list()?;
+    list.edit(item, text)?;
+    list.shown()
+}
+
+pub fn delete_memory(item: &str) -> Result<Memory, String> {
+    let list = memory_list()?;
+    list.remove(item)?;
+    list.shown()
+}
+
+pub fn delete_all_memory() -> Result<(), String> {
+    memory_list()?.clear()
+}
+
+/// The offer `id` while it's `wanted`, and the assistant is on.
+fn offer_in(store: &sessions::Store, id: &str, wanted: ChangeState) -> Result<Offer, String> {
+    let conn = db::open_connection()?;
+    if !ai_vaults::is_on(&conn, Way::Assistant)? {
+        return Err(error_text(ChatError::TurnedOff));
+    }
+    store
+        .offer(id)
+        .map_err(store_error)?
+        .filter(|offer| offer.state == wanted)
+        .ok_or_else(|| "That memory item isn't there anymore".to_string())
+}
+
+/// Adds an item the assistant offered to memory.
+pub async fn remember(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        let offer = offer_in(store, &id, ChangeState::Pending)?;
+        let added = memory_list()?.add(&offer.text)?;
+        store
+            .set_offer_state(&id, ChangeState::Applied, added)
+            .map_err(store_error)
+    })
+    .await
+}
+
+/// Takes an added item back out of memory. It can then be added again.
+pub async fn forget(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        let offer = offer_in(store, &id, ChangeState::Applied)?;
+        // An item that was in memory before stays, and so does one another
+        // offer added and still shows as added.
+        if offer.added && !store.added_elsewhere(&offer).map_err(store_error)? {
+            let list = memory_list()?;
+            if !list.remove(&offer.text)? {
+                return Err("That item was changed or deleted in Settings".to_string());
+            }
+        }
+        store
+            .set_offer_state(&id, ChangeState::Pending, false)
+            .map_err(store_error)
+    })
+    .await
+}
+
+/// Drops an offered item, adding nothing.
+pub async fn discard_offer(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        store
+            .offer(&id)
+            .map_err(store_error)?
+            .filter(|offer| offer.state == ChangeState::Pending)
+            .ok_or_else(|| "That memory item isn't there anymore".to_string())?;
+        store
+            .set_offer_state(&id, ChangeState::Discarded, false)
             .map_err(store_error)
     })
     .await

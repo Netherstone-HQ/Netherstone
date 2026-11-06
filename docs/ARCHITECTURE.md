@@ -122,10 +122,11 @@ readable on their own, without the `_attachments` folders above them.
 
 macOS and Linux list Netherstone in Open with from the bundle, at a rank that
 never makes it the default app. On Windows, Open with, the folder menu and
-the `netherstone` command on the PATH are off until turned on in Settings
-(`integrations.rs`), which writes them for the user only; the uninstaller
-takes them back. macOS gets the command from the same setting, asking for an
-administrator only when `/usr/local/bin` isn't the user's to write. Linux
+the `netherstone` command on the PATH are on until turned off in Settings
+(`integrations.rs`): release builds write them for the user only at launch,
+skipping any the user turned off, and the uninstaller takes them back. macOS
+gets the command the same way when `/usr/local/bin` is the user's to write;
+otherwise it waits for the setting, which asks for an administrator. Linux
 packages ship it in `/usr/bin`. The installer images are drawn
 from the brand mark by `scripts/installer-images.mjs` into
 `src-tauri/installer/`.

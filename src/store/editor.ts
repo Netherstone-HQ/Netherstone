@@ -13,7 +13,8 @@ export type PendingReveal =
   | { path: string; text: string }
   | { path: string; assetPath: string }
   | { path: string; tag: string }
-  | { path: string; chart: number };
+  | { path: string; chart: number }
+  | { path: string; heading: string };
 
 export interface OpenEditorFilePayload {
   path: string;
@@ -44,7 +45,7 @@ interface EditorState {
   setOpeningFilePath: (path: string | null) => void;
 
   /**
-   * An @ link (by its text), a missing file, a tag or a chart to scroll to
+   * An @ link (by its text), a missing file, a tag, a chart or a heading to scroll to
    * once `path` is on screen. Opening any other file drops it.
    */
   pendingLinkReveal: PendingReveal | null;

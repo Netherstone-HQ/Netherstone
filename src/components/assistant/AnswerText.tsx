@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 
+import type { Citation } from "@/lib/open-citation";
 import { cn } from "@/lib/utils";
 
 const parser = unified().use(remarkParse).use(remarkGfm);
@@ -19,11 +20,7 @@ type Node = {
   children?: Node[];
 };
 
-/** A shard an answer cites: a vault-relative path and maybe a section. */
-export interface Citation {
-  path: string;
-  section: string | null;
-}
+export type { Citation };
 
 /** Whether `href` names a web page or other app rather than a vault file. */
 function isOutside(href: string) {

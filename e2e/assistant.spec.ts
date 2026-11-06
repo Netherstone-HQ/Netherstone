@@ -321,3 +321,54 @@ test("adds an answer to the shard, without its cites", async ({ page }) => {
   await expect(editor(page)).toContainText("We go to Lisbon in May.");
   await expect(editor(page)).not.toContainText("May Trip");
 });
+
+const LONG = {
+  ...FILES,
+  "Trip.md": `# Trip\n\n${Array.from({ length: 80 }, (_, i) => `Line ${i + 1}.`).join("\n\n")}\n\n## Plans\n\nLisbon in May, by train.\n`,
+};
+
+const searchDialog = (page: import("@playwright/test").Page) =>
+  page.getByRole("dialog", { name: "Search" });
+
+test("has no Assistant group in search while the assistant is off", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Bread.md" });
+  await expect(editor(page)).toContainText("350 g");
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.type("when do we go");
+  const search = searchDialog(page);
+  await expect(search.getByText("No shards match “when do we go”")).toBeVisible();
+  await expect(search.getByText("Ask about this")).toHaveCount(0);
+  await expect(search.getByText("Tab", { exact: true })).toHaveCount(0);
+});
+
+test("asks from search, and carries on in the panel", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Bread.md", assistant: READY });
+  await expect(editor(page)).toContainText("350 g");
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.type("when do we go");
+  const search = searchDialog(page);
+  await expect(search.getByText("Ask about this")).toBeVisible();
+  await page.keyboard.press("Tab");
+
+  await expect(search.getByText("We go to Lisbon in May")).toBeVisible();
+  expect(await page.evaluate(() => window.__sent)).toEqual([
+    { chat: null, text: "when do we go", shards: [] },
+  ]);
+  await search.getByRole("button", { name: "Continue in chat" }).click();
+  await expect(search).toHaveCount(0);
+  await expect(panel(page).getByText("We go to Lisbon in May")).toBeVisible();
+  // The same chat, saved and titled like any other.
+  await expect(panel(page).getByRole("button", { name: "Chats" })).toHaveText("when do we go");
+});
+
+test("opens a cite from search at its section", async ({ page }) => {
+  await mockVault(page, { files: LONG, open: "Bread.md", assistant: READY });
+  await expect(editor(page)).toContainText("350 g");
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.type("when do we go");
+  await page.keyboard.press("Tab");
+  const search = searchDialog(page);
+  await search.getByRole("button", { name: "Open Trip.md" }).click();
+  await expect(search).toHaveCount(0);
+  await expect(editor(page).getByRole("heading", { name: "Plans" })).toBeInViewport();
+});

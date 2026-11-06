@@ -31,6 +31,21 @@ import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { useAssistantStore } from "@/store/assistant";
+import {
+  askFromSearch,
+  loadAssistantEnabled,
+  openAssistant,
+  stopAnswer,
+} from "@/lib/assistant";
+import { type Citation, openCitation } from "@/lib/open-citation";
+import {
+  AskRow,
+  GroupLabel,
+  SearchAnswer,
+  SearchSetupNeeded,
+} from "./assistant/SearchAnswer";
+import { setupState, useSetup } from "./assistant/setup";
 import { HighlightedText, type TextPart } from "./HighlightedText";
 
 interface SearchResult {
@@ -149,8 +164,41 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   // Answers can arrive out of order; only the latest search's counts.
   const searchIdRef = useRef(0);
 
+  const assistantOn = useAssistantStore((s) => s.enabled === true);
+  const answering = useAssistantStore((s) => s.answering);
+  const openSettings = useUIStore((s) => s.openSettings);
+  const { setup, reload } = useSetup(open && assistantOn);
+  const setup_ = setupState(setup);
+  /** The question asked from here, if one was. */
+  const [asked, setAsked] = useState<string | null>(null);
+  /** Asked before the assistant was ready: it waits for what's needed. */
+  const [waiting, setWaiting] = useState(false);
+  const [askSelected, setAskSelected] = useState(false);
+  const askedRef = useRef<string | null>(null);
+  askedRef.current = asked;
+  /** The answer went on to the panel, so closing search leaves it running. */
+  const handedOffRef = useRef(false);
+
+  useEffect(() => {
+    if (open && useAssistantStore.getState().enabled === null) {
+      void loadAssistantEnabled();
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open) {
+      // Closing search stops an answer asked here, unless the panel took it.
+      if (
+        askedRef.current !== null &&
+        !handedOffRef.current &&
+        useAssistantStore.getState().answering
+      ) {
+        stopAnswer();
+      }
+      handedOffRef.current = false;
+      setAsked(null);
+      setWaiting(false);
+      setAskSelected(false);
       setQuery("");
       setResults([]);
       setAnsweredQuery("");
@@ -158,6 +206,35 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
       setSelectedIndex(0);
     }
   }, [open]);
+
+  // Turned off: the answer stops (the assistant does that) and the group goes.
+  useEffect(() => {
+    if (!assistantOn) {
+      setAsked(null);
+      setWaiting(false);
+      setAskSelected(false);
+    }
+  }, [assistantOn]);
+
+  const ask = (text: string) => {
+    setAsked(text);
+    setAskSelected(false);
+    if (setupState(setup) === "ready") {
+      setWaiting(false);
+      void askFromSearch(text);
+    } else {
+      setWaiting(true);
+    }
+  };
+
+  // Asked while the setup was still being read, or before the vault was
+  // turned on: asks once it's ready.
+  useEffect(() => {
+    if (waiting && asked !== null && asked === query.trim() && setup_ === "ready") {
+      setWaiting(false);
+      void askFromSearch(asked);
+    }
+  }, [waiting, asked, query, setup_]);
 
   useEffect(() => {
     if (!isSearching) return;
@@ -210,6 +287,13 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   }, [query, performSearch]);
 
   const hasQuery = query.trim().length > 0;
+  /** The answer shows while it's coming, and after while the question's typed. */
+  const showAnswer =
+    assistantOn &&
+    asked !== null &&
+    (asked === query.trim() || (!waiting && answering !== null));
+  const showAssistant = assistantOn && (hasQuery || showAnswer);
+  const canAsk = showAssistant && !showAnswer && hasQuery;
   const historyRows: Row[] =
     hasQuery && openFilePath && asksForHistory(query)
       ? [
@@ -252,18 +336,65 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     }
   };
 
+  const openCited = (citation: Citation) => {
+    void openCitation(citation);
+    onOpenChange(false);
+  };
+
+  const continueInChat = () => {
+    handedOffRef.current = true;
+    openAssistant();
+    onOpenChange(false);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
+    if (e.key === "Tab" && !e.shiftKey && canAsk) {
       e.preventDefault();
-      setSelectedIndex((prev) => Math.min(prev + 1, rows.length - 1));
+      ask(query.trim());
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (askSelected) setAskSelected(false);
+      else setSelectedIndex((prev) => Math.min(prev + 1, rows.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSelectedIndex((prev) => Math.max(prev - 1, 0));
+      if (canAsk && (selectedIndex === 0 || rows.length === 0)) {
+        setAskSelected(true);
+      } else {
+        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+      }
+    } else if (e.key === "Enter" && askSelected && canAsk) {
+      e.preventDefault();
+      ask(query.trim());
     } else if (e.key === "Enter" && rows[selectedIndex]) {
       e.preventDefault();
       void handleSelect(rows[selectedIndex]);
     }
   };
+
+  const assistantGroup = showAssistant ? (
+    <div className="flex flex-col gap-0.5 px-1.5 pt-1.5">
+      <GroupLabel>Assistant</GroupLabel>
+      {canAsk ? (
+        <AskRow
+          selected={askSelected}
+          onAsk={() => ask(query.trim())}
+          onHover={() => setAskSelected(true)}
+        />
+      ) : waiting && setup_ !== "ready" ? (
+        <SearchSetupNeeded
+          state={setup_}
+          onSetUp={() => {
+            openSettings("ai-assistant");
+            onOpenChange(false);
+          }}
+          onPickModel={continueInChat}
+          onTurnedOn={() => void reload()}
+        />
+      ) : (
+        <SearchAnswer onOpenShard={openCited} onContinue={continueInChat} />
+      )}
+    </div>
+  ) : null;
 
   let body: React.ReactNode;
   if (searchError) {
@@ -295,14 +426,14 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     );
   } else if (rows.length > 0) {
     body = (
-      <div className="flex flex-col gap-0.5 p-1.5">
+      <div className={cn("flex flex-col gap-0.5 p-1.5", showAssistant && "pt-0")}>
         {!hasQuery ? (
-          <p className="px-2.5 pt-2 pb-1 font-medium text-muted-foreground text-ui-sm">
-            Recent
-          </p>
+          <GroupLabel>Recent</GroupLabel>
+        ) : showAssistant ? (
+          <GroupLabel>Shards</GroupLabel>
         ) : null}
         {rows.map((row, index) => {
-          const selected = index === selectedIndex;
+          const selected = !askSelected && index === selectedIndex;
           // For "Show history", the file it's for.
           const folder = row.isHistory
             ? getVaultFileDisplayName(fileName(row.path))
@@ -319,7 +450,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
               key={row.isHistory ? `history:${row.path}` : row.path}
               type="button"
               onClick={() => void handleSelect(row)}
-              onMouseEnter={() => setSelectedIndex(index)}
+              onMouseEnter={() => {
+                setSelectedIndex(index);
+                setAskSelected(false);
+              }}
               className={cn(
                 "flex w-full items-start gap-3 rounded-md px-2.5 py-2 text-left outline-none",
                 selected && "bg-accent",
@@ -368,6 +502,8 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     );
   }
 
+  const hasFooter = rows.length > 0 || showAssistant;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -404,21 +540,31 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         <div
           className={cn(
             "flex flex-col overflow-y-auto",
-            rows.length > 0 ? "h-100" : "h-109",
+            hasFooter ? "h-100" : "h-109",
           )}
         >
+          {assistantGroup}
           {body}
         </div>
 
-        {rows.length > 0 ? (
+        {hasFooter ? (
           <div className="flex h-9 items-center justify-between border-t px-3.5 text-muted-foreground text-xs">
             <div className="flex items-center gap-3.5">
-              <span className="flex items-center gap-1.5">
-                <Kbd>↑↓</Kbd>Move
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Kbd>↵</Kbd>Open
-              </span>
+              {rows.length > 0 ? (
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <Kbd>↑↓</Kbd>Move
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Kbd>↵</Kbd>Open
+                  </span>
+                </>
+              ) : null}
+              {showAssistant ? (
+                <span className="flex items-center gap-1.5">
+                  <Kbd>Tab</Kbd>Ask
+                </span>
+              ) : null}
             </div>
             {hasQuery ? (
               <span className="font-mono">

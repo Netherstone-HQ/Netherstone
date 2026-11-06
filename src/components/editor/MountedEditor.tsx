@@ -18,6 +18,7 @@ import {
 import {
   revealAttachment,
   revealChart,
+  revealHeading,
   revealLinkByText,
   revealTag,
 } from "./lib/link-reveal";
@@ -195,8 +196,8 @@ export const MountedEditor = memo(function MountedEditor({
   ]);
 
   // A link, missing file or chart asked for when this shard was opened (from
-  // the Overview page), or a tag (from Tags): scroll to it once the shard is
-  // on screen.
+  // the Overview page), a tag (from Tags) or a heading (from an assistant
+  // cite): scroll to it once the shard is on screen.
   useEffect(() => {
     if (!isShown) return;
 
@@ -219,6 +220,8 @@ export const MountedEditor = memo(function MountedEditor({
       revealTag(editor, pendingLinkReveal.tag);
     } else if ("chart" in pendingLinkReveal) {
       revealChart(editor, pendingLinkReveal.chart);
+    } else if ("heading" in pendingLinkReveal) {
+      revealHeading(editor, pendingLinkReveal.heading);
     } else {
       revealLinkByText(editor, pendingLinkReveal.text);
     }

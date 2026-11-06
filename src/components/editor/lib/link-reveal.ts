@@ -9,7 +9,11 @@ import {
 
 import { isChartComment } from "@/lib/chart";
 import { RAW_BLOCK_KEY } from "@/lib/markdown-raw-blocks";
-import { scrollPlateToNode } from "@/lib/plate-toc-headings";
+import {
+  getPlateHeadingList,
+  scrollPlateToHeading,
+  scrollPlateToNode,
+} from "@/lib/plate-toc-headings";
 
 function linkText(node: Record<string, unknown>): string | null {
   if (node.type === KEYS.mention) {
@@ -148,4 +152,18 @@ export function revealChart(editor: SlateEditor, index: number) {
   if (!path) return;
 
   scrollPlateToNode(editor, path, () => editor.api.start(path));
+}
+
+/** A heading's words, to match one named in a link: case and spacing aside. */
+function headingKey(title: string) {
+  return title.trim().toLowerCase().replace(/[\s-]+/g, " ");
+}
+
+/** Scrolls to the first heading named `title`. */
+export function revealHeading(editor: SlateEditor, title: string) {
+  const wanted = headingKey(title);
+  const heading = getPlateHeadingList(editor).find(
+    (h) => headingKey(h.title) === wanted,
+  );
+  if (heading) scrollPlateToHeading(editor, heading);
 }

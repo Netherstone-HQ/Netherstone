@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BrainIcon,
   CheckIcon,
@@ -45,25 +45,18 @@ import {
   undoMemory,
 } from "@/lib/assistant-memory";
 import {
-  type AssistantStatus,
   type ChatChange,
-  type ChatError,
   type ChatMemory,
   type ModelChoice,
-  type PickedModel,
   type ShownMessage,
-  getAssistantStatus,
-  getPickedModel,
-  listMcpVaults,
   setAssistantModel,
   setMcpVaultAllowed,
 } from "@/lib/commands";
 import { folderName } from "@/lib/open-vault";
-import { isSamePath } from "@/lib/drawing-files";
-import { openVaultFile } from "@/lib/open-vault-file";
+import { openCitation } from "@/lib/open-citation";
 import { openWebLink } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
-import { type Ending, useAssistantStore } from "@/store/assistant";
+import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
@@ -78,126 +71,22 @@ import {
 import { ChatsMenu } from "./ChatsMenu";
 import { Composer, shardName } from "./Composer";
 import { ModelList, isSetUp, useModelLists } from "./models";
-
-/** What the panel needs to know before a chat can start. */
-interface Setup {
-  status: AssistantStatus;
-  picked: PickedModel | null;
-  /** Whether the open vault is on for AI. */
-  vaultAllowed: boolean;
-}
-
-/** Read when the panel opens, and again on leaving Settings. */
-function useSetup() {
-  const vault = useVaultStore((s) => s.currentVaultPath);
-  const inSettings = useUIStore((s) => s.activeNavItem === "settings");
-  const [setup, setSetup] = useState<Setup | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const [status, picked, vaults] = await Promise.all([
-        getAssistantStatus(),
-        getPickedModel().catch(() => null),
-        listMcpVaults(),
-      ]);
-      const vaultAllowed =
-        vault !== null &&
-        vaults.some((v) => v.allowed && isSamePath(v.path, vault));
-      setSetup({ status, picked, vaultAllowed });
-    } catch (error) {
-      console.error("[Netherstone] Couldn't read the assistant's setup:", error);
-    }
-  }, [vault]);
-
-  useEffect(() => {
-    if (!inSettings) void load();
-  }, [load, inSettings]);
-
-  return { setup, reload: load };
-}
-
-function vaultPath(vault: string, path: string) {
-  const separator = vault.includes("\\") ? "\\" : "/";
-  return (
-    vault.replace(/[\\/]+$/, "") + separator + path.split("/").join(separator)
-  );
-}
+import {
+  type Setup,
+  endingText,
+  setupState,
+  useSetup,
+  waitingText,
+} from "./setup";
 
 function openShard(citation: Citation) {
-  const vault = useVaultStore.getState().currentVaultPath;
-  if (!vault) return;
-  void openVaultFile(vaultPath(vault, citation.path)).catch(() =>
-    toast.error(`Couldn't open ${shardName(citation.path)}`),
-  );
+  void openCitation(citation);
 }
 
 /** Opens web links only: an answer could hold any kind of link. */
 function openLink(href: string) {
   if (!/^(https?:|mailto:)/i.test(href)) return;
   void openWebLink(href).catch(() => toast.error("Couldn't open the link"));
-}
-
-const ERRORS: Record<ChatError["kind"], string> = {
-  keyRefused: "The provider turned down the key",
-  unreachable: "Couldn't reach the provider",
-  rateLimited: "The provider is getting too many requests, try again soon",
-  busy: "The provider is busy, try again soon",
-  timedOut: "The provider stopped answering",
-  tooLong: "This chat is longer than the model can read, start a new one",
-  failed: "The provider couldn't answer",
-  stopped: "Stopped",
-  noModel: "No model picked",
-  turnedOff: "The assistant is off",
-  vaultClosed: "This vault is off for AI",
-  answering: "This chat is still answering",
-  noChat: "This chat was deleted",
-  storage: "Couldn't save the chat",
-};
-
-function endingText(ending: Ending) {
-  switch (ending.kind) {
-    case "error":
-      return ERRORS[ending.error];
-    case "stop":
-      return ending.stop === "length"
-        ? "The answer reached the model's length limit"
-        : "The provider held the answer back";
-    case "stepLimit":
-      return "Stopped after too many steps";
-    case "stopped":
-      return "Stopped";
-  }
-}
-
-/** What a tool the model runs is doing, as the panel says it. */
-function activity(tool: { name: string; paths: string[] }) {
-  const name = tool.paths[0] ? shardName(tool.paths[0]) : null;
-  switch (tool.name) {
-    case "search":
-      return "Searching the vault";
-    case "read":
-      return name ? `Reading ${name}` : "Reading";
-    case "read_drawing":
-      return name ? `Looking at ${name}` : "Looking at a drawing";
-    case "list_folder":
-      return name ? `Looking in ${name}` : "Looking through folders";
-    case "links":
-      return "Following links";
-    case "list_tags":
-      return "Looking at tags";
-    case "vault_overview":
-      return "Looking over the vault";
-    case "edit_shard":
-      return name ? `Changing ${name}` : "Changing a shard";
-    case "create_shard":
-      return "Making a shard";
-    case "move":
-      return name ? `Moving ${name}` : "Moving";
-    case "edit_drawing":
-      return name ? `Drawing in ${name}` : "Drawing";
-    default:
-      return "Working";
-  }
 }
 
 function Center({
@@ -539,11 +428,7 @@ function Streaming() {
       {answering.tool || !answering.text ? (
         <p className="flex items-center gap-2 text-muted-foreground text-ui-sm">
           <LoaderCircleIcon className="size-3.5 animate-spin" />
-          {answering.tool
-            ? activity(answering.tool)
-            : answering.reasoning
-              ? "Thinking"
-              : "Waiting for the answer"}
+          {waitingText(answering)}
         </p>
       ) : null}
     </div>
@@ -761,16 +646,7 @@ export function AssistantPanel() {
     ...added.filter((path) => path !== openShard),
   ];
 
-  const hasProvider = setup?.status.providers.some(isSetUp) ?? false;
-  const state = !setup
-    ? "loading"
-    : !hasProvider
-      ? "noProvider"
-      : !setup.vaultAllowed
-        ? "vaultOff"
-        : !setup.picked
-          ? "noModel"
-          : "ready";
+  const state = setupState(setup);
   const ready = state === "ready";
 
   const send = (text: string, with_: string[]) => {

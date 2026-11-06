@@ -49,8 +49,8 @@ export function closeAssistant() {
   store.getState().setOpen(false);
 }
 
-/** Starts a new chat. An answer still coming is saved to its own chat. */
-export function newChat() {
+/** Shows no chat. An answer still coming is saved to its own chat. */
+function clearChat() {
   followed += 1;
   stopAsked = false;
   store.setState({
@@ -60,9 +60,13 @@ export function newChat() {
     memories: [],
     answering: null,
     ending: null,
-    added: [],
-    openShardRemoved: false,
   });
+}
+
+/** Starts a new chat. An answer still coming is saved to its own chat. */
+export function newChat() {
+  clearChat();
+  store.setState({ added: [], openShardRemoved: false });
 }
 
 /** Shows a saved chat. */
@@ -123,8 +127,15 @@ function onEvent(event: ChatEvent, text: string): Ending | null {
   }
 }
 
-/** Sends `text` with `shards` (vault-relative) in the chat shown. */
-export async function sendMessage(text: string, shards: string[]) {
+/**
+ * Sends `text` with `shards` (vault-relative) in the chat shown. From
+ * search, what's typed in the panel stays as it is.
+ */
+export async function sendMessage(
+  text: string,
+  shards: string[],
+  { fromSearch = false } = {},
+) {
   const vault = useVaultStore.getState().currentVaultPath;
   const state = store.getState();
   if (!vault || state.answering || !text.trim()) return;
@@ -135,9 +146,7 @@ export async function sendMessage(text: string, shards: string[]) {
     messages: [...before, { seq: -1, role: "user", text, shards }],
     answering: { chat: state.chat?.id ?? null, text: "", reasoning: "", tool: null },
     ending: null,
-    draft: "",
-    added: [],
-    openShardRemoved: false,
+    ...(fromSearch ? {} : { draft: "", added: [], openShardRemoved: false }),
   });
 
   let ending: Ending | null = null;
@@ -163,14 +172,21 @@ export async function sendMessage(text: string, shards: string[]) {
     if (run !== followed) return;
     // Nothing was saved: the message goes back to the box.
     const sent = store.getState().answering?.chat != null;
+    const restore = !sent && !fromSearch;
     store.setState({
       messages: sent ? store.getState().messages : before,
-      draft: sent ? store.getState().draft : text,
-      added: sent ? store.getState().added : shards,
+      draft: restore ? text : store.getState().draft,
+      added: restore ? shards : store.getState().added,
       answering: null,
       ending: { kind: "error", error: chatErrorKind(error) },
     });
   }
+}
+
+/** Asks `text` from search, in a new chat the panel can carry on. */
+export async function askFromSearch(text: string) {
+  clearChat();
+  await sendMessage(text, [], { fromSearch: true });
 }
 
 async function retitle(id: string) {

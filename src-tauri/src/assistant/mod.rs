@@ -6,6 +6,7 @@ mod catalog;
 mod chat;
 mod engine;
 mod files;
+mod inline;
 mod local;
 mod memory;
 mod models;
@@ -614,12 +615,7 @@ pub async fn send(
     if let Ok(mut running) = running().lock() {
         running.remove(&chat);
     }
-    let event = match result {
-        Ok((stop, usage)) => Event::Done { stop, usage },
-        Err(ChatError::Stopped) => Event::Stopped,
-        Err(error) => Event::Failed { error },
-    };
-    sink.send(event);
+    sink.send(Event::ending(result));
     Ok(chat)
 }
 
@@ -646,6 +642,85 @@ async fn run(
     .await?;
     turn.asked.store(asked, std::sync::atomic::Ordering::SeqCst);
     engine::answer(turn, sink).await
+}
+
+/// Asks for a change to `selection` (Markdown) in `shard`, and streams the
+/// Markdown that replaces it to `sink`. `id` names the request, so it can
+/// be stopped like a chat. Nothing is saved.
+#[allow(clippy::too_many_arguments)]
+pub async fn ask_inline(
+    id: String,
+    vault: String,
+    shard: String,
+    selection: String,
+    whole: bool,
+    prompt: String,
+    window: String,
+    sink: impl Sink + 'static,
+) -> Result<(), ChatError> {
+    if prompt.trim().is_empty() || selection.trim().is_empty() {
+        return Err(ChatError::Failed);
+    }
+    // Registered first, so a stop that comes while it's setting up counts.
+    let stop = StopToken::default();
+    {
+        let mut running = running().lock().map_err(|_| ChatError::Failed)?;
+        if running.contains_key(&id) {
+            return Err(ChatError::Answering);
+        }
+        running.insert(id.clone(), (window, stop.clone()));
+    }
+    let result = ask_inline_run(vault, shard, selection, whole, prompt, stop, &sink).await;
+    if let Ok(mut running) = running().lock() {
+        running.remove(&id);
+    }
+    match result {
+        // Set up, then answered or not: the stream says how it went.
+        Ok(answered) => {
+            sink.send(Event::ending(answered));
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Sets up an inline Ask and runs it, unless it's stopped first.
+async fn ask_inline_run(
+    vault: String,
+    shard: String,
+    selection: String,
+    whole: bool,
+    prompt: String,
+    stop: StopToken,
+    sink: &dyn Sink,
+) -> Result<Result<(chat::Stop, chat::Usage), ChatError>, ChatError> {
+    let (vault, mut model, send_files) = tauri::async_runtime::spawn_blocking(move || {
+        let model = picked_model()?;
+        let send_files = db::open_connection()
+            .and_then(|conn| db::settings::assistant_send_files(&conn).map_err(|e| e.to_string()))
+            .map_err(|_| ChatError::Storage)?;
+        let vault = open_vault(&PathBuf::from(vault))?;
+        Ok::<_, ChatError>((vault, model, send_files))
+    })
+    .await
+    .map_err(|_| ChatError::Failed)??;
+    if send_files && model.target.api == Api::Ollama {
+        model.facts.images = local::sees_images(&model.target, &model.id).await;
+    }
+    if stop.is_stopped() {
+        return Ok(Err(ChatError::Stopped));
+    }
+    let ask = inline::Ask {
+        vault: Arc::new(vault),
+        model,
+        stop,
+        send_files,
+        shard,
+        selection,
+        whole,
+        prompt,
+    };
+    Ok(inline::rewrite(&ask, sink).await)
 }
 
 /// Stops `chat` if it's answering.

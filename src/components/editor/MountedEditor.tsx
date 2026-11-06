@@ -8,6 +8,7 @@ import { isSamePath } from "@/lib/drawing-files";
 import { rememberSavedValue, takeOutsideChange } from "@/lib/outside-changes";
 import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
+import { InlineAskKit } from "./kits/inline-ask-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
 import {
   ChunkDrawer,
@@ -54,7 +55,8 @@ export const MountedEditor = memo(function MountedEditor({
   const suppressInitialChangeRef = useRef(true);
 
   const editor = usePlateEditor({
-    plugins: EditorKit,
+    // Inline Ask previews with the history kit, which is built on EditorKit.
+    plugins: [...EditorKit, ...InlineAskKit],
     value: initialValue,
     chunking: { chunkSize: EDITOR_CHUNK_SIZE },
     // Plate's navigation feedback (the flash on a block a table of contents

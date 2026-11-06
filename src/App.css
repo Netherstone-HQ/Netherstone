@@ -542,6 +542,36 @@
     text-decoration: inherit;
 }
 
+/* Inline Ask: the prompt drops in under the selection, and the answer's
+   preview fades in where it goes. */
+.ask-in {
+    animation: ask-in 140ms ease-out;
+}
+
+@keyframes ask-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+.preview-in {
+    animation: preview-in 220ms ease-out;
+}
+
+@keyframes preview-in {
+    from {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ask-in,
+    .preview-in {
+        animation: none;
+    }
+}
+
 /* Two versions side by side (VersionPair): what only this one has is
    highlighted, and a mark shows where the other one has something it doesn't. */
 .version-pair .history-added {

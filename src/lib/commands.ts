@@ -1080,6 +1080,33 @@ export async function sendChat(
   return invoke("assistant_send", { chat, vault, text, shards, events });
 }
 
+/**
+ * Asks for a change to `selection` (Markdown) in `shard` (vault-relative),
+ * streaming the Markdown that replaces it. `id` names the request, so
+ * `stopChat(id)` stops it. Nothing is saved.
+ */
+export async function askInline(
+  id: string,
+  vault: string,
+  shard: string,
+  selection: string,
+  whole: boolean,
+  prompt: string,
+  onEvent: (event: ChatEvent) => void,
+): Promise<void> {
+  const events = new Channel<ChatEvent>();
+  events.onmessage = onEvent;
+  await invoke("assistant_ask_inline", {
+    id,
+    vault,
+    shard,
+    selection,
+    whole,
+    prompt,
+    events,
+  });
+}
+
 export async function stopChat(chat: string): Promise<void> {
   await invoke("assistant_stop", { chat });
 }

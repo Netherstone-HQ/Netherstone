@@ -75,6 +75,16 @@ CREATE TABLE IF NOT EXISTS changes (
     created INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (chat, created);
+CREATE TABLE IF NOT EXISTS memory_offers (
+    id TEXT PRIMARY KEY,
+    chat TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    turn INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    state TEXT NOT NULL,
+    added INTEGER NOT NULL DEFAULT 0,
+    created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memory_offers_by_chat ON memory_offers (chat, created);
 ";
 
 /// Where a proposed change stands.
@@ -111,6 +121,39 @@ pub struct Change {
     /// The name of the model that proposed it.
     #[serde(skip)]
     pub model: Option<String>,
+}
+
+/// An item the assistant offered to add to memory.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Offer {
+    pub id: String,
+    #[serde(skip)]
+    pub chat: String,
+    /// The user message it answers.
+    pub turn: i64,
+    pub text: String,
+    pub state: ChangeState,
+    /// Whether applying it added it: it may have been in memory already.
+    #[serde(skip)]
+    pub added: bool,
+}
+
+const OFFER_COLUMNS: &str = "id, chat, turn, text, state, added";
+
+fn offer_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<Offer>> {
+    let state: String = row.get(4)?;
+    let Ok(state) = serde_json::from_str(&state) else {
+        return Ok(None);
+    };
+    Ok(Some(Offer {
+        id: row.get(0)?,
+        chat: row.get(1)?,
+        turn: row.get(2)?,
+        text: row.get(3)?,
+        state,
+        added: row.get(5)?,
+    }))
 }
 
 fn json_text<T: Serialize>(value: &T) -> Result<String, String> {
@@ -380,7 +423,7 @@ impl Store {
 
     pub fn delete_all(&self) -> Result<(), String> {
         self.conn
-            .execute_batch("DELETE FROM changes; DELETE FROM messages; DELETE FROM chats; VACUUM;")
+            .execute_batch("DELETE FROM changes; DELETE FROM memory_offers; DELETE FROM messages; DELETE FROM chats; VACUUM;")
             .map_err(sql)
     }
 
@@ -475,15 +518,91 @@ impl Store {
             .map_err(sql)
     }
 
-    /// Drops every change not made yet.
+    /// Drops every change and memory item not made or added yet.
     pub fn discard_pending(&self) -> Result<(), String> {
+        for table in ["changes", "memory_offers"] {
+            self.conn
+                .execute(
+                    &format!("UPDATE {table} SET state = ?1 WHERE state = ?2"),
+                    params![
+                        json_text(&ChangeState::Discarded)?,
+                        json_text(&ChangeState::Pending)?
+                    ],
+                )
+                .map_err(sql)?;
+        }
+        Ok(())
+    }
+
+    // ── Memory offers ────────────────────────────────────────────────────────
+
+    /// Keeps a new memory item offered, pending.
+    pub fn add_offer(&self, chat: &str, turn: i64, text: &str) -> Result<String, String> {
+        let id = new_id();
         self.conn
             .execute(
-                "UPDATE changes SET state = ?1 WHERE state = ?2",
+                "INSERT INTO memory_offers (id, chat, turn, text, state, created) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
-                    json_text(&ChangeState::Discarded)?,
-                    json_text(&ChangeState::Pending)?
+                    id,
+                    chat,
+                    turn,
+                    text,
+                    json_text(&ChangeState::Pending)?,
+                    now()
                 ],
+            )
+            .map_err(sql)?;
+        Ok(id)
+    }
+
+    /// A chat's memory offers, in the order they were made.
+    pub fn offers(&self, chat: &str) -> Result<Vec<Offer>, String> {
+        let mut statement = self
+            .conn
+            .prepare(&format!(
+                "SELECT {OFFER_COLUMNS} FROM memory_offers WHERE chat = ?1 ORDER BY created, rowid"
+            ))
+            .map_err(sql)?;
+        let rows = statement
+            .query_map(params![chat], offer_from_row)
+            .map_err(sql)?;
+        let mut found = Vec::new();
+        for row in rows {
+            found.extend(row.map_err(sql)?);
+        }
+        Ok(found)
+    }
+
+    pub fn offer(&self, id: &str) -> Result<Option<Offer>, String> {
+        self.conn
+            .query_row(
+                &format!("SELECT {OFFER_COLUMNS} FROM memory_offers WHERE id = ?1"),
+                params![id],
+                offer_from_row,
+            )
+            .optional()
+            .map(Option::flatten)
+            .map_err(sql)
+    }
+
+    /// Whether another offer added the same item and still shows it added.
+    pub fn added_elsewhere(&self, offer: &Offer) -> Result<bool, String> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM memory_offers WHERE id != ?1 AND state = ?2 \
+                 AND added = 1 AND text = ?3)",
+                params![offer.id, json_text(&ChangeState::Applied)?, offer.text],
+                |row| row.get(0),
+            )
+            .map_err(sql)
+    }
+
+    pub fn set_offer_state(&self, id: &str, state: ChangeState, added: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE memory_offers SET state = ?2, added = ?3 WHERE id = ?1",
+                params![id, json_text(&state)?, added],
             )
             .map(|_| ())
             .map_err(sql)
@@ -615,6 +734,41 @@ mod tests {
         assert_eq!(store.list().unwrap().len(), 1);
         store.delete_all().unwrap();
         assert!(store.list().unwrap().is_empty() && store.info(&b).unwrap().is_none());
+    }
+
+    #[test]
+    fn memory_offers_are_kept_with_their_chat_and_dropped_when_off() {
+        let store = store("sessions-offers");
+        let chat = store.create(Path::new("/v"), "a").unwrap();
+        let kept = store.add_offer(&chat, 1, "Keep answers short").unwrap();
+        let dropped = store
+            .add_offer(&chat, 1, "I write in British English")
+            .unwrap();
+        store
+            .set_offer_state(&kept, ChangeState::Applied, true)
+            .unwrap();
+        store.discard_pending().unwrap();
+        let offers = store.offers(&chat).unwrap();
+        assert_eq!(
+            offers
+                .iter()
+                .map(|o| (o.id.as_str(), o.state, o.added))
+                .collect::<Vec<_>>(),
+            vec![
+                (kept.as_str(), ChangeState::Applied, true),
+                (dropped.as_str(), ChangeState::Discarded, false)
+            ]
+        );
+        // Another offer that added the same item keeps it in memory.
+        let again = store.add_offer(&chat, 2, "Keep answers short").unwrap();
+        let kept_offer = store.offer(&kept).unwrap().unwrap();
+        assert!(!store.added_elsewhere(&kept_offer).unwrap());
+        store
+            .set_offer_state(&again, ChangeState::Applied, true)
+            .unwrap();
+        assert!(store.added_elsewhere(&kept_offer).unwrap());
+        store.delete(&chat).unwrap();
+        assert!(store.offer(&kept).unwrap().is_none());
     }
 
     #[test]

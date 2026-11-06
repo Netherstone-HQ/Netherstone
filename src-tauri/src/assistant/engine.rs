@@ -12,6 +12,7 @@ use super::chat::{
     ToolSpec, Usage,
 };
 use super::files;
+use super::memory::{self, List};
 use super::models::Target;
 use super::providers::{Api, Limits};
 use super::sessions::ChangeState;
@@ -133,6 +134,34 @@ pub fn tools() -> Vec<Tool> {
         .collect()
 }
 
+/// The tool the assistant offers a memory item with. It's the app's own,
+/// not one of the vault tools AI apps share.
+const REMEMBER: &str = "remember";
+
+fn remember_spec() -> ToolSpec {
+    ToolSpec {
+        name: REMEMBER.to_string(),
+        description: format!(
+            "Offers to add one item to the user's memory: a short list of things about \
+the user and how they want answers, sent with every chat. Nothing is added until the \
+user applies it. Offer only something lasting the user said about themselves or asked \
+for, never facts from their shards and never what's in memory already. One item a \
+call, at most {} characters.",
+            memory::MAX_LENGTH
+        ),
+        schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The item, one short line about the user, like \"I write in British English\""
+                }
+            },
+            "required": ["text"]
+        }),
+    }
+}
+
 fn specs(tools: &[Tool]) -> Vec<ToolSpec> {
     tools
         .iter()
@@ -141,11 +170,12 @@ fn specs(tools: &[Tool]) -> Vec<ToolSpec> {
             description: tool.description.clone(),
             schema: Value::Object(tool.input_schema.clone()),
         })
+        .chain([remember_spec()])
         .collect()
 }
 
-fn system_prompt(vault: &str) -> String {
-    format!(
+fn system_prompt(vault: &str, remembered: &[String]) -> String {
+    let mut prompt = format!(
         "You are the assistant in Netherstone, an app where the user keeps shards \
 (Markdown notes) in a vault, a folder on their computer. This chat is about the vault \
 \"{vault}\". Answer from the vault: search and read shards with the tools before \
@@ -157,9 +187,18 @@ message come with it inside <shard> tags. Changes you make with the write tools 
 sees each one in the app and applies or discards it, so say in your answer what you changed, and give each \
 change a summary. Reading a shard shows it as it is, without changes not applied yet. Reply in \
 the language the user writes in, and keep answers short unless asked for more. Today \
-is {}.",
+is {}. To remember something about the user for later chats, offer it with the remember \
+tool: the user adds it to memory or not.",
         chrono::Local::now().format("%Y-%m-%d")
-    )
+    );
+    if !remembered.is_empty() {
+        prompt.push_str("\n\nWhat the user asked you to remember about them:");
+        for item in remembered {
+            prompt.push_str("\n- ");
+            prompt.push_str(item);
+        }
+    }
+    prompt
 }
 
 /// One answer in a chat whose user message is already saved.
@@ -178,6 +217,8 @@ pub struct Turn {
     /// The user message being answered, once it's saved: the changes
     /// proposed in this answer belong to it.
     pub asked: AtomicI64,
+    /// What the user asked the assistant to remember.
+    pub memory: Arc<List>,
 }
 
 /// Batches streamed text into events, and stops the chat when nobody's
@@ -255,7 +296,17 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let system = system_prompt(&vault_name);
+    // Read for each message, so an edit in Settings counts from the next.
+    let list = turn.memory.clone();
+    // A list that can't be read leaves memory out rather than the answer.
+    let remembered = tauri::async_runtime::spawn_blocking(move || list.for_chat())
+        .await
+        .map_err(|_| ChatError::Storage)?
+        .unwrap_or_else(|error| {
+            eprintln!("[Netherstone] {error}");
+            Vec::new()
+        });
+    let system = system_prompt(&vault_name, &remembered);
     let mut out = Out::new(sink, &turn.stop);
     let mut sources: Vec<String> = turn.added.clone();
     if !sources.is_empty() {
@@ -569,6 +620,9 @@ fn paths_in(arguments: &Value) -> Vec<String> {
 }
 
 async fn run_tool(turn: &Turn, tools: &Arc<Vec<Tool>>, call: &Call) -> Result<String, String> {
+    if call.name == REMEMBER {
+        return offer(turn, call).await;
+    }
     // The model only gets these tools, but it may name any.
     if !tools.iter().any(|t| t.name == call.name) {
         return Err(format!("There's no tool called {}", call.name));
@@ -673,6 +727,54 @@ async fn propose(turn: &Turn, call: &Call) -> Result<String, String> {
             "Proposed, not made yet: the user sees this change to {} and applies or discards it.",
             target.path
         ))
+    })
+    .await
+    .map_err(|_| "The tool stopped".to_string())?
+}
+
+/// Keeps a memory item the model offers, for the user to add or not, once
+/// it fits the list. Nothing is added.
+async fn offer(turn: &Turn, call: &Call) -> Result<String, String> {
+    let text = call
+        .arguments
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let list = turn.memory.clone();
+    let store = turn.store.clone();
+    let chat = turn.chat.clone();
+    let stop = turn.stop.clone();
+    let asked = turn.asked.load(Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || {
+        let item = memory::clean(&text)?;
+        let items = list.items()?;
+        if memory::holds(&items, &item) {
+            return Ok("That's in memory already, so nothing was offered.".to_string());
+        }
+        let store = store
+            .lock()
+            .map_err(|_| "Saved chats are locked".to_string())?;
+        // As for changes: a stopped answer offers nothing after it.
+        if stop.is_stopped() {
+            return Err("The answer was stopped".to_string());
+        }
+        let pending: Vec<_> = store
+            .offers(&chat)?
+            .into_iter()
+            .filter(|offer| offer.turn == asked && offer.state == ChangeState::Pending)
+            .collect();
+        if pending.iter().any(|offer| memory::same(&offer.text, &item)) {
+            return Ok("Offered already.".to_string());
+        }
+        if items.len() + pending.len() >= memory::MAX_ITEMS {
+            return Err(format!(
+                "Memory is full, it holds {} items. Nothing was offered. The user can delete items in Settings.",
+                memory::MAX_ITEMS
+            ));
+        }
+        store.add_offer(&chat, asked, &item)?;
+        Ok("Offered, not added yet: the user sees it and adds it to memory or discards it.".to_string())
     })
     .await
     .map_err(|_| "The tool stopped".to_string())?

@@ -147,12 +147,17 @@ type MockAssistant = {
   title?: string;
   /** A change every answer proposes to a shard, by its vault-relative path. */
   change?: { path: string; after: string };
+  /** An item every answer offers to add to memory. */
+  remember?: string;
+  /** What's in memory to start with. */
+  memory?: string[];
 };
 
 declare global {
   interface Window {
     /** Every message sent to the assistant. */
     __sent: { chat: string | null; text: string; shards: string[] }[];
+    __memory: string[];
   }
 }
 
@@ -450,7 +455,18 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         };
         type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
         type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string };
-        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[] }[] = [];
+        type Offer = { id: string; turn: number; text: string; state: string };
+        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[] }[] = [];
+        const memory = [...(setup.memory ?? [])];
+        window.__memory = memory;
+        const findOffer = (id: string) => {
+          for (const chat of chats) {
+            const found = chat.memories.find((offer) => offer.id === id);
+            if (found) return { chat, offer: found };
+          }
+          throw "That memory item isn't there anymore";
+        };
+        const shownMemory = () => ({ items: [...memory], maxItems: 30, maxLength: 200 });
         const findChange = (id: string) => {
           for (const chat of chats) {
             const found = chat.changes.find((change) => change.id === id);
@@ -507,7 +523,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             const now = Date.now();
             let found = chats.find((c) => c.id === chat);
             if (!found) {
-              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [] };
+              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [], memories: [] };
               chats.unshift(found);
             }
             const answer = setup.answer ?? ["Done."];
@@ -519,6 +535,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             if (setup.change) {
               send({ type: "tool", name: "edit_shard", paths: [setup.change.path] });
               found.changes.push({ id: `change-${++changes}`, turn, kind: "shard", path: setup.change.path, count: 1, state: "pending" });
+            }
+            if (setup.remember) {
+              send({ type: "tool", name: "remember", paths: [] });
+              found.memories.push({ id: `offer-${++changes}`, turn, text: setup.remember, state: "pending" });
             }
             if (reads.length) send({ type: "sources", shards: reads });
             for (const piece of answer) send({ type: "text", text: piece });
@@ -575,11 +595,46 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             chat.changes = chat.changes.filter((c) => c !== change);
             return null;
           },
-          // Off drops every change not applied yet, as the app does.
+          // Off drops every change and memory item not applied yet, as the app does.
           assistant_set_enabled: (args) => {
             if (!(args as unknown as { enabled: boolean }).enabled) {
-              for (const chat of chats) chat.changes = chat.changes.filter((c) => c.state !== "pending");
+              for (const chat of chats) {
+                chat.changes = chat.changes.filter((c) => c.state !== "pending");
+                chat.memories = chat.memories.filter((m) => m.state !== "pending");
+              }
             }
+            return null;
+          },
+          assistant_memory: () => shownMemory(),
+          assistant_memory_edit: (args) => {
+            const { item, text } = args as unknown as { item: string; text: string };
+            memory[memory.indexOf(item)] = text.trim();
+            return shownMemory();
+          },
+          assistant_memory_delete: (args) => {
+            const at = memory.indexOf((args as unknown as { item: string }).item);
+            if (at !== -1) memory.splice(at, 1);
+            return shownMemory();
+          },
+          assistant_memory_delete_all: () => {
+            memory.length = 0;
+            return null;
+          },
+          assistant_remember: (args) => {
+            const { offer } = findOffer((args as unknown as { offer: string }).offer);
+            memory.push(offer.text);
+            offer.state = "applied";
+            return null;
+          },
+          assistant_forget: (args) => {
+            const { offer } = findOffer((args as unknown as { offer: string }).offer);
+            memory.splice(memory.indexOf(offer.text), 1);
+            offer.state = "pending";
+            return null;
+          },
+          assistant_discard_offer: (args) => {
+            const { chat, offer } = findOffer((args as unknown as { offer: string }).offer);
+            chat.memories = chat.memories.filter((m) => m !== offer);
             return null;
           },
         };

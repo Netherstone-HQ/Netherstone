@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   ChatChange,
+  ChatMemory,
   ChatError,
   ChatStop,
   ShownMessage,
@@ -35,6 +36,8 @@ interface AssistantState {
   changes: ChatChange[];
   /** Changes being applied, undone or discarded now. */
   busyChanges: string[];
+  /** The memory items the chat's answers offered, pending or added. */
+  memories: ChatMemory[];
   answering: Answering | null;
   ending: Ending | null;
   /** What's typed but not sent. */
@@ -58,6 +61,7 @@ export const useAssistantStore = create<AssistantState>((set) => ({
   messages: [],
   changes: [],
   busyChanges: [],
+  memories: [],
   answering: null,
   ending: null,
   draft: "",

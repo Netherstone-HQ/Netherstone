@@ -316,6 +316,32 @@ async fn assistant_delete_chats() -> Result<(), assistant::ChatError> {
     assistant::delete_chats().await
 }
 
+/// The text a change the assistant proposed would leave its shard with.
+#[tauri::command]
+async fn assistant_change_preview(change: String) -> Result<assistant::Preview, String> {
+    assistant::preview(change).await
+}
+
+/// Makes a change the assistant proposed. `expected` is the shard's text as
+/// the editor shows it, when it's open there.
+#[tauri::command]
+async fn assistant_apply(
+    change: String,
+    expected: Option<String>,
+) -> Result<assistant::Made, String> {
+    assistant::apply(change, expected).await
+}
+
+#[tauri::command]
+async fn assistant_undo(change: String) -> Result<assistant::Made, String> {
+    assistant::undo(change).await
+}
+
+#[tauri::command]
+async fn assistant_discard(change: String) -> Result<(), String> {
+    assistant::discard(change).await
+}
+
 /// The AI apps Settings can connect, and which are installed and connected.
 #[tauri::command(async)]
 fn ai_apps() -> Result<Vec<ai_apps::AppStatus>, String> {
@@ -2126,6 +2152,10 @@ pub fn run() {
             assistant_retitle,
             assistant_delete_chat,
             assistant_delete_chats,
+            assistant_change_preview,
+            assistant_apply,
+            assistant_undo,
+            assistant_discard,
             #[cfg(feature = "updater")]
             updater::updater_check,
             #[cfg(feature = "updater")]

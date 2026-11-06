@@ -25,6 +25,7 @@ pub use providers::Api;
 use providers::{Limits, Provider, Setup};
 use serde::{Deserialize, Serialize};
 pub use sessions::ChatInfo;
+use sessions::{Change, ChangeState};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -163,8 +164,22 @@ pub fn status() -> Result<Status, String> {
     })
 }
 
+/// Turns the assistant on or off. Off stops every answer and drops every
+/// change not applied yet, writing nothing.
 pub fn set_enabled(enabled: bool) -> Result<(), String> {
-    db::settings::set_assistant_enabled(&db::open_connection()?, enabled).map_err(|e| e.to_string())
+    db::settings::set_assistant_enabled(&db::open_connection()?, enabled)
+        .map_err(|e| e.to_string())?;
+    if !enabled {
+        stop_all();
+        if sessions::path().is_ok_and(|path| path.exists()) {
+            let store = store().map_err(|_| "Couldn't open the saved chats".to_string())?;
+            let store = store
+                .lock()
+                .map_err(|_| "Saved chats are locked".to_string())?;
+            store.discard_pending()?;
+        }
+    }
+    Ok(())
 }
 
 pub fn set_send_files(on: bool) -> Result<(), String> {
@@ -407,6 +422,9 @@ pub struct ChatView {
     #[serde(flatten)]
     info: ChatInfo,
     messages: Vec<Shown>,
+    /// The changes its answers proposed, applied or not; discarded ones
+    /// are left out.
+    changes: Vec<Change>,
 }
 
 /// The chats answering now: their window, and how to stop them.
@@ -581,6 +599,7 @@ pub async fn send(
         allowed: Arc::new(move || open_vault(&vault_path).is_ok()),
         send_files,
         added: shards,
+        asked: Default::default(),
     };
     let result = run(&turn, &text, &sink).await;
     if let Ok(mut running) = running().lock() {
@@ -612,10 +631,11 @@ async fn run(
         shards,
         files,
     };
-    engine::saved(&turn.store, move |store| {
-        store.add(&chat, &message, &[], None).map(|_| ())
+    let asked = engine::saved(&turn.store, move |store| {
+        store.add(&chat, &message, &[], None)
     })
     .await?;
+    turn.asked.store(asked, std::sync::atomic::Ordering::SeqCst);
     engine::answer(turn, sink).await
 }
 
@@ -623,6 +643,14 @@ async fn run(
 pub fn stop(chat: &str) {
     if let Some((_, stop)) = running().lock().ok().and_then(|r| r.get(chat).cloned()) {
         stop.stop();
+    }
+}
+
+fn stop_all() {
+    if let Ok(running) = running().lock() {
+        for (_, stop) in running.values() {
+            stop.stop();
+        }
     }
 }
 
@@ -669,14 +697,21 @@ pub async fn retitle(chat: String) -> Result<String, ChatError> {
 
 pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
     let found = engine::saved(&store()?, move |store| {
-        Ok(store.info(&chat)?.map(|info| (info, store.messages(&chat))))
+        Ok(store
+            .info(&chat)?
+            .map(|info| (info, store.messages(&chat), store.changes(&chat))))
     })
     .await?;
-    let (info, messages) = found.ok_or(ChatError::NoChat)?;
+    let (info, messages, changes) = found.ok_or(ChatError::NoChat)?;
     let messages = messages.map_err(|_| ChatError::Storage)?;
+    let changes = changes.map_err(|_| ChatError::Storage)?;
     Ok(ChatView {
         info,
         messages: messages.into_iter().filter_map(shown).collect(),
+        changes: changes
+            .into_iter()
+            .filter(|change| change.state != ChangeState::Discarded)
+            .collect(),
     })
 }
 
@@ -731,10 +766,209 @@ pub async fn delete_chat(chat: String) -> Result<(), ChatError> {
 }
 
 pub async fn delete_chats() -> Result<(), ChatError> {
-    if let Ok(running) = running().lock() {
-        for (_, stop) in running.values() {
-            stop.stop();
-        }
-    }
+    stop_all();
     engine::saved(&store()?, |store| store.delete_all()).await
+}
+
+// ── Proposed changes ─────────────────────────────────────────────────────────
+
+/// A proposed change to a shard, as the editor previews it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preview {
+    /// Vault-relative.
+    path: String,
+    /// The shard as it is now.
+    before: String,
+    /// The shard as applying would leave it.
+    after: String,
+}
+
+/// What applying or undoing left a shard with, for the editor to show.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Made {
+    /// Vault-relative.
+    path: String,
+    /// Its text now, or None when it's gone.
+    content: Option<String>,
+}
+
+fn store_error(error: String) -> String {
+    eprintln!("[Netherstone] {error}");
+    "Couldn't read the saved chats".to_string()
+}
+
+fn error_text(error: ChatError) -> String {
+    match error {
+        ChatError::TurnedOff => "The assistant is off".to_string(),
+        ChatError::VaultClosed => "This vault is off for AI".to_string(),
+        _ => "Couldn't read the saved chats".to_string(),
+    }
+}
+
+/// The change `id` in a pending or applied state as `wanted`, with the vault
+/// of its chat, while the assistant is on and may use it.
+fn change_and_vault(
+    store: &sessions::Store,
+    id: &str,
+    wanted: ChangeState,
+) -> Result<(Change, crate::tools::Vault), String> {
+    let change = store
+        .change(id)
+        .map_err(store_error)?
+        .filter(|change| change.state == wanted)
+        .ok_or_else(|| "That change isn't there anymore".to_string())?;
+    let info = store
+        .info(&change.chat)
+        .map_err(store_error)?
+        .ok_or_else(|| "That chat was deleted".to_string())?;
+    let vault = open_vault(std::path::Path::new(&info.vault)).map_err(error_text)?;
+    Ok((change, vault))
+}
+
+/// Runs `work` on the saved chats, off the async threads.
+async fn with_store<T: Send + 'static>(
+    work: impl FnOnce(&sessions::Store) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let store = store().map_err(error_text)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = store
+            .lock()
+            .map_err(|_| "Saved chats are locked".to_string())?;
+        work(&store)
+    })
+    .await
+    .map_err(|_| "Couldn't read the saved chats".to_string())?
+}
+
+fn target_of(change: &Change) -> crate::tools::proposals::Target {
+    crate::tools::proposals::Target {
+        kind: change.kind,
+        path: change.path.clone(),
+    }
+}
+
+/// The text a pending change to a shard would leave it with.
+pub async fn preview(id: String) -> Result<Preview, String> {
+    with_store(move |store| {
+        let (change, vault) = change_and_vault(store, &id, ChangeState::Pending)?;
+        let target = target_of(&change);
+        let before = crate::tools::proposals::current(&vault, &target)
+            .ok_or_else(|| format!("There's no shard at '{}'", change.path))?;
+        let after = crate::tools::proposals::replay(&vault, Some(before.clone()), &change.ops)
+            .map_err(|error| error.0)?;
+        Ok(Preview {
+            path: change.path,
+            before,
+            after,
+        })
+    })
+    .await
+}
+
+/// History's line for a change: what the model said it did, and the model.
+fn history_summary(lines: &[String], model: Option<&str>) -> Option<String> {
+    let said = lines.join("; ");
+    match (said.is_empty(), model) {
+        (true, model) => model.map(str::to_string),
+        (false, Some(model)) => Some(format!("{said} ({model})")),
+        (false, None) => Some(said),
+    }
+}
+
+const CALLER: &str = "Assistant";
+
+fn caller() -> crate::tools::Caller {
+    crate::tools::Caller {
+        app: CALLER.to_string(),
+    }
+}
+
+/// What `files` left at `path`, the change's own file.
+fn made(files: &[crate::tools::proposals::FileChange], path: &str) -> Made {
+    Made {
+        path: path.to_string(),
+        content: files
+            .iter()
+            .find(|file| file.path == path)
+            .and_then(|file| file.after.clone()),
+    }
+}
+
+/// Makes a pending change. `expected` is the shard's text as the editor
+/// shows it, when it's open.
+pub async fn apply(id: String, expected: Option<String>) -> Result<Made, String> {
+    with_store(move |store| {
+        let (change, vault) = change_and_vault(store, &id, ChangeState::Pending)?;
+        let summary = history_summary(
+            &crate::tools::proposals::summaries(&change.ops),
+            change.model.as_deref(),
+        );
+        let files = crate::tools::proposals::apply(
+            &vault,
+            &caller(),
+            summary.as_deref(),
+            &target_of(&change),
+            &change.ops,
+            expected.as_deref(),
+        )
+        .map_err(|error| error.0)?;
+        // A new file goes where it was made; a move, where it went.
+        let path = match change.kind {
+            crate::tools::proposals::Kind::Shard | crate::tools::proposals::Kind::Drawing => {
+                change.path.clone()
+            }
+            _ => files
+                .iter()
+                .find(|file| file.before.is_none())
+                .map_or(change.path.clone(), |file| file.path.clone()),
+        };
+        store
+            .set_change_state(&id, ChangeState::Applied, &files, &path)
+            .map_err(store_error)?;
+        Ok(made(&files, &path))
+    })
+    .await
+}
+
+/// Takes back an applied change, while its files are as it left them. It
+/// can then be applied again.
+pub async fn undo(id: String) -> Result<Made, String> {
+    with_store(move |store| {
+        let (change, vault) = change_and_vault(store, &id, ChangeState::Applied)?;
+        let summary = history_summary(&["Undid a change".to_string()], change.model.as_deref());
+        let files =
+            crate::tools::proposals::undo(&vault, &caller(), summary.as_deref(), &change.applied)
+                .map_err(|error| error.0)?;
+        // Pending again, where it was first proposed.
+        let path = match change.kind {
+            crate::tools::proposals::Kind::Move => change
+                .applied
+                .iter()
+                .find(|file| file.after.is_none())
+                .map_or(change.path.clone(), |file| file.path.clone()),
+            _ => change.path.clone(),
+        };
+        store
+            .set_change_state(&id, ChangeState::Pending, &[], &path)
+            .map_err(store_error)?;
+        Ok(made(&files, &change.path))
+    })
+    .await
+}
+
+/// Drops a pending change, writing nothing.
+pub async fn discard(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        let change = store
+            .change(&id)
+            .map_err(store_error)?
+            .filter(|change| change.state == ChangeState::Pending)
+            .ok_or_else(|| "That change isn't there anymore".to_string())?;
+        store
+            .set_change_state(&id, ChangeState::Discarded, &[], &change.path)
+            .map_err(store_error)
+    })
+    .await
 }

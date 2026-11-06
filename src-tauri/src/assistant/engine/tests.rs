@@ -59,6 +59,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         allowed: Arc::new(|| true),
         send_files: false,
         added: Vec::new(),
+        asked: Default::default(),
     }
 }
 
@@ -319,31 +320,77 @@ async fn files_a_provider_turns_down_are_left_out_and_the_model_told() {
 }
 
 #[tokio::test]
-async fn only_read_tools_run_whatever_the_model_asks() {
-    let call = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"create_shard\",\"arguments\":\"{\\\"path\\\":\\\"New.md\\\",\\\"content\\\":\\\"x\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
-    let done = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"I can't.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+async fn write_tools_only_propose_and_other_tools_dont_run() {
+    let edit = r#"{\"path\":\"Trip.md\",\"action\":\"replace\",\"find\":\"by train\",\"replace_with\":\"by bus\",\"summary\":\"Bus, not train\"}"#;
+    let call = format!(
+        "data: {{\"id\":\"c\",\"choices\":[{{\"index\":0,\"delta\":{{\"role\":\"assistant\",\"tool_calls\":[{{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{{\"name\":\"edit_shard\",\"arguments\":\"{edit}\"}}}},{{\"index\":1,\"id\":\"call_2\",\"type\":\"function\",\"function\":{{\"name\":\"fix_link\",\"arguments\":\"{{}}\"}}}}]}},\"finish_reason\":\"tool_calls\"}}]}}\n\ndata: [DONE]\n\n"
+    );
+    let done = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Changed it.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
     let server = serve(vec![
-        Answer::ok("text/event-stream", call),
+        Answer::ok("text/event-stream", call.as_str()),
         Answer::ok("text/event-stream", done),
     ]);
     let turn = turn(
-        "engine-write-refused",
+        "engine-write-proposed",
         server.target(Api::OpenAi, Some(KEY)),
         "gpt-5.5",
     );
+    turn.asked.store(1, Ordering::SeqCst);
     answer(&turn, &Collect::default()).await.unwrap();
-    assert!(!turn.vault.root.join("New.md").exists());
+    assert_eq!(
+        std::fs::read_to_string(turn.vault.root.join("Trip.md")).unwrap(),
+        TRIP
+    );
     let Message::Tool { results, .. } = &messages(&turn)[2] else {
         panic!()
     };
     assert!(
-        results[0]
-            .output
-            .starts_with("Error: There's no tool called create_shard")
+        results[0].output.starts_with("Proposed, not made yet"),
+        "{}",
+        results[0].output
     );
-    // The model is only offered the read tools.
+    assert!(
+        results[1]
+            .output
+            .starts_with("Error: There's no tool called fix_link")
+    );
+
+    let changes = turn.store.lock().unwrap().changes(&turn.chat).unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!((changes[0].path.as_str(), changes[0].turn), ("Trip.md", 1));
+    assert_eq!(changes[0].state, ChangeState::Pending);
+    // The model is offered the read tools and the write tools it proposes with.
     let offered = &server.requests()[0];
-    assert!(offered.contains("\"read\"") && !offered.contains("\"create_shard\""));
+    assert!(offered.contains("\"read\"") && offered.contains("\"edit_shard\""));
+    assert!(!offered.contains("\"fix_link\"") && !offered.contains("\"create_folder\""));
+}
+
+#[tokio::test]
+async fn a_stopped_answer_proposes_nothing() {
+    let server = serve(Vec::new());
+    let turn = turn(
+        "engine-stopped-proposes-nothing",
+        server.target(Api::OpenAi, Some(KEY)),
+        "gpt-5.5",
+    );
+    turn.stop.stop();
+    let call = Call {
+        id: "call_1".to_string(),
+        name: "edit_shard".to_string(),
+        arguments: serde_json::json!({
+            "path": "Trip.md", "action": "replace", "find": "by train", "replace_with": "by bus"
+        }),
+        signatures: Vec::new(),
+    };
+    assert!(propose(&turn, &call).await.is_err());
+    assert!(
+        turn.store
+            .lock()
+            .unwrap()
+            .changes(&turn.chat)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]

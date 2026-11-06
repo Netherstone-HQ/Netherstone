@@ -1,4 +1,4 @@
-import { editor, expect, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, mockVault, test } from "./vault";
 
 /**
  * The assistant panel, in the right sidebar's place: its states before a
@@ -179,4 +179,145 @@ test("swaps places with History", async ({ page }) => {
   await page.getByRole("button", { name: "Show assistant" }).click();
   await expect(panel(page)).toBeVisible();
   await expect(page.getByRole("complementary", { name: "History" })).toHaveCount(0);
+});
+
+const CHECKLIST = {
+  path: "Trip.md",
+  after: "# Trip\n\n## Plans\n\n- [x] Lisbon in May\n- [ ] By train\n",
+};
+
+const shardSaves = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => window.__saves.filter((save) => save.filePath.endsWith("/Trip.md")));
+
+test("previews an edit in the shard, applies it, and undoes it", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: CHECKLIST },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+
+  // The change shows in the shard, and nothing is written yet.
+  await expect(assistant.getByText("1 change")).toBeVisible();
+  const preview = page.getByLabel("Change to the shard");
+  await expect(preview).toContainText("Lisbon in May, by train.");
+  await expect(preview).toContainText("By train");
+  await expect(preview.locator('[data-history-block="removed"]')).toHaveCount(1);
+  await expect(preview.locator('[data-history-block="added"]')).toHaveCount(2);
+  expect(await shardSaves(page)).toEqual([]);
+
+  await assistant.getByRole("button", { name: "Apply" }).click();
+  await expect(assistant.getByText("Applied to Trip")).toBeVisible();
+  await expect(preview).toHaveCount(0);
+  await expect(editor(page)).toContainText("By train");
+  await expect(editor(page)).not.toContainText("Lisbon in May, by train.");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  expect(await shardSaves(page)).toEqual([
+    { filePath: "/home/me/Vault/Trip.md", content: CHECKLIST.after },
+  ]);
+
+  // Undo puts the shard back, and the change can be applied again.
+  await assistant.getByRole("button", { name: "Undo" }).click();
+  await expect(assistant.getByRole("button", { name: "Apply" })).toBeVisible();
+  await expect(preview).toContainText("Lisbon in May, by train.");
+  expect((await shardSaves(page)).at(-1)?.content).toBe(FILES["Trip.md"]);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+});
+
+test("keeps a shard link through the preview and Apply", async ({ page }) => {
+  const linked = "# Trip\n\nBook it, see [Bread](Bread.md).\n";
+  await mockVault(page, {
+    files: { ...FILES, "Trip.md": linked },
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: { path: "Trip.md", after: "# Trip\n\n- [ ] Book it, see [Bread](Bread.md)\n" },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+
+  // The link shows as a link on both sides of the change.
+  const preview = page.getByLabel("Change to the shard");
+  for (const side of ["removed", "added"]) {
+    await expect(
+      preview.locator(`[data-history-block="${side}"] [data-slate-value="Bread"]`),
+    ).toBeVisible();
+  }
+
+  await assistant.getByRole("button", { name: "Apply" }).click();
+  await expect(assistant.getByText("Applied to Trip")).toBeVisible();
+  await expect(editor(page).locator('[data-slate-value="Bread"]')).toBeVisible();
+
+  // An edit after it saves the link as a link.
+  await caretAfter(page, "Trip");
+  await page.keyboard.type("s");
+  await expect
+    .poll(async () => (await shardSaves(page)).at(-1)?.content)
+    .toBe("# Trips\n\n- [ ] Book it, see [Bread](Bread.md)\n");
+});
+
+test("discards an edit without writing it", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: CHECKLIST },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  const preview = page.getByLabel("Change to the shard");
+  await expect(preview).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Discard" }).click();
+  await expect(preview).toHaveCount(0);
+  await expect(assistant.getByText("1 change")).toHaveCount(0);
+  await expect(editor(page)).toContainText("Lisbon in May, by train.");
+  expect(await shardSaves(page)).toEqual([]);
+});
+
+test("turning the assistant off leaves nothing behind", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: CHECKLIST },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  await panel(page).getByRole("button", { name: "Summarize this shard" }).click();
+  const preview = page.getByLabel("Change to the shard");
+  await expect(preview).toBeVisible();
+
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
+  await settings.click();
+  await page.getByRole("button", { name: "AI assistant" }).click();
+  await page.getByRole("switch", { name: "Turn on the assistant" }).click();
+  await expect(page.getByRole("switch", { name: "Turn on the assistant" })).not.toBeChecked();
+  await settings.click();
+
+  // No preview, no panel, no button, and the shard as it was, unwritten.
+  await expect(editor(page)).toContainText("Lisbon in May, by train.");
+  await expect(preview).toHaveCount(0);
+  await expect(panel(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show assistant" })).toHaveCount(0);
+  expect(await shardSaves(page)).toEqual([]);
+  expect(
+    await page.evaluate(() =>
+      window.__commands.filter((c) => c.command === "assistant_apply").length,
+    ),
+  ).toBe(0);
+});
+
+test("adds an answer to the shard, without its cites", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Add to shard" }).click();
+  await expect(editor(page)).toContainText("We go to Lisbon in May.");
+  await expect(editor(page)).not.toContainText("May Trip");
 });

@@ -56,6 +56,7 @@ export function newChat() {
   store.setState({
     chat: null,
     messages: [],
+    changes: [],
     answering: null,
     ending: null,
     added: [],
@@ -72,6 +73,7 @@ export async function openChat(id: string) {
   store.setState({
     chat: { id: view.id, title: view.title },
     messages: view.messages,
+    changes: view.changes,
     answering: null,
     ending: null,
   });
@@ -148,6 +150,7 @@ export async function sendMessage(text: string, shards: string[]) {
     store.setState({
       chat: { id: view.id, title: view.title },
       messages: view.messages,
+      changes: view.changes,
       answering: null,
       ending,
     });
@@ -193,6 +196,17 @@ export async function removeAllChats() {
   await deleteAllChats();
   newChat();
 }
+
+// Turned off: the answer stops and the changes not applied go, so nothing
+// is left in the shard or the panel. The app drops them too.
+store.subscribe((state, previous) => {
+  if (state.enabled === false && previous.enabled === true) {
+    stopAnswer();
+    store.setState({
+      changes: state.changes.filter((change) => change.state !== "pending"),
+    });
+  }
+});
 
 // History and the panel share the right sidebar's place.
 useHistoryStore.subscribe((state, previous) => {

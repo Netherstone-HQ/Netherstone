@@ -12,6 +12,7 @@ mod find;
 pub mod guide;
 mod history;
 mod links;
+pub mod proposals;
 mod read;
 mod write;
 

@@ -30,6 +30,8 @@ import { Editor } from "./editor/Editor";
 import { ModeSwitcher } from "./sidebar/ModeSwitcher";
 import { ExcalidrawView } from "./ExcalidrawView";
 import { ShardVersionView } from "./history/ShardVersionView";
+import { ChangePreview } from "./assistant/ChangePreview";
+import { usePreviewedChange } from "@/lib/assistant-changes";
 import { WindowTitleBar } from "./WindowTitleBar";
 
 interface AppLayoutProps {
@@ -42,19 +44,23 @@ const MainEditorContent = React.memo(function MainEditorContent() {
 
 /**
  * The editor, or an earlier version of its shard over it, or of a deleted
- * shard. The editor stays laid out underneath, keeping its scroll position,
- * undo history and unsaved edits for when the version closes.
+ * shard, or a change the assistant proposed to it. The editor stays laid
+ * out underneath, keeping its scroll position, undo history and unsaved
+ * edits for when the version or the change closes.
  */
 function EditorOrVersion({ children }: { children?: React.ReactNode }) {
   const version = useShownVersion("notes");
+  const change = usePreviewedChange();
   const openPath = useEditorStore((s) => s.currentFilePath);
   const deletedPath = useHistoryStore((s) => s.deletedPath);
   const closeHistory = useHistoryStore((s) => s.closeHistory);
   const filePath = deletedPath ?? openPath;
+  const previewed = children == null && openPath !== null && change !== null;
   const shown =
-    children == null &&
-    filePath !== null &&
-    (version !== null || deletedPath !== null);
+    previewed ||
+    (children == null &&
+      filePath !== null &&
+      (version !== null || deletedPath !== null));
 
   // Opening a shard leaves the deleted one's history.
   const openPathRef = useRef(openPath);
@@ -75,7 +81,9 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
       >
         {children ?? <MainEditorContent />}
       </main>
-      {shown && version !== null ? (
+      {previewed && change !== null && openPath !== null ? (
+        <ChangePreview key={change.id} change={change} filePath={openPath} />
+      ) : shown && version !== null && filePath !== null ? (
         <ShardVersionView
           version={version}
           filePath={filePath}

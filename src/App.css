@@ -494,6 +494,54 @@
     display: none;
 }
 
+/* A change the assistant proposed, shown in the shard before it's applied:
+   what goes is struck through on a red tint, what comes in is on a green
+   one, block by block. */
+.change-preview [data-history-block] {
+    margin-inline: -8px;
+    padding: 4px 8px;
+}
+
+.change-preview [data-history-block="removed"] {
+    background: color-mix(in srgb, var(--destructive) 10%, transparent);
+    color: var(--muted-foreground);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--destructive) 60%, transparent);
+}
+
+.change-preview [data-history-block="added"] {
+    background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+/* A ticked item coming in reads as added, not as struck. */
+.change-preview [data-history-block="added"] li {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* A run of blocks reads as one: rounded at its ends only. */
+.change-preview [data-history-block]:not([data-history-block="removed"] + [data-history-block="removed"]):not([data-history-block="added"] + [data-history-block="added"]) {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+.change-preview [data-history-block="removed"]:not(:has(+ [data-history-block="removed"])),
+.change-preview [data-history-block="added"]:not(:has(+ [data-history-block="added"])) {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+.change-preview [data-history-block="removed"]:not(:has(+ [data-history-block="removed"])) {
+    margin-bottom: 6px;
+}
+
+.change-preview .history-added,
+.change-preview .history-removed {
+    background: none;
+    color: inherit;
+    text-decoration: inherit;
+}
+
 /* Two versions side by side (VersionPair): what only this one has is
    highlighted, and a mark shows where the other one has something it doesn't. */
 .version-pair .history-added {

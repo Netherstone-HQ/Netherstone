@@ -1,8 +1,10 @@
 //! The assistant's loop: send the chat, stream the answer, run the vault
 //! tools the model calls, and go again until it answers, within a step
-//! limit. Only read tools in this version, checked here and not left to
-//! the model. Shards it reads are the answer's sources. A chat that grows
-//! near the model's limit has its older messages summarized first.
+//! limit. Read tools run; write tools only propose their change, which the
+//! user applies or discards (`tools::proposals`), checked here and not
+//! left to the model. Shards it reads are the answer's sources. A chat
+//! that grows near the model's limit has its older messages summarized
+//! first.
 
 use super::catalog::Facts;
 use super::chat::{
@@ -12,10 +14,13 @@ use super::chat::{
 use super::files;
 use super::models::Target;
 use super::providers::{Api, Limits};
+use super::sessions::ChangeState;
 use super::sessions::{Saved, Store, Summary};
+use crate::tools::proposals::{self, Op, WRITE_TOOLS};
 use crate::tools::{self, Caller, Tool, Vault};
 use serde::Serialize;
 use serde_json::Value;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -99,7 +104,7 @@ const MAX_TOOL_OUTPUT: usize = 60_000;
 const BATCH_BYTES: usize = 256;
 const BATCH_WAIT: Duration = Duration::from_millis(50);
 
-/// The tools the assistant may call in this version.
+/// The tools the assistant runs as they are.
 const READ_TOOLS: [&str; 7] = [
     "search",
     "list_folder",
@@ -110,10 +115,21 @@ const READ_TOOLS: [&str; 7] = [
     "vault_overview",
 ];
 
+fn is_read_tool(name: &str) -> bool {
+    READ_TOOLS.contains(&name)
+}
+
+fn is_write_tool(name: &str) -> bool {
+    WRITE_TOOLS.contains(&name)
+}
+
 pub fn tools() -> Vec<Tool> {
     tools::all()
         .into_iter()
-        .filter(|tool| tool.read_only && READ_TOOLS.contains(&tool.name))
+        .filter(|tool| {
+            (tool.read_only && is_read_tool(tool.name))
+                || (!tool.read_only && is_write_tool(tool.name))
+        })
         .collect()
 }
 
@@ -137,7 +153,9 @@ answering about the user's notes, and never guess what they say. Cite the shards
 used with a Markdown link to the shard's vault path right after what it backs, like \
 [Trip plan](Travel/Trip%20plan.md), or [Trip plan](Travel/Trip%20plan.md#Day%202) for one \
 section. The app shows each cite as a number, so never use one as a word in a sentence. Shards the user adds to a \
-message come with it inside <shard> tags. You can only read in this version: you can't create, change or move anything. Reply in \
+message come with it inside <shard> tags. Changes you make with the write tools aren't made right away: the user \
+sees each one in the app and applies or discards it, so say in your answer what you changed, and give each \
+change a summary. Reading a shard shows it as it is, without changes not applied yet. Reply in \
 the language the user writes in, and keep answers short unless asked for more. Today \
 is {}.",
         chrono::Local::now().format("%Y-%m-%d")
@@ -157,6 +175,9 @@ pub struct Turn {
     pub send_files: bool,
     /// The shards added to the message being answered, which count as read.
     pub added: Vec<String>,
+    /// The user message being answered, once it's saved: the changes
+    /// proposed in this answer belong to it.
+    pub asked: AtomicI64,
 }
 
 /// Batches streamed text into events, and stops the chat when nobody's
@@ -548,8 +569,14 @@ fn paths_in(arguments: &Value) -> Vec<String> {
 }
 
 async fn run_tool(turn: &Turn, tools: &Arc<Vec<Tool>>, call: &Call) -> Result<String, String> {
-    // The model only gets the read tools, but it may name any.
-    if !READ_TOOLS.contains(&call.name.as_str()) || !tools.iter().any(|t| t.name == call.name) {
+    // The model only gets these tools, but it may name any.
+    if !tools.iter().any(|t| t.name == call.name) {
+        return Err(format!("There's no tool called {}", call.name));
+    }
+    if is_write_tool(&call.name) {
+        return propose(turn, call).await;
+    }
+    if !is_read_tool(&call.name) {
         return Err(format!("There's no tool called {}", call.name));
     }
     let tools = tools.clone();
@@ -579,6 +606,76 @@ async fn run_tool(turn: &Turn, tools: &Arc<Vec<Tool>>, call: &Call) -> Result<St
         text.push_str("… [cut: ask for less, like one section or a smaller page]");
     }
     Ok(text)
+}
+
+/// Keeps a write tool's call as a proposed change, with the change made so
+/// far to the same file in this answer, once it's checked to fit. Nothing
+/// is written.
+async fn propose(turn: &Turn, call: &Call) -> Result<String, String> {
+    let vault = turn.vault.clone();
+    let store = turn.store.clone();
+    let chat = turn.chat.clone();
+    let stop = turn.stop.clone();
+    let asked = turn.asked.load(Ordering::SeqCst);
+    let model = turn
+        .model
+        .facts
+        .name
+        .clone()
+        .unwrap_or_else(|| turn.model.id.clone());
+    let op = Op {
+        name: call.name.clone(),
+        arguments: call.arguments.clone(),
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let next = proposals::target(&vault, &op).map_err(|error| error.0)?;
+        let store = store
+            .lock()
+            .map_err(|_| "Saved chats are locked".to_string())?;
+        // Turning the assistant off stops the answer, then drops what's
+        // pending under this lock: a stopped answer adds nothing after it.
+        if stop.is_stopped() {
+            return Err("The answer was stopped".to_string());
+        }
+        let earlier = store.changes(&chat)?.into_iter().find(|change| {
+            change.turn == asked
+                && change.state == ChangeState::Pending
+                && proposals::adds_to(
+                    &proposals::Target {
+                        kind: change.kind,
+                        path: change.path.clone(),
+                    },
+                    &next,
+                )
+        });
+        let (target, mut ops) = match &earlier {
+            Some(change) => (
+                proposals::Target {
+                    kind: change.kind,
+                    path: change.path.clone(),
+                },
+                change.ops.clone(),
+            ),
+            None => (next, Vec::new()),
+        };
+        ops.push(op);
+        if target.kind != proposals::Kind::Move {
+            proposals::replay(&vault, proposals::current(&vault, &target), &ops)
+                .map_err(|error| error.0)?;
+        }
+        match &earlier {
+            Some(change) => store.set_ops(&change.id, &ops)?,
+            None => {
+                store.add_change(&chat, asked, target.kind, &target.path, &ops, Some(&model))?;
+            }
+        }
+        Ok(format!(
+            "Proposed, not made yet: the user sees this change to {} and applies or discards it.",
+            target.path
+        ))
+    })
+    .await
+    .map_err(|_| "The tool stopped".to_string())?
 }
 
 async fn load(store: &SharedStore, chat: &str) -> Result<(Option<Summary>, Vec<Saved>), ChatError> {

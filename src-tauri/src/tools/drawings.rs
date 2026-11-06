@@ -262,8 +262,8 @@ pub struct ShapeSpec {
 #[derive(Deserialize, JsonSchema)]
 pub struct EditDrawingParams {
     /// The drawing, vault-relative. For create, where the new one goes.
-    path: String,
-    action: DrawingAction,
+    pub(super) path: String,
+    pub(super) action: DrawingAction,
     /// For create, add and update.
     #[serde(default)]
     shapes: Option<Vec<ShapeSpec>>,
@@ -275,10 +275,10 @@ pub struct EditDrawingParams {
     shard: Option<String>,
     /// For embed: the heading to show it under. Leave out for the end.
     #[serde(default)]
-    heading: Option<String>,
+    pub(super) heading: Option<String>,
     /// A short line on what you changed, shown in History.
     #[serde(default)]
-    summary: Option<String>,
+    pub(super) summary: Option<String>,
 }
 
 /// Excalidraw's look for new shapes, as the canvas starts them.
@@ -758,50 +758,74 @@ fn embed_tag(relative: &str) -> String {
     )
 }
 
-/// Reads the drawing at `path`, changes it with `edit` and writes it back
-/// under one lock, so no save of the canvas lands in between and is lost.
-fn edit_scene(path: &Path, edit: impl FnOnce(&mut Vec<Value>) -> ToolResult<()>) -> ToolResult<()> {
-    let writes = crate::locks::vault_writes()?;
-    let mut scene = parse(&read_text(path)?)?;
-    edit(elements(&mut scene))?;
-    let content = serde_json::to_string_pretty(&Value::Object(scene))
-        .map_err(|e| ToolError(e.to_string()))?;
-    Ok(crate::vault::write_atomically(
-        &writes,
-        path,
-        content.as_bytes(),
-    )?)
+/// The drawing `text` after `params`: a new one for create, from `text` for
+/// add, update and remove. Embed changes a shard, not the drawing.
+pub(super) fn scene_after(text: Option<&str>, params: &EditDrawingParams) -> ToolResult<String> {
+    let shapes = params.shapes.clone().unwrap_or_default();
+    let mut scene = match params.action {
+        DrawingAction::Create => parse(crate::vault::EMPTY_DRAWING)?,
+        _ => parse(text.ok_or_else(|| {
+            ToolError(format!(
+                "There's no drawing at '{}'. Use create to make one.",
+                params.path
+            ))
+        })?)?,
+    };
+    let list = elements(&mut scene);
+    match params.action {
+        DrawingAction::Create | DrawingAction::Add => add_shapes(list, &shapes).map(|_| ())?,
+        DrawingAction::Update => update_shapes(list, &shapes)?,
+        DrawingAction::Remove => remove_shapes(list, params.ids.as_deref().unwrap_or_default())?,
+        DrawingAction::Embed => {
+            return Err(ToolError(
+                "embed changes a shard, not the drawing".to_string(),
+            ));
+        }
+    }
+    serde_json::to_string_pretty(&Value::Object(scene)).map_err(|e| ToolError(e.to_string()))
 }
 
-pub fn edit_drawing(
-    vault: &Vault,
-    caller: &Caller,
-    params: EditDrawingParams,
-) -> ToolResult<Drawing> {
-    let path = drawing_path(vault, &params.path)?;
-    let summary = params.summary.as_deref();
-    let shapes_given = || params.shapes.clone().unwrap_or_default();
+/// `markdown` with the drawing at `relative` shown under `heading`, or at
+/// the end.
+pub(super) fn embedded(
+    markdown: &str,
+    relative: &str,
+    heading: Option<&str>,
+) -> ToolResult<String> {
+    let at = match heading {
+        Some(heading) => find_section(markdown, heading)?.range.end,
+        None => markdown.len(),
+    };
+    let (before, after) = markdown.split_at(at);
+    let before = before.trim_end_matches(['\n', '\r', ' ']);
+    let gap = if before.is_empty() { "" } else { "\n\n" };
+    let rest = after.trim_start_matches(['\n', '\r']);
+    let tail = if rest.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", rest)
+    };
+    Ok(format!(
+        "{}{}{}\n{}",
+        before,
+        gap,
+        embed_tag(relative),
+        tail
+    ))
+}
 
-    let path = match params.action {
-        DrawingAction::Create => {
-            let folder = path.parent().unwrap_or(&vault.root).to_path_buf();
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            change(vault, caller, summary, &[], || {
-                let writes = crate::locks::vault_writes()?;
-                std::fs::create_dir_all(&folder)
-                    .map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
-                let path = crate::vault::unique_drawing_path(&folder, &name)?;
-                let mut scene = parse(crate::vault::EMPTY_DRAWING)?;
-                add_shapes(elements(&mut scene), &shapes_given())?;
-                let content = serde_json::to_string_pretty(&Value::Object(scene))
-                    .map_err(|e| ToolError(e.to_string()))?;
-                crate::vault::write_atomically(&writes, &path, content.as_bytes())?;
-                Ok((path.clone(), vec![path]))
-            })?
-        }
+/// What a drawing edit changes: the drawing, or for embed, the shard.
+pub(super) enum DrawingTarget {
+    New(PathBuf),
+    Drawing(PathBuf),
+    /// The shard, and the drawing's vault-relative path.
+    Embed(PathBuf, String),
+}
+
+pub(super) fn target(vault: &Vault, params: &EditDrawingParams) -> ToolResult<DrawingTarget> {
+    let path = drawing_path(vault, &params.path)?;
+    Ok(match params.action {
+        DrawingAction::Create => DrawingTarget::New(path),
         DrawingAction::Embed => {
             if !path.is_file() {
                 return Err(ToolError(format!(
@@ -809,49 +833,65 @@ pub fn edit_drawing(
                     params.path
                 )));
             }
-            let shard_relative = params
+            let shard = params
                 .shard
                 .as_deref()
                 .ok_or_else(|| ToolError("embed needs the shard".to_string()))?;
-            let shard = vault.shard(shard_relative)?;
-            let tag = embed_tag(&vault.relative(&path));
-            change(vault, caller, summary, std::slice::from_ref(&shard), || {
-                edit_shard(vault, &shard, |markdown| {
-                    let at = match &params.heading {
-                        Some(heading) => find_section(&markdown, heading)?.range.end,
-                        None => markdown.len(),
-                    };
-                    let (before, after) = markdown.split_at(at);
-                    let before = before.trim_end_matches(['\n', '\r', ' ']);
-                    let gap = if before.is_empty() { "" } else { "\n\n" };
-                    let rest = after.trim_start_matches(['\n', '\r']);
-                    let tail = if rest.is_empty() {
-                        String::new()
-                    } else {
-                        format!("\n{}", rest)
-                    };
-                    Ok(format!("{}{}{}\n{}", before, gap, tag, tail))
-                })?;
-                Ok(((), Vec::new()))
-            })?;
-            path
+            DrawingTarget::Embed(vault.shard(shard)?, vault.relative(&path))
         }
-        action => {
+        _ => {
             if !path.is_file() {
                 return Err(ToolError(format!(
                     "There's no drawing at '{}'. Use create to make one.",
                     params.path
                 )));
             }
-            change(vault, caller, summary, std::slice::from_ref(&path), || {
-                edit_scene(&path, |list| match action {
-                    DrawingAction::Add => add_shapes(list, &shapes_given()).map(|_| ()),
-                    DrawingAction::Update => update_shapes(list, &shapes_given()),
-                    DrawingAction::Remove => {
-                        remove_shapes(list, params.ids.as_deref().unwrap_or_default())
-                    }
-                    DrawingAction::Create | DrawingAction::Embed => unreachable!("handled above"),
+            DrawingTarget::Drawing(path)
+        }
+    })
+}
+
+/// Where a new drawing named for `wanted` goes: its folder, made if
+/// needed, under the next free name.
+pub(super) fn new_drawing_path(vault: &Vault, wanted: &Path) -> ToolResult<PathBuf> {
+    let folder = wanted.parent().unwrap_or(&vault.root).to_path_buf();
+    let name = wanted
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    std::fs::create_dir_all(&folder)
+        .map_err(|e| format!("Failed to create folder {}: {}", folder.display(), e))?;
+    Ok(crate::vault::unique_drawing_path(&folder, &name)?)
+}
+
+pub fn edit_drawing(
+    vault: &Vault,
+    caller: &Caller,
+    params: EditDrawingParams,
+) -> ToolResult<Drawing> {
+    let summary = params.summary.as_deref();
+    let path = match target(vault, &params)? {
+        DrawingTarget::New(wanted) => change(vault, caller, summary, &[], || {
+            let content = scene_after(None, &params)?;
+            let writes = crate::locks::vault_writes()?;
+            let path = new_drawing_path(vault, &wanted)?;
+            crate::vault::write_atomically(&writes, &path, content.as_bytes())?;
+            Ok((path.clone(), vec![path]))
+        })?,
+        DrawingTarget::Embed(shard, relative) => {
+            change(vault, caller, summary, std::slice::from_ref(&shard), || {
+                edit_shard(vault, &shard, |markdown| {
+                    embedded(&markdown, &relative, params.heading.as_deref())
                 })?;
+                Ok(((), Vec::new()))
+            })?;
+            drawing_path(vault, &params.path)?
+        }
+        DrawingTarget::Drawing(path) => {
+            change(vault, caller, summary, std::slice::from_ref(&path), || {
+                let writes = crate::locks::vault_writes()?;
+                let content = scene_after(Some(&read_text(&path)?), &params)?;
+                crate::vault::write_atomically(&writes, &path, content.as_bytes())?;
                 Ok(((), Vec::new()))
             })?;
             path

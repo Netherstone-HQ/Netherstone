@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-const API: &str = "https://api.github.com";
+use crate::links::GITHUB_API as API;
 
 /// Topic added to every backup repository so they can be found again, e.g.
 /// when opening a backup on another device.

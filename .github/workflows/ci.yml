@@ -46,6 +46,10 @@ jobs:
       - name: No sleeps in tests
         run: node scripts/test-sleeps.mjs web
 
+      # Web addresses live in src/data/links.json (scripts/check-links.mjs).
+      - name: No hard-coded links
+        run: node scripts/check-links.mjs
+
       - name: Test
         run: pnpm test
 
@@ -119,8 +123,9 @@ jobs:
   # root or in .github/, or docs/) tests nothing. A pull request that only
   # bumps the app's version (scripts/version-bump.mjs) only checks Cargo.lock.
   # Otherwise a push to main tests everything, a pull request runs the Rust
-  # tests only when it changes src-tauri/ or this file, and the other tests
-  # only when it changes something outside src-tauri/.
+  # tests only when it changes src-tauri/, the links it builds in
+  # (src/data/links.json) or this file, and the other tests only when it
+  # changes something outside src-tauri/.
   changes:
     name: Changed files
     runs-on: ubuntu-24.04
@@ -181,7 +186,7 @@ jobs:
           fi
           if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
             grep -qvE '^(docs/|[^/]+\.md$|\.github/[^/]+\.md$)' <<< "$files" && rust=true || rust=false
-          elif grep -qE '^(src-tauri/|\.github/workflows/ci\.yml$)' <<< "$files"; then
+          elif grep -qE '^(src-tauri/|src/data/links\.json$|\.github/workflows/ci\.yml$)' <<< "$files"; then
             rust=true
           else
             rust=false

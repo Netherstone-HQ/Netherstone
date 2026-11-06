@@ -3,12 +3,13 @@
 //! Signing in only proves who the user is. The App must also be installed on
 //! their account before its token can create and push to backup repositories.
 
+use crate::links;
 use serde::{Deserialize, Serialize};
 
 /// The App's URL name (`github.com/apps/<slug>`).
 pub const APP_SLUG: &str = "netherstone-app";
 
-const API: &str = "https://api.github.com";
+use crate::links::GITHUB_API as API;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Installation {
@@ -41,7 +42,7 @@ pub struct InstallationStatus {
 }
 
 pub fn install_url() -> String {
-    format!("https://github.com/apps/{}/installations/new", APP_SLUG)
+    links::GITHUB_APP_INSTALL.replace("{slug}", APP_SLUG)
 }
 
 pub fn installation_for<'a>(list: &'a [Installation], login: &str) -> Option<&'a Installation> {

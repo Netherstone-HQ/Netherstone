@@ -12,6 +12,7 @@ mod gone_vaults;
 mod import;
 mod integrations;
 pub mod launch;
+mod links;
 mod locks;
 mod markdown_text;
 mod mcp;

@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, State, Url};
 use tauri_plugin_updater::{Error, Update, UpdaterExt};
 
-const UPDATES_URL: &str = "https://github.com/Netherstone-HQ/Netherstone/releases/download/updates";
+use crate::links::UPDATES as UPDATES_URL;
 
 /// The update found by the last check, kept until it is installed.
 #[derive(Default)]

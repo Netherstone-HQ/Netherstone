@@ -26,9 +26,10 @@ import {
 
 import { Progress } from "@/components/ui/progress";
 import { Hint } from "@/components/ui/tooltip";
+import links from "@/data/links.json";
 import { isWebPageUrl, openWebLink } from "@/lib/open-web-link";
 
-const DEFAULT_BROWSER_URL = "https://netherstone.app/?ref=app";
+const DEFAULT_BROWSER_URL = links.siteFromApp;
 
 interface BrowserPanelProps {
   webviewLabel?: string;
@@ -57,7 +58,7 @@ function normalizeBrowserUrl(value: string) {
     return `https://${trimmed}`;
   }
 
-  return `https://duckduckgo.com/?q=${encodeURIComponent(trimmed)}`;
+  return links.webSearch.replace("{query}", encodeURIComponent(trimmed));
 }
 
 export function BrowserPanel({

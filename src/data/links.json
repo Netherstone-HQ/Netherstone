@@ -1,0 +1,32 @@
+{
+  "site": "https://netherstone.app",
+  "siteFromApp": "https://netherstone.app/?ref=app",
+  "changelog": "https://netherstone.app/changelog/v{version}?ref=app",
+  "repository": "https://github.com/Netherstone-HQ/Netherstone",
+  "updates": "https://github.com/Netherstone-HQ/Netherstone/releases/download/updates",
+  "webSearch": "https://duckduckgo.com/?q={query}",
+
+  "github": "https://github.com",
+  "githubApi": "https://api.github.com",
+  "githubRaw": "https://raw.githubusercontent.com",
+  "githubAppInstall": "https://github.com/apps/{slug}/installations/new",
+  "githubDeviceCode": "https://github.com/login/device/code",
+  "githubAccessToken": "https://github.com/login/oauth/access_token",
+
+  "openaiApi": "https://api.openai.com/v1/",
+  "openaiKeys": "https://platform.openai.com/api-keys",
+  "anthropicApi": "https://api.anthropic.com/v1/",
+  "anthropicKeys": "https://platform.claude.com/settings/keys",
+  "googleApi": "https://generativelanguage.googleapis.com/v1beta/",
+  "googleKeys": "https://aistudio.google.com/apikey",
+  "openrouterApi": "https://openrouter.ai/api/v1/",
+  "openrouterKeys": "https://openrouter.ai/settings/keys",
+  "openrouterFreeModels": "https://openrouter.ai/models?max_price=0",
+  "ollamaDownload": "https://ollama.com/download",
+
+  "claudeDesktopDownload": "https://claude.ai/download",
+  "claudeCodeDownload": "https://claude.com/product/claude-code",
+  "cursorDownload": "https://cursor.com/download",
+  "vscodeDownload": "https://code.visualstudio.com/download",
+  "gooseDownload": "https://block.github.io/goose/docs/getting-started/installation"
+}

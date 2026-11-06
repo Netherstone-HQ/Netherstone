@@ -3,6 +3,7 @@
 //! adding a provider is data.
 
 use crate::credentials::{self, Credential};
+use crate::links;
 use serde::{Deserialize, Serialize};
 
 /// How a provider's API is spoken. Each has its own route through genai.
@@ -98,36 +99,36 @@ pub const PROVIDERS: &[Provider] = &[
         name: "OpenAI",
         setup: Setup::Key,
         api: Some(Api::OpenAi),
-        base_url: Some("https://api.openai.com/v1/"),
+        base_url: Some(links::OPENAI_API),
         credential: Some(&credentials::OPENAI_KEY),
-        key_page: Some("https://platform.openai.com/api-keys"),
+        key_page: Some(links::OPENAI_KEYS),
     },
     Provider {
         id: "anthropic",
         name: "Anthropic",
         setup: Setup::Key,
         api: Some(Api::Anthropic),
-        base_url: Some("https://api.anthropic.com/v1/"),
+        base_url: Some(links::ANTHROPIC_API),
         credential: Some(&credentials::ANTHROPIC_KEY),
-        key_page: Some("https://platform.claude.com/settings/keys"),
+        key_page: Some(links::ANTHROPIC_KEYS),
     },
     Provider {
         id: "google",
         name: "Google",
         setup: Setup::Key,
         api: Some(Api::Google),
-        base_url: Some("https://generativelanguage.googleapis.com/v1beta/"),
+        base_url: Some(links::GOOGLE_API),
         credential: Some(&credentials::GOOGLE_KEY),
-        key_page: Some("https://aistudio.google.com/apikey"),
+        key_page: Some(links::GOOGLE_KEYS),
     },
     Provider {
         id: "openrouter",
         name: "OpenRouter",
         setup: Setup::Key,
         api: Some(Api::OpenRouter),
-        base_url: Some("https://openrouter.ai/api/v1/"),
+        base_url: Some(links::OPENROUTER_API),
         credential: Some(&credentials::OPENROUTER_KEY),
-        key_page: Some("https://openrouter.ai/settings/keys"),
+        key_page: Some(links::OPENROUTER_KEYS),
     },
     Provider {
         id: "local",

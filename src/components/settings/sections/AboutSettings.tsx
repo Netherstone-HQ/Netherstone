@@ -11,6 +11,7 @@ import {
   SettingsGroup,
 } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
+import links from "@/data/links.json";
 import { useKeySequence } from "@/hooks/useKeySequence";
 import { installUpdateWithToast } from "@/hooks/useUpdateCheck";
 import { bugReportUrl, versionDetails } from "@/lib/bug-report";
@@ -18,7 +19,7 @@ import { canUpdate, isInstalledApp } from "@/lib/updates";
 import { useSettingsStore } from "@/store/settings";
 import { type UpdateStatus, useUpdatesStore } from "@/store/updates";
 
-const REPOSITORY_URL = "https://github.com/Netherstone-HQ/Netherstone";
+const REPOSITORY_URL = links.repository;
 
 const COMPANION_SEQUENCE = [
   "ArrowUp",

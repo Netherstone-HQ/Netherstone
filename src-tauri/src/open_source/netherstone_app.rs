@@ -7,7 +7,7 @@ use super::{
     Download, Listing, PathCheck, Pending, Refusal, Source, Stage, Web, check_path, needs_update,
 };
 
-const SITE: &str = "https://netherstone.app";
+use crate::links::SITE;
 
 /// The `v` of `templates.json` this app reads.
 const LIST_VERSION: u32 = 1;

@@ -10,8 +10,7 @@ use super::{
     Download, FileKind, Listing, PathCheck, Pending, Refusal, Source, Stage, Web, check_path,
 };
 
-const API: &str = "https://api.github.com";
-const RAW: &str = "https://raw.githubusercontent.com";
+use crate::links::{GITHUB_API as API, GITHUB_RAW as RAW};
 
 /// How git lists a link, which is never followed.
 const LINK_MODE: &str = "120000";

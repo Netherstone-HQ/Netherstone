@@ -127,6 +127,8 @@ export type MockVaultOptions = {
   current?: Record<string, Omit<MockVersion, "content">>;
   /** Turns the assistant on, set up as given. Off when left out. */
   assistant?: MockAssistant;
+  /** Shows the companion, as once he's been found. */
+  companion?: boolean;
 };
 
 type MockAssistant = {
@@ -197,10 +199,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     versions = {},
     current = {},
     assistant = null,
+    companion = false,
   } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, drawing, noVault, otherVaults, versions, current, assistant }) => {
+    ({ vaultPath, files, binaries, folders, theme, open, drawing, noVault, otherVaults, versions, current, assistant, companion }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -232,7 +235,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           state: {
             onboardingCompletedAt: now - 86_400_000,
             theme,
-            showCompanion: false,
+            companionUnlocked: companion,
+            showCompanion: companion,
           },
           version: 2,
         }),
@@ -728,6 +732,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       versions,
       current,
       assistant,
+      companion,
     },
   );
 

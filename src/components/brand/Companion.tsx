@@ -1,6 +1,20 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  EyeOffIcon,
+  Link2Icon,
+  MessageSquareIcon,
+  NewspaperIcon,
+  PanelRightIcon,
+} from "lucide-react";
 
-import { runCompanion, STAGE } from "@/components/brand/companion-motion";
+import { setupState, useSetup } from "@/components/assistant/setup";
+import {
+  CompanionRig,
+  type CompanionMenu,
+  type Spot,
+  STAGE,
+} from "@/components/brand/companion-motion";
+import { chatWork, inlineWork } from "@/components/brand/companion-work";
 import {
   BRAND,
   FACET,
@@ -10,11 +24,25 @@ import {
   TOP,
 } from "@/components/brand/NetherstoneMark";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { openAssistant, sendMessage } from "@/lib/assistant";
+import { openShardPath } from "@/lib/assistant-changes";
 import { useEditorStore } from "@/store";
+import { useAssistantStore } from "@/store/assistant";
+import { useCompanionStore } from "@/store/companion";
+import { useInlineAskStore } from "@/store/inline-ask";
+import { useSettingsStore } from "@/store/settings";
+import { useVaultStore } from "@/store/vault";
 
 // Colors come from App.css so the dark themes can soften him.
 const FILL = { fill: "var(--companion-fill)" };
@@ -56,8 +84,43 @@ const Gem = () => (
   </g>
 );
 
+/** Where his feet go on the composer card: on its top edge, near the right. */
+function perchSpot(card: HTMLElement): Spot {
+  const rect = card.getBoundingClientRect();
+  return { x: rect.right - 52, y: rect.top + 1 };
+}
+
+/** His corner, at the bottom right of the window. */
+function homeSpot(): Spot {
+  const { width, height, ground, restX, scale } = STAGE;
+  return {
+    x: window.innerWidth - 12 - (width - restX) * scale,
+    y: window.innerHeight - (height - ground) * scale,
+  };
+}
+
 export function Companion() {
   const hostRef = useRef<HTMLDivElement>(null);
+  const hitRef = useRef<SVGGElement>(null);
+  const rigRef = useRef<CompanionRig | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuOpenRef = useRef(false);
+  const [tipOpen, setTipOpen] = useState(false);
+  const setMenu = (open: boolean) => {
+    menuOpenRef.current = open;
+    setMenuOpen(open);
+  };
+  const menu = useRef<CompanionMenu>({
+    isOpen: () => menuOpenRef.current,
+    open: () => setMenu(true),
+    close: () => setMenu(false),
+  }).current;
+
+  // He's the assistant only while it's on.
+  const assistant = useAssistantStore((s) => s.enabled === true);
+  const perch = useCompanionStore((s) => s.perch);
+  const { setup } = useSetup(assistant);
+  const noProvider = assistant && setupState(setup) === "noProvider";
 
   useEffect(() => {
     const host = hostRef.current;
@@ -65,16 +128,75 @@ export function Companion() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const companion = runCompanion(host, { reducedMotion });
-    const unsubscribe = useEditorStore.subscribe((state, prev) => {
-      if (state.editTick !== prev.editTick) companion.noticeEdit();
-      if (prev.isSaving && !state.isSaving && !state.isDirty) companion.nod();
-    });
+    const rig = new CompanionRig(host, { reducedMotion, home: homeSpot });
+    rigRef.current = rig;
+    const onResize = () => rig.relocate();
+    window.addEventListener("resize", onResize);
+    const unsubscribe = [
+      useEditorStore.subscribe((state, prev) => {
+        if (state.editTick !== prev.editTick) rig.noticeEdit();
+        if (prev.isSaving && !state.isSaving && !state.isDirty) rig.nod();
+      }),
+      useAssistantStore.subscribe((state, prev) => {
+        const work = chatWork(prev, state);
+        if (work) rig.setWork(work);
+      }),
+      useInlineAskStore.subscribe((state, prev) => {
+        const work = inlineWork(prev.phase, state.phase);
+        if (work) rig.setWork(work);
+      }),
+    ];
     return () => {
-      unsubscribe();
-      companion.stop();
+      for (const stop of unsubscribe) stop();
+      window.removeEventListener("resize", onResize);
+      rig.stop();
+      rigRef.current = null;
+      useCompanionStore.setState({ perched: false });
     };
   }, []);
+
+  // As the assistant he sits on the panel's composer while it's open.
+  useEffect(() => {
+    const rig = rigRef.current;
+    if (!rig) return;
+    rig.setAssistant(assistant, menu);
+    if (!assistant) setMenu(false);
+    const card = assistant ? perch : null;
+    rig.setSpot(card ? () => perchSpot(card) : null);
+    useCompanionStore.setState({ perched: card !== null });
+    if (!card) return;
+    const observer = new ResizeObserver(() => rig.relocate());
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [assistant, perch, menu]);
+
+  // With no provider set up, he sleeps until there is one.
+  useEffect(() => {
+    if (noProvider) rigRef.current?.setWork("sleep");
+    else rigRef.current?.wakeFromSleep();
+  }, [noProvider]);
+
+  const choose = (item: "ask" | "summarize" | "related" | "chat") => {
+    openAssistant();
+    if (item === "ask") {
+      useAssistantStore.setState({ focusComposer: true });
+      return;
+    }
+    if (item === "chat") return;
+    const shard = openShardPath(
+      useVaultStore.getState().currentVaultPath,
+      useEditorStore.getState().currentFilePath,
+    );
+    if (!shard || setupState(setup) !== "ready") return;
+    const text =
+      item === "summarize" ? "Summarize this shard" : "Find related shards";
+    void sendMessage(text, [shard]);
+  };
+
+  const hide = () =>
+    rigRef.current?.leave(() =>
+      useSettingsStore.getState().setPreference("showCompanion", false),
+    );
 
   const { width, height, ground, restX, scale } = STAGE;
 
@@ -82,7 +204,7 @@ export function Companion() {
     // Sits under dialogs and toasts, and only his own shapes take the pointer.
     <div
       ref={hostRef}
-      className="companion pointer-events-none fixed right-3 bottom-0 z-40"
+      className="companion pointer-events-none fixed top-0 left-0 z-40"
       style={{ width: width * scale, height: height * scale }}
     >
       <div
@@ -114,9 +236,17 @@ export function Companion() {
             ry={4.5}
             className="fill-foreground/10"
           />
-          <Tooltip delayDuration={1200}>
+          <Tooltip
+            delayDuration={1200}
+            open={tipOpen && !menuOpen}
+            onOpenChange={setTipOpen}
+          >
             <TooltipTrigger asChild>
-              <g data-part="hit" className="companion-hit pointer-events-auto">
+              <g
+                ref={hitRef}
+                data-part="hit"
+                className="companion-hit pointer-events-auto"
+              >
                 <g data-part="root">
                   <g data-part="front">
                     <g data-part="frontLegL">
@@ -149,6 +279,12 @@ export function Companion() {
                           <circle cx={-12.3} cy={-73.3} r={1.5} style={FILL} />
                           <circle cx={12.7} cy={-73.3} r={1.5} style={FILL} />
                         </g>
+                        <path
+                          data-part="happy"
+                          d="M-15,-70q4,-5.5 8,0M10,-70q4,-5.5 8,0"
+                          visibility="hidden"
+                          style={{ ...OUTLINE, fill: "none", strokeWidth: 2 }}
+                        />
                         <path data-part="mouth" style={{ ...OUTLINE, strokeWidth: 1.3 }} />
                       </g>
                     </g>
@@ -210,6 +346,54 @@ export function Companion() {
           </span>
         ))}
       </div>
+      {/* His menu opens above him, its right edge lined up with his. */}
+      <DropdownMenu open={menuOpen} onOpenChange={setMenu}>
+        <DropdownMenuTrigger asChild>
+          <span
+            aria-hidden="true"
+            tabIndex={-1}
+            className="absolute size-0"
+            style={{ left: restX * scale + 34, top: ground * scale - 66 }}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="top"
+          align="end"
+          sideOffset={0}
+          collisionPadding={8}
+          aria-label="Kevin"
+          className="companion-menu w-54"
+          onInteractOutside={(event) => {
+            // A click on him closes the menu himself.
+            if (hitRef.current?.contains(event.target as Node)) {
+              event.preventDefault();
+            }
+          }}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DropdownMenuItem onSelect={() => choose("ask")}>
+            <MessageSquareIcon />
+            Ask about this shard
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => choose("summarize")}>
+            <NewspaperIcon />
+            Summarize this shard
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => choose("related")}>
+            <Link2Icon />
+            Find related shards
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => choose("chat")}>
+            <PanelRightIcon />
+            Open chat
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={hide}>
+            <EyeOffIcon />
+            Hide Kevin
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

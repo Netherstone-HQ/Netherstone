@@ -49,6 +49,7 @@ import { openCitation } from "@/lib/open-citation";
 import { openWebLink } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
+import { useCompanionStore } from "@/store/companion";
 import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
@@ -453,6 +454,8 @@ function Messages() {
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
   const canAdd = openShardPath(vault, openPath) !== null;
+  // Room under the last message while the companion sits on the composer.
+  const perched = useCompanionStore((s) => s.perched);
   const { ref, onScroll } = useStickToBottom([
     messages,
     changes,
@@ -465,7 +468,10 @@ function Messages() {
     <div
       ref={ref}
       onScroll={onScroll}
-      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
+      className={cn(
+        "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
+        perched && "pb-[96px]",
+      )}
     >
       {withChanges(messages, changes, memories).map(
         ({ message, changes, memories }) =>
@@ -496,6 +502,10 @@ function Messages() {
     </div>
   );
 }
+
+/** The composer card is where the companion sits while the panel is open. */
+const setPerch = (perch: HTMLDivElement | null) =>
+  useCompanionStore.setState({ perch });
 
 function Starters({ onAsk }: { onAsk: (text: string) => void }) {
   const starter =
@@ -685,6 +695,7 @@ export function AssistantPanel() {
         answering={answering !== null}
         onSend={() => send(draft, shards)}
         onStop={stopAnswer}
+        cardRef={setPerch}
         model={
           setup ? (
             <ModelButton

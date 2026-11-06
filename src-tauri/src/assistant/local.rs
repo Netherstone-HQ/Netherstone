@@ -18,11 +18,13 @@ pub enum ServerKind {
     Other,
 }
 
-/// Each server's usual port. Ollama has its own API; the others speak the
-/// OpenAI-style one.
-const USUAL_PORTS: [(ServerKind, u16); 3] = [
+/// Each server's usual ports. Ollama has its own API; the others speak the
+/// OpenAI-style one. llama.cpp's server listens on 9931 unless told
+/// otherwise (its tools/server/README); older versions used 8080.
+const USUAL_PORTS: [(ServerKind, u16); 4] = [
     (ServerKind::Ollama, 11434),
     (ServerKind::LmStudio, 1234),
+    (ServerKind::LlamaCpp, 9931),
     (ServerKind::LlamaCpp, 8080),
 ];
 
@@ -127,6 +129,42 @@ pub async fn sees_images(target: &Target, model: &str) -> bool {
     shown
         .await
         .is_ok_and(|shown| shown.capabilities.iter().any(|c| c == "vision"))
+}
+
+/// The context the Ollama model `model` at `target` is loaded with, from
+/// the running models its server lists. None when it isn't loaded or
+/// can't be asked.
+pub async fn loaded_context(target: &Target, model: &str) -> Option<u64> {
+    #[derive(Deserialize)]
+    struct Running {
+        #[serde(default)]
+        models: Vec<Loaded>,
+    }
+    #[derive(Deserialize)]
+    struct Loaded {
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        model: String,
+        context_length: Option<u64>,
+    }
+    let client = models::http_client(PROBE_CONNECT, Some(PROBE_TOTAL)).ok()?;
+    let running = async {
+        client
+            .get(format!("{}api/ps", target.base_url))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<Running>()
+            .await
+    };
+    running
+        .await
+        .ok()?
+        .models
+        .into_iter()
+        .find(|loaded| loaded.name == model || loaded.model == model)?
+        .context_length
 }
 
 /// The servers answering on their usual ports, with their models.
@@ -263,5 +301,22 @@ mod tests {
         let requests = server.requests();
         assert!(requests[0].starts_with("POST /api/show"));
         assert!(requests[0].contains(r#"{"model":"llava"}"#));
+    }
+
+    #[tokio::test]
+    async fn a_loaded_ollama_model_says_its_context() {
+        use crate::assistant::chat::tests::{Answer, serve};
+        // Written from the example in Ollama's API docs for /api/ps.
+        let running = r#"{"models":[{"name":"gemma4:latest","model":"gemma4:latest","context_length":4096}]}"#;
+        let server = serve(vec![
+            Answer::ok("application/json", running),
+            Answer::ok("application/json", running),
+            Answer::status(404, "{}"),
+        ]);
+        let target = server.target(Api::Ollama, None);
+        assert_eq!(loaded_context(&target, "gemma4:latest").await, Some(4096));
+        assert_eq!(loaded_context(&target, "qwen3:latest").await, None);
+        assert_eq!(loaded_context(&target, "gemma4:latest").await, None);
+        assert!(server.requests()[0].starts_with("GET /api/ps"));
     }
 }

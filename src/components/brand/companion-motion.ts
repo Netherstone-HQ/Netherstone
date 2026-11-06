@@ -52,6 +52,11 @@ const MOUTHS = {
     fill: "var(--companion-ink)",
   },
   flat: { d: "M-1,-59Q2,-58.4 5,-59", fill: "none" },
+  /** Wide open, to eat his shard or spit it out. */
+  big: {
+    d: "M-3.5,-59.5a5.5,6 0 1,0 11,0a5.5,6 0 1,0-11,0Z",
+    fill: "var(--companion-ink)",
+  },
   /** Unsure, for a shrug. */
   wobble: { d: "M-2,-58.8q1.5,-1.8 3,0t3,0", fill: "none" },
   grin: { d: "M-3,-60.5Q2,-54.5 7,-60.5Z", fill: "var(--companion-ink)" },
@@ -89,6 +94,16 @@ interface Pose {
   stow: number;
   /** How far along a hop is, from 0 to 1. */
   hopP: number;
+  /** How muscled his arms and legs are, up to 1.3. */
+  bulk: number;
+  /** The gem on its way into his mouth, shrinking as it goes. */
+  eat: number;
+  /** The gem popping out of his mouth, spinning, from 0 to 1. */
+  pop: number;
+  /** Flexing, which widens his arms. */
+  flex: number;
+  /** 1 while the gem is in his tummy and his hands are free. */
+  empty: number;
   gemHidden: boolean;
   /** Showing the back view. */
   back: boolean;
@@ -121,6 +136,10 @@ const NEUTRAL: Target = {
   gemDown: 0,
   gemUp: 0,
   stow: 0,
+  bulk: 0,
+  eat: 0,
+  pop: 0,
+  flex: 0,
 };
 
 interface Tween {
@@ -161,6 +180,36 @@ const PARTS = [
 
 type Parts = Record<(typeof PARTS)[number], SVGElement>;
 
+/** The limbs that bulk up, each with a plain and a muscled shape. */
+const LIMBS = [
+  "frontLegL",
+  "frontLegR",
+  "frontArmL",
+  "frontArmR",
+  "backArmL",
+  "backArmR",
+] as const;
+
+type Limb = { plain: SVGElement | null; muscle: SVGElement | null };
+
+/** Past this, a limb shows its muscled shape. */
+const BULKED = 0.12;
+/** The most muscled he gets. */
+const MAX_BULK = 1.3;
+
+/**
+ * His flexes, in turn: double biceps, then his left arm leaning left, then
+ * his right arm leaning right.
+ */
+const FLEXES: Target[] = [
+  { armsUpL: 0.74, armsUpR: 0.74, tilt: 0 },
+  { armsUpL: 0.74, armsUpR: 0.1, tilt: -0.5 },
+  { armsUpL: 0.1, armsUpR: 0.74, tilt: 0.5 },
+];
+
+/** How a change to several shards ended. */
+type HeavyEnd = "done" | "error" | "stop";
+
 /** Where his feet are, in viewport pixels. */
 export interface Spot {
   x: number;
@@ -188,6 +237,7 @@ const clamp = (value: number, limit: number) =>
 
 export class CompanionRig {
   private readonly parts: Parts;
+  private readonly limbs: Record<(typeof LIMBS)[number], Limb>;
   private readonly reduced: boolean;
   private readonly pose: Pose;
   private readonly timers = new Set<number>();
@@ -214,8 +264,17 @@ export class CompanionRig {
   /** Asked for while he couldn't play it yet. */
   private workWaiting = false;
   /** What he's showing now, which can differ from `work` for a moment. */
-  private state: Work | "hello" | "enter" | "hop" | "leave" = "enter";
+  private state: Work | "hello" | "enter" | "hop" | "leave" | "heavy" =
+    "enter";
   private menu: CompanionMenu | null = null;
+  /**
+   * A change to several shards under way: the shards changed so far, and
+   * how many he's flexed for. Null otherwise.
+   */
+  private heavy: { changed: number; flexed: number; done: boolean } | null =
+    null;
+  /** Whether he's flexing his way through `heavy` now. */
+  private flexing = false;
 
   // On his own.
   private sitting = false;
@@ -237,6 +296,15 @@ export class CompanionRig {
         host.querySelector<SVGElement>(`[data-part="${name}"]`),
       ]),
     ) as Parts;
+    this.limbs = Object.fromEntries(
+      LIMBS.map((name) => [
+        name,
+        {
+          plain: this.parts[name].querySelector<SVGElement>("[data-plain]"),
+          muscle: this.parts[name].querySelector<SVGElement>("[data-muscle]"),
+        },
+      ]),
+    ) as Record<(typeof LIMBS)[number], Limb>;
     this.reduced = reducedMotion;
     this.home = home;
     this.spot = home();
@@ -249,6 +317,7 @@ export class CompanionRig {
       turn: 1,
       blink: 1,
       hopP: 0,
+      empty: 0,
       stow: 1,
       gemHidden: true,
       back: false,
@@ -296,6 +365,7 @@ export class CompanionRig {
     if (!on) {
       this.target = null;
       this.work = "idle";
+      this.heavy = null;
     }
     this.direct();
   }
@@ -333,6 +403,22 @@ export class CompanionRig {
     this.workWaiting = true;
     if (this.busy() || this.at !== this.where()) return;
     this.play(work);
+  }
+
+  /**
+   * How many shards the answer coming in has changed so far. From the
+   * second one, he eats his shard, bulks up and flexes once for each.
+   */
+  setChanged(count: number) {
+    if (!this.assistant || this.reduced || count < 2) return;
+    if (this.heavy) {
+      this.heavy.changed = Math.max(this.heavy.changed, count);
+      if (!this.flexing && this.state === "heavy") this.keepFlexing();
+      return;
+    }
+    this.heavy = { changed: count, flexed: 0, done: false };
+    if (this.busy() || this.at !== this.where()) return;
+    this.bulkUp();
   }
 
   /** Waves, walks off to the right, and then `gone` runs. */
@@ -497,6 +583,7 @@ export class CompanionRig {
     this.wakeEarly = null;
     this.sitting = false;
     this.reacting = false;
+    this.flexing = false;
     try {
       await sequence(this.stepFor(gen));
     } catch (error) {
@@ -565,6 +652,7 @@ export class CompanionRig {
   /** Hops to `to`, picking his shard up first so it never floats along. */
   private async hopTo(step: Step, to: Spot) {
     await this.getUp(step);
+    await this.shrinkBack(step);
     const p = this.pose;
     if (p.gemDown > 0 || p.gemHidden) {
       p.mouth = "smile";
@@ -879,6 +967,22 @@ export class CompanionRig {
 
   private play(work: Work) {
     this.workWaiting = false;
+    if (this.heavy) {
+      // Finished, he flexes for the shards he hasn't yet, then ends.
+      if (work === "done" && this.flexing) {
+        this.heavy.done = true;
+        // Still owed if a hop cuts the flexes short.
+        this.workWaiting = true;
+        return;
+      }
+      if (work !== "read" && work !== "search") {
+        return this.heavyEnd(
+          work === "done" ? "done" : work === "shrug" ? "error" : "stop",
+        );
+      }
+      if (this.state !== "heavy") this.bulkUp();
+      return;
+    }
     switch (work) {
       case "idle":
         return this.idle();
@@ -929,6 +1033,7 @@ export class CompanionRig {
   private async settle(step: Step) {
     const p = this.pose;
     await this.getUp(step);
+    await this.shrinkBack(step);
     if (p.gemHidden) await this.pullGem(step);
     p.mouth = "smile";
     await step(this.tween({ ...NEUTRAL, x: STAGE.restX }, 380));
@@ -1179,7 +1284,147 @@ export class CompanionRig {
     });
   }
 
+  // ── A change to several shards ────────────────────────────────────────────
+
+  /** He eats his shard, bulks up, and flexes for the shards changed so far. */
+  private bulkUp() {
+    this.state = "heavy";
+    void this.run(async (step) => {
+      // Shards changed meanwhile wait for the flexes at the end.
+      this.flexing = true;
+      await this.settle(step);
+      const p = this.pose;
+      await step(this.tween({ faceY: 3, gemUp: 0.3 }, 260));
+      p.mouth = "big";
+      await step(this.tween({ eat: 1, gemUp: 0 }, 420, easeIn));
+      p.gemHidden = true;
+      p.empty = 1;
+      p.mouth = "flat";
+      // A gulp.
+      await step(this.tween({ squash: 0.6, eye: 0.4 }, 120));
+      await step(
+        this.tween({ squash: 0, eye: 1, eat: 0, faceY: 0 }, 280, overshoot),
+      );
+      await step(this.wait(220));
+      // His arms and legs swell in two pulses.
+      p.mouth = "o";
+      await step(this.tween({ bulk: 0.55, squash: -0.3 }, 200, easeOut));
+      await step(this.tween({ squash: 0.15 }, 120));
+      await step(this.tween({ bulk: MAX_BULK, squash: -0.4 }, 260, easeOut));
+      p.mouth = "grin";
+      await step(this.tween({ squash: 0 }, 360, overshoot));
+      await this.flexAll(step);
+    });
+  }
+
+  /** Flexes for the shards changed since he last did. */
+  private keepFlexing() {
+    this.state = "heavy";
+    void this.run((step) => this.flexAll(step));
+  }
+
+  private async flexAll(step: Step) {
+    const gen = this.gen;
+    this.flexing = true;
+    try {
+      while (this.heavy && this.heavy.flexed < this.heavy.changed) {
+        await this.flex(step, this.heavy.flexed++);
+      }
+    } finally {
+      // A cancelled run's wait still ends: leave a newer run's flag alone.
+      if (gen === this.gen) this.flexing = false;
+    }
+    if (this.heavy?.done) this.heavyEnd("done");
+  }
+
+  private async flex(step: Step, turn: number) {
+    const p = this.pose;
+    p.mouth = "grin";
+    await step(
+      this.tween(
+        { ...FLEXES[turn % FLEXES.length], flex: 1, squash: 0.35 },
+        240,
+        easeOut,
+      ),
+    );
+    await step(this.tween({ squash: -0.15 }, 160, easeOut));
+    await step(this.tween({ squash: 0 }, 260, overshoot));
+    await step(this.wait(380));
+    p.mouth = "smile";
+    await step(
+      this.tween({ armsUpL: 0.08, armsUpR: 0.08, tilt: 0, flex: 0 }, 300),
+    );
+  }
+
+  /** However it ended, he shrinks back and spits the shard into his hands. */
+  private heavyEnd(how: HeavyEnd) {
+    this.heavy = null;
+    this.state = "heavy";
+    void this.run(async (step) => {
+      await this.shrinkBack(step);
+      if (how === "done") return this.done();
+      if (how === "error") return this.shrug();
+      this.pose.mouth = "flat";
+      await step(this.wait(500));
+      this.resume();
+    });
+  }
+
+  /** Back to his own size with the shard in his hands, if he'd bulked up. */
+  private async shrinkBack(step: Step) {
+    const p = this.pose;
+    if (p.bulk === 0 && p.empty === 0 && p.flex === 0) return;
+    await step(
+      this.tween(
+        { armsUpL: 0, armsUpR: 0, tilt: 0, squash: 0, flex: 0, faceY: 0 },
+        220,
+      ),
+    );
+    if (p.bulk > 0) {
+      // A quick, wobbly deflate.
+      p.mouth = "o";
+      await step(this.tween({ bulk: p.bulk * 0.35, squash: 0.4 }, 260, easeIn));
+      await step(this.tween({ bulk: 0, squash: -0.3 }, 220, easeOut));
+      await step(this.tween({ squash: 0 }, 260, overshoot));
+    }
+    if (p.empty > 0) await this.spit(step);
+  }
+
+  /** He swells his cheeks, then the shard pops out and lands in his hands. */
+  private async spit(step: Step) {
+    const p = this.pose;
+    p.mouth = "big";
+    await step(this.tween({ squash: 0.7, eye: 0.3 }, 180, easeOut));
+    p.gemHidden = false;
+    p.eat = 1;
+    p.pop = 0;
+    this.render();
+    await step(
+      Promise.all([
+        this.tween({ squash: -0.4 }, 140, easeOut).then(() =>
+          this.tween({ squash: 0 }, 380, overshoot),
+        ),
+        this.tween({ eat: 0, empty: 0 }, 560, easeOut),
+        this.tween({ pop: 1 }, 560, linear),
+      ]),
+    );
+    p.pop = 0;
+    p.mouth = "smile";
+    await step(this.tween({ eye: 1 }, 160));
+  }
+
   // ── Drawing ───────────────────────────────────────────────────────────────
+
+  /** Swaps a limb to its muscled shape once he bulks up, mirrored per side. */
+  private limb(name: (typeof LIMBS)[number], side: number, width: number) {
+    const { plain, muscle } = this.limbs[name];
+    if (!plain || !muscle) return;
+    const big = this.pose.bulk > BULKED;
+    // "inherit", so a limb in the hidden back view stays hidden.
+    plain.setAttribute("visibility", big ? "hidden" : "inherit");
+    muscle.setAttribute("visibility", big ? "inherit" : "hidden");
+    if (big) place(muscle, `scale(${side * width} 1)`);
+  }
 
   private render() {
     const p = this.pose;
@@ -1191,6 +1436,7 @@ export class CompanionRig {
 
     const w = p.walk;
     const ph = p.phase;
+    const b = p.bulk;
     // A heavy pebble waddles: it rocks side to side more than it bounces,
     // and squashes a little each time a foot lands.
     const bob = -Math.abs(Math.sin(ph)) * 3 * w;
@@ -1202,20 +1448,26 @@ export class CompanionRig {
     );
 
     const armsUp = (p.armsUpL + p.armsUpR) / 2;
-    const sx = 1 + 0.03 * p.sit + 0.07 * p.squash + 0.02 * land;
+    const sx = 1 + 0.03 * p.sit + 0.07 * p.squash + 0.02 * land + 0.1 * b;
     const sy =
       1 -
       0.05 * p.sit -
       0.09 * p.squash +
       0.06 * armsUp -
       0.03 * p.nod -
-      0.03 * land;
+      0.03 * land +
+      0.03 * b;
     const lift = 8 * p.sit + bob;
     const body = `translate(0 ${lift}) rotate(${p.tilt * 6} 0 -40) scale(${sx} ${sy})`;
     place(el.frontBody, body);
     place(el.backBody, body);
 
     const down = p.gemDown;
+    // Eating, the gem rises to his mouth.
+    const raise = p.gemUp + 1.35 * p.eat;
+    const muscle = Math.min(b, MAX_BULK) / MAX_BULK;
+    const legWidth = 0.55 + 0.7 * muscle;
+    const armWidth = (0.5 + 0.75 * muscle) * (1 + 0.18 * p.flex);
     const holds = { L: 0, R: 0 };
     let handAngle = 0;
     for (const [side, s] of [
@@ -1223,26 +1475,29 @@ export class CompanionRig {
       ["R", 1],
     ] as const) {
       const up = s < 0 ? p.armsUpL : p.armsUpR;
-      const hold = (1 - down) * (1 - up) * (1 - p.stow);
+      const hold = (1 - down) * (1 - up) * (1 - p.stow) * (1 - p.empty);
       holds[side] = hold;
       const swing = Math.sin(ph + (s > 0 ? Math.PI : 0));
       const step = Math.max(0, swing) * 6 * w;
       place(
         el[`frontLeg${side}`],
-        `translate(${s * (17 + 4 * p.sit)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 10 * w}) scale(1 ${1 - 0.45 * p.sit})`,
+        `translate(${s * (17 + 4 * p.sit + 5 * b)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 10 * w}) scale(1 ${1 - 0.45 * p.sit + 0.15 * b})`,
       );
+      this.limb(`frontLeg${side}`, s, legWidth);
       const wiggle = s > 0 ? p.wiggle * 22 : 0;
       const angle =
         -s *
           (12 -
             44 * hold -
-            52 * p.gemUp * hold +
+            52 * raise * hold +
             150 * up -
             18 * p.armsIn +
             wiggle) +
         Math.sin(ph) * 12 * w * (1 - hold);
       if (s > 0) handAngle = angle;
-      const arm = `translate(${s * 30} -50) rotate(${angle})`;
+      const arm = `translate(${s * (30 + 6 * b)} -50) rotate(${angle}) scale(1 ${1 + 0.08 * b})`;
+      this.limb(`frontArm${side}`, s, armWidth);
+      this.limb(`backArm${side}`, s, armWidth);
       place(el[`frontArm${side}`], arm);
       place(el[`backArm${side}`], arm);
     }
@@ -1254,12 +1509,21 @@ export class CompanionRig {
     const handX = p.x + p.turn * sx * (30 - 26 * Math.sin(rad));
     const handY = ground + lift + sy * (-50 + 26 * Math.cos(rad));
     const lapX = p.x + 2 * sx;
-    const lapY = ground + lift - 30 * sy - p.gemUp * 21;
+    const lapY = ground + lift - 30 * sy - raise * 21;
     const heldX = lapX + (handX - lapX) * p.stow;
     const heldY = lapY + (handY - lapY) * p.stow;
     const gemX = heldX + (GEM_GROUND.x - heldX) * down;
-    const gemY = heldY + (GEM_GROUND.y - heldY) * down - arc * 16;
-    place(el.gem, `translate(${gemX} ${gemY}) rotate(${-arc * 20})`);
+    // Spat out, it arcs up and spins once on its way back to his hands.
+    const gemY =
+      heldY +
+      (GEM_GROUND.y - heldY) * down -
+      arc * 16 -
+      Math.sin(Math.PI * p.pop) * 34;
+    const gemScale = 1 - 0.62 * p.eat;
+    place(
+      el.gem,
+      `translate(${gemX} ${gemY}) rotate(${-arc * 20 + p.pop * 360}) scale(${gemScale})`,
+    );
     show(el.gem, !p.gemHidden);
 
     for (const [side, s] of [
@@ -1267,8 +1531,11 @@ export class CompanionRig {
       ["R", 1],
     ] as const) {
       const hand = el[`hand${side}`];
-      place(hand, `translate(${gemX + s * 13} ${gemY + 3})`);
-      show(hand, holds[side] > 0.5 && !p.back && !p.gemHidden);
+      place(
+        hand,
+        `translate(${gemX + s * 13 * Math.max(gemScale, 0.55)} ${gemY + 3})`,
+      );
+      show(hand, holds[side] > 0.5 && !p.back && !p.gemHidden && p.pop === 0);
     }
 
     // Lying on his side, the lower leg rests along the floor and the upper
@@ -1304,7 +1571,7 @@ export class CompanionRig {
     // His shadow shrinks while he's in the air.
     const air = this.hop ? 1 - 0.4 * Math.sin(Math.PI * p.hopP) : 1;
     el.shadow.setAttribute("cx", String(p.x + 27 * p.lie));
-    el.shadow.setAttribute("rx", String((42 + 46 * p.lie) * air));
+    el.shadow.setAttribute("rx", String((42 + 46 * p.lie + 10 * b) * air));
   }
 }
 

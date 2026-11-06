@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chatWork, inlineWork } from "./companion-work";
+import { changedFiles, chatWork, inlineWork } from "./companion-work";
 
 const idle = { answering: null, ending: null, messages: [{}] };
 const answering = (tool: string | null) => ({
@@ -51,5 +51,38 @@ describe("inlineWork", () => {
     expect(inlineWork(null, "prompt")).toBeNull();
     expect(inlineWork("preview", null)).toBeNull();
     expect(inlineWork("prompt", "prompt")).toBeNull();
+  });
+});
+
+describe("changedFiles", () => {
+  const tool = (name: string, paths: string[]) => ({
+    answering: { tool: { name, paths } },
+    ending: null,
+    messages: [{}],
+  });
+
+  it("counts each file the answer changes once", () => {
+    let changed = changedFiles([], idle, tool("read", ["A.md"]));
+    expect(changed).toEqual([]);
+    let previous = tool("edit_shard", ["A.md"]);
+    changed = changedFiles(changed, tool("read", ["A.md"]), previous);
+    expect(changed).toEqual(["A.md"]);
+    const again = tool("edit_shard", ["A.md"]);
+    changed = changedFiles(changed, previous, again);
+    expect(changed).toEqual(["A.md"]);
+    previous = again;
+    changed = changedFiles(changed, previous, tool("move", ["B.md", "C.md"]));
+    expect(changed).toEqual(["A.md", "B.md"]);
+  });
+
+  it("counts every new shard, even in one folder", () => {
+    const first = tool("create_shard", ["Notes"]);
+    const one = changedFiles([], answering(null), first);
+    expect(changedFiles(one, first, tool("create_shard", ["Notes"]))).toHaveLength(2);
+  });
+
+  it("starts again with each answer", () => {
+    expect(changedFiles(["A.md", "B.md"], tool("edit_shard", ["B.md"]), idle)).toEqual([]);
+    expect(changedFiles(["A.md"], idle, tool("edit_shard", ["B.md"]))).toEqual(["B.md"]);
   });
 });

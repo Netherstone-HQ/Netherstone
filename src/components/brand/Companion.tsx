@@ -14,7 +14,11 @@ import {
   type Spot,
   STAGE,
 } from "@/components/brand/companion-motion";
-import { chatWork, inlineWork } from "@/components/brand/companion-work";
+import {
+  changedFiles,
+  chatWork,
+  inlineWork,
+} from "@/components/brand/companion-work";
 import {
   BRAND,
   FACET,
@@ -64,11 +68,35 @@ const OUTLINE = {
   vectorEffect: "non-scaling-stroke",
 } as const;
 
+// Each limb has a plain shape and a muscled one he swaps to when he bulks
+// up. Drawn for the right side, mirrored for the left; +x is outward.
+const MUSCLE_LEG =
+  "M-9,-7C-9,-11 9,-11 10,-7C17,-1 17,8 11,12C16,15 15,21 9,23L-8,23C-14,20 -14,15 -10,12C-15,6 -15,-2 -9,-7Z";
+const QUAD_LINE = "M3,-2Q7,4 4,9";
+const MUSCLE_ARM =
+  "M-8,-3C-11,-13 11,-15 13,-4C22,2 23,15 12,20C10,21 9,22 10,24C15,27 13,34 6,37L-5,37C-11,33 -11,27 -7,22C-13,15 -13,4 -8,-3Z";
+const BICEP_LINE = "M5,4Q11,10 7,17";
+const LINE = { ...OUTLINE, fill: "none", strokeWidth: 1.2 };
+
 const Leg = () => (
-  <rect x={-9} y={-6} width={18} height={28} rx={9} style={{ ...FILL, ...OUTLINE }} />
+  <>
+    <rect data-plain x={-9} y={-6} width={18} height={28} rx={9} style={{ ...FILL, ...OUTLINE }} />
+    <g data-muscle visibility="hidden">
+      <path d={MUSCLE_LEG} style={{ ...FILL, ...OUTLINE }} />
+      <path d={QUAD_LINE} style={LINE} />
+    </g>
+  </>
 );
+// Muscled, his round hand stays at the wrist, sized to the arm.
 const Arm = () => (
-  <rect x={-7} y={-4} width={14} height={36} rx={7} style={{ ...FILL, ...OUTLINE }} />
+  <>
+    <rect data-plain x={-7} y={-4} width={14} height={36} rx={7} style={{ ...FILL, ...OUTLINE }} />
+    <g data-muscle visibility="hidden">
+      <path d={MUSCLE_ARM} style={{ ...FILL, ...OUTLINE }} />
+      <path d={BICEP_LINE} style={LINE} />
+      <circle cx={0.5} cy={39} r={6.5} style={{ ...FILL, ...OUTLINE }} />
+    </g>
+  </>
 );
 const Hand = () => <circle r={5.5} style={{ ...FILL, ...OUTLINE }} />;
 
@@ -132,6 +160,7 @@ export function Companion() {
     rigRef.current = rig;
     const onResize = () => rig.relocate();
     window.addEventListener("resize", onResize);
+    let changed: readonly string[] = [];
     const unsubscribe = [
       useEditorStore.subscribe((state, prev) => {
         if (state.editTick !== prev.editTick) rig.noticeEdit();
@@ -140,6 +169,9 @@ export function Companion() {
       useAssistantStore.subscribe((state, prev) => {
         const work = chatWork(prev, state);
         if (work) rig.setWork(work);
+        const now = changedFiles(changed, prev, state);
+        if (now.length > changed.length) rig.setChanged(now.length);
+        changed = now;
       }),
       useInlineAskStore.subscribe((state, prev) => {
         const work = inlineWork(prev.phase, state.phase);

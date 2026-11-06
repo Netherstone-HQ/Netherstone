@@ -3,9 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AssistantToggle } from "@/components/assistant/AssistantToggle";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { AssistantProvider, AssistantStatus } from "@/lib/commands";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import { useAssistantStore } from "@/store/assistant";
 import { useSettingsStore } from "@/store/settings";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
@@ -29,12 +32,79 @@ function mockCommands(handlers: Handlers) {
   });
 }
 
+function provider(
+  id: string,
+  name: string,
+  setup: AssistantProvider["setup"],
+): AssistantProvider {
+  return { id, name, setup, keyPage: null, key: null, servers: [], custom: null };
+}
+
+const MODELS = ["Sonnet 5.5", "Opus 5.5"].map((name) => ({
+  id: name.toLowerCase().replaceAll(" ", "-"),
+  name,
+  reasoning: true,
+  tools: true,
+  images: true,
+  pdfs: true,
+  caching: true,
+  responsesOnly: false,
+}));
+
+/** The assistant's commands, kept like the app keeps them. Keys aren't checked. */
+function assistantCommands(more: Partial<AssistantStatus> = {}): Handlers {
+  let state: AssistantStatus = {
+    enabled: false,
+    sendFiles: false,
+    keyringAvailable: true,
+    model: null,
+    providers: [
+      provider("openai", "OpenAI", "key"),
+      provider("anthropic", "Anthropic", "key"),
+      provider("google", "Google", "key"),
+      provider("openrouter", "OpenRouter", "key"),
+      provider("local", "Local server", "local"),
+      provider("custom", "Custom", "custom"),
+    ],
+    ...more,
+  };
+  return {
+    assistant_status: () => state,
+    assistant_models: () => MODELS,
+    assistant_save_key: ({ provider: id }) => {
+      state = {
+        ...state,
+        providers: state.providers.map((p) => (p.id === id ? { ...p, key: "keyring" } : p)),
+      };
+      return MODELS;
+    },
+    assistant_set_enabled: ({ enabled }) => {
+      state = { ...state, enabled: enabled as boolean };
+    },
+    assistant_set_model: ({ choice }) => {
+      state = { ...state, model: choice as AssistantStatus["model"] };
+    },
+  };
+}
+
 const baseCommands: Handlers = {
   default_vault_location: () => DOCUMENTS,
   scan_vault: () => [],
   sync_get_vault_record: () => null,
   github_get_account: () => null,
+  ...assistantCommands(),
 };
+
+/** Keeps the open vault and skips sync, to the assistant step. */
+async function toAssistantStep() {
+  fireEvent.click(
+    screen.getByRole("button", { name: new RegExp(copy.vault.keep.title("Research")) }),
+  );
+  await screen.findByText(copy.appearance.title);
+  fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
+  fireEvent.click(await screen.findByRole("button", { name: copy.common.skip }));
+  await screen.findByText(copy.assistant.title);
+}
 
 async function renderOnboarding() {
   const onDone = vi.fn();
@@ -49,6 +119,7 @@ beforeEach(() => {
   useVaultStore.setState({ currentVaultPath: null, fileTree: [] });
   useSyncStore.setState({ vaultPath: null, record: null, loaded: false });
   useGitHubStore.setState({ account: null, loaded: false, error: null });
+  useAssistantStore.setState({ enabled: null, isOpen: false });
 });
 
 afterEach(() => {
@@ -92,6 +163,8 @@ describe("Onboarding", () => {
 
     await screen.findByText(copy.sync.title);
     fireEvent.click(screen.getByRole("button", { name: copy.common.skip }));
+    await screen.findByText(copy.assistant.title);
+    fireEvent.click(await screen.findByRole("button", { name: copy.common.skip }));
 
     await screen.findByText(copy.ready.body);
     fireEvent.click(screen.getByRole("button", { name: copy.ready.finish }));
@@ -136,6 +209,8 @@ describe("Onboarding", () => {
     await screen.findByText(copy.sync.alreadyOn);
     expect(screen.getByText(copy.sync.note)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
+    await screen.findByText(copy.assistant.title);
+    fireEvent.click(await screen.findByRole("button", { name: copy.common.skip }));
 
     await screen.findByText(copy.ready.body);
     expect(screen.getByRole("checkbox", { name: copy.ready.addGuide })).toBeTruthy();
@@ -250,8 +325,91 @@ describe("Onboarding", () => {
     await screen.findByText(copy.appearance.title);
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
     fireEvent.click(await screen.findByRole("button", { name: copy.common.skip }));
+    await screen.findByText(copy.assistant.title);
+    fireEvent.click(await screen.findByRole("button", { name: copy.common.skip }));
 
     const guide = await screen.findByRole("checkbox", { name: copy.ready.addGuide });
     expect(guide.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("turns the assistant on with a saved key and picks its first model", async () => {
+    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    mockCommands({ ...baseCommands, ...assistantCommands() });
+    await renderOnboarding();
+    await toAssistantStep();
+
+    expect(
+      screen.getByText(/Some providers' free plans train their models on your chats\./),
+    ).toBeTruthy();
+    expect(screen.getByText(copy.assistant.later)).toBeTruthy();
+    expect(screen.queryByText("Custom")).toBeNull();
+    expect(screen.getByRole("img", { name: copy.common.stepLabel(4, 5) })).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Add key" })[1]);
+    fireEvent.change(screen.getByLabelText("Anthropic key"), {
+      target: { value: "sk-test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByText(copy.assistant.on);
+    expect(invoke).toHaveBeenCalledWith("assistant_set_enabled", { enabled: true });
+    expect(invoke).toHaveBeenCalledWith("assistant_set_model", {
+      choice: { provider: "anthropic", model: MODELS[0].id, server: null },
+    });
+    expect(useAssistantStore.getState().enabled).toBe(true);
+    expect(await screen.findByText("Sonnet 5.5")).toBeTruthy();
+    expect(screen.getByText(/Key saved/)).toBeTruthy();
+    expect(screen.queryByText(copy.assistant.later)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
+    expect(await screen.findByText(copy.ready.tips.assistant)).toBeTruthy();
+  });
+
+  it("leaves nothing of the assistant behind when it's skipped", async () => {
+    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    mockCommands({ ...baseCommands, ...assistantCommands() });
+    await renderOnboarding();
+    await toAssistantStep();
+
+    fireEvent.click(screen.getByRole("button", { name: copy.common.skip }));
+    await screen.findByText(copy.ready.body);
+
+    expect(screen.queryByText(copy.ready.tips.assistant)).toBeNull();
+    expect(invoke).not.toHaveBeenCalledWith("assistant_set_enabled", { enabled: true });
+    expect(invoke).not.toHaveBeenCalledWith("assistant_set_model", expect.anything());
+    expect(useAssistantStore.getState().enabled).not.toBe(true);
+
+    render(
+      <TooltipProvider>
+        <AssistantToggle />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(useAssistantStore.getState().enabled).toBe(false));
+    expect(screen.queryByRole("button", { name: "Show assistant" })).toBeNull();
+  });
+
+  it("shows what's already set up when the tour is replayed", async () => {
+    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    const anthropic = { ...provider("anthropic", "Anthropic", "key"), key: "keyring" as const };
+    mockCommands({
+      ...baseCommands,
+      ...assistantCommands({
+        enabled: true,
+        model: { provider: "anthropic", model: MODELS[1].id, server: null },
+        providers: [provider("openai", "OpenAI", "key"), anthropic, provider("local", "Local server", "local")],
+      }),
+    });
+    render(
+      <TooltipProvider>
+        <Onboarding onDone={vi.fn()} onClose={vi.fn()} />
+      </TooltipProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: copy.welcome.start }));
+    await toAssistantStep();
+
+    await screen.findByText(copy.assistant.on);
+    expect(await screen.findByText("Opus 5.5")).toBeTruthy();
+    expect(invoke).not.toHaveBeenCalledWith("assistant_set_model", expect.anything());
+    expect(screen.getByRole("button", { name: copy.common.continue })).toBeTruthy();
   });
 });

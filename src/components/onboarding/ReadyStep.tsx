@@ -1,4 +1,4 @@
-import { SearchIcon, TypeIcon } from "lucide-react";
+import { MessageSquareIcon, SearchIcon, TypeIcon } from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
 
 import { useState } from "react";
@@ -14,12 +14,14 @@ import type { VaultChoice } from "./VaultStep";
 export function ReadyStep({
   vault,
   replay,
+  assistantOn,
   onBack,
   onFinish,
 }: {
   vault: VaultChoice;
   /** Started again from Settings, on a vault that's already in use. */
   replay: boolean;
+  assistantOn: boolean;
   onBack: () => void;
   onFinish: (addGuide: boolean) => void;
 }) {
@@ -40,6 +42,9 @@ export function ReadyStep({
       : []),
     { icon: TypeIcon, text: copy.ready.tips.blocks },
     { icon: DrawingIcon, text: copy.ready.tips.canvas },
+    ...(assistantOn
+      ? [{ icon: MessageSquareIcon, text: copy.ready.tips.assistant }]
+      : []),
   ];
 
   return (

@@ -89,6 +89,15 @@ export const copy = {
     later: "You can turn it on later in Settings.",
   },
 
+  assistant: {
+    title: "Set up the AI assistant?",
+    body: "It answers questions from your shards and suggests edits you check before they apply.",
+    /** The provider rows and the "Free ways to start" line are Settings' own. */
+    on: "The assistant is on.",
+    model: "Model",
+    later: "You can set it up later in Settings.",
+  },
+
   ready: {
     title: "You're all set",
     bodyRestored: "Your vault is back and keeps syncing.",
@@ -97,6 +106,8 @@ export const copy = {
       search: (shortcut: string) => `Press ${shortcut} to search across shards.`,
       blocks: "Type / in a shard to add headings, lists, tables and more.",
       canvas: "Switch to Canvas, in the bar on the far left, to sketch and draw.",
+      /** Only when the assistant is on. */
+      assistant: "Open the assistant with the chat button in the top bar.",
     },
     /** Offered for vaults that didn't just get the guide. */
     addGuide: "Add the Start here guide to this vault",

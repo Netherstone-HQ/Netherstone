@@ -86,10 +86,24 @@ const API_OPTIONS: { value: AssistantApi; label: string }[] = [
   { value: "google", label: "Google" },
 ];
 
-export function AiAssistantSettings() {
-  const switchId = useId();
-  const filesId = useId();
-  const [confirming, setConfirming] = useState(false);
+/** A provider just set up, with the models it offers. */
+export interface SavedSource {
+  provider: string;
+  models: AssistantModel[];
+  server?: string;
+}
+
+/**
+ * The assistant's status and its providers' model lists, with what the
+ * provider rows and the model picker do. Settings and the welcome tour
+ * share it.
+ */
+export function useProviderSetup({
+  onSaved,
+}: {
+  /** Runs after a key is saved or a local server found, before the reread. */
+  onSaved?: (sources: SavedSource[]) => Promise<void>;
+} = {}) {
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const { models, setModels, setSource, loadModels, loadAll } =
     useModelLists();
@@ -108,29 +122,6 @@ export function AiAssistantSettings() {
       loadAll(next?.providers ?? []);
     }, showError);
   }, [loadAll]);
-
-  if (!status) return null;
-
-  async function toggle(enabled: boolean) {
-    setStatus((current) => current && { ...current, enabled });
-    try {
-      await setAssistantEnabled(enabled);
-      useAssistantStore.getState().setEnabled(enabled);
-    } catch (error) {
-      setStatus((current) => current && { ...current, enabled: !enabled });
-      showError(error);
-    }
-  }
-
-  async function toggleFiles(sendFiles: boolean) {
-    setStatus((current) => current && { ...current, sendFiles });
-    try {
-      await setAssistantSendFiles(sendFiles);
-    } catch (error) {
-      setStatus((current) => current && { ...current, sendFiles: !sendFiles });
-      showError(error);
-    }
-  }
 
   async function pick(choice: ModelChoice) {
     const previous = status?.model ?? null;
@@ -160,14 +151,49 @@ export function AiAssistantSettings() {
     await refresh();
   }
 
-  /** Keeps a list just checked, so it shows without asking again. */
-  function saved(provider: string, list: AssistantModel[], server?: string) {
-    setSource(sourceKey(provider, server), { state: "ready", models: list });
-    void refresh();
+  /** Keeps the lists just checked, so they show without asking again. */
+  async function saved(sources: SavedSource[]) {
+    for (const { provider, models: list, server } of sources) {
+      setSource(sourceKey(provider, server), { state: "ready", models: list });
+    }
+    if (onSaved) await onSaved(sources);
+    await refresh();
   }
 
-  const keyProviders = status.providers.filter((p) => p.setup === "key");
-  const otherProviders = status.providers.filter((p) => p.setup !== "key");
+  return { status, setStatus, models, loadModels, refresh, pick, remove, saved };
+}
+
+export type ProviderSetup = ReturnType<typeof useProviderSetup>;
+
+export function AiAssistantSettings() {
+  const switchId = useId();
+  const filesId = useId();
+  const [confirming, setConfirming] = useState(false);
+  const setup = useProviderSetup();
+  const { status, setStatus, models, pick } = setup;
+
+  if (!status) return null;
+
+  async function toggle(enabled: boolean) {
+    setStatus((current) => current && { ...current, enabled });
+    try {
+      await setAssistantEnabled(enabled);
+      useAssistantStore.getState().setEnabled(enabled);
+    } catch (error) {
+      setStatus((current) => current && { ...current, enabled: !enabled });
+      showError(error);
+    }
+  }
+
+  async function toggleFiles(sendFiles: boolean) {
+    setStatus((current) => current && { ...current, sendFiles });
+    try {
+      await setAssistantSendFiles(sendFiles);
+    } catch (error) {
+      setStatus((current) => current && { ...current, sendFiles: !sendFiles });
+      showError(error);
+    }
+  }
 
   return (
     <>
@@ -245,50 +271,78 @@ export function AiAssistantSettings() {
 
       <SettingsGroup title="Providers" description={<FreeWaysToStart />} bare>
         <div className="space-y-5">
-          <div className="divide-y rounded-xl border bg-card shadow-xs">
-            {keyProviders.map((provider) => (
-              <KeyRow
-                key={provider.id}
-                provider={provider}
-                models={models[provider.id]}
-                keyringAvailable={status.keyringAvailable}
-                onSaved={(list) => saved(provider.id, list)}
-                onRetry={() => void loadModels(provider.id)}
-                onRemove={() => void remove(provider)}
-              />
-            ))}
-          </div>
-          <div className="divide-y rounded-xl border bg-card shadow-xs">
-            {otherProviders.map((provider) =>
-              provider.setup === "local" ? (
-                <LocalRow
-                  key={provider.id}
-                  provider={provider}
-                  models={models}
-                  onFound={(found) => {
-                    for (const server of found) {
-                      saved(provider.id, server.models, server.address);
-                    }
-                  }}
-                  onRetry={(server) =>
-                    void loadModels(provider.id, server.address)
-                  }
-                  onRemove={() => void remove(provider)}
-                />
-              ) : (
-                <CustomRow
-                  key={provider.id}
-                  provider={provider}
-                  models={models[provider.id]}
-                  keyringAvailable={status.keyringAvailable}
-                  onSaved={(list) => saved(provider.id, list)}
-                  onRemove={() => void remove(provider)}
-                />
-              ),
-            )}
-          </div>
+          <ProviderCards setup={setup} status={status} custom />
         </div>
       </SettingsGroup>
+    </>
+  );
+}
+
+/**
+ * The provider rows: the key providers in one card, the local server (and
+ * Custom, when `custom`) in another.
+ */
+export function ProviderCards({
+  setup,
+  status,
+  custom = false,
+}: {
+  setup: ProviderSetup;
+  status: AssistantStatus;
+  custom?: boolean;
+}) {
+  const { models, loadModels, remove, saved } = setup;
+  const keyProviders = status.providers.filter((p) => p.setup === "key");
+  const otherProviders = status.providers.filter(
+    (p) => p.setup === "local" || (custom && p.setup === "custom"),
+  );
+
+  return (
+    <>
+      <div className="divide-y rounded-xl border bg-card shadow-xs">
+        {keyProviders.map((provider) => (
+          <KeyRow
+            key={provider.id}
+            provider={provider}
+            models={models[provider.id]}
+            keyringAvailable={status.keyringAvailable}
+            onSaved={(list) => void saved([{ provider: provider.id, models: list }])}
+            onRetry={() => void loadModels(provider.id)}
+            onRemove={() => void remove(provider)}
+          />
+        ))}
+      </div>
+      <div className="divide-y rounded-xl border bg-card shadow-xs">
+        {otherProviders.map((provider) =>
+          provider.setup === "local" ? (
+            <LocalRow
+              key={provider.id}
+              provider={provider}
+              models={models}
+              onFound={(found) =>
+                void saved(
+                  found.map((server) => ({
+                    provider: provider.id,
+                    models: server.models,
+                    server: server.address,
+                  })),
+                )
+              }
+              onRetry={(server) => void loadModels(provider.id, server.address)}
+              onRemove={() => void remove(provider)}
+            />
+          ) : (
+            <CustomRow
+              key={provider.id}
+              provider={provider}
+              models={models[provider.id]}
+              keyringAvailable={status.keyringAvailable}
+              onSaved={(list) => void saved([{ provider: provider.id, models: list }])}
+              onRemove={() => void remove(provider)}
+            />
+          ),
+        )}
+      </div>
     </>
   );
 }
@@ -305,10 +359,16 @@ function ExternalLink({ href, children }: { href: string; children: string }) {
   );
 }
 
-function FreeWaysToStart() {
+/**
+ * Where to start for free. `sentences` runs it on as one paragraph with
+ * full stops, the way the welcome tour writes; Settings shows two lines.
+ */
+export function FreeWaysToStart({ sentences = false }: { sentences?: boolean }) {
+  const line = sentences ? undefined : "block";
+  const end = sentences ? "." : "";
   return (
     <>
-      <span className="block">
+      <span className={line}>
         Free ways to start: a{" "}
         <ExternalLink href="https://aistudio.google.com/apikey">
           Gemini key
@@ -321,15 +381,17 @@ function FreeWaysToStart() {
         <ExternalLink href="https://ollama.com/download">
           local server
         </ExternalLink>
+        {end}
       </span>
-      <span className="block">
-        Free tiers may use your chats to train models
+      {sentences ? " " : null}
+      <span className={line}>
+        Some providers' free plans train their models on your chats{end}
       </span>
     </>
   );
 }
 
-function ModelPicker({
+export function ModelPicker({
   providers,
   models,
   value,
@@ -363,12 +425,13 @@ function ModelPicker({
           disabled={empty && !value}
           className="flex h-8 w-75 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-ui shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50"
         >
-          <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center">
             {value ? (
               <>
                 <span className="truncate">
                   {picked ? modelName(picked.model) : value.model}
                 </span>
+                <Dot />
                 <span className="shrink-0 text-muted-foreground text-ui-sm">
                   {pickedProvider?.setup === "local"
                     ? "Local"
@@ -478,7 +541,7 @@ function RememberChoice({
   );
 }
 
-function ProviderRow({
+export function ProviderRow({
   name,
   description,
   actions,

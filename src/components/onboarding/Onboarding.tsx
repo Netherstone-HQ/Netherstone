@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/store/settings";
 import { useSyncStore } from "@/store/sync";
 import { AppearanceStep } from "./AppearanceStep";
+import { AssistantStep } from "./AssistantStep";
 import { copy } from "./copy";
 import { ReadyStep } from "./ReadyStep";
 import { SyncStep } from "./SyncStep";
@@ -19,14 +20,14 @@ import { addStartHere } from "./start-here";
 import { StepProgress } from "./StepLayout";
 import { WelcomeStep } from "./WelcomeStep";
 
-type Step = "welcome" | "vault" | "appearance" | "sync" | "ready";
+type Step = "welcome" | "vault" | "appearance" | "sync" | "assistant" | "ready";
 
 /** How long the flow takes to fade into the app. Matches .onboarding-leave. */
 const LEAVE_MS = 220;
 
 /**
  * The first-run welcome: picks or creates a vault, a theme and, optionally,
- * sync, then hands over to the app. Shown until it has been finished once.
+ * sync and the assistant, then hands over to the app. Shown until it has been finished once.
  * `onClose` is given when the tour was started again from Settings.
  */
 export function Onboarding({
@@ -38,10 +39,11 @@ export function Onboarding({
 }) {
   const [step, setStep] = useState<Step>("welcome");
   const [vault, setVault] = useState<VaultChoice | null>(null);
+  const [assistantOn, setAssistantOn] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const completeOnboarding = useSettingsStore((s) => s.completeOnboarding);
 
-  const steps: Step[] = ["vault", "appearance", "sync", "ready"];
+  const steps: Step[] = ["vault", "appearance", "sync", "assistant", "ready"];
 
   function next() {
     const index = steps.indexOf(step as Exclude<Step, "welcome">);
@@ -114,10 +116,19 @@ export function Onboarding({
               <AppearanceStep onBack={back} onNext={next} />
             ) : step === "sync" && vault ? (
               <SyncStep vaultPath={vault.path} onBack={back} onNext={next} />
+            ) : step === "assistant" ? (
+              <AssistantStep
+                onBack={back}
+                onNext={(on) => {
+                  setAssistantOn(on);
+                  next();
+                }}
+              />
             ) : vault ? (
               <ReadyStep
                 vault={vault}
                 replay={onClose !== undefined}
+                assistantOn={assistantOn}
                 onBack={back}
                 onFinish={(addGuide) => void finish(addGuide)}
               />

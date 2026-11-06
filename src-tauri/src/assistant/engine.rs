@@ -62,6 +62,17 @@ pub enum Event {
     Stopped,
 }
 
+impl Event {
+    /// The last event of an answer, from how it went.
+    pub fn ending(result: Result<(Stop, Usage), ChatError>) -> Self {
+        match result {
+            Ok((stop, usage)) => Event::Done { stop, usage },
+            Err(ChatError::Stopped) => Event::Stopped,
+            Err(error) => Event::Failed { error },
+        }
+    }
+}
+
 /// Where events go. False once nobody's listening, which stops the chat.
 pub trait Sink: Send + Sync {
     fn send(&self, event: Event) -> bool;
@@ -223,7 +234,7 @@ pub struct Turn {
 
 /// Batches streamed text into events, and stops the chat when nobody's
 /// listening anymore.
-struct Out<'a> {
+pub(super) struct Out<'a> {
     sink: &'a dyn Sink,
     stop: &'a StopToken,
     text: String,
@@ -232,11 +243,11 @@ struct Out<'a> {
     /// words show at once instead of waiting for the next ones.
     last: Option<Instant>,
     /// All the text of the step streaming now.
-    step_text: String,
+    pub(super) step_text: String,
 }
 
 impl<'a> Out<'a> {
-    fn new(sink: &'a dyn Sink, stop: &'a StopToken) -> Self {
+    pub(super) fn new(sink: &'a dyn Sink, stop: &'a StopToken) -> Self {
         Self {
             sink,
             stop,
@@ -253,7 +264,7 @@ impl<'a> Out<'a> {
         }
     }
 
-    fn delta(&mut self, delta: Delta) {
+    pub(super) fn delta(&mut self, delta: Delta) {
         match delta {
             Delta::Text(text) => {
                 self.text.push_str(text);
@@ -274,7 +285,7 @@ impl<'a> Out<'a> {
         self.last = None;
     }
 
-    fn flush(&mut self) {
+    pub(super) fn flush(&mut self) {
         self.last = Some(Instant::now());
         if !self.reasoning.is_empty() {
             let text = std::mem::take(&mut self.reasoning);
@@ -408,7 +419,7 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
     Ok((Stop::Done, usage))
 }
 
-const FILES_REFUSED: &str = "\n\nThe provider turned down the images and PDFs of \
+pub(super) const FILES_REFUSED: &str = "\n\nThe provider turned down the images and PDFs of \
 this chat, so they weren't sent this time. If the answer needs them, tell the user.";
 
 async fn stream_step(

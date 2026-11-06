@@ -280,6 +280,34 @@ async fn assistant_send(
     assistant::send(chat, vault, text, shards, label, ChatEvents(events)).await
 }
 
+/// Asks for a change to a selection in a shard, streaming the Markdown
+/// that replaces it over `events`.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn assistant_ask_inline(
+    window: tauri::Window,
+    id: String,
+    vault: String,
+    shard: String,
+    selection: String,
+    whole: bool,
+    prompt: String,
+    events: tauri::ipc::Channel<assistant::Event>,
+) -> Result<(), assistant::ChatError> {
+    let label = window.label().to_string();
+    assistant::ask_inline(
+        id,
+        vault,
+        shard,
+        selection,
+        whole,
+        prompt,
+        label,
+        ChatEvents(events),
+    )
+    .await
+}
+
 /// The picked model, as the assistant panel shows it.
 #[tauri::command]
 async fn assistant_picked() -> Result<Option<assistant::Picked>, assistant::ChatError> {
@@ -2184,6 +2212,7 @@ pub fn run() {
             assistant_save_custom,
             assistant_remove,
             assistant_send,
+            assistant_ask_inline,
             assistant_picked,
             assistant_stop,
             assistant_chats,

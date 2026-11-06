@@ -17,6 +17,7 @@ import {
 import type * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import { useInlineAskStore } from '@/store/inline-ask';
 
 import { Toolbar } from './toolbar';
 
@@ -31,11 +32,12 @@ export function FloatingToolbar({
   const editorId = useEditorId();
   const focusedEditorId = useEventEditorValue('focus');
   const isFloatingLinkOpen = !!usePluginOption({ key: KEYS.link }, 'mode');
+  const isAskOpen = useInlineAskStore((s) => s.phase !== null);
 
   const floatingToolbarState = useFloatingToolbarState({
     editorId,
     focusedEditorId,
-    hideToolbar: isFloatingLinkOpen,
+    hideToolbar: isFloatingLinkOpen || isAskOpen,
     ...state,
     floatingOptions: {
       middleware: [

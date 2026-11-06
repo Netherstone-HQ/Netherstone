@@ -151,6 +151,10 @@ type MockAssistant = {
   remember?: string;
   /** What's in memory to start with. */
   memory?: string[];
+  /** The answer to every inline Ask, in the pieces it streams in. */
+  inline?: string[];
+  /** Inline Asks get no answer until they're stopped. */
+  holdInline?: boolean;
 };
 
 declare global {
@@ -158,6 +162,8 @@ declare global {
     /** Every message sent to the assistant. */
     __sent: { chat: string | null; text: string; shards: string[] }[];
     __memory: string[];
+    /** Every inline Ask sent. */
+    __asked: { shard: string; selection: string; whole: boolean; prompt: string }[];
   }
 }
 
@@ -476,6 +482,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         };
         let changes = 0;
         window.__sent = [];
+        window.__asked = [];
+        const held: Record<string, () => void> = {};
         return {
           assistant_status: () => ({
             enabled: assistant !== null,
@@ -546,6 +554,36 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: answer.join(""), sources: reads });
             found.updated = now;
             return found.id;
+          },
+          assistant_ask_inline: (args) => {
+            const { id, shard, selection, whole, prompt, events } = args as unknown as {
+              id: string;
+              shard: string;
+              selection: string;
+              whole: boolean;
+              prompt: string;
+              events: { id: number };
+            };
+            window.__asked.push({ shard, selection, whole, prompt });
+            let index = 0;
+            const send = (message: unknown) => callbacks[events.id]?.({ index: index++, message });
+            if (setup.holdInline) {
+              return new Promise((resolve) => {
+                held[id] = () => {
+                  send({ type: "stopped" });
+                  resolve(null);
+                };
+              });
+            }
+            for (const piece of setup.inline ?? ["Done."]) send({ type: "text", text: piece });
+            send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
+            return null;
+          },
+          assistant_stop: (args) => {
+            const id = (args as unknown as { chat: string }).chat;
+            held[id]?.();
+            delete held[id];
+            return null;
           },
           assistant_chats: () => chats.map(({ messages: _, ...info }) => info),
           assistant_chat: (args) => {

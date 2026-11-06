@@ -223,14 +223,15 @@ async fn refused_keys_and_offline_providers_are_reported_without_the_key() {
         assert_eq!(error, ChatError::KeyRefused, "{api:?}");
         assert!(!serde_json::to_string(&error).unwrap().contains(KEY));
     }
-    let port = TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    // Bound but never listening: the port stays ours for the whole test,
+    // so no other test's server can take it, and every connection is refused.
+    let held = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None).unwrap();
+    held.bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)).into())
+        .unwrap();
+    let address = held.local_addr().unwrap().as_socket().unwrap();
     let offline = Target {
         api: Api::OpenAi,
-        base_url: format!("http://127.0.0.1:{port}/v1/"),
+        base_url: format!("http://{address}/v1/"),
         key: Some(KEY.to_string()),
     };
     assert_eq!(

@@ -1,6 +1,7 @@
-//! Netherstone in the rest of the system, each part off until turned on in
-//! Settings: the Open with entry for the files it imports, "Open as
-//! Netherstone vault" on folders, and the `netherstone` terminal command.
+//! Netherstone in the rest of the system: the Open with entry for the files
+//! it imports, "Open as Netherstone vault" on folders, and the `netherstone`
+//! terminal command. Each part is on until the user turns it off in Settings,
+//! and launch puts back any that went missing.
 //!
 //! Windows keeps each one in the user's registry, so the app writes and
 //! removes them itself (and the uninstaller removes what's left). macOS lists
@@ -11,6 +12,11 @@
 //! Everything written is fixed here; the window only says on or off.
 
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+
+/// Beside the app's database: the parts the user turned off, one a line, so
+/// launch leaves them off.
+const TURNED_OFF: &str = "integrations-off.txt";
 
 /// Which parts are on. `None`: not something the app switches here.
 #[derive(Debug, Default, Serialize)]
@@ -21,12 +27,34 @@ pub struct Integrations {
     pub terminal: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+impl Integrations {
+    fn of(&self, integration: Integration) -> Option<bool> {
+        match integration {
+            Integration::OpenWith => self.open_with,
+            Integration::FolderMenu => self.folder_menu,
+            Integration::Terminal => self.terminal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Integration {
     OpenWith,
     FolderMenu,
     Terminal,
+}
+
+impl Integration {
+    const ALL: [Self; 3] = [Self::OpenWith, Self::FolderMenu, Self::Terminal];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::OpenWith => "openWith",
+            Self::FolderMenu => "folderMenu",
+            Self::Terminal => "terminal",
+        }
+    }
 }
 
 #[tauri::command(async)]
@@ -44,15 +72,65 @@ pub fn integrations_get(_app: tauri::AppHandle) -> Integrations {
 
 #[tauri::command(async)]
 pub fn integrations_set(
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     integration: Integration,
     on: bool,
 ) -> Result<(), String> {
+    remember(&turned_off_path()?, integration, on)?;
+    set(&app, integration, on)
+}
+
+/// Turns on, without asking anything, each part the user hasn't turned off.
+/// Release builds only: a dev build would point them at itself.
+pub fn turn_on_defaults(app: &tauri::AppHandle) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let turned_off = match turned_off_path() {
+        Ok(path) => turned_off(&path),
+        Err(error) => {
+            eprintln!("[Netherstone] Couldn't read which integrations are off: {error}");
+            return;
+        }
+    };
+    let now = integrations_get(app.clone());
+    for integration in to_turn_on(&now, &turned_off) {
+        if !quiet() {
+            continue;
+        }
+        if let Err(error) = set(app, integration, true) {
+            eprintln!(
+                "[Netherstone] Couldn't turn on {}: {error}",
+                integration.name()
+            );
+        }
+    }
+}
+
+/// The parts the system offers that are off and that the user didn't turn off.
+fn to_turn_on(now: &Integrations, turned_off: &[Integration]) -> Vec<Integration> {
+    Integration::ALL
+        .into_iter()
+        .filter(|integration| now.of(*integration) == Some(false))
+        .filter(|integration| !turned_off.contains(integration))
+        .collect()
+}
+
+/// Whether turning a part on asks the user nothing. Only an administrator
+/// can add the macOS command when the user can't write its folder.
+fn quiet() -> bool {
+    #[cfg(target_os = "macos")]
+    return macos::user_can_write();
+    #[cfg(not(target_os = "macos"))]
+    true
+}
+
+fn set(_app: &tauri::AppHandle, integration: Integration, on: bool) -> Result<(), String> {
     #[cfg(windows)]
     return windows::set(integration, on);
     #[cfg(target_os = "macos")]
     return match integration {
-        Integration::Terminal => macos::set_terminal(&_app, on),
+        Integration::Terminal => macos::set_terminal(_app, on),
         _ => Err("macOS lists Netherstone in Open With itself".to_string()),
     };
     #[cfg(not(any(windows, target_os = "macos")))]
@@ -60,6 +138,33 @@ pub fn integrations_set(
         let _ = (integration, on);
         Err("The Netherstone package sets these up on Linux".to_string())
     }
+}
+
+fn turned_off_path() -> Result<PathBuf, String> {
+    Ok(crate::db::get_db_path()?.with_file_name(TURNED_OFF))
+}
+
+/// What the user turned off. Nothing yet when the file isn't there.
+fn turned_off(path: &Path) -> Vec<Integration> {
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    Integration::ALL
+        .into_iter()
+        .filter(|integration| text.lines().any(|line| line.trim() == integration.name()))
+        .collect()
+}
+
+/// Keeps the user's choice, so launch doesn't turn back on what they turned off.
+fn remember(path: &Path, integration: Integration, on: bool) -> Result<(), String> {
+    let mut off = turned_off(path);
+    off.retain(|kept| *kept != integration);
+    if !on {
+        off.push(integration);
+    }
+    let text: String = off
+        .iter()
+        .map(|integration| format!("{}\n", integration.name()))
+        .collect();
+    std::fs::write(path, text).map_err(|e| format!("Couldn't save the integrations: {e}"))
 }
 
 #[cfg(windows)]
@@ -222,31 +327,56 @@ mod windows {
         path.to_string_lossy().into_owned()
     }
 
-    /// The user's PATH as written, `%VAR%` entries left as they are.
-    fn path_value() -> Option<(Type, String)> {
-        let key = CURRENT_USER.open(ENVIRONMENT).ok()?;
-        let kind = key.get_type("Path").ok()?;
-        Some((kind, key.get_hstring("Path").ok()?.to_string_lossy()))
+    /// The user's PATH as written, `%VAR%` entries left as they are, or
+    /// `None` when there is none. A PATH that's there but can't be read is an
+    /// error, so it's never written back as if it were empty.
+    fn path_value() -> Result<Option<(Type, String)>, String> {
+        let Some(key) = found(CURRENT_USER.open(ENVIRONMENT))? else {
+            return Ok(None);
+        };
+        let Some(kind) = found(key.get_type("Path"))? else {
+            return Ok(None);
+        };
+        let value = key.get_hstring("Path").map_err(unreadable)?;
+        let value = String::from_utf16(&value)
+            .map_err(|_| "Couldn't read your PATH: it isn't valid text".to_string())?;
+        Ok(Some((kind, value)))
+    }
+
+    /// `None` for a key or value that isn't there, an error for any other
+    /// failure.
+    fn found<T>(result: windows_registry::Result<T>) -> Result<Option<T>, String> {
+        use ::windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if error.code().0 == ERROR_FILE_NOT_FOUND.to_hresult().0 => Ok(None),
+            Err(error) => Err(unreadable(error)),
+        }
+    }
+
+    fn unreadable(error: impl std::fmt::Display) -> String {
+        format!("Couldn't read your PATH: {error}")
+    }
+
+    fn entries(value: &str) -> Vec<String> {
+        value
+            .split(';')
+            .filter(|entry| !entry.is_empty())
+            .map(str::to_string)
+            .collect()
     }
 
     fn path_entries() -> Vec<String> {
-        path_value()
-            .map(|(_, value)| {
-                value
-                    .split(';')
-                    .filter(|entry| !entry.is_empty())
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default()
+        match path_value() {
+            Ok(value) => value.map(|(_, value)| entries(&value)).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
     }
 
     fn set_terminal(on: bool) -> Result<(), String> {
         let bin = text(&bin()?);
-        let kind = path_value()
-            .map(|(kind, _)| kind)
-            .unwrap_or(Type::ExpandString);
-        let mut entries: Vec<String> = path_entries()
+        let (kind, value) = path_value()?.unwrap_or((Type::ExpandString, String::new()));
+        let mut entries: Vec<String> = entries(&value)
             .into_iter()
             .filter(|entry| !entry.eq_ignore_ascii_case(&bin))
             .collect();
@@ -336,7 +466,7 @@ mod macos {
     }
 
     /// Whether the user can write the folder, or make it when it isn't there.
-    fn user_can_write() -> bool {
+    pub fn user_can_write() -> bool {
         let folder = Path::new(FOLDER);
         let existing = if folder.is_dir() {
             Some(folder)
@@ -401,5 +531,63 @@ mod macos {
             return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_off() -> Integrations {
+        Integrations {
+            open_with: Some(false),
+            folder_menu: Some(false),
+            terminal: Some(false),
+        }
+    }
+
+    fn file(name: &str) -> PathBuf {
+        crate::sync::state::tests::temp_dir(name).join(TURNED_OFF)
+    }
+
+    #[test]
+    fn turns_on_every_part_nobody_turned_off() {
+        assert_eq!(to_turn_on(&all_off(), &[]), Integration::ALL);
+    }
+
+    #[test]
+    fn leaves_off_what_the_user_turned_off() {
+        assert_eq!(
+            to_turn_on(&all_off(), &[Integration::Terminal]),
+            [Integration::OpenWith, Integration::FolderMenu]
+        );
+    }
+
+    #[test]
+    fn skips_parts_already_on_or_not_offered() {
+        let now = Integrations {
+            open_with: Some(true),
+            folder_menu: None,
+            terminal: Some(false),
+        };
+        assert_eq!(to_turn_on(&now, &[]), [Integration::Terminal]);
+    }
+
+    #[test]
+    fn nothing_is_turned_off_before_the_first_choice() {
+        assert!(turned_off(&file("integrations-none")).is_empty());
+    }
+
+    #[test]
+    fn remembers_turning_off_and_back_on() {
+        let path = file("integrations-choices");
+        remember(&path, Integration::Terminal, false).unwrap();
+        remember(&path, Integration::OpenWith, false).unwrap();
+        assert_eq!(
+            turned_off(&path),
+            [Integration::OpenWith, Integration::Terminal]
+        );
+        remember(&path, Integration::Terminal, true).unwrap();
+        assert_eq!(turned_off(&path), [Integration::OpenWith]);
     }
 }

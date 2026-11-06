@@ -2156,6 +2156,8 @@ pub fn run() {
             splash::show_main_window_eventually(app.handle());
             register_links(app);
             std::thread::spawn(open_source::remove_leftovers);
+            let handle = app.handle().clone();
+            std::thread::spawn(move || integrations::turn_on_defaults(&handle));
             Ok(())
         })
         .on_window_event(|window, event| match event {

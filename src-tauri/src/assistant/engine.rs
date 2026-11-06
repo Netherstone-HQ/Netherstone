@@ -857,8 +857,9 @@ fn with_summary(system: &str, summary: Option<&Summary>) -> String {
 
 /// Tokens a model reads when the catalog doesn't say.
 const UNKNOWN_CONTEXT: u64 = 32_000;
-/// A server on this computer that doesn't say: Ollama's usual size.
-const UNKNOWN_LOCAL_CONTEXT: u64 = 8_192;
+/// An Ollama model that isn't loaded yet: the smallest context Ollama picks
+/// on its own, below 24 GiB of graphics memory (docs.ollama.com/context-length).
+const UNKNOWN_LOCAL_CONTEXT: u64 = 4_096;
 /// The share of what's left after the answer's room at which a chat is
 /// summarized.
 const SUMMARY_AT: f64 = 0.75;

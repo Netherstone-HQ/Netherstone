@@ -16,7 +16,7 @@
   "openaiApi": "https://api.openai.com/v1/",
   "openaiKeys": "https://platform.openai.com/api-keys",
   "anthropicApi": "https://api.anthropic.com/v1/",
-  "anthropicKeys": "https://console.anthropic.com/settings/keys",
+  "anthropicKeys": "https://platform.claude.com/settings/keys",
   "googleApi": "https://generativelanguage.googleapis.com/v1beta/",
   "googleKeys": "https://aistudio.google.com/apikey",
   "openrouterApi": "https://openrouter.ai/api/v1/",

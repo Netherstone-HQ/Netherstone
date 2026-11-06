@@ -582,9 +582,13 @@ pub async fn send(
         .await
         .map_err(|_| ChatError::Failed)??
     };
-    // A local model says itself whether it sees images.
-    if send_files && model.target.api == Api::Ollama {
-        model.facts.images = local::sees_images(&model.target, &model.id).await;
+    // A local model says itself whether it sees images, and Ollama what
+    // context it's loaded with, so long chats are summarized in time.
+    if model.target.api == Api::Ollama {
+        if send_files {
+            model.facts.images = local::sees_images(&model.target, &model.id).await;
+        }
+        model.facts.context = local::loaded_context(&model.target, &model.id).await;
     }
 
     let stop = StopToken::default();

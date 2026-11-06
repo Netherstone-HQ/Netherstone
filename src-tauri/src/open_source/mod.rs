@@ -21,6 +21,7 @@
 mod github;
 mod netherstone_app;
 
+use crate::links;
 use futures_util::StreamExt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -41,12 +42,14 @@ use crate::vault;
 /// What a link starts with; the address follows.
 pub const LINK_PREFIX: &str = "netherstone://open/";
 
-/// The only hosts downloads come from, redirects included.
-const HOSTS: &[&str] = &[
-    "netherstone.app",
-    "api.github.com",
-    "raw.githubusercontent.com",
-];
+/// The only places downloads come from, redirects included.
+const SOURCES: &[&str] = &[links::SITE, links::GITHUB_API, links::GITHUB_RAW];
+
+fn is_source_host(host: &str) -> bool {
+    SOURCES
+        .iter()
+        .any(|source| reqwest::Url::parse(source).is_ok_and(|url| url.host_str() == Some(host)))
+}
 
 /// Pictures a shard can show, as the Markdown import brings them in.
 const PICTURE_EXTENSIONS: &[&str] = &[
@@ -427,11 +430,7 @@ impl Web {
             .connect_timeout(STALLED)
             .read_timeout(STALLED)
             .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt
-                    .url()
-                    .host_str()
-                    .is_some_and(|host| HOSTS.contains(&host))
-                {
+                if attempt.url().host_str().is_some_and(is_source_host) {
                     attempt.follow()
                 } else {
                     attempt.stop()

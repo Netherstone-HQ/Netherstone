@@ -17,6 +17,7 @@ import {
   useModelLists,
 } from "@/components/assistant/models";
 import { DeleteAllChatsDialog } from "@/components/assistant/ChatsMenu";
+import links from "@/data/links.json";
 import { HelpDialog } from "@/components/settings/HelpDialog";
 import { MemorySection } from "@/components/settings/MemorySection";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-ui";
@@ -370,15 +371,15 @@ export function FreeWaysToStart({ sentences = false }: { sentences?: boolean }) 
     <>
       <span className={line}>
         Free ways to start: a{" "}
-        <ExternalLink href="https://aistudio.google.com/apikey">
+        <ExternalLink href={links.googleKeys}>
           Gemini key
         </ExternalLink>
         ,{" "}
-        <ExternalLink href="https://openrouter.ai/models?max_price=0">
+        <ExternalLink href={links.openrouterFreeModels}>
           OpenRouter's free models
         </ExternalLink>{" "}
         or a{" "}
-        <ExternalLink href="https://ollama.com/download">
+        <ExternalLink href={links.ollamaDownload}>
           local server
         </ExternalLink>
         {end}

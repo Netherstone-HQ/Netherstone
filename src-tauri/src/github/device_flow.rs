@@ -11,8 +11,9 @@ use serde::Deserialize;
 /// token can do is set by the App's permissions and installation, not scopes.
 pub const CLIENT_ID: &str = "Iv23liwX2TF33nrIBcED";
 
-const DEVICE_CODE_URL: &str = "https://github.com/login/device/code";
-const ACCESS_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+use crate::links::{
+    GITHUB_ACCESS_TOKEN as ACCESS_TOKEN_URL, GITHUB_DEVICE_CODE as DEVICE_CODE_URL,
+};
 const DEVICE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 /// GitHub adds this many seconds to the interval on each `slow_down`.

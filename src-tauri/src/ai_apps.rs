@@ -3,6 +3,7 @@
 //! one row in [`APPS`]: where it can be installed, where it keeps its servers
 //! and in what shape, so adding an app, or a way to install one, is data.
 
+use crate::links;
 use jsonc_parser::ParseOptions;
 use jsonc_parser::cst::{CstInputValue, CstRootNode};
 use serde::Serialize;
@@ -138,7 +139,7 @@ const APPS: &[AiApp] = &[
             key: "mcpServers",
             typed: false,
         },
-        download_url: "https://claude.ai/download",
+        download_url: links::CLAUDE_DESKTOP_DOWNLOAD,
     },
     AiApp {
         id: "claude-code",
@@ -157,7 +158,7 @@ const APPS: &[AiApp] = &[
             key: "mcpServers",
             typed: true,
         },
-        download_url: "https://claude.com/product/claude-code",
+        download_url: links::CLAUDE_CODE_DOWNLOAD,
     },
     AiApp {
         id: "cursor",
@@ -176,7 +177,7 @@ const APPS: &[AiApp] = &[
             key: "mcpServers",
             typed: false,
         },
-        download_url: "https://cursor.com/download",
+        download_url: links::CURSOR_DOWNLOAD,
     },
     AiApp {
         id: "vscode",
@@ -195,7 +196,7 @@ const APPS: &[AiApp] = &[
             key: "servers",
             typed: true,
         },
-        download_url: "https://code.visualstudio.com/download",
+        download_url: links::VSCODE_DOWNLOAD,
     },
     AiApp {
         id: "goose",
@@ -224,7 +225,7 @@ const APPS: &[AiApp] = &[
             }]
         },
         format: Format::GooseYaml,
-        download_url: "https://block.github.io/goose/docs/getting-started/installation",
+        download_url: links::GOOSE_DOWNLOAD,
     },
 ];
 

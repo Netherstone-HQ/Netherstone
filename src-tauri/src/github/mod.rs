@@ -10,6 +10,7 @@ pub mod device_flow;
 pub mod repos;
 
 use crate::credentials;
+use crate::links;
 use device_flow::PollOutcome;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -18,7 +19,6 @@ use std::time::{Duration, Instant};
 
 const ACCOUNT_FILE: &str = "github-account.json";
 const USER_AGENT: &str = "Netherstone";
-const API_USER_URL: &str = "https://api.github.com/user";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -114,7 +114,7 @@ fn write_cached_account(account: &GitHubAccount) -> Result<(), String> {
 
 async fn fetch_account(client: &reqwest::Client, token: &str) -> Result<GitHubAccount, String> {
     let response = client
-        .get(API_USER_URL)
+        .get(format!("{}/user", links::GITHUB_API))
         .bearer_auth(token)
         .header("Accept", "application/vnd.github+json")
         .send()

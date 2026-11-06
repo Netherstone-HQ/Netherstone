@@ -14,6 +14,7 @@ import { GitHubAvatar } from "@/components/settings/GitHubAccountSection";
 import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNotice";
 import { GitHubSignIn } from "@/components/settings/GitHubSignIn";
 import { Button } from "@/components/ui/button";
+import links from "@/data/links.json";
 import {
   type BackupSummary,
   describeBackupContents,
@@ -96,7 +97,7 @@ export function BackupPanel({
         {repoName ? (
           <button
             type="button"
-            onClick={() => void openUrl(`https://github.com/${repoName}`)}
+            onClick={() => void openUrl(`${links.github}/${repoName}`)}
             className="flex w-full items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-left text-ui-sm transition-colors hover:bg-muted"
           >
             <GitHubAvatar account={account} size="sm" />

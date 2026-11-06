@@ -20,6 +20,7 @@ pub mod space;
 pub mod state;
 pub mod writing;
 
+use crate::links;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -383,7 +384,7 @@ pub async fn connect_backup(
     clone_url: String,
 ) -> Result<SyncReport, String> {
     let token = signed_in_token()?;
-    if !clone_url.starts_with("https://github.com/") {
+    if !clone_url.starts_with(&format!("{}/", links::GITHUB)) {
         return Err("That isn't a GitHub repository.".to_string());
     }
 

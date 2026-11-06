@@ -109,7 +109,7 @@ pub const PROVIDERS: &[Provider] = &[
         api: Some(Api::Anthropic),
         base_url: Some("https://api.anthropic.com/v1/"),
         credential: Some(&credentials::ANTHROPIC_KEY),
-        key_page: Some("https://console.anthropic.com/settings/keys"),
+        key_page: Some("https://platform.claude.com/settings/keys"),
     },
     Provider {
         id: "google",

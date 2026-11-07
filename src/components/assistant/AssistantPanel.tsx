@@ -6,7 +6,9 @@ import {
   CopyIcon,
   CpuIcon,
   FileIcon,
+  FilePlusIcon,
   FolderIcon,
+  FolderInputIcon,
   KeyRoundIcon,
   Link2Icon,
   LoaderCircleIcon,
@@ -17,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { DrawingIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
 import { Hint } from "@/components/ui/tooltip";
@@ -61,6 +64,7 @@ import {
   citationsIn,
   withoutCitations,
 } from "./AnswerText";
+import { ChangeContent } from "./ChangeContent";
 import { ChatsMenu } from "./ChatsMenu";
 import { ModelButton } from "./ModelButton";
 import { Composer, shardName } from "./Composer";
@@ -160,9 +164,53 @@ function changeCount(count: number) {
   return count === 1 ? "1 change" : `${count} changes`;
 }
 
-/** A change an answer proposed: to look at in the shard, then apply or not. */
+/** What a change does, as its card says it. */
+function changeTitle(change: ChatChange) {
+  const name = shardName(change.path);
+  switch (change.kind) {
+    case "newShard":
+      return `New shard ${name}`;
+    case "newDrawing":
+      return `New drawing ${name}`;
+    case "move": {
+      const { folder = null, name: renamed = null } = change.moving ?? {};
+      const where = folder === "" ? "the top of the vault" : folder;
+      if (where !== null && renamed) {
+        return `Move ${change.path} to ${where} as ${renamed}`;
+      }
+      if (where !== null) return `Move ${change.path} to ${where}`;
+      return `Rename ${change.path} to ${renamed ?? ""}`;
+    }
+    default:
+      return name;
+  }
+}
+
+function ChangeIcon({ kind }: { kind: ChatChange["kind"] }) {
+  const className = "size-4 shrink-0 text-muted-foreground";
+  switch (kind) {
+    case "newShard":
+      return <FilePlusIcon className={className} />;
+    case "drawing":
+    case "newDrawing":
+      return <DrawingIcon className={className} />;
+    case "move":
+      return <FolderInputIcon className={className} />;
+    default:
+      return <FileIcon className={className} />;
+  }
+}
+
+/**
+ * A change an answer proposed: to look at, then apply or not. A change to
+ * the open shard shows in its place; one to another shard opens it; a new
+ * shard or a drawing shows in the card; a move says where it goes.
+ */
 function ChangeCard({ change }: { change: ChatChange }) {
   const busy = useAssistantStore((s) => s.busyChanges.includes(change.id));
+  const vault = useVaultStore((s) => s.currentVaultPath);
+  const openPath = useEditorStore((s) => s.currentFilePath);
+  const [showing, setShowing] = useState(false);
   if (change.state === "applied") {
     return (
       <div className="flex items-center gap-2 rounded-[10px] border bg-card py-2.5 pr-2 pl-3">
@@ -182,16 +230,47 @@ function ChangeCard({ change }: { change: ChatChange }) {
       </div>
     );
   }
+  const title = changeTitle(change);
+  const inCard = change.kind !== "shard" && change.kind !== "move";
+  const elsewhere =
+    change.kind === "shard" && openShardPath(vault, openPath) !== change.path;
   return (
     <div className="flex flex-col gap-2.5 rounded-[10px] border bg-card p-3">
       <div className="flex min-w-0 items-center gap-2">
-        <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="truncate font-medium">{shardName(change.path)}</span>
-        <span className="shrink-0 text-muted-foreground text-ui-sm">
-          {changeCount(change.count)}
+        <ChangeIcon kind={change.kind} />
+        <span
+          className={cn(
+            "min-w-0 font-medium",
+            change.kind === "move" ? "break-words" : "truncate",
+          )}
+        >
+          {title}
         </span>
+        {change.kind !== "move" && (
+          <span className="shrink-0 text-muted-foreground text-ui-sm">
+            {changeCount(change.count)}
+          </span>
+        )}
       </div>
+      {inCard && showing && (
+        <ChangeContent change={change} label={`Preview of ${title}`} />
+      )}
       <div className="flex justify-end gap-2">
+        {(inCard || elsewhere) && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mr-auto"
+            onClick={() =>
+              inCard
+                ? setShowing((shown) => !shown)
+                : openShard({ path: change.path, section: null })
+            }
+          >
+            {inCard && showing ? "Hide" : "Show"}
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"

@@ -4,7 +4,7 @@
 //! sent in their place while they stay saved.
 
 use super::chat::Message;
-use crate::tools::proposals::{FileChange, Kind, Op};
+use crate::tools::proposals::{FileChange, Kind, Moving, Op};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -121,6 +121,9 @@ pub struct Change {
     /// The name of the model that proposed it.
     #[serde(skip)]
     pub model: Option<String>,
+    /// For a move, where it goes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moving: Option<Moving>,
 }
 
 /// An item the assistant offered to add to memory.
@@ -182,6 +185,7 @@ fn change_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<Change>> {
         kind,
         path: row.get(4)?,
         count: ops.len(),
+        moving: crate::tools::proposals::moving(&ops),
         ops,
         state,
         applied: applied

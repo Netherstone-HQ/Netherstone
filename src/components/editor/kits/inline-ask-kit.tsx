@@ -24,6 +24,7 @@ import {
 import { Editor as PlateEditor } from "@/components/ui/editor";
 import { diffShardValues } from "@/lib/history-diff";
 import { inlineAskBlock, inlineAskRange } from "@/lib/inline-ask";
+import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
 import { useInlineAskStore } from "@/store/inline-ask";
 
 const KEY = "inlineAsk";
@@ -80,13 +81,18 @@ const PREVIEW_PLUGINS = VersionPreviewKit.filter(
 
 /** What comes in for whole blocks, after the last of them. */
 function AddedBlocks() {
+  const shard = useEditorRef();
   const preview = useInlineAskStore((s) => s.preview) as TElement[] | null;
   const value = useMemo(
     () =>
-      diffShardValues(preview ?? [], [], isInlineElement, {
-        wholeBlocks: true,
-      }) as TElement[],
-    [preview],
+      diffShardValues(
+        // Media from the web the shard doesn't have shows as its address.
+        withRemoteMediaAsLinks(preview ?? [], remoteMediaIn(shard.children)),
+        [],
+        isInlineElement,
+        { wholeBlocks: true },
+      ) as TElement[],
+    [preview, shard],
   );
   const editor = usePlateEditor({
     plugins: PREVIEW_PLUGINS,

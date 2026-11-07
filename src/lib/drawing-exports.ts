@@ -105,6 +105,21 @@ async function renderScenePng(
   });
 }
 
+/**
+ * A picture of the drawing in `json`, to look at before it's made. Pictures
+ * it holds that aren't saved in the drawing itself are left out, so drawing
+ * it loads nothing from elsewhere.
+ */
+export async function previewDrawing(json: string, dark: boolean) {
+  const { elements, appState, files } = await parseDrawing(json);
+  const own = Object.fromEntries(
+    Object.entries(files ?? {}).filter(([, file]) =>
+      file.dataURL.startsWith("data:"),
+    ),
+  );
+  return renderScenePng({ elements, appState, files: own }, dark);
+}
+
 /** Renders `scene` to a PNG and stores it as an attachment in `vaultPath`. */
 async function persistScenePng(
   scene: ExportableScene,

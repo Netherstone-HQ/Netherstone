@@ -4,6 +4,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 
 import type { Citation } from "@/lib/open-citation";
+import { isRemoteAddress } from "@/lib/remote-media";
 import { cn } from "@/lib/utils";
 
 const parser = unified().use(remarkParse).use(remarkGfm);
@@ -14,6 +15,7 @@ type Node = {
   value?: string;
   url?: string;
   alt?: string | null;
+  identifier?: string;
   depth?: number;
   ordered?: boolean | null;
   start?: number | null;
@@ -125,6 +127,16 @@ export function AnswerText({
   onOpenLink: (href: string) => void;
 }) {
   const tree = useMemo(() => parser.parse(text) as Node, [text]);
+  // Where `![alt][name]` images point.
+  const definitions = useMemo(() => {
+    const found = new Map<string, string>();
+    walk(tree, (node) => {
+      if (node.type === "definition" && node.identifier && node.url) {
+        found.set(node.identifier, node.url);
+      }
+    });
+    return found;
+  }, [tree]);
 
   const render = (node: Node, key: number | string): ReactNode => {
     const children = () =>
@@ -205,7 +217,24 @@ export function AnswerText({
       case "break":
         return <br key={key} />;
       case "image":
-        return <Fragment key={key}>{node.alt}</Fragment>;
+      case "imageReference": {
+        // A web address shows too, so adding the answer to a shard brings
+        // in nothing the answer didn't show.
+        const url =
+          node.type === "image"
+            ? node.url
+            : definitions.get(node.identifier ?? "");
+        return (
+          <Fragment key={key}>
+            {node.alt}
+            {isRemoteAddress(url) && (
+              <span className="break-all text-muted-foreground">
+                {node.alt ? " " : ""}({url.trim()})
+              </span>
+            )}
+          </Fragment>
+        );
+      }
       case "html":
         return <Fragment key={key}>{node.value}</Fragment>;
       case "table":

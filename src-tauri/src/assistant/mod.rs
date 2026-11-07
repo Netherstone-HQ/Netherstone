@@ -876,9 +876,9 @@ pub async fn delete_chats() -> Result<(), ChatError> {
 pub struct Preview {
     /// Vault-relative.
     path: String,
-    /// The shard as it is now.
+    /// The shard or drawing as it is now, empty for a new one.
     before: String,
-    /// The shard as applying would leave it.
+    /// The shard or drawing as applying would leave it.
     after: String,
 }
 
@@ -947,18 +947,26 @@ fn target_of(change: &Change) -> crate::tools::proposals::Target {
     }
 }
 
-/// The text a pending change to a shard would leave it with.
+/// The text a pending change would leave its shard or drawing with, and
+/// the text it has now: none for a new one. A move has none to show.
 pub async fn preview(id: String) -> Result<Preview, String> {
     with_store(move |store| {
         let (change, vault) = change_and_vault(store, &id, ChangeState::Pending)?;
         let target = target_of(&change);
-        let before = crate::tools::proposals::current(&vault, &target)
-            .ok_or_else(|| format!("There's no shard at '{}'", change.path))?;
-        let after = crate::tools::proposals::replay(&vault, Some(before.clone()), &change.ops)
+        use crate::tools::proposals::Kind;
+        let before = match change.kind {
+            Kind::NewShard | Kind::NewDrawing => None,
+            Kind::Shard | Kind::Drawing => Some(
+                crate::tools::proposals::current(&vault, &target)
+                    .ok_or_else(|| format!("There's nothing at '{}'", change.path))?,
+            ),
+            Kind::Move => return Err("A move has no text to show".to_string()),
+        };
+        let after = crate::tools::proposals::replay(&vault, before.clone(), &change.ops)
             .map_err(|error| error.0)?;
         Ok(Preview {
             path: change.path,
-            before,
+            before: before.unwrap_or_default(),
             after,
         })
     })

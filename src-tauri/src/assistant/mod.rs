@@ -624,10 +624,20 @@ pub async fn send(
     // A local model says itself whether it sees images, and Ollama what
     // context it's loaded with, so long chats are summarized in time.
     if model.target.api == Api::Ollama {
-        if send_files {
-            model.facts.images = local::sees_images(&model.target, &model.id).await;
+        let (target, id) = (&model.target, &model.id);
+        let (images, context) = tokio::join!(
+            async {
+                match send_files {
+                    true => Some(local::sees_images(target, id).await),
+                    false => None,
+                }
+            },
+            local::loaded_context(target, id),
+        );
+        if let Some(images) = images {
+            model.facts.images = images;
         }
-        model.facts.context = local::loaded_context(&model.target, &model.id).await;
+        model.facts.context = context;
     }
 
     let stop = StopToken::default();

@@ -6,6 +6,7 @@ use super::models::{self, Model, ProviderError, Target};
 use super::providers::Api;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,15 +107,31 @@ async fn answers(server: &Server) -> Option<Vec<Model>> {
 
 /// Whether the Ollama model `model` at `target` says it sees images, from
 /// the capabilities its server reports. False when it can't be asked.
+/// Kept for the session once known, since every message asks.
 pub async fn sees_images(target: &Target, model: &str) -> bool {
+    static KNOWN: Mutex<Vec<(String, String, bool)>> = Mutex::new(Vec::new());
+    let known = |found: &(String, String, bool)| found.0 == target.base_url && found.1 == model;
+    let lock = || KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((.., sees)) = lock().iter().find(|found| known(found)) {
+        return *sees;
+    }
+    let Some(sees) = ask_sees_images(target, model).await else {
+        return false;
+    };
+    let mut found = lock();
+    if !found.iter().any(known) {
+        found.push((target.base_url.clone(), model.to_string(), sees));
+    }
+    sees
+}
+
+async fn ask_sees_images(target: &Target, model: &str) -> Option<bool> {
     #[derive(Deserialize)]
     struct Shown {
         #[serde(default)]
         capabilities: Vec<String>,
     }
-    let Ok(client) = models::http_client(PROBE_CONNECT) else {
-        return false;
-    };
+    let client = models::http_client(PROBE_CONNECT).ok()?;
     let url = format!("{}api/show", target.base_url);
     let shown = async {
         client
@@ -127,9 +144,8 @@ pub async fn sees_images(target: &Target, model: &str) -> bool {
             .json::<Shown>()
             .await
     };
-    shown
-        .await
-        .is_ok_and(|shown| shown.capabilities.iter().any(|c| c == "vision"))
+    let shown = shown.await.ok()?;
+    Some(shown.capabilities.iter().any(|c| c == "vision"))
 }
 
 /// The context the Ollama model `model` at `target` is loaded with, from
@@ -300,7 +316,10 @@ mod tests {
         assert!(sees_images(&target, "llava").await);
         assert!(!sees_images(&target, "llama3.2").await);
         assert!(!sees_images(&target, "gone").await);
+        // Known now, so not asked again.
+        assert!(sees_images(&target, "llava").await);
         let requests = server.requests();
+        assert_eq!(requests.len(), 3);
         assert!(requests[0].starts_with("POST /api/show"));
         assert!(requests[0].contains(r#"{"model":"llava"}"#));
     }

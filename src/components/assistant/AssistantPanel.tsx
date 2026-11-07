@@ -14,6 +14,7 @@ import {
   LoaderCircleIcon,
   NewspaperIcon,
   PlusIcon,
+  ServerOffIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react";
@@ -70,6 +71,7 @@ import { EndingNote } from "./EndingNote";
 import { ModelButton } from "./ModelButton";
 import { Composer, shardName } from "./Composer";
 import {
+  serverDownText,
   setupState,
   useSetup,
   waitingText,
@@ -738,6 +740,26 @@ export function AssistantPanel() {
             </Button>
           }
         />
+      ) : state === "serverDown" && setup?.serverDown ? (
+        <Center
+          icon={<ServerOffIcon className="size-4.5" />}
+          text={serverDownText(setup.serverDown)}
+          action={
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void reload()}>
+                Try again
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => openSettings("ai-assistant")}
+              >
+                Settings
+              </Button>
+            </div>
+          }
+        />
       ) : state === "noModel" && isEmpty ? (
         <Center
           icon={<CpuIcon className="size-4.5" />}
@@ -770,7 +792,9 @@ export function AssistantPanel() {
           if (path === openShard) setOpenShardRemoved(true);
           setAdded(added.filter((p) => p !== path));
         }}
-        disabled={state === "noProvider" || state === "vaultOff"}
+        disabled={
+          state === "noProvider" || state === "vaultOff" || state === "serverDown"
+        }
         canSend={ready && draft.trim().length > 0}
         answering={answering}
         onSend={() => send(draft, shards)}

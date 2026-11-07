@@ -1,4 +1,5 @@
 import { CircleCheckIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { isSetUp } from "@/components/assistant/models";
@@ -10,7 +11,8 @@ import {
   useProviderSetup,
 } from "@/components/settings/sections/AiAssistantSettings";
 import { Button } from "@/components/ui/button";
-import { getAssistantStatus, setAssistantEnabled } from "@/lib/commands";
+import { getAssistantStatus, setAssistantEnabled, setMcpVaultAllowed } from "@/lib/commands";
+import { folderName } from "@/lib/open-vault";
 import { useAssistantStore } from "@/store/assistant";
 import { copy } from "./copy";
 import { Hint, Step } from "./StepLayout";
@@ -26,13 +28,16 @@ function showError(error: unknown) {
 
 /**
  * Offers the assistant with the same provider rows as Settings. A saved key
- * or a found local server turns it on and picks the first model when none
- * is picked yet.
+ * or a found local server turns it on, picks the first model when none is
+ * picked yet and turns the vault on for AI.
  */
 export function AssistantStep({
+  vaultPath,
   onBack,
   onNext,
 }: {
+  /** The vault picked in the vault step. */
+  vaultPath: string;
   onBack: () => void;
   /** `on` says whether the assistant is on, for the last step's tips. */
   onNext: (on: boolean) => void;
@@ -73,6 +78,19 @@ export function AssistantStep({
     status !== null &&
     status.enabled &&
     status.providers.some((p) => p.setup !== "custom" && isSetUp(p));
+
+  // The assistant only reads vaults that are on for AI.
+  const [vaultOn, setVaultOn] = useState<string | null>(null);
+  useEffect(() => {
+    if (!on || vaultOn === vaultPath) return;
+    let cancelled = false;
+    setMcpVaultAllowed(vaultPath, true).then(() => {
+      if (!cancelled) setVaultOn(vaultPath);
+    }, showError);
+    return () => {
+      cancelled = true;
+    };
+  }, [on, vaultPath, vaultOn]);
 
   return (
     <Step
@@ -117,7 +135,13 @@ export function AssistantStep({
             </p>
           )}
           <ProviderCards setup={setup} status={status} />
-          {on ? null : <Hint>{copy.assistant.later}</Hint>}
+          {on ? (
+            vaultOn === vaultPath ? (
+              <Hint>{copy.assistant.vaultOn(folderName(vaultPath))}</Hint>
+            ) : null
+          ) : (
+            <Hint>{copy.assistant.later}</Hint>
+          )}
         </div>
       ) : (
         <div className="h-9" />

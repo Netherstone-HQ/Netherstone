@@ -913,6 +913,11 @@ export async function findLocalServers(): Promise<FoundServer[]> {
   return invoke("assistant_find_local");
 }
 
+/** The picked local server's kind while it isn't answering, else null. */
+export async function findLocalServerDown(): Promise<LocalServer["kind"] | null> {
+  return invoke("assistant_local_down");
+}
+
 export async function saveLocalServer(address: string): Promise<FoundServer> {
   return invoke("assistant_save_local", { address });
 }

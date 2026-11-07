@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantToggle } from "@/components/assistant/AssistantToggle";
+import { setupState, useSetup } from "@/components/assistant/setup";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AssistantProvider, AssistantStatus } from "@/lib/commands";
 import { openEditorFile } from "@/lib/open-editor-file";
@@ -22,6 +23,7 @@ vi.mock("@/lib/open-editor-file", () => ({ openEditorFile: vi.fn(async () => {})
 vi.mock("@/components/WindowTitleBar", () => ({ WindowTitleBar: () => null }));
 
 const DOCUMENTS = "/home/me/Documents";
+const RESEARCH = "/vaults/Research";
 
 type Handlers = Record<string, (args: Record<string, unknown>) => unknown>;
 
@@ -68,7 +70,19 @@ function assistantCommands(more: Partial<AssistantStatus> = {}): Handlers {
     ],
     ...more,
   };
+  let vaults = [{ path: RESEARCH, name: "Research", allowed: false }];
   return {
+    mcp_vaults: () => vaults,
+    mcp_set_vault_allowed: ({ path, allowed }) => {
+      vaults = vaults.map((v) => (v.path === path ? { ...v, allowed: allowed as boolean } : v));
+    },
+    assistant_picked: () =>
+      state.model && {
+        id: state.model.model,
+        provider: state.model.provider,
+        local: false,
+        images: false,
+      },
     assistant_enabled: () => state.enabled,
     assistant_status: () => state,
     assistant_models: () => MODELS,
@@ -193,7 +207,7 @@ describe("Onboarding", () => {
   });
 
   it("shows sync as already on for an open vault, and offers it the guide", async () => {
-    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    useVaultStore.setState({ currentVaultPath: RESEARCH });
     mockCommands({
       ...baseCommands,
       github_get_account: () => ({ login: "octocat", name: null, avatarUrl: null }),
@@ -241,7 +255,7 @@ describe("Onboarding", () => {
   });
 
   it("doesn't say sync is on until GitHub is connected", async () => {
-    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    useVaultStore.setState({ currentVaultPath: RESEARCH });
     mockCommands({
       ...baseCommands,
       sync_get_vault_record: () => ({ vaultPath: "/vaults/Research", syncEnabled: true }),
@@ -311,7 +325,7 @@ describe("Onboarding", () => {
   });
 
   it("leaves the guide unticked when the tour is replayed", async () => {
-    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    useVaultStore.setState({ currentVaultPath: RESEARCH });
     mockCommands(baseCommands);
     render(
       <TooltipProvider>
@@ -334,7 +348,7 @@ describe("Onboarding", () => {
   });
 
   it("turns the assistant on with a saved key and picks its first model", async () => {
-    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    useVaultStore.setState({ currentVaultPath: RESEARCH });
     mockCommands({ ...baseCommands, ...assistantCommands() });
     await renderOnboarding();
     await toAssistantStep();
@@ -361,13 +375,22 @@ describe("Onboarding", () => {
     expect(await screen.findByText("Sonnet 5.5")).toBeTruthy();
     expect(screen.getByText(/Key saved/)).toBeTruthy();
     expect(screen.queryByText(copy.assistant.later)).toBeNull();
+    expect(await screen.findByText(copy.assistant.vaultOn("Research"))).toBeTruthy();
+    expect(invoke).toHaveBeenCalledWith("mcp_set_vault_allowed", {
+      path: RESEARCH,
+      allowed: true,
+    });
 
     fireEvent.click(screen.getByRole("button", { name: copy.common.continue }));
     expect(await screen.findByText(copy.ready.tips.assistant)).toBeTruthy();
+
+    // The panel can chat in the vault straight away.
+    const { result } = renderHook(() => useSetup());
+    await waitFor(() => expect(setupState(result.current.setup)).toBe("ready"));
   });
 
   it("leaves nothing of the assistant behind when it's skipped", async () => {
-    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    useVaultStore.setState({ currentVaultPath: RESEARCH });
     mockCommands({ ...baseCommands, ...assistantCommands() });
     await renderOnboarding();
     await toAssistantStep();
@@ -378,6 +401,7 @@ describe("Onboarding", () => {
     expect(screen.queryByText(copy.ready.tips.assistant)).toBeNull();
     expect(invoke).not.toHaveBeenCalledWith("assistant_set_enabled", { enabled: true });
     expect(invoke).not.toHaveBeenCalledWith("assistant_set_model", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("mcp_set_vault_allowed", expect.anything());
     expect(useAssistantStore.getState().enabled).not.toBe(true);
 
     render(
@@ -390,7 +414,7 @@ describe("Onboarding", () => {
   });
 
   it("shows what's already set up when the tour is replayed", async () => {
-    useVaultStore.setState({ currentVaultPath: "/vaults/Research" });
+    useVaultStore.setState({ currentVaultPath: RESEARCH });
     const anthropic = { ...provider("anthropic", "Anthropic", "key"), key: "keyring" as const };
     mockCommands({
       ...baseCommands,
@@ -410,6 +434,11 @@ describe("Onboarding", () => {
 
     await screen.findByText(copy.assistant.on);
     expect(await screen.findByText("Opus 5.5")).toBeTruthy();
+    expect(await screen.findByText(copy.assistant.vaultOn("Research"))).toBeTruthy();
+    expect(invoke).toHaveBeenCalledWith("mcp_set_vault_allowed", {
+      path: RESEARCH,
+      allowed: true,
+    });
     expect(invoke).not.toHaveBeenCalledWith("assistant_set_model", expect.anything());
     expect(screen.getByRole("button", { name: copy.common.continue })).toBeTruthy();
   });

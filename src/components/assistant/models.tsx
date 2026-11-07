@@ -11,6 +11,7 @@ import {
 import {
   type AssistantModel,
   type AssistantProvider,
+  type LocalServer,
   type ModelChoice,
   type ProviderError,
   listAssistantModels,
@@ -37,6 +38,14 @@ export function errorKind(error: unknown): ProviderError["kind"] {
 export function modelName(model: AssistantModel): string {
   return model.name ?? model.id;
 }
+
+/** Each local server's name, when it has one. */
+export const SERVER_NAMES: Record<LocalServer["kind"], string | null> = {
+  ollama: "Ollama",
+  lmStudio: "LM Studio",
+  llamaCpp: "llama.cpp",
+  other: null,
+};
 
 /** Whether anything is set up to pick a model from. */
 export function isSetUp(provider: AssistantProvider) {

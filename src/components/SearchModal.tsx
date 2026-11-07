@@ -383,6 +383,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
       ) : waiting && setup_ !== "ready" ? (
         <SearchSetupNeeded
           state={setup_}
+          setup={setup}
           onSetUp={() => {
             openSettings("ai-assistant");
             onOpenChange(false);

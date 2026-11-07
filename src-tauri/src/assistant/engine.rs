@@ -14,7 +14,7 @@ use super::chat::{
 use super::files;
 use super::memory::{self, List};
 use super::models::Target;
-use super::providers::{Api, Limits};
+use super::providers::Api;
 use super::sessions::ChangeState;
 use super::sessions::{Saved, Store, Summary};
 use crate::tools::proposals::{self, Op, WRITE_TOOLS};
@@ -453,7 +453,7 @@ async fn with_files(turn: &Turn, mut messages: Vec<Message>, system_bytes: u64) 
         return messages;
     }
     let root = turn.vault.root.clone();
-    let limits = Limits::of(turn.model.target.api);
+    let sending = files::Sending::new(turn.send_files, turn.model.target.api, &turn.model.facts);
     let text_bytes = system_bytes
         + messages
             .iter()
@@ -461,7 +461,7 @@ async fn with_files(turn: &Turn, mut messages: Vec<Message>, system_bytes: u64) 
             .sum::<u64>();
     let plain = messages.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        files::load(&root, &mut messages, &limits, text_bytes);
+        files::load(&root, &mut messages, &sending, text_bytes);
         messages
     })
     .await
@@ -1018,6 +1018,7 @@ pub async fn short_title(
     chat: &str,
     question: &str,
     answer: &str,
+    stop: &StopToken,
 ) -> Result<String, ChatError> {
     let piece = |text: &str| -> String { text.chars().take(TITLE_PIECE).collect() };
     let messages = [Message::user(format!(
@@ -1033,7 +1034,7 @@ pub async fn short_title(
         thinking: false,
         cache_key: chat,
     };
-    let reply = chat::stream(&model.target, &request, &mut |_| {}, &StopToken::default()).await?;
+    let reply = chat::stream(&model.target, &request, &mut |_| {}, stop).await?;
     clean_title(&reply.text).ok_or(ChatError::Failed)
 }
 

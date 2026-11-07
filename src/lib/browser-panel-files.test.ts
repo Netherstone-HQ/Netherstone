@@ -40,6 +40,14 @@ describe("canShowInBrowserPanel", () => {
     expect(canShowInBrowserPanel("/v/_attachments/pdf")).toBe(false);
     expect(canShowInBrowserPanel(null)).toBe(false);
   });
+
+  it("leaves out SVG and paths that climb out of a folder", () => {
+    expect(canShowInBrowserPanel("/v/_attachments/logo.svg")).toBe(false);
+    expect(canShowInBrowserPanel("/v/_attachments/../../a.pdf")).toBe(false);
+    expect(canShowInBrowserPanel("C:\\v\\_attachments\\..\\a.pdf")).toBe(
+      false,
+    );
+  });
 });
 
 describe("openFileInBrowserPanel", () => {

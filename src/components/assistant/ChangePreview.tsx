@@ -10,6 +10,7 @@ import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { type ChatChange, previewChange } from "@/lib/commands";
 import { diffShardValues } from "@/lib/history-diff";
+import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
 
 /** The change laid over the open shard as it is now. */
 function usePreviewValue(change: ChatChange, filePath: string) {
@@ -30,9 +31,11 @@ function usePreviewValue(change: ChatChange, filePath: string) {
         resolveSessionValue(filePath, preview.after, null),
       ]);
       if (cancelled) return;
+      // Media the change adds from the web shows as its address until applied.
+      const shown = withRemoteMediaAsLinks(after, remoteMediaIn(before));
       setLoaded({
         key,
-        value: diffShardValues(after, before, isInlineElement, {
+        value: diffShardValues(shown, before, isInlineElement, {
           wholeBlocks: true,
         }),
       });

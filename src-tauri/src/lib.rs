@@ -326,8 +326,11 @@ async fn assistant_chats() -> Result<Vec<assistant::ChatInfo>, assistant::ChatEr
 }
 
 #[tauri::command]
-async fn assistant_retitle(chat: String) -> Result<String, assistant::ChatError> {
-    assistant::retitle(chat).await
+async fn assistant_retitle(
+    window: tauri::Window,
+    chat: String,
+) -> Result<String, assistant::ChatError> {
+    assistant::retitle(chat, window.label().to_string()).await
 }
 
 #[tauri::command]
@@ -2370,6 +2373,107 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The command names in a `generate_handler!` list or a permission's
+    /// `commands.allow` list.
+    fn names(list: &str) -> std::collections::BTreeSet<String> {
+        list.lines()
+            .map(|line| line.trim().trim_end_matches(',').trim_matches('"'))
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|path| path.rsplit("::").next().unwrap_or(path).to_string())
+            .collect()
+    }
+
+    fn between<'a>(text: &'a str, start: &str, end: &str) -> &'a str {
+        let from = text.find(start).expect("start not found") + start.len();
+        let to = from + text[from..].find(end).expect("end not found");
+        &text[from..to]
+    }
+
+    #[test]
+    fn permissions_match_handler() {
+        let handler = names(between(
+            include_str!("lib.rs"),
+            concat!("generate_handler", "!["),
+            "])",
+        ));
+        let allowed = names(between(
+            include_str!("../permissions/app.toml"),
+            "commands.allow = [",
+            "]",
+        ));
+        assert!(handler.len() > 100, "the handler list wasn't read");
+        let missing: Vec<_> = handler.difference(&allowed).collect();
+        let extra: Vec<_> = allowed.difference(&handler).collect();
+        assert!(
+            missing.is_empty() && extra.is_empty(),
+            "permissions/app.toml is missing {missing:?} and has {extra:?} that the handler doesn't"
+        );
+    }
+
+    /// Asks for `show_main_window` from `webview` as a page at `url`.
+    fn ask(
+        webview: &tauri::Webview<tauri::test::MockRuntime>,
+        url: &str,
+    ) -> Result<tauri::ipc::InvokeResponseBody, serde_json::Value> {
+        struct View<'a>(&'a tauri::Webview<tauri::test::MockRuntime>);
+        impl AsRef<tauri::Webview<tauri::test::MockRuntime>> for View<'_> {
+            fn as_ref(&self) -> &tauri::Webview<tauri::test::MockRuntime> {
+                self.0
+            }
+        }
+        tauri::test::get_ipc_response(
+            &View(webview),
+            tauri::webview::InvokeRequest {
+                cmd: "show_main_window".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: url.parse().unwrap(),
+                body: tauri::ipc::InvokeBody::default(),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+    }
+
+    #[test]
+    fn only_the_app_view_reaches_app_commands() {
+        // The app's real capabilities, with a handler that answers any
+        // command that gets past them.
+        use tauri::Manager;
+        let app = tauri::test::mock_builder()
+            .invoke_handler(|invoke| {
+                invoke.resolver.resolve(true);
+                true
+            })
+            .build(tauri::generate_context!())
+            .unwrap();
+        let main = match app.get_webview_window("main") {
+            Some(main) => main,
+            None => tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+                .build()
+                .unwrap(),
+        };
+        assert!(ask(main.as_ref(), "tauri://localhost").is_ok());
+
+        // A page in the browser panel is another view in the same window.
+        let panel = main
+            .as_ref()
+            .window()
+            .add_child(
+                tauri::webview::WebviewBuilder::new(
+                    "browser",
+                    tauri::WebviewUrl::External("https://example.com".parse().unwrap()),
+                ),
+                tauri::LogicalPosition::new(0, 0),
+                tauri::LogicalSize::new(100, 100),
+            )
+            .unwrap();
+        assert!(ask(&panel, "https://example.com").is_err());
+        assert!(ask(&panel, "tauri://localhost").is_err());
+        // The main view sent to a website gets nothing either.
+        assert!(ask(main.as_ref(), "https://example.com").is_err());
+    }
 
     #[test]
     fn splits_a_cache_entry_where_its_markdown_ends() {

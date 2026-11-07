@@ -260,6 +260,136 @@ test("keeps a shard link through the preview and Apply", async ({ page }) => {
     .toBe("# Trips\n\n- [ ] Book it, see [Bread](Bread.md)\n");
 });
 
+test("shows a web image a change adds as its address, loading nothing", async ({ page }) => {
+  const kept = "https://pictures.example/kept.png";
+  const added = "https://pictures.example/new.png?d=Lisbon";
+  const asked: string[] = [];
+  await page.route("https://pictures.example/**", (route) => {
+    asked.push(route.request().url());
+    return route.abort();
+  });
+  await mockVault(page, {
+    files: { ...FILES, "Trip.md": `# Trip\n\n![kept](${kept})\n\nLisbon in May.\n` },
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: {
+        path: "Trip.md",
+        after: `# Trip\n\n![kept](${kept})\n\nLisbon in May.\n\n![new](${added})\n`,
+      },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  await panel(page).getByRole("button", { name: "Summarize this shard" }).click();
+
+  // The image already in the shard shows as it does there; the new one
+  // only as its address.
+  const preview = page.getByLabel("Change to the shard");
+  await expect(preview).toContainText(`Image: ${added}`);
+  await expect(preview).not.toContainText(`Image: ${kept}`);
+  await expect(preview.locator(`img[src="${added}"]`)).toHaveCount(0);
+  expect(asked).not.toContain(added);
+});
+
+test("shows the address of a web image in an answer", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, answer: ["See the map ![map](https://pictures.example/m.png)."] },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(assistant.getByText("See the map map (https://pictures.example/m.png).")).toBeVisible();
+  await expect(assistant.locator("img")).toHaveCount(0);
+});
+
+test("shows a new shard in its card before it's made", async ({ page }) => {
+  const image = "https://pictures.example/n.png";
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: {
+        kind: "newShard",
+        path: "Plans/Lisbon.md",
+        after: `# Lisbon\n\nTrains at 9.\n\n![map](${image})\n`,
+      },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+
+  await expect(assistant.getByText("New shard Lisbon")).toBeVisible();
+  await expect(page.getByLabel("Change to the shard")).toHaveCount(0);
+  await assistant.getByRole("button", { name: "Show", exact: true }).click();
+  const preview = assistant.getByLabel("Preview of New shard Lisbon");
+  await expect(preview).toContainText("Trains at 9.");
+  await expect(preview).toContainText(`Image: ${image}`);
+  await assistant.getByRole("button", { name: "Hide", exact: true }).click();
+  await expect(preview).toHaveCount(0);
+  expect(await page.evaluate(() => window.__saves)).toEqual([]);
+});
+
+test("shows a drawing in its card before it's made", async ({ page }) => {
+  const scene = JSON.stringify({
+    type: "excalidraw",
+    version: 2,
+    elements: [
+      { id: "r", type: "rectangle", x: 0, y: 0, width: 120, height: 80, angle: 0, strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, seed: 1, version: 1, versionNonce: 1, isDeleted: false, boundElements: null, updated: 1, link: null, locked: false },
+    ],
+    appState: {},
+    files: {},
+  });
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: { kind: "newDrawing", path: "Sketch.excalidraw", after: scene } },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+
+  await expect(assistant.getByText("New drawing Sketch")).toBeVisible();
+  await assistant.getByRole("button", { name: "Show", exact: true }).click();
+  await expect(assistant.getByRole("img", { name: "Preview of New drawing Sketch" })).toBeVisible();
+});
+
+test("says where a move goes", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: { kind: "move", path: "Trip.md", after: "", moving: { folder: "Archive", name: null } },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(assistant.getByText("Move Trip.md to Archive")).toBeVisible();
+  await expect(assistant.getByRole("button", { name: "Show", exact: true })).toHaveCount(0);
+});
+
+test("opens a shard a change is to, to show it there", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: { path: "Bread.md", after: "# Bread\n\nUse 360 g water.\n" } },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(page.getByLabel("Change to the shard")).toHaveCount(0);
+
+  await assistant.getByRole("button", { name: "Show", exact: true }).click();
+  const preview = page.getByLabel("Change to the shard");
+  await expect(preview).toContainText("Use 360 g water.");
+  await expect(assistant.getByRole("button", { name: "Show", exact: true })).toHaveCount(0);
+});
+
 test("discards an edit without writing it", async ({ page }) => {
   await mockVault(page, {
     files: FILES,

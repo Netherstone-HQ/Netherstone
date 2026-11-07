@@ -758,11 +758,35 @@ pub async fn chats() -> Result<Vec<ChatInfo>, ChatError> {
 }
 
 /// Gives a new chat a short name from its first question and answer, with
-/// one small call to the model. Its first title stays when that fails.
-pub async fn retitle(chat: String) -> Result<String, ChatError> {
+/// one small call to the model. Its first title stays when that fails. Only
+/// while the assistant is on and may use the chat's vault; turning it off
+/// stops it like an answer.
+pub async fn retitle(chat: String, window: String) -> Result<String, ChatError> {
+    // Registered first, so turning off while it's setting up counts.
+    let key = format!("title:{chat}");
+    let stop = StopToken::default();
+    {
+        let mut running = running().lock().map_err(|_| ChatError::Failed)?;
+        if running.contains_key(&key) {
+            return Err(ChatError::Answering);
+        }
+        running.insert(key.clone(), (window, stop.clone()));
+    }
+    let result = retitle_run(chat, &stop).await;
+    if let Ok(mut running) = running().lock() {
+        running.remove(&key);
+    }
+    result
+}
+
+async fn retitle_run(chat: String, stop: &StopToken) -> Result<String, ChatError> {
     let store = store()?;
     let id = chat.clone();
-    let messages = engine::saved(&store, move |store| store.messages(&id)).await?;
+    let (info, messages) = engine::saved(&store, move |store| {
+        Ok((store.info(&id)?, store.messages(&id)?))
+    })
+    .await?;
+    let info = info.ok_or(ChatError::NoChat)?;
     let question = messages.iter().find_map(|saved| match &saved.message {
         Message::User { text, .. } => Some(text.clone()),
         _ => None,
@@ -774,10 +798,16 @@ pub async fn retitle(chat: String) -> Result<String, ChatError> {
     let (Some(question), Some(answer)) = (question, answer) else {
         return Err(ChatError::Failed);
     };
-    let model = tauri::async_runtime::spawn_blocking(picked_model)
-        .await
-        .map_err(|_| ChatError::Failed)??;
-    let title = engine::short_title(&model, &chat, &question, &answer).await?;
+    let model = tauri::async_runtime::spawn_blocking(move || {
+        open_vault(&PathBuf::from(info.vault))?;
+        picked_model()
+    })
+    .await
+    .map_err(|_| ChatError::Failed)??;
+    if stop.is_stopped() {
+        return Err(ChatError::Stopped);
+    }
+    let title = engine::short_title(&model, &chat, &question, &answer, stop).await?;
     let kept = title.clone();
     engine::saved(&store, move |store| store.set_title(&chat, &kept)).await?;
     Ok(sessions::title_of(&title))
@@ -876,9 +906,9 @@ pub async fn delete_chats() -> Result<(), ChatError> {
 pub struct Preview {
     /// Vault-relative.
     path: String,
-    /// The shard as it is now.
+    /// The shard or drawing as it is now, empty for a new one.
     before: String,
-    /// The shard as applying would leave it.
+    /// The shard or drawing as applying would leave it.
     after: String,
 }
 
@@ -947,18 +977,26 @@ fn target_of(change: &Change) -> crate::tools::proposals::Target {
     }
 }
 
-/// The text a pending change to a shard would leave it with.
+/// The text a pending change would leave its shard or drawing with, and
+/// the text it has now: none for a new one. A move has none to show.
 pub async fn preview(id: String) -> Result<Preview, String> {
     with_store(move |store| {
         let (change, vault) = change_and_vault(store, &id, ChangeState::Pending)?;
         let target = target_of(&change);
-        let before = crate::tools::proposals::current(&vault, &target)
-            .ok_or_else(|| format!("There's no shard at '{}'", change.path))?;
-        let after = crate::tools::proposals::replay(&vault, Some(before.clone()), &change.ops)
+        use crate::tools::proposals::Kind;
+        let before = match change.kind {
+            Kind::NewShard | Kind::NewDrawing => None,
+            Kind::Shard | Kind::Drawing => Some(
+                crate::tools::proposals::current(&vault, &target)
+                    .ok_or_else(|| format!("There's nothing at '{}'", change.path))?,
+            ),
+            Kind::Move => return Err("A move has no text to show".to_string()),
+        };
+        let after = crate::tools::proposals::replay(&vault, before.clone(), &change.ops)
             .map_err(|error| error.0)?;
         Ok(Preview {
             path: change.path,
-            before,
+            before: before.unwrap_or_default(),
             after,
         })
     })

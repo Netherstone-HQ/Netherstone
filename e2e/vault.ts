@@ -147,8 +147,16 @@ type MockAssistant = {
   reads?: string[];
   /** The short title a new chat gets after its answer, if any. */
   title?: string;
-  /** A change every answer proposes to a shard, by its vault-relative path. */
-  change?: { path: string; after: string };
+  /**
+   * A change every answer proposes, by its vault-relative path: to a shard
+   * unless `kind` says otherwise.
+   */
+  change?: {
+    path: string;
+    after: string;
+    kind?: "shard" | "newShard" | "drawing" | "newDrawing" | "move";
+    moving?: { folder: string | null; name: string | null };
+  };
   /** An item every answer offers to add to memory. */
   remember?: string;
   /** What's in memory to start with. */
@@ -464,7 +472,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           responsesOnly: false,
         };
         type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
-        type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string };
+        type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string; moving?: unknown };
         type Offer = { id: string; turn: number; text: string; state: string };
         const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[] }[] = [];
         const memory = [...(setup.memory ?? [])];
@@ -546,7 +554,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             for (const path of reads) send({ type: "tool", name: "read", paths: [path] });
             if (setup.change) {
               send({ type: "tool", name: "edit_shard", paths: [setup.change.path] });
-              found.changes.push({ id: `change-${++changes}`, turn, kind: "shard", path: setup.change.path, count: 1, state: "pending" });
+              const { kind = "shard", moving } = setup.change;
+              found.changes.push({ id: `change-${++changes}`, turn, kind, path: setup.change.path, count: 1, state: "pending", ...(moving ? { moving } : {}) });
             }
             if (setup.remember) {
               send({ type: "tool", name: "remember", paths: [] });
@@ -613,7 +622,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           },
           assistant_change_preview: (args) => {
             const { change } = findChange((args as unknown as { change: string }).change);
-            return { path: change.path, before: files[change.path], after: setup.change?.after };
+            return { path: change.path, before: files[change.path] ?? "", after: setup.change?.after };
           },
           assistant_apply: (args) => {
             const { change } = findChange((args as unknown as { change: string }).change);

@@ -106,6 +106,30 @@ pub fn target(vault: &Vault, op: &Op) -> ToolResult<Target> {
     })
 }
 
+/// Where a move puts its file or folder: the folder ("" for the top of the
+/// vault) and the new name, each when the move gives it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Moving {
+    pub folder: Option<String>,
+    pub name: Option<String>,
+}
+
+/// Where the move in `ops` puts its file, if they hold one.
+pub fn moving(ops: &[Op]) -> Option<Moving> {
+    let op = ops.iter().find(|op| op.name == "move")?;
+    let text = |key: &str| {
+        op.arguments
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    Some(Moving {
+        folder: text("to_folder"),
+        name: text("new_name"),
+    })
+}
+
 /// Whether a call on `next` goes into a change made so far to `target`.
 pub fn adds_to(target: &Target, next: &Target) -> bool {
     target.path == next.path && target.kind.takes(next.kind)
@@ -432,6 +456,25 @@ mod tests {
             history.current.unwrap().summary.as_deref(),
             Some("Undid it")
         );
+    }
+
+    #[test]
+    fn a_move_says_where_it_goes() {
+        let moved = [op(
+            "move",
+            json!({ "path": "Plans", "to_folder": "Archive" }),
+        )];
+        assert_eq!(
+            moving(&moved),
+            Some(Moving {
+                folder: Some("Archive".into()),
+                name: None
+            })
+        );
+        let renamed = [op("move", json!({ "path": "Plan.md", "new_name": "Trip" }))];
+        assert_eq!(moving(&renamed).unwrap().name.as_deref(), Some("Trip"));
+        let edited = [op("edit_shard", json!({ "path": "Plan.md" }))];
+        assert_eq!(moving(&edited), None);
     }
 
     #[test]

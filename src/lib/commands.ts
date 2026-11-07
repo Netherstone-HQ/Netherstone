@@ -1013,6 +1013,8 @@ export interface ChatChange {
   /** How many calls make it. */
   count: number;
   state: "pending" | "applied";
+  /** For a move: the folder it goes to ("" for the top), and its new name. */
+  moving?: { folder: string | null; name: string | null };
 }
 
 /** An item an answer offered to add to memory. */
@@ -1030,7 +1032,10 @@ export interface ChatView extends ChatInfo {
   memories: ChatMemory[];
 }
 
-/** A pending change to a shard: its text now and as applying leaves it. */
+/**
+ * A pending change to a shard or drawing: its text now (empty for a new
+ * one) and as applying leaves it.
+ */
 export interface ChangePreview {
   path: string;
   before: string;

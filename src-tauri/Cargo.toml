@@ -81,6 +81,8 @@ jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 yaml-edit = { version = "0.3", default-features = false }
 
 [dev-dependencies]
+# Runs the app's real capabilities against a mock window in tests.
+tauri = { version = "2", features = ["protocol-asset", "unstable", "test"] }
 # Tests hold a port that refuses connections: bound, never listening.
 socket2 = "0.6"
 

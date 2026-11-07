@@ -4,7 +4,7 @@
 //! sent in their place while they stay saved.
 
 use super::chat::Message;
-use crate::tools::proposals::{FileChange, Kind, Op};
+use crate::tools::proposals::{FileChange, Kind, Moving, Op};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -121,6 +121,9 @@ pub struct Change {
     /// The name of the model that proposed it.
     #[serde(skip)]
     pub model: Option<String>,
+    /// For a move, where it goes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moving: Option<Moving>,
 }
 
 /// An item the assistant offered to add to memory.
@@ -182,6 +185,7 @@ fn change_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<Change>> {
         kind,
         path: row.get(4)?,
         count: ops.len(),
+        moving: crate::tools::proposals::moving(&ops),
         ops,
         state,
         applied: applied
@@ -417,13 +421,22 @@ impl Store {
     pub fn delete(&self, chat: &str) -> Result<(), String> {
         self.conn
             .execute("DELETE FROM chats WHERE id = ?1", params![chat])
-            .map(|_| ())
-            .map_err(sql)
+            .map_err(sql)?;
+        self.clear_log()
     }
 
     pub fn delete_all(&self) -> Result<(), String> {
         self.conn
             .execute_batch("DELETE FROM changes; DELETE FROM memory_offers; DELETE FROM messages; DELETE FROM chats; VACUUM;")
+            .map_err(sql)?;
+        self.clear_log()
+    }
+
+    /// Writes the log into the database and empties it, so deleted text
+    /// isn't left in assistant.db-wal.
+    fn clear_log(&self) -> Result<(), String> {
+        self.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
             .map_err(sql)
     }
 
@@ -683,6 +696,38 @@ mod tests {
         let info = store.info(&chat).unwrap().unwrap();
         assert_eq!(info.title, "What did I plan for the trip?");
         assert_eq!(info.vault, "/vaults/Notes");
+    }
+
+    #[test]
+    fn deleted_chats_leave_no_text_on_disk() {
+        let dir = crate::sync::state::tests::temp_dir("sessions-deleted");
+        let db = dir.join("assistant.db");
+        let wal = dir.join("assistant.db-wal");
+        let store = Store::open_at(&db).unwrap();
+        let on_disk = |word: &str| {
+            [&db, &wal].iter().any(|path| {
+                std::fs::read(path)
+                    .unwrap_or_default()
+                    .windows(word.len())
+                    .any(|w| w == word.as_bytes())
+            })
+        };
+
+        let one = store.create(Path::new("/v"), "first").unwrap();
+        store
+            .add(&one, &Message::user("Plumtree secret one"), &[], None)
+            .unwrap();
+        let two = store.create(Path::new("/v"), "second").unwrap();
+        store
+            .add(&two, &Message::user("Quincewood secret two"), &[], None)
+            .unwrap();
+        assert!(on_disk("Plumtree") && on_disk("Quincewood"));
+
+        store.delete(&one).unwrap();
+        assert!(!on_disk("Plumtree"));
+        assert!(on_disk("Quincewood"));
+        store.delete_all().unwrap();
+        assert!(!on_disk("Quincewood"));
     }
 
     #[test]

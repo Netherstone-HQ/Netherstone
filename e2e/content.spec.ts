@@ -454,12 +454,27 @@ test("sound, video and other files outside the vault show and open", async ({ pa
     )
     .toBe(true);
 
-  // Or in the browser panel, from the row's menu.
+  // The browser panel only shows the vault's own files.
+  await file.hover();
+  await editor(page).getByRole("button", { name: "More" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Open in browser panel" })).toHaveCount(0);
+});
+
+test("a vault file opens in the browser panel from its row's menu", async ({ page }) => {
+  await asInApp(page);
+  await mockVault(page, {
+    files: { "Plan.md": `# Plan\n\n<file name="Plan.pdf" src="_attachments/Plan.pdf" />\n` },
+    assets: { "_attachments/Plan.pdf": pdf() },
+    open: "Plan.md",
+  });
+  const file = editor(page).getByText("Plan.pdf").first();
+  await expect(file).toBeVisible();
   await file.hover();
   await editor(page).getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Open in browser panel" }).click();
   await expect(page.getByRole("textbox", { name: "Browser address" })).toHaveValue(
-    "file:///home/me/Documents/Report.pdf",
+    "file:///home/me/Vault/_attachments/Plan.pdf",
   );
 });
 

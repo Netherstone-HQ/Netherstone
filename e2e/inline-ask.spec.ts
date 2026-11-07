@@ -112,6 +112,29 @@ test("changes a whole paragraph as blocks, and Discard keeps it", async ({ page 
   expect(await shardSaves(page)).toEqual([]);
 });
 
+test("shows a web image the answer brings in as its address, loading nothing", async ({ page }) => {
+  const image = "https://pictures.example/a.png?d=offline";
+  const asked: string[] = [];
+  await page.route("https://pictures.example/**", (route) => {
+    asked.push(route.request().url());
+    return route.abort();
+  });
+  await mockVault(page, {
+    files: FILES,
+    open: "Why.md",
+    assistant: { ...READY, inline: [`It works offline.\n\n![map](${image})`] },
+  });
+  await select(page, WHY);
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await prompt(page).fill("Add a map");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const added = page.getByLabel("Change to the selection");
+  await expect(added).toContainText(`Image: ${image}`);
+  await expect(added.locator("img")).toHaveCount(0);
+  expect(asked).toEqual([]);
+});
+
 test("Escape closes the prompt, and Stop leaves the text as it was", async ({ page }) => {
   await mockVault(page, {
     files: FILES,

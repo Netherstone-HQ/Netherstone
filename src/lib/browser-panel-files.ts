@@ -1,6 +1,9 @@
 import { useUIStore } from "@/store/ui";
 
-/** Files a webview shows as a page: documents, pictures, text, sound, video. */
+/**
+ * Files a webview shows as a page: documents, pictures, text, sound, video.
+ * No SVG: it is a page that runs its own scripts.
+ */
 const BROWSER_PANEL_EXTENSIONS = new Set([
   "pdf",
   "png",
@@ -11,7 +14,6 @@ const BROWSER_PANEL_EXTENSIONS = new Set([
   "avif",
   "bmp",
   "ico",
-  "svg",
   "txt",
   "log",
   "csv",
@@ -36,7 +38,11 @@ function extensionOf(path: string) {
 
 /** Whether the browser panel can show the file at `path`. */
 export function canShowInBrowserPanel(path: string | null | undefined) {
-  return !!path && BROWSER_PANEL_EXTENSIONS.has(extensionOf(path));
+  return (
+    !!path &&
+    !path.split(/[\\/]/).includes("..") &&
+    BROWSER_PANEL_EXTENSIONS.has(extensionOf(path))
+  );
 }
 
 /**

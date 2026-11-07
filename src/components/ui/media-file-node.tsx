@@ -255,8 +255,11 @@ export const FileElement = withHOC(
     }, [displayName, resolvedSource, source]);
 
     const shownPath = useVaultRelativePath(attachmentPath);
+    // Only for the vault's own files, never ones linked from elsewhere.
     const openInPanel =
-      attachmentPath && canShowInBrowserPanel(attachmentPath)
+      attachmentPath &&
+      resolvedSource.kind === "vault" &&
+      canShowInBrowserPanel(attachmentPath)
         ? [
             {
               label: "Open in browser panel",

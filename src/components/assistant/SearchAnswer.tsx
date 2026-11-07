@@ -5,6 +5,7 @@ import {
   KeyRoundIcon,
   LoaderCircleIcon,
   MessageSquareIcon,
+  ServerOffIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { useVaultStore } from "@/store/vault";
 import { AnswerText, CiteNumber, useParsedAnswer } from "./AnswerText";
 import { shardName } from "./Composer";
 import { EndingNote } from "./EndingNote";
-import { type SetupState, waitingText } from "./setup";
+import { type Setup, type SetupState, serverDownText, waitingText } from "./setup";
 
 /** A group's name in the search list, like Recent. */
 export function GroupLabel({ children }: { children: string }) {
@@ -133,13 +134,16 @@ export function SearchAnswer({
 /** What's needed before the question can be asked, as the panel says it. */
 export function SearchSetupNeeded({
   state,
+  setup,
   onSetUp,
   onPickModel,
   onTurnedOn,
 }: {
   state: Exclude<SetupState, "ready">;
+  setup: Setup | null;
   onSetUp: () => void;
   onPickModel: () => void;
+  /** Reads the setup again, after turning the vault on or for Try again. */
   onTurnedOn: () => void;
 }) {
   const vault = useVaultStore((s) => s.currentVaultPath);
@@ -173,7 +177,9 @@ export function SearchSetupNeeded({
             "Turn on",
             () => void turnOn(),
           ]
-        : [CpuIcon, "No model picked", "Pick a model", onPickModel];
+        : state === "serverDown" && setup?.serverDown
+          ? [ServerOffIcon, serverDownText(setup.serverDown), "Try again", onTurnedOn]
+          : [CpuIcon, "No model picked", "Pick a model", onPickModel];
 
   return (
     <div className="flex items-center gap-2.5 py-1 pr-1 pl-2.5 text-ui">

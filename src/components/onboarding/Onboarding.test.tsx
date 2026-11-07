@@ -76,7 +76,13 @@ function assistantCommands(more: Partial<AssistantStatus> = {}): Handlers {
     mcp_set_vault_allowed: ({ path, allowed }) => {
       vaults = vaults.map((v) => (v.path === path ? { ...v, allowed: allowed as boolean } : v));
     },
-    assistant_picked: () => state.model,
+    assistant_picked: () =>
+      state.model && {
+        id: state.model.model,
+        provider: state.model.provider,
+        local: false,
+        images: false,
+      },
     assistant_enabled: () => state.enabled,
     assistant_status: () => state,
     assistant_models: () => MODELS,

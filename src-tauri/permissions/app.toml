@@ -22,6 +22,7 @@ commands.allow = [
   "assistant_send",
   "assistant_ask_inline",
   "assistant_picked",
+  "assistant_local_down",
   "assistant_stop",
   "assistant_chats",
   "assistant_chat",

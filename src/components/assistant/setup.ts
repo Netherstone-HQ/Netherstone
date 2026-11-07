@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import {
   type AssistantStatus,
   type ChatError,
+  type LocalServer,
   type PickedModel,
+  findLocalServerDown,
   getAssistantStatus,
   getPickedModel,
   listMcpVaults,
@@ -14,7 +16,7 @@ import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 
 import { shardName } from "./Composer";
-import { isSetUp } from "./models";
+import { SERVER_NAMES, isSetUp } from "./models";
 
 /** What a chat needs before it can start. */
 export interface Setup {
@@ -22,6 +24,8 @@ export interface Setup {
   picked: PickedModel | null;
   /** Whether the open vault is on for AI. */
   vaultAllowed: boolean;
+  /** The picked model's local server, when it isn't answering. */
+  serverDown: LocalServer["kind"] | null;
 }
 
 export type SetupState =
@@ -29,6 +33,7 @@ export type SetupState =
   | "noProvider"
   | "vaultOff"
   | "noModel"
+  | "serverDown"
   | "ready";
 
 export function setupState(setup: Setup | null): SetupState {
@@ -36,7 +41,13 @@ export function setupState(setup: Setup | null): SetupState {
   if (!setup.status.providers.some(isSetUp)) return "noProvider";
   if (!setup.vaultAllowed) return "vaultOff";
   if (!setup.picked) return "noModel";
+  if (setup.serverDown) return "serverDown";
   return "ready";
+}
+
+/** What the setup says when the picked model's local server isn't answering. */
+export function serverDownText(kind: LocalServer["kind"]) {
+  return `${SERVER_NAMES[kind] ?? "The local server"} isn't running`;
 }
 
 /** Read while `active`, and again on leaving Settings. */
@@ -55,7 +66,10 @@ export function useSetup(active = true) {
       const vaultAllowed =
         vault !== null &&
         vaults.some((v) => v.allowed && isSamePath(v.path, vault));
-      setSetup({ status, picked, vaultAllowed });
+      // Asked only for a local model, so the probe stays off otherwise.
+      const serverDown =
+        status.enabled && picked?.local ? await findLocalServerDown() : null;
+      setSetup({ status, picked, vaultAllowed, serverDown });
     } catch (error) {
       console.error("[Netherstone] Couldn't read the assistant's setup:", error);
     }

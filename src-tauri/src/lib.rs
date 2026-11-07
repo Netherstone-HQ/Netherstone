@@ -241,6 +241,12 @@ async fn assistant_find_local() -> Result<Vec<assistant::Found>, assistant::Prov
     assistant::find_local().await
 }
 
+/// The picked local server's kind when it isn't answering.
+#[tauri::command]
+async fn assistant_local_down() -> Result<Option<assistant::ServerKind>, assistant::ProviderError> {
+    assistant::local_down().await
+}
+
 #[tauri::command]
 async fn assistant_save_local(
     address: String,
@@ -2225,6 +2231,7 @@ pub fn run() {
             assistant_send,
             assistant_ask_inline,
             assistant_picked,
+            assistant_local_down,
             assistant_stop,
             assistant_chats,
             assistant_chat,

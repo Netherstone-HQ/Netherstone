@@ -99,7 +99,7 @@ fn origin(url: &Url) -> String {
     url.origin().ascii_serialization()
 }
 
-async fn answers(server: &Server) -> Option<Vec<Model>> {
+pub async fn answers(server: &Server) -> Option<Vec<Model>> {
     models::list_within(&server.target(), PROBE_CONNECT, PROBE_TOTAL)
         .await
         .ok()

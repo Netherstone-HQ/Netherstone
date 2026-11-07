@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import {
   type Models,
   ModelList,
+  SERVER_NAMES,
   errorKind,
   modelGroups,
   modelName,
@@ -65,13 +66,6 @@ import { cn } from "@/lib/utils";
 function showError(error: unknown) {
   toast.error(error instanceof Error ? error.message : String(error));
 }
-
-const SERVER_NAMES: Record<LocalServer["kind"], string | null> = {
-  ollama: "Ollama",
-  lmStudio: "LM Studio",
-  llamaCpp: "llama.cpp",
-  other: null,
-};
 
 function hostOf(address: string): string {
   return address.replace(/^https?:\/\//, "").replace(/\/.*$/, "");

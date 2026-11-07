@@ -21,6 +21,7 @@ use chat::{Message, ReasoningPart, StopToken};
 pub use engine::{Event, Sink};
 use engine::{SharedStore, Turn};
 use local::Server;
+pub use local::ServerKind;
 pub use memory::Memory;
 use models::Target;
 pub use models::{Model, ProviderError};
@@ -555,6 +556,36 @@ pub async fn picked() -> Result<Option<Picked>, ChatError> {
         local: provider.setup == Setup::Local,
         images,
     }))
+}
+
+/// The kind of the picked model's local server when it doesn't answer now.
+/// None while the assistant is off or the picked model isn't on a local
+/// server, so nothing is probed then.
+pub async fn local_down() -> Result<Option<ServerKind>, ProviderError> {
+    let server = blocking(|| {
+        if !enabled().map_err(storage_error)? {
+            return Ok(None);
+        }
+        let Some(choice) = read::<ModelChoice>(MODEL).map_err(storage_error)? else {
+            return Ok(None);
+        };
+        let local = providers::find(&choice.provider).is_ok_and(|p| p.setup == Setup::Local);
+        if !local {
+            return Ok(None);
+        }
+        Ok(servers()
+            .map_err(storage_error)?
+            .into_iter()
+            .find(|saved| Some(&saved.address) == choice.server.as_ref()))
+    })
+    .await?;
+    let Some(server) = server else {
+        return Ok(None);
+    };
+    Ok(match local::answers(&server).await {
+        Some(_) => None,
+        None => Some(server.kind),
+    })
 }
 
 /// The vault at `path`, while the assistant is on and may use it.

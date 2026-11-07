@@ -27,6 +27,7 @@ import { Hint } from "@/components/ui/tooltip";
 import {
   closeAssistant,
   newChat,
+  retryAnswer,
   sendMessage,
   stopAnswer,
 } from "@/lib/assistant";
@@ -203,22 +204,86 @@ function ChangeIcon({ kind }: { kind: ChatChange["kind"] }) {
   }
 }
 
+/** Where the file a change made or changed is once it's applied. */
+function appliedPath(change: ChatChange): string {
+  if (change.kind !== "move") return change.path;
+  const { folder = null, name = null } = change.moving ?? {};
+  const parts = change.path.split("/");
+  const old = parts.pop() ?? change.path;
+  const extension = /\.(md|excalidraw)$/i.exec(old)?.[0] ?? "";
+  const renamed = name
+    ? name.toLowerCase().endsWith(extension.toLowerCase())
+      ? name
+      : name + extension
+    : old;
+  const where = folder === null ? parts.join("/") : folder;
+  return where ? `${where}/${renamed}` : renamed;
+}
+
+/** Brings the open shard's preview of a change back into view. */
+function revealPreview() {
+  document
+    .querySelector(".change-preview [data-history-block]")
+    ?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+/**
+ * A file's name in a change card that opens it, or for a change to the
+ * open shard, brings its preview there into view.
+ */
+function FileLink({
+  path,
+  onOpen,
+  children,
+}: {
+  path: string;
+  onOpen?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen ?? (() => openShard({ path, section: null }))}
+      className="min-w-0 truncate text-left font-medium underline-offset-2 hover:underline"
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
  * A change an answer proposed: to look at, then apply or not. A change to
- * the open shard shows in its place; one to another shard opens it; a new
- * shard or a drawing shows in the card; a move says where it goes.
+ * the open shard shows in its place, and its name brings it back into
+ * view; one to another shard opens it from its name; a new shard or
+ * drawing, or a changed drawing, shows in the card; a move says where it
+ * goes. Once applied, its name opens what it made or changed.
  */
 function ChangeCard({ change }: { change: ChatChange }) {
   const busy = useAssistantStore((s) => s.busyChanges.includes(change.id));
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
-  const [showing, setShowing] = useState(false);
+  if (change.state === "discarded") {
+    return (
+      <div className="flex items-center gap-2 rounded-[10px] border border-dashed py-2.5 pr-2 pl-3 text-muted-foreground">
+        <XIcon className="size-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate">
+          Discarded {changeTitle(change)}
+        </span>
+      </div>
+    );
+  }
   if (change.state === "applied") {
+    const path = appliedPath(change);
     return (
       <div className="flex items-center gap-2 rounded-[10px] border bg-card py-2.5 pr-2 pl-3">
         <CheckIcon className="size-4 shrink-0 text-brand" />
-        <span className="min-w-0 flex-1 truncate">
-          Applied to {shardName(change.path)}
+        <span className="flex min-w-0 flex-1 items-center gap-1">
+          <span className="shrink-0">Applied to </span>
+          {isOpenable(path) ? (
+            <FileLink path={path}>{shardName(path)}</FileLink>
+          ) : (
+            <span className="truncate">{shardName(path)}</span>
+          )}
         </span>
         <Button
           type="button"
@@ -234,45 +299,38 @@ function ChangeCard({ change }: { change: ChatChange }) {
   }
   const title = changeTitle(change);
   const inCard = change.kind !== "shard" && change.kind !== "move";
-  const elsewhere =
-    change.kind === "shard" && openShardPath(vault, openPath) !== change.path;
+  const onOpenShard =
+    change.kind === "shard" && openShardPath(vault, openPath) === change.path;
+  const linked = change.kind === "shard" || change.kind === "drawing";
   return (
     <div className="flex flex-col gap-2.5 rounded-[10px] border bg-card p-3">
       <div className="flex min-w-0 items-center gap-2">
         <ChangeIcon kind={change.kind} />
-        <span
-          className={cn(
-            "min-w-0 font-medium",
-            change.kind === "move" ? "break-words" : "truncate",
-          )}
-        >
-          {title}
-        </span>
+        {linked ? (
+          <FileLink
+            path={change.path}
+            onOpen={onOpenShard ? revealPreview : undefined}
+          >
+            {title}
+          </FileLink>
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 font-medium",
+              change.kind === "move" ? "break-words" : "truncate",
+            )}
+          >
+            {title}
+          </span>
+        )}
         {change.kind !== "move" && (
           <span className="shrink-0 text-muted-foreground text-ui-sm">
             {changeCount(change.count)}
           </span>
         )}
       </div>
-      {inCard && showing && (
-        <ChangeContent change={change} label={`Preview of ${title}`} />
-      )}
+      {inCard && <ChangeContent change={change} label={`Preview of ${title}`} />}
       <div className="flex justify-end gap-2">
-        {(inCard || elsewhere) && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mr-auto"
-            onClick={() =>
-              inCard
-                ? setShowing((shown) => !shown)
-                : openShard({ path: change.path, section: null })
-            }
-          >
-            {inCard && showing ? "Hide" : "Show"}
-          </Button>
-        )}
         <Button
           type="button"
           variant="ghost"
@@ -293,6 +351,57 @@ function ChangeCard({ change }: { change: ChatChange }) {
       </div>
     </div>
   );
+}
+
+/** Apply all and Discard all, for an answer with more than one change left. */
+function AllChanges({ changes }: { changes: ChatChange[] }) {
+  const pending = changes.filter((change) => change.state === "pending");
+  const [running, setRunning] = useState(false);
+  const busy = useAssistantStore((s) =>
+    pending.some((change) => s.busyChanges.includes(change.id)),
+  );
+  if (pending.length < 2) return null;
+  const each = async (run: (change: ChatChange) => Promise<void>) => {
+    const chat = useAssistantStore.getState().chat?.id;
+    setRunning(true);
+    try {
+      for (const { id } of pending) {
+        // Each as it stands now: one may have been done from its own card.
+        const now = useAssistantStore.getState();
+        if (now.chat?.id !== chat) break;
+        const change = now.changes.find((c) => c.id === id);
+        if (change?.state === "pending") await run(change);
+      }
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <div className="flex justify-end gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={busy || running}
+        onClick={() => void each(discardAssistantChange)}
+      >
+        Discard all
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        disabled={busy || running}
+        onClick={() => void each(applyAssistantChange)}
+      >
+        Apply all
+      </Button>
+    </div>
+  );
+}
+
+/** Whether a path names a shard or drawing, rather than a folder. */
+function isOpenable(path: string) {
+  return /\.(md|excalidraw)$/i.test(path);
 }
 
 /** An item an answer offered to remember: to add to memory or not. */
@@ -369,10 +478,9 @@ function Thinking({ text }: { text: string }) {
   );
 }
 
-/** The shards an answer cites, numbered, or the ones it read. */
-function Sources({ cited, read }: { cited: Citation[]; read: string[] }) {
-  const rest = cited.length === 0 ? read : [];
-  if (cited.length === 0 && rest.length === 0) return null;
+/** The shards an answer cites, numbered as in its text. */
+function Sources({ cited }: { cited: Citation[] }) {
+  if (cited.length === 0) return null;
   return (
     <div className="-mx-2 flex flex-col">
       {cited.map((citation, index) => (
@@ -392,16 +500,6 @@ function Sources({ cited, read }: { cited: Citation[]; read: string[] }) {
               </span>
             </>
           ) : null}
-        </button>
-      ))}
-      {rest.map((path) => (
-        <button
-          key={path}
-          type="button"
-          onClick={() => openShard({ path, section: null })}
-          className="flex h-7.5 min-w-0 items-center gap-2 rounded-md px-2 text-left text-ui-sm hover:bg-accent"
-        >
-          <span className="truncate">{shardName(path)}</span>
         </button>
       ))}
     </div>
@@ -426,7 +524,7 @@ const Answer = memo(function Answer({
   const cards = changes.length + memories.length;
   if (!message.text && !message.reasoning && cards === 0) return null;
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="group/answer flex flex-col gap-2.5">
       {message.reasoning ? <Thinking text={message.reasoning} /> : null}
       {message.text ? (
         <AnswerText
@@ -438,12 +536,15 @@ const Answer = memo(function Answer({
       {changes.map((change) => (
         <ChangeCard key={change.id} change={change} />
       ))}
+      <AllChanges changes={changes} />
       {memories.map((memory) => (
         <MemoryCard key={memory.id} memory={memory} />
       ))}
-      <Sources cited={answer.cited} read={message.sources ?? []} />
+      <Sources cited={answer.cited} />
       {message.text && cards === 0 ? (
-        <div className="-ml-1.5 flex items-center gap-0.5">
+        // Shown on the answer the pointer or focus is on, so they don't
+        // stack up under every answer.
+        <div className="-ml-1.5 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/answer:opacity-100">
           <CopyButton text={message.text} />
           {canAdd ? <AddToShardButton text={message.text} /> : null}
         </div>
@@ -555,6 +656,7 @@ function Messages() {
     () => withChanges(messages, changes, memories),
     [messages, changes, memories],
   );
+  const lastAsked = [...messages].reverse().find((m) => m.role === "user")?.seq;
 
   return (
     <div
@@ -580,7 +682,14 @@ function Messages() {
         ),
       )}
       <Streaming onGrow={follow} />
-      {ending ? <EndingNote ending={ending} onOpenLink={openLink} /> : null}
+      {ending ? (
+        <EndingNote
+          ending={ending}
+          onOpenLink={openLink}
+          onRetry={() => void retryAnswer()}
+          partly={changes.some((change) => change.turn === lastAsked)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -667,7 +776,7 @@ export function AssistantPanel() {
   return (
     <aside
       aria-label="Assistant"
-      className="flex h-full w-100 flex-col border-l bg-sidebar text-sidebar-foreground text-ui"
+      className="flex h-full w-(--assistant-width) flex-col border-l bg-sidebar text-sidebar-foreground text-ui"
     >
       <div className="flex h-toolbar shrink-0 items-center gap-1 border-sidebar-border border-b pr-2.5 pl-3">
         {ready && chat ? (

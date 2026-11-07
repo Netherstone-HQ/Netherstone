@@ -11,6 +11,7 @@ import {
   getChat,
   undoChange,
 } from "@/lib/commands";
+import { fillDrawingPictures } from "@/lib/drawing-exports";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import {
@@ -109,10 +110,11 @@ async function writeChange(
   // text already on screen.
   const shown = state.plateEditor?.children;
   let typed = false;
+  let made: MadeChange;
   state.setIsSaving(true);
   try {
     suppressVaultChangePath(filePath);
-    const made = await write(state.markdownContent);
+    made = await write(state.markdownContent);
     // Typed while it was written: what's typed stays, and the written text
     // comes in around it as an outside change does.
     typed = useEditorStore.getState().plateEditor?.children !== shown;
@@ -121,6 +123,10 @@ async function writeChange(
     useEditorStore.getState().setIsSaving(false);
   }
   if (typed) await reloadOpenShardIfChanged();
+  // A drawing the change shows gets its picture now, as on opening the shard.
+  if (made.content !== null) {
+    await fillDrawingPictures(filePath, made.content, vault);
+  }
   return true;
 }
 
@@ -198,8 +204,13 @@ export function discardAssistantChange(change: ChatChange) {
       toast.error("Couldn't discard the change", { description: errorText(error) });
       return;
     }
+    // It stays in the chat, marked as discarded.
     store.setState({
-      changes: store.getState().changes.filter((c) => c.id !== change.id),
+      changes: store
+        .getState()
+        .changes.map((c) =>
+          c.id === change.id ? { ...c, state: "discarded" as const } : c,
+        ),
     });
   });
 }

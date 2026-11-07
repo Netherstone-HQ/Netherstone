@@ -1,8 +1,17 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  lazy,
+  type RefObject,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ListTreeIcon } from "lucide-react";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
+import { ASSISTANT_WIDTH } from "@/store/ui";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
@@ -11,6 +20,7 @@ import { LinkedFromSection } from "./right-sidebar/LinkedFromSection";
 import { LinksSection } from "./right-sidebar/LinksSection";
 import { OutlineSection } from "./right-sidebar/OutlineSection";
 import { useIndexedShard, useShardLinks } from "./right-sidebar/useShardInfo";
+import { usePanelResize } from "./usePanelResize";
 
 // Loaded the first time the assistant opens.
 const AssistantPanel = lazy(() =>
@@ -31,6 +41,37 @@ function ShardSections({ isOpen }: { isOpen: boolean }) {
       <LinkedFromSection backlinks={indexed?.linkedFrom ?? null} />
       <DetailsSection details={indexed ? indexed.details : undefined} />
     </>
+  );
+}
+
+/** The assistant panel's left edge, dragged to size it like the left sidebar. */
+function AssistantResizeHandle({
+  containerRef,
+  onDragging,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>;
+  onDragging: (dragging: boolean) => void;
+}) {
+  const width = useUIStore((s) => s.assistantWidth);
+  const setWidth = useUIStore((s) => s.setAssistantWidth);
+  const { onPointerDown, reset } = usePanelResize({
+    containerRef,
+    cssVar: "--assistant-width",
+    width,
+    setWidth,
+    defaultWidth: ASSISTANT_WIDTH.default,
+    minWidth: ASSISTANT_WIDTH.min,
+    maxWidth: ASSISTANT_WIDTH.max,
+    side: "right",
+    onDragging,
+  });
+  return (
+    <div
+      aria-hidden="true"
+      onPointerDown={onPointerDown}
+      onDoubleClick={reset}
+      className="absolute inset-y-0 left-0 z-20 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-0 after:w-0.5 hover:after:bg-sidebar-border"
+    />
   );
 }
 
@@ -62,6 +103,9 @@ export function RightSidebar() {
     showsAssistant,
   });
   const [slides, setSlides] = useState(true);
+  const [resizing, setResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const assistantWidth = useUIStore((s) => s.assistantWidth);
   if (
     shown.isPanelOpen !== isPanelOpen ||
     shown.showsHistory !== showsHistory ||
@@ -78,11 +122,13 @@ export function RightSidebar() {
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative shrink-0 overflow-hidden",
-        slides && "transition-[width] duration-200 ease-linear",
-        !isPanelOpen ? "w-0" : showsAssistant ? "w-100" : "w-72",
+        slides && !resizing && "transition-[width] duration-200 ease-linear",
+        !isPanelOpen ? "w-0" : showsAssistant ? "w-(--assistant-width)" : "w-72",
       )}
+      style={{ "--assistant-width": `${assistantWidth}px` } as CSSProperties}
       inert={!isPanelOpen}
     >
       {showsHistory ? (
@@ -95,6 +141,10 @@ export function RightSidebar() {
           <Suspense fallback={null}>
             <AssistantPanel />
           </Suspense>
+          <AssistantResizeHandle
+            containerRef={containerRef}
+            onDragging={setResizing}
+          />
         </div>
       ) : null}
       <aside

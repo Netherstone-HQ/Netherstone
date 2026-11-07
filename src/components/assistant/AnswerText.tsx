@@ -4,6 +4,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 
 import type { Citation } from "@/lib/open-citation";
+import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { isRemoteAddress } from "@/lib/remote-media";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,10 @@ type Node = {
 };
 
 export type { Citation };
+
+function shardName(path: string) {
+  return getVaultFileDisplayName(path.split("/").pop() ?? path);
+}
 
 /** Whether `href` names a web page or other app rather than a vault file. */
 function isOutside(href: string) {
@@ -54,25 +59,83 @@ function walk(node: Node, visit: (node: Node) => void) {
   for (const child of node.children ?? []) walk(child, visit);
 }
 
-/** The shards an answer cites, numbered in the order they first come. */
-function citationsIn(tree: Node): Citation[] {
-  const found: Citation[] = [];
+/** Text with nothing to read in it, between or around cites. */
+function isBlank(node: Node) {
+  return node.type === "text" && !node.value?.trim();
+}
+
+function isShardLink(node: Node) {
+  return node.type === "link" && !!node.url && citationOf(node.url) !== null;
+}
+
+/** Text that may come right after a cite: the end of the clause it backs. */
+const CLAUSE_END = /^\s*[.,;!?)]/;
+
+/**
+ * Whether the shard link at `index` in `siblings` is a cite: it comes after
+ * what it backs and ends that clause, like "came in at 15 MB [1]." Any other
+ * shard link is part of the sentence, like "linked from [1]:", and reads as
+ * the shard's name.
+ */
+function isCite(siblings: Node[], index: number) {
+  const before = siblings.slice(0, index);
+  if (!before.some((node) => !isBlank(node) && !isShardLink(node))) return false;
+  for (const node of siblings.slice(index + 1)) {
+    if (isBlank(node) || isShardLink(node)) continue;
+    return node.type === "text" && CLAUSE_END.test(node.value ?? "");
+  }
+  return true;
+}
+
+/** Each shard link in `tree`, as a cite or as a name in the sentence. */
+function shardLinksIn(tree: Node): Map<Node, "cite" | "name"> {
+  const found = new Map<Node, "cite" | "name">();
   walk(tree, (node) => {
-    if (node.type !== "link" || !node.url) return;
-    const citation = citationOf(node.url);
-    if (citation && !found.some((c) => c.path === citation.path)) {
-      found.push(citation);
-    }
+    const children = node.children ?? [];
+    children.forEach((child, index) => {
+      if (isShardLink(child)) {
+        found.set(child, isCite(children, index) ? "cite" : "name");
+      }
+    });
   });
   return found;
 }
 
-/** An answer's Markdown, parsed once for its text and its cites. */
-export type ParsedAnswer = { tree: Node; cited: Citation[] };
+/** The shards an answer cites, numbered in the order they first come. */
+function citationsIn(links: Map<Node, "cite" | "name">): Citation[] {
+  const found: Citation[] = [];
+  for (const [node, use] of links) {
+    if (use !== "cite") continue;
+    const citation = citationOf(node.url ?? "")!;
+    if (!found.some((c) => c.path === citation.path)) found.push(citation);
+  }
+  return found;
+}
+
+/** What a shard link named in a sentence reads as. */
+function linkText(node: Node, citation: Citation) {
+  const text = (node.children ?? [])
+    .map((child) => child.value ?? "")
+    .join("")
+    .trim();
+  // A bare number stands for the shard, so its name says which.
+  return text && !/^\d+$/.test(text) ? text : shardName(citation.path);
+}
+
+/**
+ * An answer's Markdown, parsed once: its tree, the shards it cites in
+ * order, and which shard links are cites and which are names.
+ */
+export type ParsedAnswer = {
+  tree: Node;
+  cited: Citation[];
+  links: Map<Node, "cite" | "name">;
+};
 
 function parseAnswer(markdown: string): ParsedAnswer {
   const tree = parser.parse(markdown) as Node;
-  return { tree, cited: citationsIn(tree) };
+  const links = shardLinksIn(tree);
+  return { tree, cited: citationsIn(links), links };
 }
 
 /** `text` parsed, again only when it changes. */
@@ -80,22 +143,28 @@ export function useParsedAnswer(text: string): ParsedAnswer {
   return useMemo(() => parseAnswer(text), [text]);
 }
 
-/** `markdown` without its cites, for text that goes into a shard. */
+/**
+ * `markdown` for a shard: cites taken out, and shards named in a sentence
+ * left as their names.
+ */
 export function withoutCitations(markdown: string): string {
-  const cuts: [number, number][] = [];
-  walk(parser.parse(markdown) as Node, (node) => {
+  const { links } = parseAnswer(markdown);
+  const edits: [number, number, string][] = [];
+  for (const [node, use] of links) {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
-    if (node.type !== "link" || !node.url || start === undefined || end === undefined) {
-      return;
+    if (start === undefined || end === undefined) continue;
+    if (use === "name") {
+      edits.push([start, end, linkText(node, citationOf(node.url ?? "")!)]);
+    } else {
+      // With the space before it, so no gap is left behind.
+      const from = markdown[start - 1] === " " ? start - 1 : start;
+      edits.push([from, end, ""]);
     }
-    if (citationOf(node.url)) cuts.push([start, end]);
-  });
+  }
   let text = markdown;
-  for (const [start, end] of cuts.reverse()) {
-    // With the space before it, so no gap is left behind.
-    const from = text[start - 1] === " " ? start - 1 : start;
-    text = text.slice(0, from) + text.slice(end);
+  for (const [start, end, replacement] of edits.sort((a, b) => b[0] - a[0])) {
+    text = text.slice(0, start) + replacement + text.slice(end);
   }
   return text;
 }
@@ -125,11 +194,12 @@ export function CiteNumber({
 }
 
 /**
- * An answer's Markdown. Links to shards show as their number from `cited`
- * and open the shard; other links open as links do elsewhere in the app.
+ * An answer's Markdown. A cite shows as its number from `cited` and a shard
+ * named in a sentence as its name, both opening the shard; other links
+ * open as links do elsewhere in the app.
  */
 export function AnswerText({
-  answer: { tree, cited },
+  answer: { tree, cited, links },
   onOpenShard,
   onOpenLink,
 }: {
@@ -266,6 +336,18 @@ export function AnswerText({
       case "link": {
         const href = node.url ?? "";
         const citation = citationOf(href);
+        if (citation && links.get(node) === "name") {
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onOpenShard(citation)}
+              className="text-brand underline-offset-2 hover:underline"
+            >
+              {linkText(node, citation)}
+            </button>
+          );
+        }
         if (citation) {
           const index = cited.findIndex((c) => c.path === citation.path);
           return (

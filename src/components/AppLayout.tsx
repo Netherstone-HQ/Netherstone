@@ -81,7 +81,9 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
       <main
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col overflow-auto",
-          shown && "invisible",
+          // A preview covers the editor once it's ready; till then the
+          // shard stays in view, so nothing blanks.
+          shown && !previewed && "invisible",
         )}
         inert={shown}
       >

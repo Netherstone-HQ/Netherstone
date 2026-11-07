@@ -324,13 +324,15 @@ test("shows a new shard in its card before it's made", async ({ page }) => {
 
   await expect(assistant.getByText("New shard Lisbon")).toBeVisible();
   await expect(page.getByLabel("Change to the shard")).toHaveCount(0);
-  await assistant.getByRole("button", { name: "Show", exact: true }).click();
   const preview = assistant.getByLabel("Preview of New shard Lisbon");
   await expect(preview).toContainText("Trains at 9.");
   await expect(preview).toContainText(`Image: ${image}`);
-  await assistant.getByRole("button", { name: "Hide", exact: true }).click();
-  await expect(preview).toHaveCount(0);
   expect(await page.evaluate(() => window.__saves)).toEqual([]);
+
+  // Once made, its name opens it.
+  await assistant.getByRole("button", { name: "Apply" }).click();
+  await assistant.getByRole("button", { name: "Lisbon", exact: true }).click();
+  await expect(editor(page)).toContainText("Trains at 9.");
 });
 
 test("shows a drawing in its card before it's made", async ({ page }) => {
@@ -353,7 +355,6 @@ test("shows a drawing in its card before it's made", async ({ page }) => {
   await assistant.getByRole("button", { name: "Summarize this shard" }).click();
 
   await expect(assistant.getByText("New drawing Sketch")).toBeVisible();
-  await assistant.getByRole("button", { name: "Show", exact: true }).click();
   await expect(assistant.getByRole("img", { name: "Preview of New drawing Sketch" })).toBeVisible();
 });
 
@@ -370,10 +371,10 @@ test("says where a move goes", async ({ page }) => {
   const assistant = panel(page);
   await assistant.getByRole("button", { name: "Summarize this shard" }).click();
   await expect(assistant.getByText("Move Trip.md to Archive")).toBeVisible();
-  await expect(assistant.getByRole("button", { name: "Show", exact: true })).toHaveCount(0);
+  await expect(assistant.getByRole("button", { name: "Move Trip.md to Archive" })).toHaveCount(0);
 });
 
-test("opens a shard a change is to, to show it there", async ({ page }) => {
+test("opens a shard a change is to from its name, to show it there", async ({ page }) => {
   await mockVault(page, {
     files: FILES,
     open: "Trip.md",
@@ -384,10 +385,9 @@ test("opens a shard a change is to, to show it there", async ({ page }) => {
   await assistant.getByRole("button", { name: "Summarize this shard" }).click();
   await expect(page.getByLabel("Change to the shard")).toHaveCount(0);
 
-  await assistant.getByRole("button", { name: "Show", exact: true }).click();
+  await assistant.getByRole("button", { name: "Bread", exact: true }).click();
   const preview = page.getByLabel("Change to the shard");
   await expect(preview).toContainText("Use 360 g water.");
-  await expect(assistant.getByRole("button", { name: "Show", exact: true })).toHaveCount(0);
 });
 
 test("discards an edit without writing it", async ({ page }) => {
@@ -405,8 +405,39 @@ test("discards an edit without writing it", async ({ page }) => {
   await assistant.getByRole("button", { name: "Discard" }).click();
   await expect(preview).toHaveCount(0);
   await expect(assistant.getByText("1 change")).toHaveCount(0);
+  // It stays in the chat as discarded.
+  await expect(assistant.getByText("Discarded Trip")).toBeVisible();
   await expect(editor(page)).toContainText("Lisbon in May, by train.");
   expect(await shardSaves(page)).toEqual([]);
+});
+
+test("applies or discards every change of an answer at once", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: { ...CHECKLIST, also: ["Bread.md"] } },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  const message = assistant.getByRole("textbox", { name: "Message" });
+  await message.fill("Make both checklists");
+  await page.keyboard.press("Enter");
+  await expect(assistant.getByText("1 change")).toHaveCount(2);
+
+  await assistant.getByRole("button", { name: "Apply all" }).click();
+  await expect(assistant.getByText("Applied to")).toHaveCount(2);
+  await expect(assistant.getByRole("button", { name: "Apply all" })).toHaveCount(0);
+  const saved = await page.evaluate(() =>
+    window.__saves.map((save) => save.filePath.split("/").pop()),
+  );
+  expect(saved).toEqual(expect.arrayContaining(["Trip.md", "Bread.md"]));
+
+  await message.fill("Again");
+  await page.keyboard.press("Enter");
+  await expect(assistant.getByText("1 change")).toHaveCount(2);
+  await assistant.getByRole("button", { name: "Discard all" }).click();
+  await expect(assistant.getByText(/^Discarded /)).toHaveCount(2);
+  await expect(assistant.getByText("1 change")).toHaveCount(0);
 });
 
 test("turning the assistant off leaves nothing behind", async ({ page }) => {
@@ -501,4 +532,143 @@ test("opens a cite from search at its section", async ({ page }) => {
   await search.getByRole("button", { name: "Open Trip.md" }).click();
   await expect(search).toHaveCount(0);
   await expect(editor(page).getByRole("heading", { name: "Plans" })).toBeInViewport();
+});
+
+test("reads shards named in a sentence by name, and numbers only cites", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      answer: ["Linked from [1](Trip.md): [Bread](Bread.md) uses 350 g of water [Bread](Bread.md)."],
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+
+  await expect(assistant.getByText(/^Linked from Trip: Bread uses 350 g of water/)).toBeVisible();
+  await expect(assistant.getByRole("button", { name: "Trip", exact: true })).toBeVisible();
+  await expect(assistant.getByRole("button", { name: "Open Bread.md" })).toHaveText("1");
+  // Only the cite is listed; nothing else the answer read.
+  await expect(assistant.getByRole("button", { name: /^1\s*Bread$/ })).toBeVisible();
+  await expect(assistant.getByRole("button", { name: /^\d\s*Trip/ })).toHaveCount(0);
+
+  await assistant.getByRole("button", { name: "Bread", exact: true }).click();
+  await expect(editor(page)).toContainText("350 g");
+});
+
+test("sizes the panel from its edge, and keeps the width", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await expect(assistant).toBeVisible();
+  const box = (await assistant.boundingBox())!;
+  expect(Math.round(box.width)).toBe(400);
+
+  await page.mouse.move(box.x + 2, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 50, box.y + 300, { steps: 4 });
+  await page.mouse.move(box.x + 2 - 100, box.y + 300, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await assistant.boundingBox())!.width)).toBe(500);
+
+  // Not past its widest.
+  const wide = (await assistant.boundingBox())!;
+  await page.mouse.move(wide.x + 2, wide.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(wide.x - 600, wide.y + 300, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await assistant.boundingBox())!.width)).toBe(640);
+
+  // Kept with the app's other panel sizes, and used when it opens again.
+  const kept = await page.evaluate(() => localStorage.getItem("netherstone-ui"));
+  expect(JSON.parse(kept!).state.assistantWidth).toBe(640);
+  await page.getByRole("button", { name: "Hide assistant" }).first().click();
+  await expect(panel(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  await expect.poll(async () => Math.round((await panel(page).boundingBox())!.width)).toBe(640);
+});
+
+test("says what came before an error, and tries again from there", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: { path: "Bread.md", after: "# Bread\n\nUse 360 g water.\n" }, failOnce: "rateLimited" },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+
+  await expect(assistant.getByRole("alert")).toHaveText(
+    "The provider is getting too many requests, try again soon",
+  );
+  await expect(assistant.getByText("The changes above came before it stopped.")).toBeVisible();
+  await expect(assistant.getByText("1 change")).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Try again" }).click();
+  await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
+  await expect(assistant.getByRole("alert")).toHaveCount(0);
+  // The same message goes on: nothing new is sent as the user's.
+  expect(await page.evaluate(() => window.__sent.map((sent) => sent.text))).toEqual([
+    "Summarize this shard",
+    "",
+  ]);
+  await expect(assistant.getByText("1 change")).toBeVisible();
+});
+
+test("shows a drawing a change embeds once it's applied", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { isTauri: boolean }).isTauri = true;
+  });
+  const scene = JSON.stringify({
+    type: "excalidraw",
+    version: 2,
+    elements: [
+      { id: "r", type: "rectangle", x: 0, y: 0, width: 120, height: 80, angle: 0, strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, seed: 1, version: 1, versionNonce: 1, isDeleted: false, boundElements: null, updated: 1, link: null, locked: false },
+    ],
+    appState: {},
+    files: {},
+  });
+  await mockVault(page, {
+    files: { ...FILES, "Diagrams/Map.excalidraw": scene },
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: {
+        path: "Trip.md",
+        after: '# Trip\n\n## Plans\n\nLisbon in May, by train.\n\n<img src="" data-dark-src="" alt="Map" width="480" data-excalidraw="Diagrams/Map.excalidraw" />\n',
+      },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await assistant.getByRole("button", { name: "Apply" }).click();
+  await expect(assistant.getByText("Applied to Trip")).toBeVisible();
+
+  // Its pictures are made and shown, without opening the shard again.
+  await expect
+    .poll(() => page.evaluate(() => window.__vaultFiles["Trip.md"]))
+    .toContain('src="_attachments/Map.png"');
+  await expect(editor(page).getByText("No source found")).toHaveCount(0);
+});
+
+test("leaves the panel's chat as it was when search's answer isn't carried on", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText("Summarize this shard");
+
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.type("when do we go");
+  const search = searchDialog(page);
+  await expect(search.getByText("Ask about this")).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(search.getByText("We go to Lisbon in May")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText("Summarize this shard");
+  await expect(assistant.getByText("Summarize this shard", { exact: true }).last()).toBeVisible();
 });

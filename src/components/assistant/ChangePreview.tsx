@@ -11,6 +11,26 @@ import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { type ChatChange, previewChange } from "@/lib/commands";
 import { diffShardValues } from "@/lib/history-diff";
 import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
+import { useEditorStore } from "@/store/editor";
+
+/** The element that scrolls `node`, if any. */
+function scrollerOf(node: Element | null | undefined): HTMLElement | null {
+  for (let el = node?.parentElement; el; el = el.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el;
+  }
+  return null;
+}
+
+/** How far the open shard is scrolled, so the preview opens where it is. */
+function editorScrollTop() {
+  const editor = useEditorStore.getState().plateEditor;
+  if (!editor) return 0;
+  try {
+    return scrollerOf(editor.api.toDOMNode(editor))?.scrollTop ?? 0;
+  } catch {
+    return 0;
+  }
+}
 
 /** The change laid over the open shard as it is now. */
 function usePreviewValue(change: ChatChange, filePath: string) {
@@ -50,7 +70,13 @@ function usePreviewValue(change: ChatChange, filePath: string) {
   return loaded?.key === key ? loaded.value : null;
 }
 
-function PreviewDocument({ value }: { value: any[] }) {
+function PreviewDocument({
+  value,
+  scrollTop,
+}: {
+  value: any[];
+  scrollTop: number;
+}) {
   const editor = usePlateEditor({
     plugins: VersionPreviewKit,
     value,
@@ -60,12 +86,16 @@ function PreviewDocument({ value }: { value: any[] }) {
   });
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Opens on the change, so it's in view without scrolling for it.
+  // Opens where the shard was, so nothing moves, and scrolls only as far
+  // as it takes to bring the change into view.
   useLayoutEffect(() => {
-    rootRef.current
+    const root = rootRef.current;
+    const scroller = scrollerOf(root?.querySelector("[data-slate-editor]"));
+    if (scroller) scroller.scrollTop = scrollTop;
+    root
       ?.querySelector("[data-history-block]")
-      ?.scrollIntoView({ block: "center" });
-  }, []);
+      ?.scrollIntoView({ block: "nearest" });
+  }, [scrollTop]);
 
   return (
     <div ref={rootRef} className="change-preview min-h-0 flex-1">
@@ -81,7 +111,8 @@ function PreviewDocument({ value }: { value: any[] }) {
 /**
  * A change the assistant proposed, shown in the open shard's place until
  * it's applied or discarded: what goes struck through, what comes in
- * marked. The editor stays as it was underneath.
+ * marked. The editor stays as it was underneath, and in view until the
+ * preview is ready to cover it, so nothing blanks in between.
  */
 export function ChangePreview({
   change,
@@ -91,11 +122,15 @@ export function ChangePreview({
   filePath: string;
 }) {
   const value = usePreviewValue(change, filePath);
+  const [scrollTop] = useState(editorScrollTop);
+  if (!value) return null;
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
-      {value ? (
-        <PreviewDocument key={`${change.id}:${change.count}`} value={value} />
-      ) : null}
+      <PreviewDocument
+        key={`${change.id}:${change.count}`}
+        value={value}
+        scrollTop={scrollTop}
+      />
     </div>
   );
 }

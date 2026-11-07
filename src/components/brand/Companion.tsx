@@ -46,6 +46,7 @@ import { useAssistantStore } from "@/store/assistant";
 import { useCompanionStore } from "@/store/companion";
 import { useInlineAskStore } from "@/store/inline-ask";
 import { useSettingsStore } from "@/store/settings";
+import { useHistoryStore } from "@/store/history";
 import { useVaultStore } from "@/store/vault";
 
 // Colors come from App.css so the dark themes can soften him.
@@ -149,6 +150,13 @@ export function Companion() {
   const perch = useCompanionStore((s) => s.perch);
   const { setup } = useSetup(assistant);
   const noProvider = assistant && setupState(setup) === "noProvider";
+  // The menu offers only what isn't on screen already and has a shard to use.
+  const chatShown = useAssistantStore((s) => s.isOpen);
+  const historyShown = useHistoryStore((s) => s.openIn === "notes");
+  const offersChat = !chatShown || historyShown;
+  const vault = useVaultStore((s) => s.currentVaultPath);
+  const openPath = useEditorStore((s) => s.currentFilePath);
+  const hasShard = openShardPath(vault, openPath) !== null;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -403,23 +411,29 @@ export function Companion() {
           }}
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
-          <DropdownMenuItem onSelect={() => choose("ask")}>
-            <MessageSquareIcon />
-            Ask about this shard
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => choose("summarize")}>
-            <NewspaperIcon />
-            Summarize this shard
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => choose("related")}>
-            <Link2Icon />
-            Find related shards
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => choose("chat")}>
-            <PanelRightIcon />
-            Open chat
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {hasShard ? (
+            <>
+              <DropdownMenuItem onSelect={() => choose("ask")}>
+                <MessageSquareIcon />
+                Ask about this shard
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => choose("summarize")}>
+                <NewspaperIcon />
+                Summarize this shard
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => choose("related")}>
+                <Link2Icon />
+                Find related shards
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {offersChat ? (
+            <DropdownMenuItem onSelect={() => choose("chat")}>
+              <PanelRightIcon />
+              Open chat
+            </DropdownMenuItem>
+          ) : null}
+          {hasShard || offersChat ? <DropdownMenuSeparator /> : null}
           <DropdownMenuItem onSelect={hide}>
             <EyeOffIcon />
             Hide Kevin

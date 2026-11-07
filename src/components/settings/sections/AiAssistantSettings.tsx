@@ -153,6 +153,19 @@ export function useProviderSetup({
 
 export type ProviderSetup = ReturnType<typeof useProviderSetup>;
 
+/** Where a shard's images and PDFs go with it: wherever the model runs. */
+function filesGoTo(status: AssistantStatus) {
+  const provider = status.providers.find((p) => p.id === status.model?.provider);
+  if (provider?.setup === "local") {
+    return "They go to your local server with the shard's text and stay on this computer";
+  }
+  if (provider?.setup === "custom") {
+    return "They go to your custom server with the shard's text";
+  }
+  if (provider) return `They go to ${provider.name} with the shard's text`;
+  return "They go to the model's provider with the shard's text";
+}
+
 export function AiAssistantSettings() {
   const switchId = useId();
   const filesId = useId();
@@ -224,7 +237,7 @@ export function AiAssistantSettings() {
         </SettingRow>
         <SettingRow
           label="Send images and PDFs"
-          description="They leave this computer with the shard's text"
+          description={filesGoTo(status)}
           htmlFor={filesId}
         >
           <Switch

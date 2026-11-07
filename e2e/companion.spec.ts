@@ -120,3 +120,16 @@ test("hides from his menu", async ({ page }) => {
   await panel(page).getByRole("button", { name: "Summarize this shard" }).click();
   await expect(panel(page).getByText("We go to Lisbon in May.")).toBeVisible();
 });
+
+test("offers only what isn't on screen already", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY, companion: true });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  await expect(panel(page)).toBeVisible();
+  await hit(page).click();
+  await expect(menu(page).getByRole("menuitem")).toHaveText([
+    "Ask about this shard",
+    "Summarize this shard",
+    "Find related shards",
+    /^Hide /,
+  ]);
+});

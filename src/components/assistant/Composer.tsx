@@ -181,8 +181,13 @@ export function Composer({
     }
   };
 
-  const send =
-    "size-7.5 shrink-0 rounded-[7px] bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50";
+  // Stop takes Send's place at its size, quieter while the answer comes in.
+  const button = "size-7.5 shrink-0 rounded-[7px]";
+  const send = cn(
+    button,
+    "bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50",
+  );
+  const stop = cn(button, "bg-muted text-foreground hover:bg-accent");
 
   return (
     <div className={cn("shrink-0 p-3", disabled && "opacity-50")}>
@@ -287,9 +292,9 @@ export function Composer({
               size="icon-sm"
               onClick={onStop}
               aria-label="Stop"
-              className={send}
+              className={stop}
             >
-              <SquareIcon className="fill-current" />
+              <SquareIcon className="size-3 fill-current" />
             </Button>
           ) : (
             <Button

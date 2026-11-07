@@ -192,10 +192,87 @@ export async function sendMessage(
   }
 }
 
+/**
+ * Goes on with the answer to the chat's last message after it ended on an
+ * error: what it proposed before stays, and it carries on from there.
+ */
+export async function retryAnswer() {
+  const state = store.getState();
+  const chat = state.chat;
+  const vault = useVaultStore.getState().currentVaultPath;
+  if (!chat || !vault || state.answering) return;
+  const run = ++followed;
+  stopAsked = false;
+  store.setState({
+    answering: { chat: chat.id, text: "", reasoning: "", tool: null },
+    ending: null,
+  });
+  let ending: Ending | null = null;
+  try {
+    await sendChat(chat.id, vault, "", [], (event) => {
+      if (run !== followed) return;
+      ending = onEvent(event, "") ?? ending;
+    });
+    if (run !== followed) return;
+    const view = await getChat(chat.id);
+    if (run !== followed) return;
+    store.setState({
+      messages: view.messages,
+      changes: view.changes,
+      memories: view.memories,
+      answering: null,
+      ending,
+    });
+  } catch (error) {
+    if (run !== followed) return;
+    store.setState({
+      answering: null,
+      ending: { kind: "error", error: chatErrorKind(error) },
+    });
+  }
+}
+
+/** The panel's chat while search asks in a new one, until it's carried on. */
+let beforeSearch: Pick<
+  ReturnType<typeof store.getState>,
+  "chat" | "messages" | "changes" | "memories" | "ending"
+> | null = null;
+
 /** Asks `text` from search, in a new chat the panel can carry on. */
 export async function askFromSearch(text: string) {
+  if (beforeSearch === null) {
+    const { chat, messages, changes, memories, ending } = store.getState();
+    beforeSearch = { chat, messages, changes, memories, ending };
+  }
   clearChat();
   await sendMessage(text, [], { fromSearch: true });
+}
+
+/** Search's chat goes on in the panel: the chat it had before is left. */
+export function keepSearchChat() {
+  beforeSearch = null;
+}
+
+/** Search closed without carrying its chat on: the panel's comes back. */
+export async function leaveSearchChat() {
+  if (beforeSearch === null) return;
+  const run = ++followed;
+  const before = beforeSearch;
+  beforeSearch = null;
+  store.setState({ ...before, answering: null });
+  if (!before.chat) return;
+  // Read again: it may have moved on while search was open.
+  try {
+    const view = await getChat(before.chat.id);
+    if (run !== followed) return;
+    store.setState({
+      messages: view.messages,
+      changes: view.changes,
+      memories: view.memories,
+    });
+  } catch {
+    // What it had stays shown.
+  }
 }
 
 async function retitle(id: string) {

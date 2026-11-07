@@ -448,8 +448,7 @@ pub struct ChatView {
     #[serde(flatten)]
     info: ChatInfo,
     messages: Vec<Shown>,
-    /// The changes its answers proposed, applied or not; discarded ones
-    /// are left out.
+    /// The changes its answers proposed: pending, applied or discarded.
     changes: Vec<Change>,
     /// The memory items its answers offered, added or not; discarded ones
     /// are left out.
@@ -602,6 +601,8 @@ fn open_vault(path: &std::path::Path) -> Result<crate::tools::Vault, ChatError> 
 
 /// Sends `text` in `chat`, or in a new chat about `vault`, with `shards`
 /// added to it, and streams the answer to `sink`. Gives the chat's id once the answer ends.
+/// No text in a chat goes on with its last message's answer, after one that
+/// ended on an error.
 pub async fn send(
     chat: Option<String>,
     vault: String,
@@ -611,7 +612,8 @@ pub async fn send(
     sink: impl Sink + 'static,
 ) -> Result<String, ChatError> {
     let text = text.trim().to_string();
-    if text.is_empty() {
+    // Going on with an answer adds nothing new to the chat.
+    if text.is_empty() && (chat.is_none() || !shards.is_empty()) {
         return Err(ChatError::Failed);
     }
     let store = store()?;
@@ -714,16 +716,36 @@ async fn run(
         return Err(ChatError::Stopped);
     }
     let chat = turn.chat.clone();
-    let (shards, files) = engine::attach(turn, &turn.added).await;
-    let message = Message::User {
-        text: text.to_string(),
-        shards,
-        files,
+    let asked = if text.is_empty() {
+        engine::saved(&turn.store, move |store| {
+            let messages = store.messages(&chat)?;
+            // Only an answer that broke off goes on: a finished one ends on
+            // a reply that calls no tools.
+            if let Some(Message::Assistant { calls, .. }) = messages.last().map(|m| &m.message)
+                && calls.is_empty()
+            {
+                return Err("The last answer is finished".to_string());
+            }
+            messages
+                .into_iter()
+                .rev()
+                .find(|saved| matches!(saved.message, Message::User { .. }))
+                .map(|saved| saved.seq)
+                .ok_or_else(|| "The chat has no message to answer".to_string())
+        })
+        .await?
+    } else {
+        let (shards, files) = engine::attach(turn, &turn.added).await;
+        let message = Message::User {
+            text: text.to_string(),
+            shards,
+            files,
+        };
+        engine::saved(&turn.store, move |store| {
+            store.add(&chat, &message, &[], None)
+        })
+        .await?
     };
-    let asked = engine::saved(&turn.store, move |store| {
-        store.add(&chat, &message, &[], None)
-    })
-    .await?;
     turn.asked.store(asked, std::sync::atomic::Ordering::SeqCst);
     engine::answer(turn, sink).await
 }
@@ -912,10 +934,8 @@ pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
     Ok(ChatView {
         info,
         messages: messages.into_iter().filter_map(shown).collect(),
-        changes: changes
-            .into_iter()
-            .filter(|change| change.state != ChangeState::Discarded)
-            .collect(),
+        // A discarded change stays in the chat as a trace of what was turned down.
+        changes,
         memories: offers
             .into_iter()
             .filter(|offer| offer.state != ChangeState::Discarded)

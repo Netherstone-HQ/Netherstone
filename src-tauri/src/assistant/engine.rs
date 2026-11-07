@@ -16,7 +16,7 @@ use super::memory::{self, List};
 use super::models::Target;
 use super::providers::Api;
 use super::sessions::ChangeState;
-use super::sessions::{Saved, Store, Summary};
+use super::sessions::{Change, Saved, Store, Summary};
 use crate::tools::proposals::{self, Op, WRITE_TOOLS};
 use crate::tools::{self, Caller, Tool, Vault};
 use serde::Serialize;
@@ -190,16 +190,22 @@ fn system_prompt(vault: &str, remembered: &[String]) -> String {
         "You are the assistant in Netherstone, an app where the user keeps shards \
 (Markdown notes) in a vault, a folder on their computer. This chat is about the vault \
 \"{vault}\". Answer from the vault: search and read shards with the tools before \
-answering about the user's notes, and never guess what they say. Cite the shards you \
-used with a Markdown link to the shard's vault path right after what it backs, like \
-[Trip plan](Travel/Trip%20plan.md), or [Trip plan](Travel/Trip%20plan.md#Day%202) for one \
-section. The app shows each cite as a number, so never use one as a word in a sentence. Shards the user adds to a \
-message come with it inside <shard> tags. Changes you make with the write tools aren't made right away: the user \
-sees each one in the app and applies or discards it, so say in your answer what you changed, and give each \
-change a summary. Reading a shard shows it as it is, without changes not applied yet. Reply in \
+answering about the user's notes, and never guess what they say. Answer directly, \
+without an opening line about what follows. Name shards in plain words, and cite the \
+shards you used with a Markdown link to the shard's vault path at the end of the \
+sentence or clause it backs, before its full stop or comma, like: The trip starts on \
+May 3 [Trip plan](Travel/Trip%20plan.md#Day%201). The app shows each cite as a small \
+number, so a cite never stands in for a word. Shards the user adds to a message come \
+with it inside <shard> tags, and \"this shard\" means the one added. A summary is short \
+and in your own words: never copy a shard back. A new drawing shows in the chat for the \
+user to apply or discard before anything is saved, so when they only want to see one, \
+create it and don't embed it anywhere. Changes you make with the write tools aren't made right away: the user \
+sees each one as a card in this chat and applies or discards it there, so say in your answer what you \
+proposed, never how to apply it, and give each change a summary. Reading a shard shows it as it is, without changes not applied yet. Reply in \
 the language the user writes in, and keep answers short unless asked for more. Today \
 is {}. To remember something about the user for later chats, offer it with the remember \
-tool: the user adds it to memory or not.",
+tool: the user sees it as a card under your answer and adds it to memory or not there, so \
+don't say you offered it or that it's remembered, and don't describe the card.",
         chrono::Local::now().format("%Y-%m-%d")
     );
     if !remembered.is_empty() {
@@ -210,6 +216,38 @@ tool: the user adds it to memory or not.",
         }
     }
     prompt
+}
+
+/// Where the changes proposed before this message stand, so an answer
+/// doesn't call an applied change proposed, or offer one again.
+pub(super) fn change_states(changes: &[Change], asked: i64) -> String {
+    let earlier: Vec<String> = changes
+        .iter()
+        .filter(|change| change.turn < asked)
+        .map(|change| {
+            let what = match change.kind {
+                proposals::Kind::NewShard => "new shard",
+                proposals::Kind::NewDrawing => "new drawing",
+                proposals::Kind::Drawing => "drawing",
+                proposals::Kind::Move => "move of",
+                proposals::Kind::Shard => "change to",
+            };
+            let state = match change.state {
+                ChangeState::Pending => "not applied or discarded yet",
+                ChangeState::Applied => "applied",
+                ChangeState::Discarded => "discarded",
+            };
+            format!("\n- {what} {}: {state}", change.path)
+        })
+        .collect();
+    if earlier.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n\nThe changes proposed earlier in this chat, as they stand now (the user \
+applies or discards each from its card in this chat):{}",
+        earlier.concat()
+    )
 }
 
 /// One answer in a chat whose user message is already saved.
@@ -317,7 +355,10 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
             eprintln!("[Netherstone] {error}");
             Vec::new()
         });
-    let system = system_prompt(&vault_name, &remembered);
+    let chat = turn.chat.clone();
+    let changes = saved(&turn.store, move |store| store.changes(&chat)).await?;
+    let mut system = system_prompt(&vault_name, &remembered);
+    system.push_str(&change_states(&changes, turn.asked.load(Ordering::SeqCst)));
     let mut out = Out::new(sink, &turn.stop);
     let mut sources: Vec<String> = turn.added.clone();
     if !sources.is_empty() {

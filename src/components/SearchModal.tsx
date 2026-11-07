@@ -34,6 +34,8 @@ import { useVaultStore } from "@/store/vault";
 import { useAssistantStore } from "@/store/assistant";
 import {
   askFromSearch,
+  keepSearchChat,
+  leaveSearchChat,
   loadAssistantEnabled,
   openAssistant,
   stopAnswer,
@@ -195,6 +197,8 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
       ) {
         stopAnswer();
       }
+      // The panel shows the chat it had, unless it took search's.
+      if (!handedOffRef.current) void leaveSearchChat();
       handedOffRef.current = false;
       setAsked(null);
       setWaiting(false);
@@ -343,6 +347,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
   const continueInChat = () => {
     handedOffRef.current = true;
+    keepSearchChat();
     openAssistant();
     onOpenChange(false);
   };

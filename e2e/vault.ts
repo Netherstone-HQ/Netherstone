@@ -156,6 +156,8 @@ type MockAssistant = {
     after: string;
     kind?: "shard" | "newShard" | "drawing" | "newDrawing" | "move";
     moving?: { folder: string | null; name: string | null };
+    /** More shards the same answer changes the same way. */
+    also?: string[];
   };
   /** An item every answer offers to add to memory. */
   remember?: string;
@@ -165,6 +167,8 @@ type MockAssistant = {
   inline?: string[];
   /** Inline Asks get no answer until they're stopped. */
   holdInline?: boolean;
+  /** The first answer proposes its change, then fails with this error. */
+  failOnce?: string;
 };
 
 declare global {
@@ -413,7 +417,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         get_tagged_files: () => [],
         search_files: () => [],
         find_shards_containing: () => [],
-        stale_drawing_pictures: () => [],
+        // A drawing shown without its pictures yet needs them made.
+        stale_drawing_pictures: ({ drawings }) =>
+          (drawings as unknown as { drawingPath: string; imagePaths: (string | null)[] }[])
+            .filter((drawing) => drawing.imagePaths.includes(null))
+            .map((drawing) => drawing.drawingPath),
         sync_get_vault_record: () => null,
         // Versions are named by file and position: "Note.md#0" is the newest.
         history_list_versions: ({ filePath }) => {
@@ -549,18 +557,28 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             }
             const answer = setup.answer ?? ["Done."];
             const reads = setup.reads ?? [];
-            found.messages.push({ seq: found.messages.length + 1, role: "user", text, shards });
-            const turn = found.messages.length;
+            // No text goes on with the last message's answer.
+            if (text) found.messages.push({ seq: found.messages.length + 1, role: "user", text, shards });
+            const turn = [...found.messages].reverse().find((m) => m.role === "user")!.seq;
             send({ type: "chat", id: found.id });
             for (const path of reads) send({ type: "tool", name: "read", paths: [path] });
-            if (setup.change) {
-              send({ type: "tool", name: "edit_shard", paths: [setup.change.path] });
-              const { kind = "shard", moving } = setup.change;
-              found.changes.push({ id: `change-${++changes}`, turn, kind, path: setup.change.path, count: 1, state: "pending", ...(moving ? { moving } : {}) });
+            if (setup.change && text) {
+              const { kind = "shard", moving, also = [] } = setup.change;
+              for (const path of [setup.change.path, ...also]) {
+                send({ type: "tool", name: "edit_shard", paths: [path] });
+                found.changes.push({ id: `change-${++changes}`, turn, kind, path, count: 1, state: "pending", ...(moving ? { moving } : {}) });
+              }
             }
             if (setup.remember) {
               send({ type: "tool", name: "remember", paths: [] });
               found.memories.push({ id: `offer-${++changes}`, turn, text: setup.remember, state: "pending" });
+            }
+            if (setup.failOnce) {
+              // The step that proposed the change is kept, as the app keeps it.
+              found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: "", sources: [] });
+              send({ type: "failed", error: { kind: setup.failOnce } });
+              delete setup.failOnce;
+              return found.id;
             }
             if (reads.length) send({ type: "sources", shards: reads });
             for (const piece of answer) send({ type: "text", text: piece });
@@ -643,15 +661,15 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             return { path: change.path, content: before };
           },
           assistant_discard: (args) => {
-            const { chat, change } = findChange((args as unknown as { change: string }).change);
-            chat.changes = chat.changes.filter((c) => c !== change);
+            const { change } = findChange((args as unknown as { change: string }).change);
+            change.state = "discarded";
             return null;
           },
           // Off drops every change and memory item not applied yet, as the app does.
           assistant_set_enabled: (args) => {
             if (!(args as unknown as { enabled: boolean }).enabled) {
               for (const chat of chats) {
-                chat.changes = chat.changes.filter((c) => c.state !== "pending");
+                for (const change of chat.changes) if (change.state === "pending") change.state = "discarded";
                 chat.memories = chat.memories.filter((m) => m.state !== "pending");
               }
             }

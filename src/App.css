@@ -397,6 +397,13 @@
         cursor: pointer;
     }
 
+    /* WebView2 draws its own reveal and clear buttons inside password and
+       text fields; the app's fields don't have them in any other engine. */
+    input::-ms-reveal,
+    input::-ms-clear {
+        display: none;
+    }
+
     /* One stroke weight for every icon; Lucide's default 2 reads heavy at 18px. */
     .lucide {
         stroke-width: 1.6;

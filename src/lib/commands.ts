@@ -1023,7 +1023,7 @@ export interface ChatChange {
   path: string;
   /** How many calls make it. */
   count: number;
-  state: "pending" | "applied";
+  state: "pending" | "applied" | "discarded";
   /** For a move: the folder it goes to ("" for the top), and its new name. */
   moving?: { folder: string | null; name: string | null };
 }

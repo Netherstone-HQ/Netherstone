@@ -303,24 +303,21 @@ function DraggableControls({
 
 const HANDLE_HEIGHT = 24;
 
-/**
- * The handle's top inside the block wrapper, centred on the first line of
- * editable text (an empty block still has Slate's zero-width text). Blocks
- * without text, like images, put it at the top of their content.
- */
-function firstLineHandleTop(wrapper: HTMLElement) {
+/** The top that centres the handle on the first line `accept` lets through. */
+function lineHandleTop(
+  wrapper: HTMLElement,
+  accept: (node: Node) => boolean,
+): number | null {
   const top = wrapper.getBoundingClientRect().top;
   const walker = document.createTreeWalker(wrapper, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) =>
-      node.parentElement?.closest(
-        '[contenteditable="false"], [data-slate-spacer]',
-      )
-        ? NodeFilter.FILTER_REJECT
-        : NodeFilter.FILTER_ACCEPT,
+      accept(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
   });
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (!node.textContent) continue;
+    // A label's blank text, between its parts, has no line of its own.
+    if (!node.textContent.trim() && !isEditableText(node)) continue;
 
     const range = document.createRange();
     range.setStart(node, 0);
@@ -330,12 +327,42 @@ function firstLineHandleTop(wrapper: HTMLElement) {
 
     return Math.round(rect.top + rect.height / 2 - top - HANDLE_HEIGHT / 2);
   }
+  return null;
+}
+
+/** Text in the block's editable part, an empty block's zero-width one too. */
+function isEditableText(node: Node) {
+  return !node.parentElement?.closest(
+    '[contenteditable="false"], [data-slate-spacer]',
+  );
+}
+
+/** A label drawn with a block that has no editable text, like a file's name. */
+function isLabelText(node: Node) {
+  return (
+    !isEditableText(node) &&
+    !node.parentElement?.closest("[data-slate-spacer], svg, canvas")
+  );
+}
+
+/**
+ * The handle's top inside the block wrapper, centred on the first line of
+ * editable text (an empty block still has Slate's zero-width text). Blocks
+ * without text centre it on their first label, like a file's name, and an
+ * image puts it at the top of its picture.
+ */
+function firstLineHandleTop(wrapper: HTMLElement) {
+  const onText =
+    lineHandleTop(wrapper, isEditableText) ??
+    lineHandleTop(wrapper, isLabelText);
+  if (onText !== null) return onText;
 
   const block = wrapper.firstElementChild;
-  const marginTop = block
-    ? Number.parseFloat(window.getComputedStyle(block).marginTop)
+  const style = block ? window.getComputedStyle(block) : null;
+  const inset = style
+    ? Number.parseFloat(style.marginTop) + Number.parseFloat(style.paddingTop)
     : 0;
-  return (Number.isFinite(marginTop) ? marginTop : 0) + 3;
+  return (Number.isFinite(inset) ? inset : 0) + 3;
 }
 
 function Gutter({

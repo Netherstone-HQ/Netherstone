@@ -39,11 +39,19 @@ function shardsIn(tree: FileTreeNode[], vault: string): string[] {
   return found;
 }
 
-/** The `@words` typed just before the caret, if any. */
-function mentionAt(text: string, caret: number) {
-  const match = /(^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
+/**
+ * The `@name` typed just before the caret, if any. It runs past a space
+ * while some shard's name still matches, so names with spaces narrow.
+ */
+function mentionAt(text: string, caret: number, names: string[]) {
+  const match = /(^|\s)@([^@\n]*)$/.exec(text.slice(0, caret));
   if (!match) return null;
-  return { start: caret - match[2].length - 1, query: match[2] };
+  const query = match[2];
+  if (/\s/.test(query)) {
+    const wanted = query.toLowerCase();
+    if (!names.some((name) => name.toLowerCase().includes(wanted))) return null;
+  }
+  return { start: caret - query.length - 1, query };
 }
 
 function ShardChip({
@@ -82,6 +90,7 @@ export function Composer({
   disabled,
   canSend,
   answering,
+  queued = false,
   onSend,
   onStop,
   model,
@@ -96,6 +105,8 @@ export function Composer({
   disabled: boolean;
   canSend: boolean;
   answering: boolean;
+  /** What's typed is sent once the answer coming in is done. */
+  queued?: boolean;
   onSend: () => void;
   onStop: () => void;
   model: React.ReactNode;
@@ -122,6 +133,7 @@ export function Composer({
     useAssistantStore.setState({ focusComposer: false });
   }, [focusAsked]);
 
+  const names = useMemo(() => allShards.map(shardName), [allShards]);
   const matches = useMemo(() => {
     if (!mention) return [];
     const query = mention.query.toLowerCase();
@@ -137,7 +149,7 @@ export function Composer({
   }, [mention, allShards, shards]);
 
   const track = (text: string, caret: number) => {
-    const found = mentionAt(text, caret);
+    const found = mentionAt(text, caret, names);
     setMention(found);
     if (found?.query !== mention?.query) setActive(0);
   };
@@ -145,13 +157,16 @@ export function Composer({
   const pick = (path: string) => {
     if (!mention) return;
     const caret = textRef.current?.selectionStart ?? draft.length;
-    const next = draft.slice(0, mention.start) + draft.slice(caret);
+    // The name stays in the message, so it still reads as written.
+    const named = `@${shardName(path)} `;
+    const next = draft.slice(0, mention.start) + named + draft.slice(caret).replace(/^ /, "");
+    const after = mention.start + named.length;
     onDraft(next);
     onAdd(path);
     setMention(null);
     requestAnimationFrame(() => {
       textRef.current?.focus();
-      textRef.current?.setSelectionRange(mention.start, mention.start);
+      textRef.current?.setSelectionRange(after, after);
     });
   };
 
@@ -177,7 +192,7 @@ export function Composer({
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      if (canSend && !answering) onSend();
+      if (canSend) onSend();
     }
   };
 
@@ -285,7 +300,15 @@ export function Composer({
           />
         </div>
         <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">{model}</div>
+          <div className="min-w-0">
+            {queued ? (
+              <span className="block px-1 text-muted-foreground text-ui-sm">
+                Queued. Sends when this answer is done.
+              </span>
+            ) : (
+              model
+            )}
+          </div>
           {answering ? (
             <Button
               type="button"

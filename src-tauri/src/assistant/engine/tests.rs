@@ -61,6 +61,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         send_files: false,
         added: Vec::new(),
         asked: Default::default(),
+        step_limited: Default::default(),
         memory: Arc::new(List::at(vault_dir.join("memory.txt"))),
     }
 }
@@ -1014,4 +1015,23 @@ fn earlier_changes_are_told_as_they_stand() {
     );
     assert!(!told.contains("Now.md"), "{told}");
     assert_eq!(change_states(&changes[3..], 5), "");
+}
+
+#[test]
+fn questions_that_got_no_answer_are_left_out() {
+    let answer = Message::Assistant {
+        text: "Lisbon".into(),
+        calls: Vec::new(),
+        reasoning: None,
+    };
+    let sent = without_unanswered(vec![
+        Message::user("first"),
+        answer.clone(),
+        Message::user("failed"),
+        Message::user("asked again"),
+    ]);
+    assert_eq!(
+        sent,
+        vec![Message::user("first"), answer, Message::user("asked again")]
+    );
 }

@@ -317,14 +317,31 @@ export function AnswerText({
       }
       case "html":
         return <Fragment key={key}>{node.value}</Fragment>;
-      case "table":
+      case "table": {
+        // Its first row is the header.
+        const [head, ...rows] = node.children ?? [];
         return (
           <div key={key} className="overflow-x-auto">
             <table className="w-full border-collapse text-ui-sm">
-              <tbody>{children()}</tbody>
+              {head ? (
+                <thead>
+                  <tr className="bg-muted">
+                    {(head.children ?? []).map((cell, i) => (
+                      <th
+                        key={i}
+                        className="border px-2 py-1 text-left align-top font-medium"
+                      >
+                        {(cell.children ?? []).map((child, j) => render(child, j))}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              ) : null}
+              <tbody>{rows.map((row, i) => render(row, i))}</tbody>
             </table>
           </div>
         );
+      }
       case "tableRow":
         return <tr key={key}>{children()}</tr>;
       case "tableCell":

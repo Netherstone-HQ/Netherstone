@@ -80,7 +80,8 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
     <div className="relative flex min-w-0 flex-1 flex-col">
       <main
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-auto",
+          // Isolated, so the editor's sticky toolbar stays under a preview.
+          "isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-auto",
           // A preview covers the editor once it's ready; till then the
           // shard stays in view, so nothing blanks.
           shown && !previewed && "invisible",

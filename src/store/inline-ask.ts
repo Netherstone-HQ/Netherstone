@@ -20,6 +20,8 @@ interface InlineAskState {
   draft: string;
   /** What comes in, as editor nodes, while the preview shows. */
   preview: unknown[] | null;
+  /** Why the last answer failed, shown under the prompt until it's sent again. */
+  error: string | null;
 }
 
 export const useInlineAskStore = create<InlineAskState>(() => ({
@@ -28,4 +30,5 @@ export const useInlineAskStore = create<InlineAskState>(() => ({
   prompt: "",
   draft: "",
   preview: null,
+  error: null,
 }));

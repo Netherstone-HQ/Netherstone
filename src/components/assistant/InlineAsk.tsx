@@ -25,8 +25,10 @@ const OUTSET = 8;
 /** Its gap under the block. */
 const GAP = 8;
 
-const SEND =
-  "size-7.5 shrink-0 rounded-[7px] bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50";
+const BUTTON = "size-7.5 shrink-0 rounded-[7px]";
+const SEND = `${BUTTON} bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50`;
+/** Stop is quieter than Send, as in the panel. */
+const STOP = `${BUTTON} bg-muted text-foreground hover:bg-accent`;
 
 /** Where the prompt sits: under the block asked about, over the column. */
 function usePlace(box: React.RefObject<HTMLDivElement | null>) {
@@ -60,10 +62,16 @@ function usePlace(box: React.RefObject<HTMLDivElement | null>) {
       const padLeft = Number.parseFloat(style.paddingLeft);
       const column =
         content.clientWidth - padLeft - Number.parseFloat(style.paddingRight);
+      const left =
+        content.getBoundingClientRect().left + padLeft - at.left + frame.scrollLeft - OUTSET;
       setPlace({
-        left: content.getBoundingClientRect().left + padLeft - at.left + frame.scrollLeft - OUTSET,
+        left,
         top: anchor.getBoundingClientRect().bottom - at.top + frame.scrollTop + GAP,
-        width: Math.max(MIN_WIDTH, column + OUTSET * 2),
+        // Never past the scroller's own width, which leaves out its scrollbar.
+        width: Math.min(
+          Math.max(MIN_WIDTH, column + OUTSET * 2),
+          frame.clientWidth - left - OUTSET,
+        ),
       });
     }
 
@@ -88,6 +96,7 @@ export function InlineAsk() {
   const phase = useInlineAskStore((s) => s.phase);
   const prompt = useInlineAskStore((s) => s.prompt);
   const draft = useInlineAskStore((s) => s.draft);
+  const error = useInlineAskStore((s) => s.error);
   const { setup, reload } = useSetup(phase !== null);
   const [text, setText] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -201,9 +210,9 @@ export function InlineAsk() {
                   size="icon-sm"
                   onClick={discardInlineAsk}
                   aria-label="Stop"
-                  className={SEND}
+                  className={STOP}
                 >
-                  <SquareIcon className="fill-current" />
+                  <SquareIcon className="size-3 fill-current" />
                 </Button>
               </>
             ) : (
@@ -224,6 +233,22 @@ export function InlineAsk() {
           </>
         )}
       </div>
+      {phase === "prompt" && error ? (
+        <div className="mt-1.5 flex items-center gap-2 rounded-[10px] border border-input bg-card py-1 pr-1 pl-2.5 shadow-md">
+          <span role="alert" className="min-w-0 flex-1 text-destructive text-ui-sm">
+            {error}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!ready || !text.trim()}
+            onClick={send}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

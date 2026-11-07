@@ -349,6 +349,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     handedOffRef.current = true;
     keepSearchChat();
     openAssistant();
+    useAssistantStore.setState({ focusComposer: true });
     onOpenChange(false);
   };
 
@@ -422,7 +423,8 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         }
       />
     );
-  } else if (hasQuery && rows.length === 0 && answeredQuery === query) {
+  } else if (hasQuery && rows.length === 0 && answeredQuery === query && !waiting) {
+    // Under an answer, no matching shards goes unsaid.
     body = (
       <Notice
         icon={SearchXIcon}

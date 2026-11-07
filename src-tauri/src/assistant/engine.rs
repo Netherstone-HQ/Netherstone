@@ -21,7 +21,7 @@ use crate::tools::proposals::{self, Op, WRITE_TOOLS};
 use crate::tools::{self, Caller, Tool, Vault};
 use serde::Serialize;
 use serde_json::Value;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -50,6 +50,10 @@ pub enum Event {
     },
     /// Older messages were summarized to make room.
     Summarized,
+    /// The provider failed for now, and is asked again after a wait.
+    Retrying {
+        error: ChatError,
+    },
     Done {
         stop: Stop,
         usage: Usage,
@@ -266,6 +270,8 @@ pub struct Turn {
     /// The user message being answered, once it's saved: the changes
     /// proposed in this answer belong to it.
     pub asked: AtomicI64,
+    /// Whether the answer stopped at the step limit.
+    pub step_limited: AtomicBool,
     /// What the user asked the assistant to remember.
     pub memory: Arc<List>,
 }
@@ -309,6 +315,10 @@ impl<'a> Out<'a> {
                 self.step_text.push_str(text);
             }
             Delta::Reasoning(text) => self.reasoning.push_str(text),
+            Delta::Retrying(error) => {
+                self.send(Event::Retrying { error });
+                return;
+            }
         }
         if self.text.len() + self.reasoning.len() >= BATCH_BYTES
             || self.last.is_none_or(|last| last.elapsed() >= BATCH_WAIT)
@@ -449,6 +459,7 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         let seq = saved(&turn.store, move |store| store.add(&chat, &kept, &[], None)).await?;
         history.push(seq, message);
         if over {
+            turn.step_limited.store(true, Ordering::SeqCst);
             out.send(Event::StepLimit);
             return Ok((Stop::Done, usage));
         }
@@ -876,12 +887,12 @@ impl History {
 
     /// The messages to send, every tool call answered.
     fn messages(&self) -> Vec<Message> {
-        answered(
+        answered(without_unanswered(
             self.saved
                 .iter()
                 .map(|saved| saved.message.clone())
                 .collect(),
-        )
+        ))
     }
 
     /// `summary` now stands in for the messages before `split`.
@@ -905,6 +916,22 @@ async fn load(store: &SharedStore, chat: &str) -> Result<History, ChatError> {
         Ok(History::new(summary, messages))
     })
     .await
+}
+
+/// `messages` without questions that never got an answer, as when one
+/// failed and another was asked after it: they'd reach the model as user
+/// turns in a row.
+pub(super) fn without_unanswered(messages: Vec<Message>) -> Vec<Message> {
+    let is_user = |message: Option<&Message>| matches!(message, Some(Message::User { .. }));
+    let mut kept = Vec::with_capacity(messages.len());
+    let mut rest = messages.into_iter().peekable();
+    while let Some(message) = rest.next() {
+        if is_user(Some(&message)) && is_user(rest.peek()) {
+            continue;
+        }
+        kept.push(message);
+    }
+    kept
 }
 
 /// `messages` with every tool call answered: a call whose result was

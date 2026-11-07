@@ -63,8 +63,15 @@ export function usePreviewedChange(): ChatChange | null {
   const historyOpen = useHistoryStore((s) => s.openIn === "notes");
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
+  const setAside = store((s) => s.previewSetAside);
   if (!shown || historyOpen) return null;
-  return previewedChange(changes, openShardPath(vault, openPath));
+  const change = previewedChange(changes, openShardPath(vault, openPath));
+  return change?.id === setAside ? null : change;
+}
+
+/** Back to editing the open shard, the change waiting in its card. */
+export function setPreviewAside(change: ChatChange) {
+  store.setState({ previewSetAside: change.id });
 }
 
 function errorText(error: unknown) {

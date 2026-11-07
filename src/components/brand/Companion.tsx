@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import {
   EyeOffIcon,
@@ -46,6 +47,7 @@ import { useAssistantStore } from "@/store/assistant";
 import { useCompanionStore } from "@/store/companion";
 import { useInlineAskStore } from "@/store/inline-ask";
 import { useSettingsStore } from "@/store/settings";
+import { useUIStore } from "@/store/ui";
 import { useHistoryStore } from "@/store/history";
 import { useVaultStore } from "@/store/vault";
 
@@ -56,6 +58,8 @@ const INK = { fill: "var(--companion-ink)" };
 
 const FRONT =
   "M-40,-46C-42,-72-24,-96 3,-96C28,-96 42,-74 39,-48C37,-22 22,-10 0,-10C-24,-10-38,-22-40,-46Z";
+/** How far his body reaches right of his center. */
+const BODY_RIGHT = 42;
 // The front mirrored, with a lobe on each side of the crease.
 const BACK =
   "M40,-46C42,-72 24,-96-3,-96C-28,-96-42,-74-39,-48C-38,-30-33,-16-23,-10C-18,-4-6,-4 0,-11C6,-3 19,-3 24,-9C34,-16 39,-28 40,-46Z";
@@ -148,6 +152,8 @@ export function Companion() {
   // He's the assistant only while it's on.
   const assistant = useAssistantStore((s) => s.enabled === true);
   const perch = useCompanionStore((s) => s.perch);
+  // Settings covers the panel, so he goes home, out of sight, while it's open.
+  const settingsShown = useUIStore((s) => s.activeNavItem === "settings");
   const { setup } = useSetup(assistant);
   const noProvider = assistant && setupState(setup) === "noProvider";
   // The menu offers only what isn't on screen already and has a shard to use.
@@ -201,14 +207,14 @@ export function Companion() {
     if (!rig) return;
     rig.setAssistant(assistant, menu);
     if (!assistant) setMenu(false);
-    const card = assistant ? perch : null;
+    const card = assistant && !settingsShown ? perch : null;
     rig.setSpot(card ? () => perchSpot(card) : null);
     useCompanionStore.setState({ perched: card !== null });
     if (!card) return;
     const observer = new ResizeObserver(() => rig.relocate());
     observer.observe(card);
     return () => observer.disconnect();
-  }, [assistant, perch, menu]);
+  }, [assistant, perch, menu, settingsShown]);
 
   // With no provider set up, he sleeps until there is one.
   useEffect(() => {
@@ -242,9 +248,14 @@ export function Companion() {
 
   return (
     // Sits under dialogs and toasts, and only his own shapes take the pointer.
+    // Hidden over Settings, whose rows would sit under him.
     <div
       ref={hostRef}
-      className="companion pointer-events-none fixed top-0 left-0 z-40"
+      className={cn(
+        "companion pointer-events-none fixed top-0 left-0 z-40",
+        settingsShown && "opacity-0",
+      )}
+      inert={settingsShown}
       style={{ width: width * scale, height: height * scale }}
     >
       <div
@@ -377,7 +388,9 @@ export function Companion() {
             key={i}
             className="companion-z font-medium text-muted-foreground text-ui-sm"
             style={{
-              left: (restX + 92) * scale + i * 3,
+              // Right beside his head, so they stay in the window when he
+              // sits near its right edge.
+              left: (restX + BODY_RIGHT + 4) * scale + i * 3,
               top: (ground - 80) * scale,
               animationDelay: `${-i * 1.15}s`,
             }}
@@ -386,6 +399,15 @@ export function Companion() {
           </span>
         ))}
       </div>
+      {/* Keyboards and screen readers reach him here; the drawing is hidden. */}
+      <button
+        type="button"
+        aria-label={assistant ? "Assistant menu" : "Companion"}
+        className="sr-only"
+        onClick={() =>
+          hitRef.current?.dispatchEvent(new MouseEvent("click", { detail: 1 }))
+        }
+      />
       {/* His menu opens above him, its right edge lined up with his. */}
       <DropdownMenu open={menuOpen} onOpenChange={setMenu}>
         <DropdownMenuTrigger asChild>

@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BrainIcon,
   CheckIcon,
@@ -88,6 +96,31 @@ function openLink(href: string) {
   void openWebLink(href).catch(() => toast.error("Couldn't open the link"));
 }
 
+/**
+ * What's missing before the next message can go, under a chat that's
+ * there: the chat stays readable.
+ */
+function Notice({
+  icon,
+  text,
+  action,
+}: {
+  icon: React.ReactNode;
+  text: string;
+  action: React.ReactNode;
+}) {
+  return (
+    // The buttons wrap under the text when the panel is too narrow for both.
+    <div className="mx-2 mb-2 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3">
+      <div className="flex min-w-48 flex-1 items-center gap-2.5">
+        <span className="flex shrink-0 text-muted-foreground">{icon}</span>
+        <p className="min-w-0 flex-1 text-muted-foreground">{text}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
 function Center({
   icon,
   text,
@@ -167,26 +200,63 @@ function changeCount(count: number) {
   return count === 1 ? "1 change" : `${count} changes`;
 }
 
-/** What a change does, as its card says it. */
+/** The folder a vault path is in, as a card names it. */
+function folderOf(path: string) {
+  const parts = path.split("/").slice(0, -1);
+  return parts.length > 0 ? parts.join("/") : "the top of the vault";
+}
+
+/** Where a move takes it, and its new name, as a card says them. */
+function moveParts(change: ChatChange) {
+  const { folder = null, name = null } = change.moving ?? {};
+  return {
+    where: folder === null ? null : folder === "" ? "the top of the vault" : folder,
+    renamed: name ? shardName(name) : null,
+  };
+}
+
+/** What a change does, as its card says it before it's applied. */
 function changeTitle(change: ChatChange) {
   const name = shardName(change.path);
   switch (change.kind) {
     case "newShard":
-      return `New shard ${name}`;
+      return `New shard ${name} in ${folderOf(change.path)}`;
     case "newDrawing":
-      return `New drawing ${name}`;
+      return `New drawing ${name} in ${folderOf(change.path)}`;
     case "move": {
-      const { folder = null, name: renamed = null } = change.moving ?? {};
-      const where = folder === "" ? "the top of the vault" : folder;
-      if (where !== null && renamed) {
-        return `Move ${change.path} to ${where} as ${renamed}`;
-      }
-      if (where !== null) return `Move ${change.path} to ${where}`;
-      return `Rename ${change.path} to ${renamed ?? ""}`;
+      const { where, renamed } = moveParts(change);
+      if (where !== null && renamed) return `Move ${name} to ${where} as ${renamed}`;
+      if (where !== null) return `Move ${name} to ${where}`;
+      return `Rename ${name} to ${renamed ?? ""}`;
     }
     default:
       return name;
   }
+}
+
+/** What an applied change did, around the link to what it left. */
+function appliedWords(change: ChatChange): [string, string] {
+  switch (change.kind) {
+    case "newShard":
+    case "newDrawing":
+      return ["Created ", ` in ${folderOf(change.path)}`];
+    case "move": {
+      const { where, renamed } = moveParts(change);
+      const old = shardName(change.path);
+      if (where === null) return [`Renamed ${old} to `, ""];
+      return renamed ? [`Moved ${old} to ${where} as `, ""] : ["Moved ", ` to ${where}`];
+    }
+    default:
+      return ["Applied to ", ""];
+  }
+}
+
+/** What a discarded change would have done, as its trace says it. */
+function discardedTitle(change: ChatChange) {
+  const title = changeTitle(change);
+  return change.kind === "shard" || change.kind === "drawing"
+    ? `Discarded the change to ${title}`
+    : `Discarded: ${title.charAt(0).toLowerCase()}${title.slice(1)}`;
 }
 
 function ChangeIcon({ kind }: { kind: ChatChange["kind"] }) {
@@ -222,6 +292,11 @@ function appliedPath(change: ChatChange): string {
 
 /** Brings the open shard's preview of a change back into view. */
 function revealPreview() {
+  // Set aside to edit: shown again, and it brings the change into view.
+  if (useAssistantStore.getState().previewSetAside !== null) {
+    useAssistantStore.setState({ previewSetAside: null });
+    return;
+  }
   document
     .querySelector(".change-preview [data-history-block]")
     ?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -266,24 +341,24 @@ function ChangeCard({ change }: { change: ChatChange }) {
     return (
       <div className="flex items-center gap-2 rounded-[10px] border border-dashed py-2.5 pr-2 pl-3 text-muted-foreground">
         <XIcon className="size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">
-          Discarded {changeTitle(change)}
-        </span>
+        <span className="min-w-0 flex-1 truncate">{discardedTitle(change)}</span>
       </div>
     );
   }
   if (change.state === "applied") {
     const path = appliedPath(change);
+    const [before, after] = appliedWords(change);
     return (
       <div className="flex items-center gap-2 rounded-[10px] border bg-card py-2.5 pr-2 pl-3">
         <CheckIcon className="size-4 shrink-0 text-brand" />
-        <span className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="shrink-0">Applied to </span>
+        <span className="min-w-0 flex-1 break-words">
+          {before}
           {isOpenable(path) ? (
             <FileLink path={path}>{shardName(path)}</FileLink>
           ) : (
-            <span className="truncate">{shardName(path)}</span>
+            shardName(path)
           )}
+          {after}
         </span>
         <Button
           type="button"
@@ -323,7 +398,7 @@ function ChangeCard({ change }: { change: ChatChange }) {
             {title}
           </span>
         )}
-        {change.kind !== "move" && (
+        {(change.kind === "shard" || change.kind === "drawing") && (
           <span className="shrink-0 text-muted-foreground text-ui-sm">
             {changeCount(change.count)}
           </span>
@@ -346,7 +421,7 @@ function ChangeCard({ change }: { change: ChatChange }) {
           disabled={busy}
           onClick={() => void applyAssistantChange(change)}
         >
-          Apply
+          {change.kind === "newShard" || change.kind === "newDrawing" ? "Create" : "Apply"}
         </Button>
       </div>
     </div>
@@ -570,6 +645,9 @@ function withChanges(
       message.role === "assistant" && (!next || next.role === "user");
     return {
       message,
+      turn,
+      /** The turn's last message, answered or not. */
+      endsTurn: !next || next.role === "user",
       changes: endsAnswer ? changes.filter((c) => c.turn === turn) : [],
       memories: endsAnswer ? memories.filter((m) => m.turn === turn) : [],
     };
@@ -588,7 +666,7 @@ function UserMessage({ message }: { message: ShownMessage }) {
  * The answer as it comes in. The only part of the chat that changes while
  * it streams, so it alone re-renders, and it keeps itself in view.
  */
-function Streaming({ onGrow }: { onGrow: () => void }) {
+function Streaming({ onGrow, local }: { onGrow: () => void; local: boolean }) {
   const answering = useAssistantStore((s) => s.answering);
   const answer = useParsedAnswer(answering?.text ?? "");
   useEffect(onGrow, [answering, onGrow]);
@@ -605,7 +683,7 @@ function Streaming({ onGrow }: { onGrow: () => void }) {
       {answering.tool || !answering.text ? (
         <p className="flex items-center gap-2 text-muted-foreground text-ui-sm">
           <LoaderCircleIcon className="size-3.5 animate-spin" />
-          {waitingText(answering)}
+          {waitingText(answering, local)}
         </p>
       ) : null}
     </div>
@@ -634,11 +712,22 @@ function useStickToBottom(deps: unknown[]) {
   return { ref, onScroll, follow };
 }
 
-function Messages() {
+function Messages({
+  local,
+  canRetry,
+  serverDown,
+}: {
+  local: boolean;
+  canRetry: boolean;
+  /** The notice under the chat already says the server isn't running. */
+  serverDown: boolean;
+}) {
   const messages = useAssistantStore((s) => s.messages);
   const changes = useAssistantStore((s) => s.changes);
   const memories = useAssistantStore((s) => s.memories);
   const ending = useAssistantStore((s) => s.ending);
+  const endings = useAssistantStore((s) => s.endings);
+  const answering = useAssistantStore((s) => s.answering !== null);
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
   const canAdd = openShardPath(vault, openPath) !== null;
@@ -649,6 +738,7 @@ function Messages() {
     changes,
     memories,
     ending,
+    endings,
   ]);
   // New arrays only when the chat changes, so answers that didn't change
   // don't render again.
@@ -657,6 +747,16 @@ function Messages() {
     [messages, changes, memories],
   );
   const lastAsked = [...messages].reverse().find((m) => m.role === "user")?.seq;
+  // The last turn's ending as it ended here, or as it was kept. None while
+  // it's being answered again, and no error while the server notice says why.
+  const ended = answering
+    ? null
+    : (ending ?? endings.find((saved) => saved.turn === lastAsked)?.ending ?? null);
+  const lastEnding = serverDown && ended?.kind === "error" ? null : ended;
+  const endedEarlier = (turn: number) =>
+    turn === lastAsked
+      ? null
+      : (endings.find((saved) => saved.turn === turn)?.ending ?? null);
 
   return (
     <div
@@ -667,26 +767,30 @@ function Messages() {
         perched && "pb-[96px]",
       )}
     >
-      {shown.map(
-        ({ message, changes, memories }) =>
-        message.role === "user" ? (
-          <UserMessage key={message.seq} message={message} />
-        ) : (
-          <Answer
-            key={message.seq}
-            message={message}
-            changes={changes}
-            memories={memories}
-            canAdd={canAdd}
-          />
-        ),
-      )}
-      <Streaming onGrow={follow} />
-      {ending ? (
+      {shown.map(({ message, changes, memories, turn, endsTurn }) => {
+        const earlier = endsTurn ? endedEarlier(turn) : null;
+        return (
+          <Fragment key={message.seq}>
+            {message.role === "user" ? (
+              <UserMessage message={message} />
+            ) : (
+              <Answer
+                message={message}
+                changes={changes}
+                memories={memories}
+                canAdd={canAdd}
+              />
+            )}
+            {earlier ? <EndingNote ending={earlier} onOpenLink={openLink} /> : null}
+          </Fragment>
+        );
+      })}
+      <Streaming onGrow={follow} local={local} />
+      {lastEnding ? (
         <EndingNote
-          ending={ending}
+          ending={lastEnding}
           onOpenLink={openLink}
-          onRetry={() => void retryAnswer()}
+          onRetry={canRetry ? () => void retryAnswer() : undefined}
           partly={changes.some((change) => change.turn === lastAsked)}
         />
       ) : null}
@@ -761,6 +865,26 @@ export function AssistantPanel() {
     void sendMessage(text.trim(), with_);
   };
 
+  // Sent while an answer comes in, it waits for that answer as its own
+  // message, rather than running into what's typed next.
+  const [queued, setQueued] = useState(false);
+  const wasAnswering = useRef(answering);
+  const chatId = useAssistantStore((s) => s.chat?.id ?? null);
+  const wasChat = useRef(chatId);
+  useEffect(() => {
+    const ended = wasAnswering.current && !answering;
+    // A new chat gets its id while answering; any other change is a switch.
+    const switched = wasChat.current !== null && wasChat.current !== chatId;
+    wasAnswering.current = answering;
+    wasChat.current = chatId;
+    if (!queued || (!ended && !switched)) return;
+    setQueued(false);
+    // Moving to another chat, or an error, leaves it typed, to send or change.
+    if (switched || useAssistantStore.getState().ending?.kind === "error") return;
+    const { draft: text } = useAssistantStore.getState();
+    send(text, shards);
+  });
+
   const turnOn = async () => {
     if (!vault) return;
     try {
@@ -772,6 +896,57 @@ export function AssistantPanel() {
   };
 
   const isEmpty = messages.length === 0 && !answering;
+  // A chat that's there stays readable while the vault is off or the
+  // server is down; only the next message waits.
+  const blocked = state === "vaultOff" || state === "serverDown";
+  const chatsShown = ready || blocked;
+
+  // An answer from a local model that failed: the server may have stopped.
+  const ending = useAssistantStore((s) => s.ending);
+  const local = setup?.picked?.local === true;
+  useEffect(() => {
+    if (ending?.kind === "error" && local) void reload();
+  }, [ending, local, reload]);
+
+  // Asks the server again, and goes on with the answer that broke off.
+  const serverBack = async () => {
+    const now = await reload();
+    if (setupState(now) !== "ready") return;
+    if (useAssistantStore.getState().ending?.kind === "error") void retryAnswer();
+  };
+
+  const vaultOff = {
+    icon: <FolderIcon className="size-4.5" />,
+    text: `${vault ? folderName(vault) : "This vault"} is off for AI`,
+    action: (
+      <Button type="button" variant="outline" size="sm" onClick={() => void turnOn()}>
+        Turn on
+      </Button>
+    ),
+  };
+  const serverDown = setup?.serverDown
+    ? {
+        icon: <ServerOffIcon className="size-4.5" />,
+        text: serverDownText(setup.serverDown),
+        action: (
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => void serverBack()}>
+              Try again
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => openSettings("ai-assistant")}
+            >
+              Settings
+            </Button>
+          </div>
+        ),
+      }
+    : null;
+  const missing =
+    state === "vaultOff" ? vaultOff : state === "serverDown" ? serverDown : null;
 
   return (
     <aside
@@ -779,7 +954,7 @@ export function AssistantPanel() {
       className="flex h-full w-(--assistant-width) flex-col border-l bg-sidebar text-sidebar-foreground text-ui"
     >
       <div className="flex h-toolbar shrink-0 items-center gap-1 border-sidebar-border border-b pr-2.5 pl-3">
-        {ready && chat ? (
+        {chatsShown && chat ? (
           <>
             <ChatsMenu title={chat.title} />
             <Hint label="New chat" side="bottom">
@@ -798,9 +973,9 @@ export function AssistantPanel() {
         ) : (
           <>
             <span className="flex-1 pl-1 font-medium">
-              {ready ? "New chat" : "Assistant"}
+              {chatsShown ? "New chat" : "Assistant"}
             </span>
-            {ready ? <ChatsMenu title={null} /> : null}
+            {chatsShown ? <ChatsMenu title={null} /> : null}
           </>
         )}
         <Hint label="Hide assistant" side="bottom">
@@ -834,41 +1009,8 @@ export function AssistantPanel() {
             </Button>
           }
         />
-      ) : state === "vaultOff" ? (
-        <Center
-          icon={<FolderIcon className="size-4.5" />}
-          text={`${vault ? folderName(vault) : "This vault"} is off for AI`}
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void turnOn()}
-            >
-              Turn on
-            </Button>
-          }
-        />
-      ) : state === "serverDown" && setup?.serverDown ? (
-        <Center
-          icon={<ServerOffIcon className="size-4.5" />}
-          text={serverDownText(setup.serverDown)}
-          action={
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => void reload()}>
-                Try again
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => openSettings("ai-assistant")}
-              >
-                Settings
-              </Button>
-            </div>
-          }
-        />
+      ) : missing && isEmpty ? (
+        <Center {...missing} />
       ) : state === "noModel" && isEmpty ? (
         <Center
           icon={<CpuIcon className="size-4.5" />}
@@ -889,8 +1031,13 @@ export function AssistantPanel() {
       ) : isEmpty ? (
         <div className="flex-1" />
       ) : (
-        <Messages />
+        <Messages
+          local={local}
+          canRetry={!missing}
+          serverDown={state === "serverDown"}
+        />
       )}
+      {missing && !isEmpty ? <Notice {...missing} /> : null}
 
       <Composer
         draft={draft}
@@ -906,8 +1053,12 @@ export function AssistantPanel() {
         }
         canSend={ready && draft.trim().length > 0}
         answering={answering}
-        onSend={() => send(draft, shards)}
-        onStop={stopAnswer}
+        queued={queued}
+        onSend={() => (answering ? setQueued(true) : send(draft, shards))}
+        onStop={() => {
+          setQueued(false);
+          stopAnswer();
+        }}
         cardRef={setPerch}
         model={
           setup ? (

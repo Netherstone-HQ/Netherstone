@@ -7,10 +7,17 @@ import {
   VersionPreviewKit,
 } from "@/components/history/history-diff-kit";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
+import { Button } from "@/components/ui/button";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
+import {
+  applyAssistantChange,
+  discardAssistantChange,
+  setPreviewAside,
+} from "@/lib/assistant-changes";
 import { type ChatChange, previewChange } from "@/lib/commands";
 import { diffShardValues } from "@/lib/history-diff";
 import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
+import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 
 /** The element that scrolls `node`, if any. */
@@ -123,9 +130,36 @@ export function ChangePreview({
 }) {
   const value = usePreviewValue(change, filePath);
   const [scrollTop] = useState(editorScrollTop);
+  const busy = useAssistantStore((s) => s.busyChanges.includes(change.id));
   if (!value) return null;
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
+      {/* Says why the shard can't be edited now, and how to go on. */}
+      <div className="flex min-h-11 shrink-0 items-center gap-2 border-b py-1.5 pr-2 pl-4 text-ui">
+        <span className="min-w-0 flex-1 text-muted-foreground">
+          Showing a change from the assistant
+        </span>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewAside(change)}>
+          Back to editing
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => void discardAssistantChange(change)}
+        >
+          Discard
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy}
+          onClick={() => void applyAssistantChange(change)}
+        >
+          Apply
+        </Button>
+      </div>
       <PreviewDocument
         key={`${change.id}:${change.count}`}
         value={value}

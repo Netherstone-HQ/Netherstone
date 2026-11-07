@@ -11,7 +11,7 @@ import { ListTreeIcon } from "lucide-react";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
-import { ASSISTANT_WIDTH } from "@/store/ui";
+import { ASSISTANT_WIDTH, SHARD_MIN_WIDTH } from "@/store/ui";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
@@ -47,9 +47,12 @@ function ShardSections({ isOpen }: { isOpen: boolean }) {
 /** The assistant panel's left edge, dragged to size it like the left sidebar. */
 function AssistantResizeHandle({
   containerRef,
+  maxWidth,
   onDragging,
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
+  /** As wide as it goes with the shard's room kept. */
+  maxWidth: number;
   onDragging: (dragging: boolean) => void;
 }) {
   const width = useUIStore((s) => s.assistantWidth);
@@ -61,7 +64,7 @@ function AssistantResizeHandle({
     setWidth,
     defaultWidth: ASSISTANT_WIDTH.default,
     minWidth: ASSISTANT_WIDTH.min,
-    maxWidth: ASSISTANT_WIDTH.max,
+    maxWidth,
     side: "right",
     onDragging,
   });
@@ -73,6 +76,30 @@ function AssistantResizeHandle({
       className="absolute inset-y-0 left-0 z-20 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-0 after:w-0.5 hover:after:bg-sidebar-border"
     />
   );
+}
+
+/**
+ * The assistant's width, narrowed down to its least so the shard beside it
+ * keeps room to read and edit in a narrow window.
+ */
+function useFittedWidth(
+  containerRef: RefObject<HTMLDivElement | null>,
+  width: number,
+) {
+  const [room, setRoom] = useState<number | null>(null);
+  useEffect(() => {
+    // The row the shard and the panel share.
+    const row = containerRef.current?.parentElement;
+    if (!row) return;
+    const observer = new ResizeObserver(() => setRoom(row.clientWidth));
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [containerRef]);
+  const most =
+    room === null
+      ? ASSISTANT_WIDTH.max
+      : Math.min(ASSISTANT_WIDTH.max, Math.max(ASSISTANT_WIDTH.min, room - SHARD_MIN_WIDTH));
+  return { width: Math.min(width, most), most };
 }
 
 /**
@@ -106,6 +133,7 @@ export function RightSidebar() {
   const [resizing, setResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const assistantWidth = useUIStore((s) => s.assistantWidth);
+  const fitted = useFittedWidth(containerRef, assistantWidth);
   if (
     shown.isPanelOpen !== isPanelOpen ||
     shown.showsHistory !== showsHistory ||
@@ -114,6 +142,16 @@ export function RightSidebar() {
     setShown({ isPanelOpen, showsHistory, showsAssistant });
     setSlides(shown.isPanelOpen !== isPanelOpen);
   }
+
+  // Opened in a window too narrow for the shard beside it even at its least,
+  // the assistant folds the file list away.
+  useEffect(() => {
+    if (!showsAssistant) return;
+    const row = containerRef.current?.parentElement;
+    if (!row || row.clientWidth - ASSISTANT_WIDTH.min >= SHARD_MIN_WIDTH) return;
+    const { isSidebarOpen, setSidebarOpen } = useUIStore.getState();
+    if (isSidebarOpen) setSidebarOpen(false);
+  }, [showsAssistant]);
 
   // Closing the shard closes its history.
   useEffect(() => {
@@ -128,7 +166,7 @@ export function RightSidebar() {
         slides && !resizing && "transition-[width] duration-200 ease-linear",
         !isPanelOpen ? "w-0" : showsAssistant ? "w-(--assistant-width)" : "w-72",
       )}
-      style={{ "--assistant-width": `${assistantWidth}px` } as CSSProperties}
+      style={{ "--assistant-width": `${fitted.width}px` } as CSSProperties}
       inert={!isPanelOpen}
     >
       {showsHistory ? (
@@ -143,6 +181,7 @@ export function RightSidebar() {
           </Suspense>
           <AssistantResizeHandle
             containerRef={containerRef}
+            maxWidth={fitted.most}
             onDragging={setResizing}
           />
         </div>

@@ -453,6 +453,14 @@ pub struct ChatView {
     /// The memory items its answers offered, added or not; discarded ones
     /// are left out.
     memories: Vec<Offer>,
+    /// How answers that didn't end well ended, by the turn they answered.
+    endings: Vec<Ending>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Ending {
+    turn: i64,
+    ending: serde_json::Value,
 }
 
 /// The chats answering now: their window, and how to stop them.
@@ -692,6 +700,7 @@ pub async fn send(
         send_files,
         added: shards,
         asked: Default::default(),
+        step_limited: Default::default(),
         memory: Arc::new(memory::List::open().map_err(|error| {
             eprintln!("[Netherstone] {error}");
             ChatError::Storage
@@ -701,8 +710,44 @@ pub async fn send(
     if let Ok(mut running) = running().lock() {
         running.remove(&chat);
     }
+    // Kept with the chat, so it still shows under its turn later.
+    let asked = turn.asked.load(std::sync::atomic::Ordering::SeqCst);
+    if asked > 0 {
+        let ending = saved_ending(
+            &result,
+            turn.step_limited.load(std::sync::atomic::Ordering::SeqCst),
+        );
+        let id = chat.clone();
+        if let Err(error) = engine::saved(&turn.store, move |store| {
+            store.set_ending(&id, asked, ending.as_ref())
+        })
+        .await
+        {
+            eprintln!("[Netherstone] Couldn't keep how the answer ended: {error:?}");
+        }
+    }
     sink.send(Event::ending(result));
     Ok(chat)
+}
+
+/// How an answer ended, as the panel shows it, or None when it ended well.
+fn saved_ending(
+    result: &Result<(chat::Stop, chat::Usage), ChatError>,
+    step_limited: bool,
+) -> Option<serde_json::Value> {
+    use serde_json::json;
+    match result {
+        Err(ChatError::Stopped) => Some(json!({ "kind": "stopped" })),
+        Err(error) => {
+            let kind = serde_json::to_value(error).ok()?.get("kind")?.clone();
+            Some(json!({ "kind": "error", "error": kind }))
+        }
+        Ok((stop @ (chat::Stop::Length | chat::Stop::Filtered), _)) => {
+            Some(json!({ "kind": "stop", "stop": stop }))
+        }
+        Ok(_) if step_limited => Some(json!({ "kind": "stepLimit" })),
+        Ok(_) => None,
+    }
 }
 
 async fn run(
@@ -923,11 +968,13 @@ pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
                 store.messages(&chat),
                 store.changes(&chat),
                 store.offers(&chat),
+                store.endings(&chat),
             )
         }))
     })
     .await?;
-    let (info, messages, changes, offers) = found.ok_or(ChatError::NoChat)?;
+    let (info, messages, changes, offers, endings) = found.ok_or(ChatError::NoChat)?;
+    let endings = endings.map_err(|_| ChatError::Storage)?;
     let messages = messages.map_err(|_| ChatError::Storage)?;
     let changes = changes.map_err(|_| ChatError::Storage)?;
     let offers = offers.map_err(|_| ChatError::Storage)?;
@@ -939,6 +986,10 @@ pub async fn chat_view(chat: String) -> Result<ChatView, ChatError> {
         memories: offers
             .into_iter()
             .filter(|offer| offer.state != ChangeState::Discarded)
+            .collect(),
+        endings: endings
+            .into_iter()
+            .map(|(turn, ending)| Ending { turn, ending })
             .collect(),
     })
 }

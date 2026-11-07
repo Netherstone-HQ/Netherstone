@@ -118,12 +118,28 @@ test("adds shards with @", async ({ page }) => {
   await expect(option).toHaveAttribute("aria-selected", "true");
   await message.press("Enter");
   await expect(assistant.getByRole("button", { name: "Remove Bread from this message" })).toBeVisible();
-  await expect(message).toHaveValue("How much water? ");
+  // The name stays in the message, as written.
+  await expect(message).toHaveValue("How much water? @Bread ");
   await message.press("Enter");
   await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
   expect(await page.evaluate(() => window.__sent)).toEqual([
-    { chat: null, text: "How much water?", shards: ["Bread.md"] },
+    { chat: null, text: "How much water? @Bread", shards: ["Bread.md"] },
   ]);
+});
+
+test("narrows @ to a name with spaces, and closes once nothing matches", async ({ page }) => {
+  await mockVault(page, {
+    files: { ...FILES, "The Salt Coast.md": "# The Salt Coast\n", "The Salt Flats.md": "# The Salt Flats\n" },
+    open: "Trip.md",
+    assistant: READY,
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  const message = assistant.getByRole("textbox", { name: "Message" });
+  await message.fill("Compare @The Salt C");
+  await expect(assistant.getByRole("option")).toHaveText(["The Salt Coast"]);
+  await message.fill("Compare @The Salt Coast and more");
+  await expect(assistant.getByRole("listbox", { name: "Shards" })).toHaveCount(0);
 });
 
 test("adds drawings with @", async ({ page }) => {
@@ -141,7 +157,7 @@ test("adds drawings with @", async ({ page }) => {
   await message.press("Enter");
   await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
   expect(await page.evaluate(() => window.__sent)).toEqual([
-    { chat: null, text: "What's on", shards: ["Trip.md", "Route.excalidraw"] },
+    { chat: null, text: "What's on @Route", shards: ["Trip.md", "Route.excalidraw"] },
   ]);
 });
 
@@ -330,7 +346,7 @@ test("shows a new shard in its card before it's made", async ({ page }) => {
   expect(await page.evaluate(() => window.__saves)).toEqual([]);
 
   // Once made, its name opens it.
-  await assistant.getByRole("button", { name: "Apply" }).click();
+  await assistant.getByRole("button", { name: "Create" }).click();
   await assistant.getByRole("button", { name: "Lisbon", exact: true }).click();
   await expect(editor(page)).toContainText("Trains at 9.");
 });
@@ -370,8 +386,12 @@ test("says where a move goes", async ({ page }) => {
   await page.getByRole("button", { name: "Show assistant" }).click();
   const assistant = panel(page);
   await assistant.getByRole("button", { name: "Summarize this shard" }).click();
-  await expect(assistant.getByText("Move Trip.md to Archive")).toBeVisible();
-  await expect(assistant.getByRole("button", { name: "Move Trip.md to Archive" })).toHaveCount(0);
+  await expect(assistant.getByText("Move Trip to Archive")).toBeVisible();
+  await expect(assistant.getByRole("button", { name: "Move Trip to Archive" })).toHaveCount(0);
+  await expect(assistant.getByText("1 change")).toHaveCount(0);
+
+  await assistant.getByRole("button", { name: "Create" }).click();
+  await expect(assistant.getByText("Moved Trip to Archive")).toBeVisible();
 });
 
 test("opens a shard a change is to from its name, to show it there", async ({ page }) => {
@@ -406,7 +426,7 @@ test("discards an edit without writing it", async ({ page }) => {
   await expect(preview).toHaveCount(0);
   await expect(assistant.getByText("1 change")).toHaveCount(0);
   // It stays in the chat as discarded.
-  await expect(assistant.getByText("Discarded Trip")).toBeVisible();
+  await expect(assistant.getByText("Discarded the change to Trip")).toBeVisible();
   await expect(editor(page)).toContainText("Lisbon in May, by train.");
   expect(await shardSaves(page)).toEqual([]);
 });
@@ -518,6 +538,8 @@ test("asks from search, and carries on in the panel", async ({ page }) => {
   await search.getByRole("button", { name: "Continue in chat" }).click();
   await expect(search).toHaveCount(0);
   await expect(panel(page).getByText("We go to Lisbon in May")).toBeVisible();
+  // Ready for the next question.
+  await expect(panel(page).getByRole("textbox", { name: "Message" })).toBeFocused();
   // The same chat, saved and titled like any other.
   await expect(panel(page).getByRole("button", { name: "Chats" })).toHaveText("when do we go");
 });
@@ -559,6 +581,8 @@ test("reads shards named in a sentence by name, and numbers only cites", async (
 });
 
 test("sizes the panel from its edge, and keeps the width", async ({ page }) => {
+  // Wide enough for its widest beside the shard.
+  await page.setViewportSize({ width: 1700, height: 900 });
   await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
   await page.getByRole("button", { name: "Show assistant" }).click();
   const assistant = panel(page);
@@ -590,6 +614,55 @@ test("sizes the panel from its edge, and keeps the width", async ({ page }) => {
   await expect.poll(async () => Math.round((await panel(page).boundingBox())!.width)).toBe(640);
 });
 
+test("a local server that stopped mid-chat says so under the chat, which stays", async ({ page }) => {
+  await page.addInitScript(() => {
+    let down: string | null = null;
+    window.__overrides = {
+      assistant_picked: () => ({ id: "qwen", name: "qwen", provider: "LM Studio", local: true, images: false }),
+      assistant_local_down: () => down,
+    };
+    (window as unknown as { __setDown: (kind: string | null) => void }).__setDown = (kind) => {
+      down = kind;
+    };
+  });
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: { ...READY, failOnce: "unreachable" } });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  // Up when the panel opens, it stops before the question goes.
+  const summarize = assistant.getByRole("button", { name: "Summarize this shard" });
+  await expect(summarize).toBeVisible();
+  await page.evaluate(() => (window as unknown as { __setDown: (kind: string) => void }).__setDown("lmStudio"));
+  await summarize.click();
+
+  await expect(assistant.getByText("LM Studio isn't running")).toBeVisible();
+  // Said once, by the notice, not again as an error in the chat.
+  await expect(assistant.getByText("Couldn't reach the provider")).toHaveCount(0);
+  // The question stays, under its chat's title.
+  await expect(assistant.getByText("Summarize this shard")).toHaveCount(2);
+  await expect(assistant.getByRole("button", { name: "Chats" })).toBeVisible();
+  await expect(assistant.getByRole("textbox", { name: "Message" })).toBeDisabled();
+
+  await page.evaluate(() => (window as unknown as { __setDown: (kind: null) => void }).__setDown(null));
+  // One Try again: the server's, which asks it again and goes on.
+  await expect(assistant.getByRole("button", { name: "Try again" })).toHaveCount(1);
+  await assistant.getByRole("button", { name: "Try again" }).click();
+  await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
+  await expect(assistant.getByText("LM Studio isn't running")).toHaveCount(0);
+});
+
+test("narrows in a narrow window and folds the file list, so the shard keeps room", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  await expect.poll(async () => Math.round((await panel(page).boundingBox())!.width)).toBe(320);
+  // Too narrow for both even then, so the file list folds away.
+  await expect(page.getByRole("button", { name: "Show left sidebar" })).toBeVisible();
+
+  // Wider again, it goes back to the width it was given.
+  await page.setViewportSize({ width: 1700, height: 900 });
+  await expect.poll(async () => Math.round((await panel(page).boundingBox())!.width)).toBe(400);
+});
+
 test("says what came before an error, and tries again from there", async ({ page }) => {
   await mockVault(page, {
     files: FILES,
@@ -615,6 +688,33 @@ test("says what came before an error, and tries again from there", async ({ page
     "",
   ]);
   await expect(assistant.getByText("1 change")).toBeVisible();
+});
+
+test("an earlier error stays under its message, in the chat and when it's opened again", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, failOnce: "busy" },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  const message = assistant.getByRole("textbox", { name: "Message" });
+  await message.fill("Where do we go?");
+  await page.keyboard.press("Enter");
+  await expect(assistant.getByRole("alert")).toBeVisible();
+
+  await message.fill("And when?");
+  await page.keyboard.press("Enter");
+  await expect(assistant.getByText("We go to Lisbon in May")).toBeVisible();
+  const busy = assistant.getByText("The provider is busy, try again soon");
+  await expect(busy).toBeVisible();
+  // Only the latest answer offers Try again.
+  await expect(assistant.getByRole("button", { name: "Try again" })).toHaveCount(0);
+
+  await assistant.getByRole("button", { name: "New chat" }).click();
+  await assistant.getByRole("button", { name: "Chats" }).click();
+  await page.getByRole("menuitem", { name: /Where do we go/ }).click();
+  await expect(busy).toBeVisible();
 });
 
 test("shows a drawing a change embeds once it's applied", async ({ page }) => {

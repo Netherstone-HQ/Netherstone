@@ -167,6 +167,8 @@ type MockAssistant = {
   inline?: string[];
   /** Inline Asks get no answer until they're stopped. */
   holdInline?: boolean;
+  /** The first inline Ask fails with this error. */
+  inlineFailOnce?: string;
   /** The first answer proposes its change, then fails with this error. */
   failOnce?: string;
 };
@@ -178,6 +180,8 @@ declare global {
     __memory: string[];
     /** Every inline Ask sent. */
     __asked: { shard: string; selection: string; whole: boolean; prompt: string }[];
+    /** Commands a test answers its own way. */
+    __overrides?: Record<string, (args: unknown) => unknown>;
   }
 }
 
@@ -482,7 +486,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
         type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string; moving?: unknown };
         type Offer = { id: string; turn: number; text: string; state: string };
-        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[] }[] = [];
+        type Ended = { turn: number; ending: unknown };
+        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[]; endings: Ended[] }[] = [];
         const memory = [...(setup.memory ?? [])];
         window.__memory = memory;
         const findOffer = (id: string) => {
@@ -552,7 +557,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             const now = Date.now();
             let found = chats.find((c) => c.id === chat);
             if (!found) {
-              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [], memories: [] };
+              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [], memories: [], endings: [] };
               chats.unshift(found);
             }
             const answer = setup.answer ?? ["Done."];
@@ -577,12 +582,14 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
               // The step that proposed the change is kept, as the app keeps it.
               found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: "", sources: [] });
               send({ type: "failed", error: { kind: setup.failOnce } });
+              found.endings.push({ turn, ending: { kind: "error", error: setup.failOnce } });
               delete setup.failOnce;
               return found.id;
             }
             if (reads.length) send({ type: "sources", shards: reads });
             for (const piece of answer) send({ type: "text", text: piece });
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
+            found.endings = found.endings.filter((ended) => ended.turn !== turn);
             found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: answer.join(""), sources: reads });
             found.updated = now;
             return found.id;
@@ -606,6 +613,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
                   resolve(null);
                 };
               });
+            }
+            if (setup.inlineFailOnce && window.__asked.length === 1) {
+              send({ type: "failed", error: { kind: setup.inlineFailOnce } });
+              return null;
             }
             for (const piece of setup.inline ?? ["Done."]) send({ type: "text", text: piece });
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
@@ -732,6 +743,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           `http://asset.localhost/${encodeURIComponent(path)}`,
         invoke: async (command: string, args: Args = {}, options?: Options) => {
           window.__commands.push({ command, args });
+          // A test can answer a command its own way, set before or after load.
+          const override = window.__overrides?.[command];
+          if (override) return override(args);
           if (handlers[command]) return handlers[command](args, options);
           if (command.startsWith("plugin:event|listen")) {
             const { event, handler } = args as unknown as { event: string; handler: number };

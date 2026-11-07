@@ -42,6 +42,12 @@ const MAX_RECENT_FILES_HISTORY = 25;
 /** The assistant panel's widths in px: as designed, and how far it drags. */
 export const ASSISTANT_WIDTH = { default: 400, min: 320, max: 640 };
 
+/**
+ * The least room the shard keeps beside the assistant: the inline Ask
+ * prompt's width plus the editor's gutters. Past it, the panel narrows.
+ */
+export const SHARD_MIN_WIDTH = 440 + 2 * 64;
+
 export interface RecentFileEntry {
   path: string;
   name: string;

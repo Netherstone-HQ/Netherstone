@@ -468,10 +468,19 @@ function Spinner() {
 }
 
 /** What a saved provider says next to its name. */
-function Saved({ children }: { children: React.ReactNode }) {
+function Saved({
+  children,
+  live = true,
+}: {
+  children: React.ReactNode;
+  /** Whether it's answering now: a stopped server has no green dot. */
+  live?: boolean;
+}) {
   return (
     <span className="inline-flex flex-wrap items-center">
-      <span className="mr-2 inline-block size-1.5 rounded-full bg-emerald-500" />
+      {live ? (
+        <span className="mr-2 inline-block size-1.5 rounded-full bg-emerald-500" />
+      ) : null}
       {children}
     </span>
   );
@@ -791,7 +800,7 @@ function LocalRow({
       <ProviderRow
         name={provider.name}
         description={
-          <Saved>
+          <Saved live={down.length < servers.length}>
             {servers.map((server, i) => (
               <span key={server.address} className="inline-flex items-center">
                 {i > 0 ? <Dot /> : null}

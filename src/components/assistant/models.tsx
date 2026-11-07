@@ -112,15 +112,17 @@ export function useModelLists() {
     (providers: AssistantProvider[]) => {
       for (const provider of providers) {
         if (provider.setup === "local") {
+          // Listed again each time: a server on this computer may have
+          // stopped or started since, and asking it is quick.
           for (const server of provider.servers) {
-            showModels(provider.id, server.address);
+            void loadModels(provider.id, server.address);
           }
         } else if (isSetUp(provider)) {
           showModels(provider.id);
         }
       }
     },
-    [showModels],
+    [loadModels, showModels],
   );
 
   /** Drops a removed provider's lists. */

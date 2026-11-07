@@ -71,6 +71,25 @@ describe("AiAssistantSettings", () => {
     expect(commands.every((c) => !c.includes("get_key"))).toBe(true);
   });
 
+  it("lists a provider's models once a session", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "assistant_status") return status();
+      if (command === "assistant_models") return [MODEL];
+      return undefined;
+    });
+    const listings = () =>
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "assistant_models")
+        .length;
+    render(<AiAssistantSettings />);
+    expect(await screen.findByText(/1 model/)).toBeTruthy();
+    const first = listings();
+    cleanup();
+
+    render(<AiAssistantSettings />);
+    expect(await screen.findByText(/1 model/)).toBeTruthy();
+    expect(listings()).toBe(first);
+  });
+
   it("checks a key before saving it and says when it's refused", async () => {
     vi.mocked(invoke).mockImplementation(async (command: string) => {
       if (command === "assistant_status") return status();

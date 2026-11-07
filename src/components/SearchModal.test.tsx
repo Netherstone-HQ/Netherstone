@@ -156,6 +156,8 @@ function assistantOn({ provider = true } = {}) {
     switch (command) {
       case "search_files":
         return [RESULT];
+      case "assistant_enabled":
+        return true;
       case "assistant_status":
         return {
           enabled: true,

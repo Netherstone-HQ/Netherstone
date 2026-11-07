@@ -601,6 +601,59 @@ async fn a_long_chat_is_summarized_and_carries_on() {
     assert!(sent.contains("Earlier: talk of trains.") && !sent.contains("Trains 0"));
 }
 
+/// Older turns, enough of them to summarize, then the question again.
+fn long_chat(turn: &Turn) {
+    let store = turn.store.lock().unwrap();
+    for i in 0..6 {
+        let answer = Message::Assistant {
+            text: format!("Trains {i} ").repeat(800),
+            calls: vec![],
+            reasoning: None,
+        };
+        store.add(&turn.chat, &answer, &[], None).unwrap();
+        store
+            .add(&turn.chat, &Message::user("And then?"), &[], None)
+            .unwrap();
+    }
+    store
+        .add(&turn.chat, &Message::user(QUESTION), &[], None)
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_context_too_small_for_the_instructions_and_tools_sends_nothing() {
+    let server = serve(Vec::new());
+    let mut turn = turn(
+        "engine-small-context",
+        server.target(Api::Ollama, None),
+        "llama3.2:3b",
+    );
+    // Ollama's smallest default.
+    turn.model.facts.context = Some(4_096);
+    assert_eq!(
+        answer(&turn, &Collect::default()).await.unwrap_err(),
+        ChatError::ContextTooSmall
+    );
+    assert!(server.requests().is_empty());
+}
+
+#[tokio::test]
+async fn no_summary_runs_when_the_instructions_and_tools_fill_the_budget() {
+    let server = serve(vec![Answer::recorded("ollama-2.ndjson")]);
+    let turn = turn(
+        "engine-no-futile-summary",
+        server.target(Api::Ollama, None),
+        "llama3.2:3b",
+    );
+    // A model that isn't loaded yet, so its context isn't known.
+    assert_eq!(turn.model.facts.context, None);
+    long_chat(&turn);
+    let sink = Collect::default();
+    answer(&turn, &sink).await.unwrap();
+    assert!(!sink.events().contains(&Event::Summarized));
+    assert_eq!(server.requests().len(), 1);
+}
+
 #[test]
 fn a_call_saved_without_its_result_is_answered_as_not_run() {
     let call = |id: &str| Call {

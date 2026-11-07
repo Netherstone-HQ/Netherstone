@@ -196,6 +196,12 @@ fn assistant_status() -> Result<assistant::Status, String> {
     assistant::status()
 }
 
+/// Whether the assistant is on, with nothing else read.
+#[tauri::command(async)]
+fn assistant_enabled() -> Result<bool, String> {
+    assistant::enabled()
+}
+
 #[tauri::command(async)]
 fn assistant_set_enabled(enabled: bool) -> Result<(), String> {
     assistant::set_enabled(enabled)
@@ -2206,6 +2212,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             splash::show_main_window,
             assistant_status,
+            assistant_enabled,
             assistant_set_enabled,
             assistant_set_send_files,
             assistant_set_model,

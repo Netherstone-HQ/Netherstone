@@ -223,6 +223,9 @@ pub enum ChatError {
     TimedOut,
     /// The chat is longer than the model reads.
     TooLong,
+    /// The model's context can't hold the assistant's instructions and
+    /// tools with room for an answer.
+    ContextTooSmall,
     /// Anything else the provider answered.
     Failed,
     Stopped,
@@ -409,7 +412,7 @@ async fn stream_genai(
     stop: &StopToken,
 ) -> Result<Reply, Failure> {
     let failed = |error| Failure::new(error, false);
-    let http = models::http_client(CONNECT_TIMEOUT, None).map_err(|e| failed(e.into()))?;
+    let http = models::http_client(CONNECT_TIMEOUT).map_err(|e| failed(e.into()))?;
     let client = genai::Client::builder()
         .with_reqwest(http)
         .build()

@@ -9,6 +9,7 @@ use super::providers::Api;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ProviderConfig};
 use serde::Serialize;
+use std::sync::Mutex;
 use std::time::Duration;
 
 /// Where to send a request, and with what key.
@@ -53,23 +54,25 @@ pub enum ProviderError {
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-/// The client every provider request goes through. `total` caps the whole
-/// request; a streamed chat leaves it out and times itself.
-pub(super) fn http_client(
-    connect: Duration,
-    total: Option<Duration>,
-) -> Result<reqwest::Client, ProviderError> {
-    let builder = reqwest::Client::builder()
+/// The client every provider request goes through, one for each wait to
+/// connect, kept for the session so requests reuse their connections. It
+/// has no cap on a whole request: each caller sets its own, and a streamed
+/// chat times itself.
+pub(super) fn http_client(connect: Duration) -> Result<reqwest::Client, ProviderError> {
+    static CLIENTS: Mutex<Vec<(Duration, reqwest::Client)>> = Mutex::new(Vec::new());
+    let mut clients = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, client)) = clients.iter().find(|(wait, _)| *wait == connect) {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .user_agent(concat!("Netherstone/", env!("CARGO_PKG_VERSION")))
         // A redirect could carry the key's header to another host.
         .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(connect);
-    match total {
-        Some(total) => builder.timeout(total),
-        None => builder,
-    }
-    .build()
-    .map_err(|_| ProviderError::Failed)
+        .connect_timeout(connect)
+        .build()
+        .map_err(|_| ProviderError::Failed)?;
+    clients.push((connect, client.clone()));
+    Ok(client)
 }
 
 pub(super) fn adapter(api: Api) -> AdapterKind {
@@ -93,7 +96,13 @@ pub async fn list_within(
     connect: Duration,
     total: Duration,
 ) -> Result<Vec<Model>, ProviderError> {
-    let http = http_client(connect, Some(total))?;
+    tokio::time::timeout(total, list_models(target, connect))
+        .await
+        .map_err(|_| ProviderError::Unreachable)?
+}
+
+async fn list_models(target: &Target, connect: Duration) -> Result<Vec<Model>, ProviderError> {
+    let http = http_client(connect)?;
     // OpenRouter lists its models to anyone, so its key is checked apart.
     if target.api == Api::OpenRouter
         && let Some(key) = &target.key

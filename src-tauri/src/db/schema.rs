@@ -240,6 +240,10 @@ CREATE TABLE IF NOT EXISTS file_languages (
     PRIMARY KEY (file_id, language),
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
+
+-- So a search finds the languages a vault was stemmed in without reading
+-- every shard's.
+CREATE INDEX IF NOT EXISTS idx_file_languages_language ON file_languages(language, file_id);
 "#;
 
 fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, rusqlite::Error> {

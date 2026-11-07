@@ -16,9 +16,10 @@ import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
 import { useVaultStore } from "@/store/vault";
 
-import { AnswerText, CiteNumber, citationsIn } from "./AnswerText";
+import { AnswerText, CiteNumber, useParsedAnswer } from "./AnswerText";
 import { shardName } from "./Composer";
-import { type SetupState, endingText, waitingText } from "./setup";
+import { EndingNote } from "./EndingNote";
+import { type SetupState, waitingText } from "./setup";
 
 /** A group's name in the search list, like Recent. */
 export function GroupLabel({ children }: { children: string }) {
@@ -80,14 +81,13 @@ export function SearchAnswer({
         .filter((m) => m.role === "assistant" && m.text)
         .map((m) => m.text)
         .join("\n\n");
-  const cited = citationsIn(text);
+  const answer = useParsedAnswer(text);
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md bg-accent p-3 text-ui">
       {text ? (
         <AnswerText
-          text={text}
-          cited={cited}
+          answer={answer}
           onOpenShard={onOpenShard}
           onOpenLink={openLink}
         />
@@ -98,21 +98,11 @@ export function SearchAnswer({
           {waitingText(answering)}
         </p>
       ) : null}
-      {ending ? (
-        <p
-          role={ending.kind === "error" ? "alert" : undefined}
-          className={cn(
-            "text-ui-sm",
-            ending.kind === "error" ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {endingText(ending)}
-        </p>
-      ) : null}
-      {cited.length > 0 || chat ? (
+      {ending ? <EndingNote ending={ending} onOpenLink={openLink} /> : null}
+      {answer.cited.length > 0 || chat ? (
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
-            {cited.map((citation, index) => (
+            {answer.cited.map((citation, index) => (
               <button
                 key={citation.path}
                 type="button"

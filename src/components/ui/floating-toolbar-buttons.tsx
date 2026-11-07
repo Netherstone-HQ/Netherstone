@@ -11,7 +11,7 @@ import {
 import { KEYS } from 'platejs';
 import { useEditorReadOnly, useEditorRef } from 'platejs/react';
 
-import { openInlineAsk } from '@/lib/inline-ask';
+import { hasInlineAsk, openInlineAsk } from '@/lib/inline-ask';
 import { useAssistantStore } from '@/store/assistant';
 
 import { LinkToolbarButton } from './link-toolbar-button';
@@ -22,7 +22,8 @@ import { TurnIntoToolbarButton } from './turn-into-toolbar-button';
 export function FloatingToolbarButtons() {
   const readOnly = useEditorReadOnly();
   const editor = useEditorRef();
-  const assistant = useAssistantStore((s) => s.enabled === true);
+  const assistant =
+    useAssistantStore((s) => s.enabled === true) && hasInlineAsk(editor);
 
   return (
     <>

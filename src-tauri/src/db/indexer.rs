@@ -1,5 +1,5 @@
 use super::queries::locate_tags;
-use super::words::shard_words;
+use super::words::{ShardLanguages, ShardWords, shard_languages, shard_words};
 use crate::markdown_text::{TextBlock, text_blocks};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
@@ -157,40 +157,111 @@ fn read_shard(file_path: &Path) -> Result<ShardFile, String> {
     })
 }
 
+fn shard_name(file_path: &Path) -> &str {
+    file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+}
+
+/// A shard's search words, or its languages while its words wait on the
+/// vault's language.
+enum Words {
+    Ready(ShardWords),
+    NeedVaultLanguage(ShardLanguages),
+}
+
+/// A shard read from disk with the work that needs nothing from the index
+/// done, so the indexer can read many at once.
+struct ReadShard {
+    file: ShardFile,
+    blocks: Vec<TextBlock>,
+    words: Words,
+}
+
+/// Reads the shard at `file_path` of the vault at `vault_path`, or None for
+/// a shard in another vault inside this one, which is that vault's.
+fn read_for_index(vault_path: &Path, file_path: &Path) -> Result<Option<ReadShard>, String> {
+    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
+        return Ok(None);
+    }
+    let file = read_shard(file_path)?;
+    let blocks = text_blocks(&file.content);
+    let languages = shard_languages(&blocks);
+    let words = if languages.needs_vault_language() {
+        Words::NeedVaultLanguage(languages)
+    } else {
+        Words::Ready(shard_words(
+            shard_name(file_path),
+            &blocks,
+            &languages,
+            None,
+        ))
+    };
+    Ok(Some(ReadShard {
+        file,
+        blocks,
+        words,
+    }))
+}
+
 /// Indexes one shard of the vault at `vault_path`: its file record, links,
 /// tags, drawing embeds and search text.
 ///
 /// A shard in another vault inside this one is that vault's, so it's left out.
 pub fn index_file(conn: &Connection, vault_path: &Path, file_path: &Path) -> Result<(), String> {
-    if crate::sync::state::crosses_into_another_vault(vault_path, file_path) {
+    let Some(shard) = read_for_index(vault_path, file_path)? else {
         return Ok(());
-    }
-    store_shard(conn, vault_path, file_path, read_shard(file_path)?)
+    };
+    store_shard(conn, vault_path, file_path, shard, |file_id| {
+        vault_language(conn, file_id)
+    })
+    .map(|_| ())
 }
 
+/// The language most of the other shards in the vault of the shard
+/// `file_id` were stemmed in, ties going to the first code.
+fn vault_language(conn: &Connection, file_id: i64) -> rusqlite::Result<Option<whatlang::Lang>> {
+    let code: Option<String> = conn
+        .prepare_cached(
+            "SELECT l.language FROM file_languages l JOIN files f ON f.id = l.file_id
+             WHERE f.vault_path = (SELECT vault_path FROM files WHERE id = ?1) AND f.id != ?1
+             GROUP BY l.language ORDER BY COUNT(*) DESC, l.language LIMIT 1",
+        )?
+        .query_row(params![file_id], |row| row.get(0))
+        .optional()?;
+    Ok(code.and_then(whatlang::Lang::from_code))
+}
+
+/// Stores a read shard, asking `vault_language` for its file id when its
+/// words need the vault's language. Gives the languages its words were
+/// stemmed in.
 fn store_shard(
     conn: &Connection,
     vault_path: &Path,
     file_path: &Path,
-    shard: ShardFile,
-) -> Result<(), String> {
+    shard: ReadShard,
+    vault_language: impl FnOnce(i64) -> rusqlite::Result<Option<whatlang::Lang>>,
+) -> Result<Vec<&'static str>, String> {
     let path_str = file_path
         .to_str()
         .ok_or_else(|| "Invalid file path".to_string())?;
-    let ShardFile {
-        last_modified,
-        created_at,
-        file_size,
-        content,
-        content_hash,
+    let ReadShard {
+        file:
+            ShardFile {
+                last_modified,
+                created_at,
+                file_size,
+                content,
+                content_hash,
+            },
+        blocks,
+        words,
     } = shard;
 
     let parsed = parse_markdown(&content);
 
-    let file_name = file_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown");
+    let file_name = shard_name(file_path);
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -269,7 +340,6 @@ fn store_shard(
     }
 
     // Insert tags (deduplicated), with the text around each one
-    let blocks = text_blocks(&content);
     let unique_tags: HashSet<String> = parsed.tags.into_iter().collect();
     insert_tags(conn, file_id, &blocks, unique_tags.into_iter().collect())
         .map_err(|e| format!("Failed to insert tag: {}", e))?;
@@ -287,30 +357,28 @@ fn store_shard(
 
     super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
 
-    insert_search(conn, file_id, path_str, file_name, &content, &blocks)
+    let words = match words {
+        Words::Ready(words) => words,
+        Words::NeedVaultLanguage(languages) => {
+            let vault_language = vault_language(file_id)
+                .map_err(|e| format!("Failed to read the vault's language: {}", e))?;
+            shard_words(file_name, &blocks, &languages, vault_language)
+        }
+    };
+    insert_search(conn, file_id, path_str, file_name, &content, words)
         .map_err(|e| format!("Failed to insert into search index: {}", e))
 }
 
 /// Replaces the search rows of the shard `file_id`: its text with its word
-/// stems and character pairs, and its languages.
+/// stems and character pairs, and its languages, which it gives back.
 fn insert_search(
     conn: &Connection,
     file_id: i64,
     path: &str,
     name: &str,
     content: &str,
-    blocks: &[TextBlock],
-) -> rusqlite::Result<()> {
-    let vault_language: Option<String> = conn
-        .prepare_cached(
-            "SELECT l.language FROM file_languages l JOIN files f ON f.id = l.file_id
-             WHERE f.vault_path = (SELECT vault_path FROM files WHERE id = ?1) AND f.id != ?1
-             GROUP BY l.language ORDER BY COUNT(*) DESC, l.language LIMIT 1",
-        )?
-        .query_row(params![file_id], |row| row.get(0))
-        .optional()?;
-    let vault_language = vault_language.and_then(whatlang::Lang::from_code);
-    let words = shard_words(name, blocks, vault_language);
+    words: ShardWords,
+) -> rusqlite::Result<Vec<&'static str>> {
     conn.execute("DELETE FROM fts_search WHERE rowid = ?1", params![file_id])?;
     conn.execute(
         "DELETE FROM file_languages WHERE file_id = ?1",
@@ -322,10 +390,62 @@ fn insert_search(
     )?;
     let mut language =
         conn.prepare_cached("INSERT INTO file_languages (file_id, language) VALUES (?1, ?2)")?;
-    for code in words.languages {
+    for code in &words.languages {
         language.execute(params![file_id, code])?;
     }
-    Ok(())
+    Ok(words.languages)
+}
+
+/// How many of a vault's shards were stemmed in each language, kept up to
+/// date through an indexing pass, so a shard's vault language is a lookup
+/// instead of a query over the whole vault.
+struct LanguageCounts(HashMap<String, usize>);
+
+impl LanguageCounts {
+    fn read(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Self> {
+        let mut stmt = conn.prepare(
+            "SELECT l.language, COUNT(*) FROM file_languages l JOIN files f ON f.id = l.file_id
+             WHERE f.vault_path = ?1 GROUP BY l.language",
+        )?;
+        let counts = stmt
+            .query_map(params![super::attachments::vault_key(vault_path)], |row| {
+                Ok((row.get(0)?, row.get::<_, i64>(1)? as usize))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(Self(counts))
+    }
+
+    /// The languages the shard `file_id` was stemmed in.
+    fn of_shard(conn: &Connection, file_id: i64) -> rusqlite::Result<Vec<String>> {
+        let mut stmt =
+            conn.prepare_cached("SELECT language FROM file_languages WHERE file_id = ?1")?;
+        stmt.query_map(params![file_id], |row| row.get(0))?
+            .collect()
+    }
+
+    /// The vault language for a shard stemmed in `own`, as [`vault_language`]
+    /// picks it: the most common language of the other shards, ties going
+    /// to the first code.
+    fn top_without(&self, own: &[String]) -> Option<whatlang::Lang> {
+        self.0
+            .iter()
+            .map(|(code, count)| (code, count - own.contains(code) as usize))
+            .filter(|(_, count)| *count > 0)
+            .max_by(|(a, x), (b, y)| x.cmp(y).then_with(|| b.cmp(a)))
+            .and_then(|(code, _)| whatlang::Lang::from_code(code))
+    }
+
+    /// Counts a shard stemmed in `old` as stemmed in `new` now.
+    fn replace(&mut self, old: &[String], new: &[&str]) {
+        for code in old {
+            if let Some(count) = self.0.get_mut(code) {
+                *count -= 1;
+            }
+        }
+        for code in new {
+            *self.0.entry(code.to_string()).or_default() += 1;
+        }
+    }
 }
 
 /// Stores a file's tags in the order they first appear, each with the text
@@ -442,26 +562,67 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
     let mut shards =
         indexed_shards(conn, vault_path).map_err(|e| format!("Failed to read the index: {}", e))?;
     let (mut indexed, mut skipped, mut errors) = (0, 0, 0);
+    let mut changed: Vec<(&str, Option<i64>)> = Vec::new();
     for (path_str, modified) in &on_disk {
         let path = Path::new(path_str);
-        let known = shards
-            .remove(path_str)
-            .map(|(_, last_modified)| last_modified);
+        let known = shards.remove(path_str);
         match modified.map_or_else(|| modified_secs(path), Ok) {
-            Ok(modified) if known.is_some_and(|known| known >= modified) => skipped += 1,
-            Ok(_) => match index_file(conn, vault_path, path) {
-                Ok(()) => indexed += 1,
-                Err(e) => {
-                    eprintln!("[Netherstone] Failed to index {}: {}", path_str, e);
-                    errors += 1;
-                }
-            },
+            Ok(modified) if known.is_some_and(|(_, known)| known >= modified) => skipped += 1,
+            Ok(_) => changed.push((path_str, known.map(|(id, _)| id))),
             Err(e) => {
                 eprintln!("[Netherstone] Failed to check {}: {}", path_str, e);
                 errors += 1;
             }
         }
     }
+
+    let mut counts = LanguageCounts::read(conn, vault_path)
+        .map_err(|e| format!("Failed to read the index: {}", e))?;
+    let mut store = |path_str: &str, id: Option<i64>, shard: Result<Option<ReadShard>, String>| {
+        let stored = shard.and_then(|shard| {
+            let Some(shard) = shard else {
+                return Ok(());
+            };
+            let old = match id {
+                Some(id) => LanguageCounts::of_shard(conn, id)
+                    .map_err(|e| format!("Failed to read the index: {}", e))?,
+                None => Vec::new(),
+            };
+            let new = store_shard(conn, vault_path, Path::new(path_str), shard, |_| {
+                Ok(counts.top_without(&old))
+            })?;
+            counts.replace(&old, &new);
+            Ok(())
+        });
+        match stored {
+            Ok(()) => indexed += 1,
+            Err(e) => {
+                eprintln!("[Netherstone] Failed to index {}: {}", path_str, e);
+                errors += 1;
+                // A shard stored halfway leaves the counts unknown.
+                if let Ok(read) = LanguageCounts::read(conn, vault_path) {
+                    counts = read;
+                }
+            }
+        }
+    };
+    // Shards are read and their languages told on one thread each, a batch
+    // at a time, while the batch before is written in order on this one.
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    std::thread::scope(|scope| {
+        let read = |batch| read_batch(scope, vault_path, batch);
+        let mut batches = changed.chunks(threads);
+        let mut next = batches.next().map(|batch| (batch, read(batch)));
+        while let Some((batch, reading)) = next.take() {
+            next = batches.next().map(|batch| (batch, read(batch)));
+            for (&(path_str, id), handle) in batch.iter().zip(reading) {
+                let shard = handle
+                    .join()
+                    .unwrap_or_else(|_| Err("Failed to read the shard".to_string()));
+                store(path_str, id, shard);
+            }
+        }
+    });
 
     // What's left is this vault's shards that are gone from disk.
     let gone: Vec<i64> = shards.into_values().map(|(id, _)| id).collect();
@@ -475,6 +636,18 @@ pub fn index_vault(conn: &Connection, vault_path: &Path) -> Result<VaultIndexed,
         skipped,
         errors,
     })
+}
+
+/// Starts reading each shard of `batch` on a thread of its own.
+fn read_batch<'scope, 'env>(
+    scope: &'scope std::thread::Scope<'scope, 'env>,
+    vault_path: &'env Path,
+    batch: &[(&'env str, Option<i64>)],
+) -> Vec<std::thread::ScopedJoinHandle<'scope, Result<Option<ReadShard>, String>>> {
+    batch
+        .iter()
+        .map(|&(path_str, _)| scope.spawn(move || read_for_index(vault_path, Path::new(path_str))))
+        .collect()
 }
 
 /// Forgets the indexed shards at `path` or inside it, with their search text,
@@ -553,6 +726,67 @@ mod tests {
             shards_showing(&conn, "d/F & co.excalidraw"),
             Vec::<String>::new()
         );
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    /// Each shard's stems and languages, by name.
+    fn words_by_name(conn: &Connection) -> Vec<(String, String, String)> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT f.name, s.stems, COALESCE((SELECT group_concat(language, ' ')
+                 FROM (SELECT language FROM file_languages WHERE file_id = f.id ORDER BY language)), '')
+                 FROM files f JOIN fts_search s ON s.rowid = f.id ORDER BY f.name",
+            )
+            .unwrap();
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn a_vault_pass_stores_the_words_one_save_at_a_time_would() {
+        let vault = crate::sync::state::tests::temp_dir("indexer-vault-words");
+        let english = "We talked about the gardens and the planting season ahead of us \
+                       while the children were running along the paths.";
+        let spanish = "Los jardineros estaban plantando flores en los caminos, y hablamos \
+                       de la temporada que viene mientras los niños jugaban.";
+        for (name, text) in [
+            ("a.md", english),
+            ("b.md", spanish),
+            ("c.md", english),
+            // Too short to tell, so these take the vault's language.
+            ("d.md", "Pack the bags."),
+            ("e.md", "Flowers"),
+        ] {
+            std::fs::write(vault.join(name), text).unwrap();
+        }
+        let pass = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&pass).unwrap();
+        let one_by_one = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_schema(&one_by_one).unwrap();
+
+        let paths = index_vault(&pass, &vault).unwrap().paths;
+        for path in &paths {
+            index_file(&one_by_one, &vault, Path::new(path)).unwrap();
+        }
+        let words = words_by_name(&pass);
+        assert_eq!(words, words_by_name(&one_by_one));
+        let short = words.iter().find(|(name, ..)| name == "d.md").unwrap();
+        assert_eq!((short.1.as_str(), short.2.as_str()), ("bag", "eng"));
+
+        // Reindexed shards don't count their own old languages.
+        for name in ["a.md", "c.md"] {
+            std::fs::write(vault.join(name), spanish).unwrap();
+        }
+        std::fs::write(vault.join("d.md"), "Packing bags.").unwrap();
+        pass.execute_batch("UPDATE files SET last_modified = 0")
+            .unwrap();
+        index_vault(&pass, &vault).unwrap();
+        for path in &paths {
+            index_file(&one_by_one, &vault, Path::new(path)).unwrap();
+        }
+        assert_eq!(words_by_name(&pass), words_by_name(&one_by_one));
         std::fs::remove_dir_all(&vault).unwrap();
     }
 

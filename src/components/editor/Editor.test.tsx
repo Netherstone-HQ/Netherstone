@@ -17,10 +17,12 @@ import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { readMarkdownFile } from "@/lib/commands";
+import { hasInlineAsk } from "@/lib/inline-ask";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
+import { useAssistantStore } from "@/store/assistant";
 import { useSettingsStore } from "@/store/settings";
 import { Editor } from "./Editor";
 
@@ -187,6 +189,19 @@ describe("Editor", () => {
       expect(useEditorStore.getState().openingFilePath).toBeNull();
       expect(screen.getByText("No shard open")).toBeTruthy();
     });
+  });
+
+  it("leaves inline Ask out of a shard opened with the assistant off", async () => {
+    useAssistantStore.setState({ enabled: false });
+    const off = await openNote(NOTE);
+    expect(hasInlineAsk(off)).toBe(false);
+    cleanup();
+    act(() => useEditorStore.getState().closeFile());
+
+    useAssistantStore.setState({ enabled: true });
+    const on = await openNote(NOTE);
+    expect(hasInlineAsk(on)).toBe(true);
+    useAssistantStore.setState({ enabled: null });
   });
 
   it("loads a note and shows its content", async () => {

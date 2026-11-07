@@ -10,8 +10,10 @@ use crate::db::attachments::{extract_html_attr_value, normalize_attachment_path}
 use crate::markdown_text::markdown_options;
 use base64::Engine;
 use pulldown_cmark::{Event, Parser, Tag};
-use std::path::Path;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
@@ -219,12 +221,41 @@ fn estimate_tokens(path: &Path, kind: Kind, bytes: u64) -> u64 {
             (width * scale * height * scale / PIXELS_PER_TOKEN).ceil() as u64
         }
         Kind::Pdf => {
-            let pages = std::fs::read(path)
-                .map_or(1, |data| count_pages(&data))
-                .max(1);
+            let pages = pdf_pages(path).max(1);
             (pages as u64 * TOKENS_PER_PAGE).max(bytes.div_ceil(4).min(TOKENS_PER_PAGE))
         }
     }
+}
+
+/// A file as it is now on disk: its size and when it last changed.
+#[derive(Clone, Copy, PartialEq)]
+struct Version(u64, Option<SystemTime>);
+
+impl Version {
+    fn of(metadata: &std::fs::Metadata) -> Self {
+        Self(metadata.len(), metadata.modified().ok())
+    }
+}
+
+/// The pages of the PDF at `path`, counted once for each version of it,
+/// since a shard showing it can be read on every step of an answer.
+fn pdf_pages(path: &Path) -> usize {
+    static COUNTED: Mutex<Vec<(PathBuf, Version, usize)>> = Mutex::new(Vec::new());
+    let Ok(version) = std::fs::metadata(path).map(|m| Version::of(&m)) else {
+        return 0;
+    };
+    let lock = || COUNTED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, _, pages)) = lock()
+        .iter()
+        .find(|(counted, at, _)| counted == path && *at == version)
+    {
+        return *pages;
+    }
+    let pages = std::fs::read(path).map_or(0, |data| count_pages(&data));
+    let mut counted = lock();
+    counted.retain(|(counted, ..)| counted != path);
+    counted.push((path.to_path_buf(), version, pages));
+    pages
 }
 
 /// The pages a PDF names as `/Type /Page`, which compressed ones may hide.
@@ -241,11 +272,43 @@ fn count_pages(data: &[u8]) -> usize {
     pages
 }
 
+/// The files read and encoded for one answer, kept while they're unchanged
+/// so each step of it doesn't read and encode them again.
+#[derive(Default)]
+pub struct Encoded(HashMap<PathBuf, (Version, Arc<str>)>);
+
+impl Encoded {
+    /// The file at `path` in base64, read again only when it changed.
+    fn get(&mut self, path: &Path, version: Version) -> Option<Arc<str>> {
+        if let Some((at, data)) = self.0.get(path)
+            && *at == version
+        {
+            return Some(data.clone());
+        }
+        let bytes = std::fs::read(path).ok()?;
+        // Changed since its size was checked: left out this time.
+        if bytes.len() as u64 != version.0 {
+            return None;
+        }
+        let data: Arc<str> = Arc::from(base64::engine::general_purpose::STANDARD.encode(&bytes));
+        self.0.insert(path.to_path_buf(), (version, data.clone()));
+        Some(data)
+    }
+}
+
 /// Reads the data of the files in `messages` that the model takes, newest
 /// first, while they fit the provider's limits beside `text_bytes` of text.
 /// Files read for an earlier model that this one doesn't take, older files
 /// that don't fit, and files gone from the vault are left out of the request.
-pub fn load(root: &Path, messages: &mut [Message], sending: &Sending, text_bytes: u64) {
+/// A file's size is checked before it's read, and `encoded` keeps what was
+/// read for the next step.
+pub fn load(
+    root: &Path,
+    messages: &mut [Message],
+    sending: &Sending,
+    text_bytes: u64,
+    encoded: &mut Encoded,
+) {
     let limits = &sending.limits;
     let mut request_left = limits
         .request_bytes
@@ -265,25 +328,29 @@ pub fn load(root: &Path, messages: &mut [Message], sending: &Sending, text_bytes
             if !sending.on || !takes {
                 continue;
             }
-            let Some(Ok(bytes)) = inside(root, &file.path).map(std::fs::read) else {
+            let Some(full) = inside(root, &file.path) else {
                 continue;
             };
-            let encoded = (bytes.len() as u64).div_ceil(3) * 4;
+            let Ok(version) = std::fs::metadata(&full).map(|m| Version::of(&m)) else {
+                continue;
+            };
+            let size = version.0;
+            let encoded_size = size.div_ceil(3) * 4;
             let pdf = kind == Kind::Pdf;
-            if sending
-                .largest(kind)
-                .is_some_and(|largest| bytes.len() as u64 > largest)
-                || request_left.is_some_and(|left| encoded > left)
-                || (pdf && pdfs_left.is_some_and(|left| bytes.len() as u64 > left))
+            if sending.largest(kind).is_some_and(|largest| size > largest)
+                || request_left.is_some_and(|left| encoded_size > left)
+                || (pdf && pdfs_left.is_some_and(|left| size > left))
             {
                 continue;
             }
-            request_left = request_left.map(|left| left - encoded);
+            let Some(data) = encoded.get(&full, version) else {
+                continue;
+            };
+            request_left = request_left.map(|left| left - encoded_size);
             if pdf {
-                pdfs_left = pdfs_left.map(|left| left - bytes.len() as u64);
+                pdfs_left = pdfs_left.map(|left| left - size);
             }
-            let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            file.data = Some(Arc::from(data));
+            file.data = Some(data);
         }
     }
 }
@@ -461,6 +528,7 @@ mod tests {
                 &mut messages,
                 &Sending::new(on, Api::Anthropic, &facts),
                 10,
+                &mut Encoded::default(),
             );
             messages[0]
                 .files()
@@ -519,7 +587,7 @@ mod tests {
             },
             ..Sending::new(true, Api::Anthropic, &facts)
         };
-        load(&root, &mut messages, &sending, 10);
+        load(&root, &mut messages, &sending, 10, &mut Encoded::default());
         let data = |message: &Message| match message {
             Message::Tool { files, .. } => {
                 files.iter().map(|f| f.data.is_some()).collect::<Vec<_>>()
@@ -532,5 +600,24 @@ mod tests {
         without_data(&mut messages);
         assert!(!any_sent(&messages));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_file_is_read_and_encoded_once_while_it_stays_the_same() {
+        let dir = crate::sync::state::tests::temp_dir("files-encoded");
+        let path = dir.join("map.png");
+        std::fs::write(&path, b"one").unwrap();
+        let version = || Version::of(&std::fs::metadata(&path).unwrap());
+        let mut encoded = Encoded::default();
+        let first = encoded.get(&path, version()).unwrap();
+        assert!(Arc::ptr_eq(&first, &encoded.get(&path, version()).unwrap()));
+
+        std::fs::write(&path, b"two!").unwrap();
+        assert_eq!(&*encoded.get(&path, version()).unwrap(), "dHdvIQ==");
+        // Changed after its size was checked: left out.
+        let checked = version();
+        std::fs::write(&path, b"three").unwrap();
+        assert_eq!(encoded.get(&path, Version(checked.0, None)), None);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

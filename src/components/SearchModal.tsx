@@ -165,7 +165,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const searchIdRef = useRef(0);
 
   const assistantOn = useAssistantStore((s) => s.enabled === true);
-  const answering = useAssistantStore((s) => s.answering);
+  const answering = useAssistantStore((s) => s.answering !== null);
   const openSettings = useUIStore((s) => s.openSettings);
   const { setup, reload } = useSetup(open && assistantOn);
   const setup_ = setupState(setup);
@@ -291,7 +291,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const showAnswer =
     assistantOn &&
     asked !== null &&
-    (asked === query.trim() || (!waiting && answering !== null));
+    (asked === query.trim() || (!waiting && answering));
   const showAssistant = assistantOn && (hasQuery || showAnswer);
   const canAsk = showAssistant && !showAnswer && hasQuery;
   const historyRows: Row[] =

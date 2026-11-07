@@ -128,6 +128,19 @@ fn saved_key(provider: &Provider) -> Result<Option<(String, Storage)>, String> {
     }
 }
 
+/// Where the provider's key is kept, without reading it.
+fn key_kept(provider: &Provider) -> Result<Option<Storage>, String> {
+    match provider.credential {
+        Some(credential) => credentials::kept(credential),
+        None => Ok(None),
+    }
+}
+
+/// Whether the assistant is on, read from its setting alone.
+pub fn enabled() -> Result<bool, String> {
+    db::settings::assistant_enabled(&db::open_connection()?).map_err(|e| e.to_string())
+}
+
 pub fn status() -> Result<Status, String> {
     let conn = db::open_connection()?;
     let enabled = db::settings::assistant_enabled(&conn).map_err(|e| e.to_string())?;
@@ -145,7 +158,7 @@ pub fn status() -> Result<Status, String> {
                 name: provider.name,
                 setup: provider.setup,
                 key_page: provider.key_page,
-                key: saved_key(provider)?.map(|(_, storage)| storage),
+                key: key_kept(provider)?,
                 limits: api.map_or(Limits::UNKNOWN, Limits::of),
                 servers: match provider.setup {
                     Setup::Local => servers.clone(),
@@ -213,6 +226,15 @@ fn target(provider: &Provider, server: Option<&str>) -> Result<Target, ProviderE
     let key = saved_key(provider)
         .map_err(storage_error)?
         .map(|(key, _)| key);
+    target_with(provider, server, key)
+}
+
+/// [`target`] with `key` in place of the saved key.
+fn target_with(
+    provider: &Provider,
+    server: Option<&str>,
+    key: Option<String>,
+) -> Result<Target, ProviderError> {
     match provider.setup {
         Setup::Key => Ok(Target {
             api: provider.api.ok_or(ProviderError::Failed)?,
@@ -454,15 +476,32 @@ fn store() -> Result<SharedStore, ChatError> {
 
 /// The picked model, ready to call.
 fn picked_model() -> Result<engine::Model, ChatError> {
+    picked_model_with(true)
+}
+
+/// The picked model, with its key when `with_key`, or else only checked to
+/// be saved, so showing the model never reads the keyring.
+fn picked_model_with(with_key: bool) -> Result<engine::Model, ChatError> {
     let choice: ModelChoice = read(MODEL)
         .map_err(|_| ChatError::Storage)?
         .ok_or(ChatError::NoModel)?;
     let provider = providers::find(&choice.provider).map_err(|_| ChatError::NoModel)?;
-    let target = target(provider, choice.server.as_deref()).map_err(|error| match error {
+    let server = choice.server.as_deref();
+    let target = match with_key {
+        true => target(provider, server),
+        false => target_with(provider, server, None),
+    }
+    .map_err(|error| match error {
         ProviderError::Storage => ChatError::Storage,
         _ => ChatError::NoModel,
     })?;
-    if provider.setup == Setup::Key && target.key.is_none() {
+    let has_key = match with_key {
+        true => target.key.is_some(),
+        false => key_kept(provider)
+            .map_err(|_| ChatError::Storage)?
+            .is_some(),
+    };
+    if provider.setup == Setup::Key && !has_key {
         return Err(ChatError::NoModel);
     }
     let facts = catalog::facts(target.api, &choice.model);
@@ -493,7 +532,7 @@ pub async fn picked() -> Result<Option<Picked>, ChatError> {
         let Some(choice) = read::<ModelChoice>(MODEL).map_err(|_| ChatError::Storage)? else {
             return Ok(None);
         };
-        match picked_model() {
+        match picked_model_with(false) {
             Ok(model) => Ok(Some((choice, model))),
             Err(ChatError::NoModel) => Ok(None),
             Err(error) => Err(error),
@@ -585,10 +624,20 @@ pub async fn send(
     // A local model says itself whether it sees images, and Ollama what
     // context it's loaded with, so long chats are summarized in time.
     if model.target.api == Api::Ollama {
-        if send_files {
-            model.facts.images = local::sees_images(&model.target, &model.id).await;
+        let (target, id) = (&model.target, &model.id);
+        let (images, context) = tokio::join!(
+            async {
+                match send_files {
+                    true => Some(local::sees_images(target, id).await),
+                    false => None,
+                }
+            },
+            local::loaded_context(target, id),
+        );
+        if let Some(images) = images {
+            model.facts.images = images;
         }
-        model.facts.context = local::loaded_context(&model.target, &model.id).await;
+        model.facts.context = context;
     }
 
     let stop = StopToken::default();

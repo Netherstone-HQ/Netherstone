@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BrainIcon,
   CheckIcon,
@@ -61,15 +61,15 @@ import {
   AnswerText,
   type Citation,
   CiteNumber,
-  citationsIn,
+  useParsedAnswer,
   withoutCitations,
 } from "./AnswerText";
 import { ChangeContent } from "./ChangeContent";
 import { ChatsMenu } from "./ChatsMenu";
+import { EndingNote } from "./EndingNote";
 import { ModelButton } from "./ModelButton";
 import { Composer, shardName } from "./Composer";
 import {
-  endingText,
   setupState,
   useSetup,
   waitingText,
@@ -406,7 +406,7 @@ function Sources({ cited, read }: { cited: Citation[]; read: string[] }) {
   );
 }
 
-function Answer({
+const Answer = memo(function Answer({
   message,
   changes,
   memories,
@@ -420,7 +420,7 @@ function Answer({
   /** Whether a shard is open to add the answer to. */
   canAdd: boolean;
 }) {
-  const cited = citationsIn(message.text);
+  const answer = useParsedAnswer(message.text);
   const cards = changes.length + memories.length;
   if (!message.text && !message.reasoning && cards === 0) return null;
   return (
@@ -428,8 +428,7 @@ function Answer({
       {message.reasoning ? <Thinking text={message.reasoning} /> : null}
       {message.text ? (
         <AnswerText
-          text={message.text}
-          cited={cited}
+          answer={answer}
           onOpenShard={openShard}
           onOpenLink={openLink}
         />
@@ -440,7 +439,7 @@ function Answer({
       {memories.map((memory) => (
         <MemoryCard key={memory.id} memory={memory} />
       ))}
-      <Sources cited={cited} read={message.sources ?? []} />
+      <Sources cited={answer.cited} read={message.sources ?? []} />
       {message.text && cards === 0 ? (
         <div className="-ml-1.5 flex items-center gap-0.5">
           <CopyButton text={message.text} />
@@ -449,7 +448,7 @@ function Answer({
       ) : null}
     </div>
   );
-}
+});
 
 /**
  * Each message, with the changes and memory items an answer offered under
@@ -482,16 +481,20 @@ function UserMessage({ message }: { message: ShownMessage }) {
   );
 }
 
-function Streaming() {
+/**
+ * The answer as it comes in. The only part of the chat that changes while
+ * it streams, so it alone re-renders, and it keeps itself in view.
+ */
+function Streaming({ onGrow }: { onGrow: () => void }) {
   const answering = useAssistantStore((s) => s.answering);
+  const answer = useParsedAnswer(answering?.text ?? "");
+  useEffect(onGrow, [answering, onGrow]);
   if (!answering) return null;
-  const cited = citationsIn(answering.text);
   return (
     <div className="flex flex-col gap-2.5">
       {answering.text ? (
         <AnswerText
-          text={answering.text}
-          cited={cited}
+          answer={answer}
           onOpenShard={openShard}
           onOpenLink={openLink}
         />
@@ -506,42 +509,50 @@ function Streaming() {
   );
 }
 
-/** Keeps the newest message in view while it grows, unless scrolled up. */
+/**
+ * Keeps the newest message in view while it grows, unless scrolled up:
+ * when `deps` change, or when `follow` is called.
+ */
 function useStickToBottom(deps: unknown[]) {
   const ref = useRef<HTMLDivElement>(null);
   const stuck = useRef(true);
-  useEffect(() => {
+  const follow = useCallback(() => {
     const element = ref.current;
     if (element && stuck.current) element.scrollTop = element.scrollHeight;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(follow, deps);
   const onScroll = () => {
     const element = ref.current;
     if (!element) return;
     stuck.current =
       element.scrollHeight - element.scrollTop - element.clientHeight < 24;
   };
-  return { ref, onScroll };
+  return { ref, onScroll, follow };
 }
 
 function Messages() {
   const messages = useAssistantStore((s) => s.messages);
   const changes = useAssistantStore((s) => s.changes);
   const memories = useAssistantStore((s) => s.memories);
-  const answering = useAssistantStore((s) => s.answering);
   const ending = useAssistantStore((s) => s.ending);
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
   const canAdd = openShardPath(vault, openPath) !== null;
   // Room under the last message while the companion sits on the composer.
   const perched = useCompanionStore((s) => s.perched);
-  const { ref, onScroll } = useStickToBottom([
+  const { ref, onScroll, follow } = useStickToBottom([
     messages,
     changes,
     memories,
-    answering,
     ending,
   ]);
+  // New arrays only when the chat changes, so answers that didn't change
+  // don't render again.
+  const shown = useMemo(
+    () => withChanges(messages, changes, memories),
+    [messages, changes, memories],
+  );
 
   return (
     <div
@@ -552,7 +563,7 @@ function Messages() {
         perched && "pb-[96px]",
       )}
     >
-      {withChanges(messages, changes, memories).map(
+      {shown.map(
         ({ message, changes, memories }) =>
         message.role === "user" ? (
           <UserMessage key={message.seq} message={message} />
@@ -566,18 +577,8 @@ function Messages() {
           />
         ),
       )}
-      <Streaming />
-      {ending ? (
-        <p
-          role={ending.kind === "error" ? "alert" : undefined}
-          className={cn(
-            "text-ui-sm",
-            ending.kind === "error" ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {endingText(ending)}
-        </p>
-      ) : null}
+      <Streaming onGrow={follow} />
+      {ending ? <EndingNote ending={ending} onOpenLink={openLink} /> : null}
     </div>
   );
 }
@@ -619,7 +620,7 @@ export function AssistantPanel() {
   const openSettings = useUIStore((s) => s.openSettings);
   const chat = useAssistantStore((s) => s.chat);
   const messages = useAssistantStore((s) => s.messages);
-  const answering = useAssistantStore((s) => s.answering);
+  const answering = useAssistantStore((s) => s.answering !== null);
   const draft = useAssistantStore((s) => s.draft);
   const added = useAssistantStore((s) => s.added);
   const openShardRemoved = useAssistantStore((s) => s.openShardRemoved);
@@ -771,7 +772,7 @@ export function AssistantPanel() {
         }}
         disabled={state === "noProvider" || state === "vaultOff"}
         canSend={ready && draft.trim().length > 0}
-        answering={answering !== null}
+        answering={answering}
         onSend={() => send(draft, shards)}
         onStop={stopAnswer}
         cardRef={setPerch}

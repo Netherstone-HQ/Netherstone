@@ -69,6 +69,7 @@ function assistantCommands(more: Partial<AssistantStatus> = {}): Handlers {
     ...more,
   };
   return {
+    assistant_enabled: () => state.enabled,
     assistant_status: () => state,
     assistant_models: () => MODELS,
     assistant_save_key: ({ provider: id }) => {

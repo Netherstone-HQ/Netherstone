@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { ListTreeIcon } from "lucide-react";
-import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
@@ -12,6 +11,13 @@ import { LinkedFromSection } from "./right-sidebar/LinkedFromSection";
 import { LinksSection } from "./right-sidebar/LinksSection";
 import { OutlineSection } from "./right-sidebar/OutlineSection";
 import { useIndexedShard, useShardLinks } from "./right-sidebar/useShardInfo";
+
+// Loaded the first time the assistant opens.
+const AssistantPanel = lazy(() =>
+  import("@/components/assistant/AssistantPanel").then((module) => ({
+    default: module.AssistantPanel,
+  })),
+);
 
 /** The open shard's sections. They only load while the sidebar is open. */
 function ShardSections({ isOpen }: { isOpen: boolean }) {
@@ -86,7 +92,9 @@ export function RightSidebar() {
       ) : null}
       {showsAssistant ? (
         <div className="absolute inset-y-0 right-0">
-          <AssistantPanel />
+          <Suspense fallback={null}>
+            <AssistantPanel />
+          </Suspense>
         </div>
       ) : null}
       <aside

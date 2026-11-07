@@ -409,7 +409,7 @@ async fn stream_genai(
     stop: &StopToken,
 ) -> Result<Reply, Failure> {
     let failed = |error| Failure::new(error, false);
-    let http = models::http_client(CONNECT_TIMEOUT, None).map_err(|e| failed(e.into()))?;
+    let http = models::http_client(CONNECT_TIMEOUT).map_err(|e| failed(e.into()))?;
     let client = genai::Client::builder()
         .with_reqwest(http)
         .build()

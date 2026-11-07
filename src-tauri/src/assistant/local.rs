@@ -112,13 +112,14 @@ pub async fn sees_images(target: &Target, model: &str) -> bool {
         #[serde(default)]
         capabilities: Vec<String>,
     }
-    let Ok(client) = models::http_client(PROBE_CONNECT, Some(PROBE_TOTAL)) else {
+    let Ok(client) = models::http_client(PROBE_CONNECT) else {
         return false;
     };
     let url = format!("{}api/show", target.base_url);
     let shown = async {
         client
             .post(url)
+            .timeout(PROBE_TOTAL)
             .json(&serde_json::json!({ "model": model }))
             .send()
             .await?
@@ -148,10 +149,11 @@ pub async fn loaded_context(target: &Target, model: &str) -> Option<u64> {
         model: String,
         context_length: Option<u64>,
     }
-    let client = models::http_client(PROBE_CONNECT, Some(PROBE_TOTAL)).ok()?;
+    let client = models::http_client(PROBE_CONNECT).ok()?;
     let running = async {
         client
             .get(format!("{}api/ps", target.base_url))
+            .timeout(PROBE_TOTAL)
             .send()
             .await?
             .error_for_status()?

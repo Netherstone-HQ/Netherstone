@@ -111,7 +111,7 @@ pub(super) fn edit_shard(
     let writes = crate::locks::vault_writes()?;
     let content = read_text(path)?;
     let edited = edit(content)?;
-    Ok(crate::write_shard(
+    Ok(crate::shards::write_shard(
         &writes,
         &vault.root,
         &path.to_string_lossy(),

@@ -5,6 +5,8 @@
 //! is cached in AppData so the UI can show who is signed in without a network
 //! call.
 
+pub mod commands;
+
 pub mod app;
 pub mod device_flow;
 pub mod repos;

@@ -7,6 +7,8 @@
 //! vaults they come from.
 //! It also takes an import back when the person asks right after.
 
+pub mod commands;
+
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::collections::HashSet;

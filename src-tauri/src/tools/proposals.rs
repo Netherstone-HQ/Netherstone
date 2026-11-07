@@ -8,6 +8,7 @@ use super::drawings::{self, DrawingTarget, EditDrawingParams};
 use super::edits::{edit_shard, read_text, recorded, reindex};
 use super::write::{self, CreateShardParams, EditShardParams, MoveParams};
 use super::{Caller, ToolError, ToolResult, Vault};
+use crate::shards::CHANGED_ON_DISK;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -220,9 +221,6 @@ fn file_changes(changes: Vec<crate::sync::AppChange>) -> Vec<FileChange> {
         .collect()
 }
 
-/// What applying refuses with when the file isn't the text the app shows.
-pub const CHANGED_ON_DISK: &str = "The shard changed on disk";
-
 /// Makes the change `ops` propose to `target`, noted in History by
 /// `caller` with `summary`. `expected`, when given, is the text the app
 /// shows for the file: if the file holds something else, nothing is made.
@@ -278,7 +276,12 @@ pub fn apply(
             recorded(vault, caller, summary, &[], || {
                 let writes = crate::locks::vault_writes()?;
                 let path = crate::import::prepare_new_shard(&vault.root, &wanted)?;
-                crate::write_shard(&writes, &vault.root, &path.to_string_lossy(), &content)?;
+                crate::shards::write_shard(
+                    &writes,
+                    &vault.root,
+                    &path.to_string_lossy(),
+                    &content,
+                )?;
                 Ok(((), vec![path]))
             })?
             .1
@@ -348,7 +351,12 @@ pub fn undo(
                         })?;
                     }
                     if crate::vault::is_markdown_path(path) {
-                        crate::write_shard(&writes, &vault.root, &path.to_string_lossy(), before)?;
+                        crate::shards::write_shard(
+                            &writes,
+                            &vault.root,
+                            &path.to_string_lossy(),
+                            before,
+                        )?;
                     } else {
                         crate::vault::write_atomically(&writes, path, before.as_bytes())?;
                     }

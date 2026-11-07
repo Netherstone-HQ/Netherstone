@@ -1,6 +1,6 @@
 import "./onboarding.css";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { XIcon } from "lucide-react";
 
 import { WindowTitleBar } from "@/components/WindowTitleBar";
@@ -11,9 +11,13 @@ import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/store/settings";
 import { useSyncStore } from "@/store/sync";
 import { AppearanceStep } from "./AppearanceStep";
-import { AssistantStep } from "./AssistantStep";
 import { copy } from "./copy";
 import { ReadyStep } from "./ReadyStep";
+
+// With the assistant's setup, which only this step and Settings show.
+const AssistantStep = lazy(() =>
+  import("./AssistantStep").then((module) => ({ default: module.AssistantStep })),
+);
 import { SyncStep } from "./SyncStep";
 import { VaultStep, type VaultChoice } from "./VaultStep";
 import { addStartHere } from "./start-here";
@@ -117,13 +121,15 @@ export function Onboarding({
             ) : step === "sync" && vault ? (
               <SyncStep vaultPath={vault.path} onBack={back} onNext={next} />
             ) : step === "assistant" ? (
-              <AssistantStep
-                onBack={back}
-                onNext={(on) => {
-                  setAssistantOn(on);
-                  next();
-                }}
-              />
+              <Suspense fallback={null}>
+                <AssistantStep
+                  onBack={back}
+                  onNext={(on) => {
+                    setAssistantOn(on);
+                    next();
+                  }}
+                />
+              </Suspense>
             ) : vault ? (
               <ReadyStep
                 vault={vault}

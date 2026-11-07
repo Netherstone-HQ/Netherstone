@@ -30,9 +30,15 @@ import { Editor } from "./editor/Editor";
 import { ModeSwitcher } from "./sidebar/ModeSwitcher";
 import { ExcalidrawView } from "./ExcalidrawView";
 import { ShardVersionView } from "./history/ShardVersionView";
-import { ChangePreview } from "./assistant/ChangePreview";
 import { usePreviewedChange } from "@/lib/assistant-changes";
 import { WindowTitleBar } from "./WindowTitleBar";
+
+// Loaded the first time an assistant change is previewed.
+const ChangePreview = React.lazy(() =>
+  import("./assistant/ChangePreview").then((module) => ({
+    default: module.ChangePreview,
+  })),
+);
 
 interface AppLayoutProps {
   children?: React.ReactNode;
@@ -82,7 +88,9 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
         {children ?? <MainEditorContent />}
       </main>
       {previewed && change !== null && openPath !== null ? (
-        <ChangePreview key={change.id} change={change} filePath={openPath} />
+        <React.Suspense fallback={null}>
+          <ChangePreview key={change.id} change={change} filePath={openPath} />
+        </React.Suspense>
       ) : shown && version !== null && filePath !== null ? (
         <ShardVersionView
           version={version}

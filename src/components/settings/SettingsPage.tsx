@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import {
   FolderIcon,
   InfoIcon,
@@ -15,7 +15,6 @@ import {
 
 import { AboutSettings } from "@/components/settings/sections/AboutSettings";
 import { AiAppsSettings } from "@/components/settings/sections/AiAppsSettings";
-import { AiAssistantSettings } from "@/components/settings/sections/AiAssistantSettings";
 import { AppearanceSettings } from "@/components/settings/sections/AppearanceSettings";
 import { EditorSettings } from "@/components/settings/sections/EditorSettings";
 import { FilesSettings } from "@/components/settings/sections/FilesSettings";
@@ -32,6 +31,21 @@ import {
 } from "@/components/vault/tree-layout";
 import { cn } from "@/lib/utils";
 import { type SettingsCategory, useUIStore } from "@/store/ui";
+
+// Loaded the first time its section opens.
+const AiAssistantSection = lazy(() =>
+  import("@/components/settings/sections/AiAssistantSettings").then((module) => ({
+    default: module.AiAssistantSettings,
+  })),
+);
+
+function AiAssistantSettings() {
+  return (
+    <Suspense fallback={null}>
+      <AiAssistantSection />
+    </Suspense>
+  );
+}
 
 type Category = {
   id: SettingsCategory;

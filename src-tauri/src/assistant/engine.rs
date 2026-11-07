@@ -1018,6 +1018,7 @@ pub async fn short_title(
     chat: &str,
     question: &str,
     answer: &str,
+    stop: &StopToken,
 ) -> Result<String, ChatError> {
     let piece = |text: &str| -> String { text.chars().take(TITLE_PIECE).collect() };
     let messages = [Message::user(format!(
@@ -1033,7 +1034,7 @@ pub async fn short_title(
         thinking: false,
         cache_key: chat,
     };
-    let reply = chat::stream(&model.target, &request, &mut |_| {}, &StopToken::default()).await?;
+    let reply = chat::stream(&model.target, &request, &mut |_| {}, stop).await?;
     clean_title(&reply.text).ok_or(ChatError::Failed)
 }
 

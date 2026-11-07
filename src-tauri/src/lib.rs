@@ -326,8 +326,11 @@ async fn assistant_chats() -> Result<Vec<assistant::ChatInfo>, assistant::ChatEr
 }
 
 #[tauri::command]
-async fn assistant_retitle(chat: String) -> Result<String, assistant::ChatError> {
-    assistant::retitle(chat).await
+async fn assistant_retitle(
+    window: tauri::Window,
+    chat: String,
+) -> Result<String, assistant::ChatError> {
+    assistant::retitle(chat, window.label().to_string()).await
 }
 
 #[tauri::command]

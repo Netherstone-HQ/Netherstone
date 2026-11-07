@@ -896,6 +896,7 @@ async fn a_short_title_comes_from_the_first_question_and_answer() {
         &turn.chat,
         "What's still open before the 0.7 tag?",
         "Two things are open.",
+        &StopToken::default(),
     )
     .await
     .unwrap();

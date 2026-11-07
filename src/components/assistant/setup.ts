@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type AssistantStatus,
@@ -55,8 +55,11 @@ export function useSetup(active = true) {
   const vault = useVaultStore((s) => s.currentVaultPath);
   const inSettings = useUIStore((s) => s.activeNavItem === "settings");
   const [setup, setSetup] = useState<Setup | null>(null);
+  // The probe can take a moment: only the latest read lands.
+  const latest = useRef(0);
 
   const load = useCallback(async () => {
+    const read = ++latest.current;
     try {
       const [status, picked, vaults] = await Promise.all([
         getAssistantStatus(),
@@ -68,8 +71,10 @@ export function useSetup(active = true) {
         vaults.some((v) => v.allowed && isSamePath(v.path, vault));
       // Asked only for a local model, so the probe stays off otherwise.
       const serverDown =
-        status.enabled && picked?.local ? await findLocalServerDown() : null;
-      setSetup({ status, picked, vaultAllowed, serverDown });
+        status.enabled && picked?.local
+          ? await findLocalServerDown().catch(() => null)
+          : null;
+      if (read === latest.current) setSetup({ status, picked, vaultAllowed, serverDown });
     } catch (error) {
       console.error("[Netherstone] Couldn't read the assistant's setup:", error);
     }

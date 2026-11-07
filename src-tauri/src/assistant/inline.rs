@@ -121,6 +121,7 @@ async fn message(ask: &Ask) -> Message {
             std::slice::from_mut(&mut message),
             &sending,
             bytes,
+            &mut files::Encoded::default(),
         );
         message
     })

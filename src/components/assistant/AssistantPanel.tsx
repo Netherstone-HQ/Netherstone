@@ -48,7 +48,6 @@ import {
   type ShownMessage,
   setMcpVaultAllowed,
 } from "@/lib/commands";
-import { folderName } from "@/lib/open-vault";
 import { openCitation } from "@/lib/open-citation";
 import { openWebLink } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
@@ -728,7 +727,7 @@ export function AssistantPanel() {
       ) : state === "vaultOff" ? (
         <Center
           icon={<FolderIcon className="size-4.5" />}
-          text={`${vault ? folderName(vault) : "This vault"} is off for AI`}
+          text="AI is off for this vault"
           action={
             <Button
               type="button"

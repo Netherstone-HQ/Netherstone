@@ -35,7 +35,7 @@ export function ModelButton({
   const { picked, status } = setup;
   const hasProvider = status.providers.some(isSetUp);
 
-  // Listed each time it opens, from the button or the panel's Pick a model.
+  // Shown each time it opens, from the button or the panel's Pick a model.
   useEffect(() => {
     if (open) loadAll(status.providers);
   }, [open, loadAll, status.providers]);

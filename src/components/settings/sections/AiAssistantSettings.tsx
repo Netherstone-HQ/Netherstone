@@ -106,8 +106,7 @@ export function useProviderSetup({
   onSaved?: (sources: SavedSource[]) => Promise<void>;
 } = {}) {
   const [status, setStatus] = useState<AssistantStatus | null>(null);
-  const { models, setModels, setSource, loadModels, loadAll } =
-    useModelLists();
+  const { models, setSource, loadModels, loadAll, forget } = useModelLists();
 
   const refresh = useCallback(async () => {
     try {
@@ -142,13 +141,7 @@ export function useProviderSetup({
       showError(error);
       return;
     }
-    setModels((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(
-          ([key]) => key !== provider.id && !key.startsWith(`${provider.id} `),
-        ),
-      ),
-    );
+    forget(provider.id);
     await refresh();
   }
 

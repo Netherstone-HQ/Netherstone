@@ -47,11 +47,24 @@ export function isSetUp(provider: AssistantProvider) {
   );
 }
 
+/**
+ * The lists listed this session, by `sourceKey`, so opening Settings or the
+ * picker again doesn't ask every provider again. A list saving a key or
+ * address brings replaces its own; Retry asks again.
+ */
+const listed = new Map<string, AssistantModel[]>();
+
 /** The model lists of set-up providers, by `sourceKey`, listed on demand. */
 export function useModelLists() {
-  const [models, setModels] = useState<Record<string, Models>>({});
+  const [models, setModels] = useState<Record<string, Models>>(() =>
+    Object.fromEntries(
+      [...listed].map(([key, list]) => [key, { state: "ready", models: list }]),
+    ),
+  );
 
   const setSource = useCallback((key: string, value: Models | null) => {
+    if (value?.state === "ready") listed.set(key, value.models);
+    else listed.delete(key);
     setModels((current) => {
       const next = { ...current };
       if (value) next[key] = value;
@@ -60,6 +73,7 @@ export function useModelLists() {
     });
   }, []);
 
+  /** Asks for a source's models, even when they were listed before. */
   const loadModels = useCallback(
     async (provider: string, server: string | null = null) => {
       const key = sourceKey(provider, server);
@@ -74,23 +88,42 @@ export function useModelLists() {
     [setSource],
   );
 
-  /** Lists every set-up provider's models. */
+  /** A source's models, from this session's list when there is one. */
+  const showModels = useCallback(
+    (provider: string, server: string | null = null) => {
+      const list = listed.get(sourceKey(provider, server));
+      if (list) setSource(sourceKey(provider, server), { state: "ready", models: list });
+      else void loadModels(provider, server);
+    },
+    [loadModels, setSource],
+  );
+
+  /** Shows every set-up provider's models. */
   const loadAll = useCallback(
     (providers: AssistantProvider[]) => {
       for (const provider of providers) {
         if (provider.setup === "local") {
           for (const server of provider.servers) {
-            void loadModels(provider.id, server.address);
+            showModels(provider.id, server.address);
           }
         } else if (isSetUp(provider)) {
-          void loadModels(provider.id);
+          showModels(provider.id);
         }
       }
     },
-    [loadModels],
+    [showModels],
   );
 
-  return { models, setModels, setSource, loadModels, loadAll };
+  /** Drops a removed provider's lists. */
+  const forget = useCallback((provider: string) => {
+    const gone = (key: string) => key === provider || key.startsWith(`${provider} `);
+    for (const key of [...listed.keys()]) if (gone(key)) listed.delete(key);
+    setModels((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !gone(key))),
+    );
+  }, []);
+
+  return { models, setSource, loadModels, loadAll, forget };
 }
 
 /** The models to pick from, grouped by provider. */

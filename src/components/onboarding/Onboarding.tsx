@@ -120,9 +120,10 @@ export function Onboarding({
               <AppearanceStep onBack={back} onNext={next} />
             ) : step === "sync" && vault ? (
               <SyncStep vaultPath={vault.path} onBack={back} onNext={next} />
-            ) : step === "assistant" ? (
+            ) : step === "assistant" && vault ? (
               <Suspense fallback={null}>
                 <AssistantStep
+                  vaultPath={vault.path}
                   onBack={back}
                   onNext={(on) => {
                     setAssistantOn(on);

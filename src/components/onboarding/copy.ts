@@ -95,6 +95,9 @@ export const copy = {
     /** The provider rows and the "Free ways to start" line are Settings' own. */
     on: "The assistant is on.",
     model: "Model",
+    /** Under the provider rows once the vault is on for AI. */
+    vaultOn: (vault: string) =>
+      `The assistant and connected AI apps can now use ${vault}. Change this in Settings › AI apps.`,
     later: "You can set it up later in Settings.",
   },
 

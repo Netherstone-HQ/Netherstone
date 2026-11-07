@@ -106,6 +106,12 @@ type Memory = Mutex<BTreeMap<&'static str, String>>;
 /// Secrets saved without being remembered, kept for this run of the app.
 static MEMORY: Memory = Mutex::new(BTreeMap::new());
 
+/// Secrets looked for in the keyring once this run, for keys saved before
+/// the app marked where it keeps them.
+type Checked = Mutex<std::collections::BTreeSet<&'static str>>;
+
+static CHECKED: Checked = Mutex::new(std::collections::BTreeSet::new());
+
 /// The credential store.
 trait Keyring {
     fn get(&self, credential: &Credential) -> Result<Option<String>, String>;
@@ -168,6 +174,7 @@ struct Stores<'a> {
     /// keyring.
     dir: &'a Path,
     memory: &'a Memory,
+    checked: &'a Checked,
 }
 
 fn data_dir() -> Result<PathBuf, String> {
@@ -184,6 +191,7 @@ fn with_stores<T>(run: impl FnOnce(&Stores) -> Result<T, String>) -> Result<T, S
         keyring: keyring.as_ref().map(|k| k as &dyn Keyring),
         dir: &dir,
         memory: &MEMORY,
+        checked: &CHECKED,
     })
 }
 
@@ -204,7 +212,9 @@ pub fn clear(credential: &Credential) -> Result<(), String> {
 }
 
 /// Where the secret is kept, if there is one, without reading it: reading
-/// the keyring can ask the user to unlock it or let the app in.
+/// the keyring can ask the user to unlock it or let the app in. Only a
+/// secret saved before the app marked where it keeps them is looked for,
+/// once a run.
 pub fn kept(credential: &Credential) -> Result<Option<Storage>, String> {
     with_stores(|stores| kept_in(stores, credential))
 }
@@ -248,10 +258,22 @@ fn kept_in(stores: &Stores, credential: &Credential) -> Result<Option<Storage>, 
     if stores.dir.join(credential.file).exists() {
         return Ok(Some(Storage::File));
     }
-    Ok(
-        (stores.keyring.is_some() && keyring_marker(stores.dir, credential).exists())
-            .then_some(Storage::Keyring),
-    )
+    if stores.keyring.is_none() {
+        return Ok(None);
+    }
+    if keyring_marker(stores.dir, credential).exists() {
+        return Ok(Some(Storage::Keyring));
+    }
+    // Saved before the marker was: looked for once a run, which marks it.
+    let first_look = stores
+        .checked
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(credential.id);
+    if first_look {
+        return Ok(load_from(stores, credential)?.map(|(_, storage)| storage));
+    }
+    Ok(None)
 }
 
 fn load_from(
@@ -459,10 +481,13 @@ mod tests {
         dir: &'a Path,
         memory: &'a Memory,
     ) -> Stores<'a> {
+        // Fresh for each call: what was looked for belongs to one run.
+        let checked: &'a Checked = Box::leak(Box::default());
         Stores {
             keyring: keyring.map(|k| k as &dyn Keyring),
             dir,
             memory,
+            checked,
         }
     }
 
@@ -536,6 +561,22 @@ mod tests {
         keyring.entries.borrow_mut().clear();
         assert_eq!(load_from(&open, &GITHUB), Ok(None));
         assert_eq!(kept_in(&open, &GITHUB), Ok(None));
+
+        // Saved before markers: found by one look, then known without one.
+        let older = FakeKeyring::holding("com.netherstone.app.github", "default", "tok");
+        let first_run = stores(Some(&older), &dir, &memory);
+        assert_eq!(kept_in(&first_run, &GITHUB), Ok(Some(Storage::Keyring)));
+        older.entries.borrow_mut().clear();
+        assert_eq!(kept_in(&first_run, &GITHUB), Ok(Some(Storage::Keyring)));
+        clear_in(&first_run, &GITHUB).unwrap();
+        // Nothing there: looked for once a run, not on every read.
+        let none = FakeKeyring {
+            refuses: true,
+            ..Default::default()
+        };
+        let run = stores(Some(&none), &dir, &memory);
+        assert!(kept_in(&run, &GITHUB).is_err());
+        assert_eq!(kept_in(&run, &GITHUB), Ok(None));
 
         let without = stores(None, &dir, &memory);
         save_to(&without, &GITHUB, "tok", true).unwrap();
@@ -685,6 +726,7 @@ mod tests {
             keyring: Some(&keyring),
             dir: &dir,
             memory: &memory,
+            checked: &Checked::default(),
         };
 
         assert_eq!(

@@ -26,7 +26,6 @@ import { useAssistantStore } from "@/store/assistant";
 import { useSettingsStore } from "@/store/settings";
 import { Editor } from "./Editor";
 
-
 vi.mock("@tauri-apps/plugin-opener", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tauri-apps/plugin-opener")>()),
   openUrl: vi.fn(async () => {}),

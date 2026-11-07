@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
 import { useVaultStore } from "@/store/vault";
 
-import { AnswerText, CiteNumber, citationsIn } from "./AnswerText";
+import { AnswerText, CiteNumber, useParsedAnswer } from "./AnswerText";
 import { shardName } from "./Composer";
 import { type SetupState, endingText, waitingText } from "./setup";
 
@@ -80,14 +80,13 @@ export function SearchAnswer({
         .filter((m) => m.role === "assistant" && m.text)
         .map((m) => m.text)
         .join("\n\n");
-  const cited = citationsIn(text);
+  const answer = useParsedAnswer(text);
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md bg-accent p-3 text-ui">
       {text ? (
         <AnswerText
-          text={text}
-          cited={cited}
+          answer={answer}
           onOpenShard={onOpenShard}
           onOpenLink={openLink}
         />
@@ -109,10 +108,10 @@ export function SearchAnswer({
           {endingText(ending)}
         </p>
       ) : null}
-      {cited.length > 0 || chat ? (
+      {answer.cited.length > 0 || chat ? (
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
-            {cited.map((citation, index) => (
+            {answer.cited.map((citation, index) => (
               <button
                 key={citation.path}
                 type="button"

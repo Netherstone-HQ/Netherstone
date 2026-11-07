@@ -54,10 +54,10 @@ function walk(node: Node, visit: (node: Node) => void) {
   for (const child of node.children ?? []) walk(child, visit);
 }
 
-/** The shards `markdown` cites, numbered in the order they first come. */
-export function citationsIn(markdown: string): Citation[] {
+/** The shards an answer cites, numbered in the order they first come. */
+function citationsIn(tree: Node): Citation[] {
   const found: Citation[] = [];
-  walk(parser.parse(markdown) as Node, (node) => {
+  walk(tree, (node) => {
     if (node.type !== "link" || !node.url) return;
     const citation = citationOf(node.url);
     if (citation && !found.some((c) => c.path === citation.path)) {
@@ -65,6 +65,19 @@ export function citationsIn(markdown: string): Citation[] {
     }
   });
   return found;
+}
+
+/** An answer's Markdown, parsed once for its text and its cites. */
+export type ParsedAnswer = { tree: Node; cited: Citation[] };
+
+function parseAnswer(markdown: string): ParsedAnswer {
+  const tree = parser.parse(markdown) as Node;
+  return { tree, cited: citationsIn(tree) };
+}
+
+/** `text` parsed, again only when it changes. */
+export function useParsedAnswer(text: string): ParsedAnswer {
+  return useMemo(() => parseAnswer(text), [text]);
 }
 
 /** `markdown` without its cites, for text that goes into a shard. */
@@ -116,17 +129,14 @@ export function CiteNumber({
  * and open the shard; other links open as links do elsewhere in the app.
  */
 export function AnswerText({
-  text,
-  cited,
+  answer: { tree, cited },
   onOpenShard,
   onOpenLink,
 }: {
-  text: string;
-  cited: Citation[];
+  answer: ParsedAnswer;
   onOpenShard: (citation: Citation) => void;
   onOpenLink: (href: string) => void;
 }) {
-  const tree = useMemo(() => parser.parse(text) as Node, [text]);
   // Where `![alt][name]` images point.
   const definitions = useMemo(() => {
     const found = new Map<string, string>();

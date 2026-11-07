@@ -55,9 +55,14 @@ fn algorithm(lang: Lang) -> Option<Algorithm> {
 }
 
 /// The language of `text` when whatlang is sure of it and it has a stemmer.
-fn stemmed_language(text: &str) -> Option<(Lang, Stemmer)> {
+fn stemmed_language(text: &str) -> Option<Lang> {
     let info = whatlang::detect(text).filter(|info| info.is_reliable())?;
-    algorithm(info.lang()).map(|algorithm| (info.lang(), Stemmer::new(algorithm)))
+    algorithm(info.lang()).map(|_| info.lang())
+}
+
+/// The language with its stemmer, for one that has one.
+fn with_stemmer(lang: Lang) -> Option<(Lang, Stemmer)> {
+    algorithm(lang).map(|algorithm| (lang, Stemmer::new(algorithm)))
 }
 
 /// Whether `c` is in a script written without spaces between words (Chinese,
@@ -111,11 +116,18 @@ pub struct ShardWords {
     pub languages: Vec<&'static str>,
 }
 
-/// The stems, character pairs and languages of a shard named `name` whose
-/// text is `blocks`. A paragraph whatlang can't tell is taken to be in the
-/// shard's main language, or with none, in `vault_language`. With neither,
-/// only its words as written are indexed.
-pub fn shard_words(name: &str, blocks: &[TextBlock], vault_language: Option<Lang>) -> ShardWords {
+/// The languages whatlang tells in a shard: its main one, from a sample of
+/// its text, and each block's. This is most of the work of a shard's words,
+/// and it needs nothing from the rest of the vault, so the indexer tells
+/// many shards at once.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShardLanguages {
+    main: Option<Lang>,
+    blocks: Vec<Option<Lang>>,
+}
+
+/// The languages of a shard whose text is `blocks`.
+pub fn shard_languages(blocks: &[TextBlock]) -> ShardLanguages {
     let mut sample = String::new();
     for block in blocks.iter().filter(|b| b.kind != BlockKind::CodeBlock) {
         if sample.len() >= SAMPLE_BYTES {
@@ -124,9 +136,32 @@ pub fn shard_words(name: &str, blocks: &[TextBlock], vault_language: Option<Lang
         sample.push_str(&block.text);
         sample.push('\n');
     }
-    let main = stemmed_language(&sample);
-    let vault = vault_language
-        .and_then(|lang| algorithm(lang).map(|algorithm| (lang, Stemmer::new(algorithm))));
+    ShardLanguages {
+        main: stemmed_language(&sample),
+        blocks: blocks.iter().map(|b| stemmed_language(&b.text)).collect(),
+    }
+}
+
+impl ShardLanguages {
+    /// Whether the shard needs the vault's language: when it has no main
+    /// language, its name and the blocks whatlang can't tell take the vault's.
+    pub fn needs_vault_language(&self) -> bool {
+        self.main.is_none()
+    }
+}
+
+/// The stems, character pairs and languages of a shard named `name` whose
+/// text is `blocks`, told in `languages`. A paragraph whatlang can't tell is
+/// taken to be in the shard's main language, or with none, in
+/// `vault_language`. With neither, only its words as written are indexed.
+pub fn shard_words(
+    name: &str,
+    blocks: &[TextBlock],
+    languages: &ShardLanguages,
+    vault_language: Option<Lang>,
+) -> ShardWords {
+    let main = languages.main.and_then(with_stemmer);
+    let vault = vault_language.and_then(with_stemmer);
 
     let mut words = ShardWords::default();
     let mut add = |text: &str, language: Option<(Lang, Stemmer)>| {
@@ -157,20 +192,28 @@ pub fn shard_words(name: &str, blocks: &[TextBlock], vault_language: Option<Lang
     };
     let title = name.strip_suffix(".md").unwrap_or(name);
     add(title, main.or(vault));
-    for block in blocks {
-        add(
-            &block.text,
-            stemmed_language(&block.text).or(main).or(vault),
-        );
+    for (block, lang) in blocks.iter().zip(&languages.blocks) {
+        add(&block.text, lang.and_then(with_stemmer).or(main).or(vault));
     }
     words
 }
 
 /// The stemmers for the languages the vault at `vault_path` was indexed in.
 fn vault_stemmers(conn: &Connection, vault_path: &Path) -> rusqlite::Result<Vec<Stemmer>> {
+    // Steps through the distinct languages on the language index, then asks
+    // for each whether any shard of the vault has it, which stops at the
+    // first one, so a search doesn't read every shard's languages.
     let mut stmt = conn.prepare_cached(
-        "SELECT DISTINCT l.language FROM file_languages l
-         JOIN files f ON f.id = l.file_id WHERE f.vault_path = ?1",
+        "WITH RECURSIVE languages(code) AS (
+             SELECT MIN(language) FROM file_languages
+             UNION ALL
+             SELECT (SELECT MIN(language) FROM file_languages WHERE language > code)
+             FROM languages WHERE code IS NOT NULL
+         )
+         SELECT code FROM languages WHERE code IS NOT NULL AND EXISTS (
+             SELECT 1 FROM file_languages l JOIN files f ON f.id = l.file_id
+             WHERE l.language = code AND f.vault_path = ?1
+         )",
     )?;
     let codes = stmt
         .query_map(params![vault_key(vault_path)], |row| {
@@ -429,6 +472,10 @@ mod questions;
 mod tests {
     use super::*;
     use crate::markdown_text::text_blocks;
+
+    fn shard_words(name: &str, blocks: &[TextBlock], vault_language: Option<Lang>) -> ShardWords {
+        super::shard_words(name, blocks, &shard_languages(blocks), vault_language)
+    }
 
     fn search(query: &str, algorithms: &[Algorithm]) -> Search {
         Search::with_stemmers(

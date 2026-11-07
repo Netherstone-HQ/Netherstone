@@ -241,10 +241,12 @@ fn count_pages(data: &[u8]) -> usize {
     pages
 }
 
-/// Reads the data of the files in `messages`, newest first, while they fit
-/// the provider's limits beside `text_bytes` of text. Older files that
-/// don't fit, and files gone from the vault, are left out of the request.
-pub fn load(root: &Path, messages: &mut [Message], limits: &Limits, text_bytes: u64) {
+/// Reads the data of the files in `messages` that the model takes, newest
+/// first, while they fit the provider's limits beside `text_bytes` of text.
+/// Files read for an earlier model that this one doesn't take, older files
+/// that don't fit, and files gone from the vault are left out of the request.
+pub fn load(root: &Path, messages: &mut [Message], sending: &Sending, text_bytes: u64) {
+    let limits = &sending.limits;
     let mut request_left = limits
         .request_bytes
         .map(|bytes| bytes.saturating_sub(text_bytes));
@@ -253,12 +255,25 @@ pub fn load(root: &Path, messages: &mut [Message], limits: &Limits, text_bytes: 
     for message in messages.iter_mut().rev() {
         for file in message.files_mut().iter_mut().rev() {
             file.data = None;
+            let Some((kind, _)) = kind_of(&file.path) else {
+                continue;
+            };
+            let takes = match kind {
+                Kind::Image => sending.images,
+                Kind::Pdf => sending.pdfs,
+            };
+            if !sending.on || !takes {
+                continue;
+            }
             let Some(Ok(bytes)) = inside(root, &file.path).map(std::fs::read) else {
                 continue;
             };
             let encoded = (bytes.len() as u64).div_ceil(3) * 4;
-            let pdf = file.mime == "application/pdf";
-            if request_left.is_some_and(|left| encoded > left)
+            let pdf = kind == Kind::Pdf;
+            if sending
+                .largest(kind)
+                .is_some_and(|largest| bytes.len() as u64 > largest)
+                || request_left.is_some_and(|left| encoded > left)
                 || (pdf && pdfs_left.is_some_and(|left| bytes.len() as u64 > left))
             {
                 continue;
@@ -422,6 +437,54 @@ mod tests {
     }
 
     #[test]
+    fn files_read_earlier_only_go_to_a_model_that_takes_them() {
+        let root = vault("files-load-kinds");
+        let file = |path: &str, mime: &str| File {
+            path: path.to_string(),
+            mime: mime.to_string(),
+            tokens: 1,
+            data: None,
+        };
+        let read = || {
+            vec![Message::Tool {
+                results: Vec::new(),
+                files: vec![
+                    file("_attachments/map.png", "image/png"),
+                    file("_attachments/plan.pdf", "application/pdf"),
+                ],
+            }]
+        };
+        let sent = |facts: Facts, on: bool| {
+            let mut messages = read();
+            load(
+                &root,
+                &mut messages,
+                &Sending::new(on, Api::Anthropic, &facts),
+                10,
+            );
+            messages[0]
+                .files()
+                .iter()
+                .map(|f| f.data.is_some())
+                .collect::<Vec<_>>()
+        };
+        let images = Facts {
+            images: true,
+            ..Facts::default()
+        };
+        let both = Facts {
+            images: true,
+            pdfs: true,
+            ..Facts::default()
+        };
+        assert_eq!(sent(Facts::default(), true), [false, false]);
+        assert_eq!(sent(images, true), [true, false]);
+        assert_eq!(sent(both.clone(), true), [true, true]);
+        assert_eq!(sent(both, false), [false, false]);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn newest_files_fill_the_request_first() {
         let root = vault("files-load");
         let file = |path: &str, mime: &str| File {
@@ -444,11 +507,19 @@ mod tests {
                 file("_attachments/gone.png", "image/png"),
             ]),
         ];
-        let limits = Limits {
-            request_bytes: Some(pdf_size.div_ceil(3) * 4 + 10),
-            ..Limits::UNKNOWN
+        let facts = Facts {
+            images: true,
+            pdfs: true,
+            ..Facts::default()
         };
-        load(&root, &mut messages, &limits, 10);
+        let sending = Sending {
+            limits: Limits {
+                request_bytes: Some(pdf_size.div_ceil(3) * 4 + 10),
+                ..Limits::UNKNOWN
+            },
+            ..Sending::new(true, Api::Anthropic, &facts)
+        };
+        load(&root, &mut messages, &sending, 10);
         let data = |message: &Message| match message {
             Message::Tool { files, .. } => {
                 files.iter().map(|f| f.data.is_some()).collect::<Vec<_>>()

@@ -6,7 +6,6 @@
 use super::chat::{self, Added, ChatError, Message, Request, Stop, StopToken, Usage};
 use super::engine::{Model, Out, Sink};
 use super::files;
-use super::providers::Limits;
 use crate::tools::Vault;
 use std::sync::Arc;
 
@@ -97,8 +96,6 @@ async fn message(ask: &Ask) -> Message {
     let vault = ask.vault.clone();
     let shard = ask.shard.clone();
     let sending = files::Sending::new(ask.send_files, ask.model.target.api, &ask.model.facts);
-    let api = ask.model.target.api;
-    let send_files = ask.send_files;
     let text_bytes = (SYSTEM.len() + text.len()) as u64;
     let plain = Message::user(text.clone());
     tauri::async_runtime::spawn_blocking(move || {
@@ -119,14 +116,12 @@ async fn message(ask: &Ask) -> Message {
             }],
             files: found,
         };
-        if send_files {
-            files::load(
-                &vault.root,
-                std::slice::from_mut(&mut message),
-                &Limits::of(api),
-                bytes,
-            );
-        }
+        files::load(
+            &vault.root,
+            std::slice::from_mut(&mut message),
+            &sending,
+            bytes,
+        );
         message
     })
     .await

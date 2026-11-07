@@ -877,6 +877,11 @@ export async function getAssistantStatus(): Promise<AssistantStatus> {
   return invoke("assistant_status");
 }
 
+/** Whether the assistant is on, with no key or provider read. */
+export async function getAssistantEnabled(): Promise<boolean> {
+  return invoke("assistant_enabled");
+}
+
 export async function setAssistantEnabled(enabled: boolean): Promise<void> {
   await invoke("assistant_set_enabled", { enabled });
 }

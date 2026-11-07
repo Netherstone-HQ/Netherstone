@@ -497,6 +497,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         window.__asked = [];
         const held: Record<string, () => void> = {};
         return {
+          assistant_enabled: () => assistant !== null,
           assistant_status: () => ({
             enabled: assistant !== null,
             sendFiles: setup.sendFiles ?? true,

@@ -203,6 +203,12 @@ pub fn clear(credential: &Credential) -> Result<(), String> {
     with_stores(|stores| clear_in(stores, credential))
 }
 
+/// Where the secret is kept, if there is one, without reading it: reading
+/// the keyring can ask the user to unlock it or let the app in.
+pub fn kept(credential: &Credential) -> Result<Option<Storage>, String> {
+    with_stores(|stores| kept_in(stores, credential))
+}
+
 /// Whether this device has a credential store to keep secrets in.
 pub fn keyring_available() -> bool {
     OsKeyring::open().is_some()
@@ -212,6 +218,40 @@ fn lock_memory(
     memory: &Memory,
 ) -> Result<std::sync::MutexGuard<'_, BTreeMap<&'static str, String>>, String> {
     memory.lock().map_err(|e| e.to_string())
+}
+
+/// The file that says a secret is in the keyring, so where it's kept is
+/// known without reading it.
+fn keyring_marker(dir: &Path, credential: &Credential) -> PathBuf {
+    dir.join(format!("{}.in-keyring", credential.file))
+}
+
+fn mark_in_keyring(dir: &Path, credential: &Credential, in_keyring: bool) -> Result<(), String> {
+    let marker = keyring_marker(dir, credential);
+    let result = match in_keyring {
+        true => std::fs::write(&marker, b""),
+        false => std::fs::remove_file(&marker),
+    };
+    match result {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!(
+            "Couldn't save where the {} is: {}",
+            credential.label, e
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn kept_in(stores: &Stores, credential: &Credential) -> Result<Option<Storage>, String> {
+    if lock_memory(stores.memory)?.contains_key(credential.id) {
+        return Ok(Some(Storage::Memory));
+    }
+    if stores.dir.join(credential.file).exists() {
+        return Ok(Some(Storage::File));
+    }
+    Ok(
+        (stores.keyring.is_some() && keyring_marker(stores.dir, credential).exists())
+            .then_some(Storage::Keyring),
+    )
 }
 
 fn load_from(
@@ -227,7 +267,10 @@ fn load_from(
         return Ok(file_secret.map(|secret| (secret, Storage::File)));
     };
 
-    if let Some(secret) = keyring.get(credential)? {
+    let keyring_secret = keyring.get(credential)?;
+    // Keeps the marker true to the keyring, which can change outside the app.
+    mark_in_keyring(stores.dir, credential, keyring_secret.is_some())?;
+    if let Some(secret) = keyring_secret {
         return Ok(Some((secret, Storage::Keyring)));
     }
 
@@ -236,7 +279,11 @@ fn load_from(
     let Some(secret) = file_secret else {
         return Ok(None);
     };
-    if keyring.set(credential, &secret).is_err() || remove_file(stores.dir, credential).is_err() {
+    if keyring.set(credential, &secret).is_err() {
+        return Ok(Some((secret, Storage::File)));
+    }
+    mark_in_keyring(stores.dir, credential, true)?;
+    if remove_file(stores.dir, credential).is_err() {
         return Ok(Some((secret, Storage::File)));
     }
     Ok(Some((secret, Storage::Keyring)))
@@ -251,6 +298,7 @@ fn save_to(
     let storage = match stores.keyring {
         Some(keyring) => {
             keyring.set(credential, secret)?;
+            mark_in_keyring(stores.dir, credential, true)?;
             remove_file(stores.dir, credential)?;
             Storage::Keyring
         }
@@ -273,6 +321,7 @@ fn clear_in(stores: &Stores, credential: &Credential) -> Result<(), String> {
     if let Some(keyring) = stores.keyring {
         keyring.delete(credential)?;
     }
+    mark_in_keyring(stores.dir, credential, false)?;
     remove_file(stores.dir, credential)
 }
 
@@ -462,6 +511,39 @@ mod tests {
 
         clear_in(&stores, &GITHUB).unwrap();
         assert_eq!(load_from(&stores, &GITHUB), Ok(None));
+    }
+
+    #[test]
+    fn says_where_a_secret_is_without_reading_the_keyring() {
+        let dir = temp_dir("kept");
+        let memory = Memory::default();
+        let keyring = FakeKeyring::default();
+        let open = stores(Some(&keyring), &dir, &memory);
+        assert_eq!(kept_in(&open, &GITHUB), Ok(None));
+        save_to(&open, &GITHUB, "tok", true).unwrap();
+
+        // A keyring that would fail a read isn't asked.
+        let locked = FakeKeyring {
+            refuses: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            kept_in(&stores(Some(&locked), &dir, &memory), &GITHUB),
+            Ok(Some(Storage::Keyring))
+        );
+
+        // Gone from the keyring outside the app: the next read finds out.
+        keyring.entries.borrow_mut().clear();
+        assert_eq!(load_from(&open, &GITHUB), Ok(None));
+        assert_eq!(kept_in(&open, &GITHUB), Ok(None));
+
+        let without = stores(None, &dir, &memory);
+        save_to(&without, &GITHUB, "tok", true).unwrap();
+        assert_eq!(kept_in(&without, &GITHUB), Ok(Some(Storage::File)));
+        save_to(&without, &OTHER, "tok", false).unwrap();
+        assert_eq!(kept_in(&without, &OTHER), Ok(Some(Storage::Memory)));
+        clear_in(&without, &GITHUB).unwrap();
+        assert_eq!(kept_in(&without, &GITHUB), Ok(None));
     }
 
     #[test]

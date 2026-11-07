@@ -3,7 +3,7 @@ import {
   type ChatEvent,
   deleteAllChats,
   deleteChat,
-  getAssistantStatus,
+  getAssistantEnabled,
   getChat,
   retitleChat,
   sendChat,
@@ -28,13 +28,16 @@ function chatErrorKind(error: unknown): ChatError["kind"] {
   return "failed";
 }
 
-/** Reads the assistant's switch, for the top bar button. */
+/**
+ * Reads the assistant's switch, for the top bar button. Reads nothing else,
+ * so with the assistant off no key is read. Left unknown when it can't be
+ * read, so the next look tries again.
+ */
 export async function loadAssistantEnabled() {
   try {
-    store.getState().setEnabled((await getAssistantStatus()).enabled);
+    store.getState().setEnabled(await getAssistantEnabled());
   } catch (error) {
     console.error("[Netherstone] Couldn't read the assistant's switch:", error);
-    store.getState().setEnabled(false);
   }
 }
 

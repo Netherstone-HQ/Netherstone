@@ -223,6 +223,9 @@ pub enum ChatError {
     TimedOut,
     /// The chat is longer than the model reads.
     TooLong,
+    /// The model's context can't hold the assistant's instructions and
+    /// tools with room for an answer.
+    ContextTooSmall,
     /// Anything else the provider answered.
     Failed,
     Stopped,

@@ -959,6 +959,7 @@ export interface ChatError {
     | "busy"
     | "timedOut"
     | "tooLong"
+    | "contextTooSmall"
     | "failed"
     | "stopped"
     | "noModel"

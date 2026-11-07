@@ -23,6 +23,7 @@
   "openrouterKeys": "https://openrouter.ai/settings/keys",
   "openrouterFreeModels": "https://openrouter.ai/models?max_price=0",
   "ollamaDownload": "https://ollama.com/download",
+  "ollamaContextLength": "https://docs.ollama.com/context-length",
 
   "claudeDesktopDownload": "https://claude.ai/download",
   "claudeCodeDownload": "https://claude.com/product/claude-code",

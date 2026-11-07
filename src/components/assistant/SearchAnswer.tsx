@@ -18,7 +18,8 @@ import { useVaultStore } from "@/store/vault";
 
 import { AnswerText, CiteNumber, useParsedAnswer } from "./AnswerText";
 import { shardName } from "./Composer";
-import { type SetupState, endingText, waitingText } from "./setup";
+import { EndingNote } from "./EndingNote";
+import { type SetupState, waitingText } from "./setup";
 
 /** A group's name in the search list, like Recent. */
 export function GroupLabel({ children }: { children: string }) {
@@ -97,17 +98,7 @@ export function SearchAnswer({
           {waitingText(answering)}
         </p>
       ) : null}
-      {ending ? (
-        <p
-          role={ending.kind === "error" ? "alert" : undefined}
-          className={cn(
-            "text-ui-sm",
-            ending.kind === "error" ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {endingText(ending)}
-        </p>
-      ) : null}
+      {ending ? <EndingNote ending={ending} onOpenLink={openLink} /> : null}
       {answer.cited.length > 0 || chat ? (
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">

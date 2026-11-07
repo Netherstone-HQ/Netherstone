@@ -66,10 +66,10 @@ import {
 } from "./AnswerText";
 import { ChangeContent } from "./ChangeContent";
 import { ChatsMenu } from "./ChatsMenu";
+import { EndingNote } from "./EndingNote";
 import { ModelButton } from "./ModelButton";
 import { Composer, shardName } from "./Composer";
 import {
-  endingText,
   setupState,
   useSetup,
   waitingText,
@@ -578,17 +578,7 @@ function Messages() {
         ),
       )}
       <Streaming onGrow={follow} />
-      {ending ? (
-        <p
-          role={ending.kind === "error" ? "alert" : undefined}
-          className={cn(
-            "text-ui-sm",
-            ending.kind === "error" ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {endingText(ending)}
-        </p>
-      ) : null}
+      {ending ? <EndingNote ending={ending} onOpenLink={openLink} /> : null}
     </div>
   );
 }

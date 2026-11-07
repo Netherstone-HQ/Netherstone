@@ -327,24 +327,19 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
     }
     let mut usage = Usage::default();
     let chat_id = turn.chat.clone();
+    if !fits_context(&turn.model, &system, &specs) {
+        return Err(ChatError::ContextTooSmall);
+    }
+    let mut history = load(&turn.store, &chat_id).await?;
+    let encoded = Arc::new(Mutex::new(files::Encoded::default()));
 
     for step in 0..MAX_STEPS {
         if turn.stop.is_stopped() {
             return Err(ChatError::Stopped);
         }
-        let (summary, history) = load(&turn.store, &chat_id).await?;
-        let (summary, history) =
-            match make_room(turn, &system, &specs, summary, history, &mut out).await? {
-                Some(room) => room,
-                None => load(&turn.store, &chat_id).await?,
-            };
-        let mut system = with_summary(&system, summary.as_ref());
-        let mut messages = with_files(
-            turn,
-            answered(history.into_iter().map(|saved| saved.message).collect()),
-            system.len() as u64,
-        )
-        .await;
+        make_room(turn, &system, &specs, &mut history, &mut out).await?;
+        let mut system = with_summary(&system, history.summary.as_ref());
+        let mut messages = with_files(turn, &history, system.len() as u64, &encoded).await;
 
         out.start_step();
         let mut result = stream_step(turn, &system, &messages, &specs, &mut out).await;
@@ -386,10 +381,12 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         let cited = if done { sources.clone() } else { Vec::new() };
         let model = turn.model.id.clone();
         let chat = chat_id.clone();
-        saved(&turn.store, move |store| {
-            store.add(&chat, &message, &cited, Some(&model)).map(|_| ())
+        let kept = message.clone();
+        let seq = saved(&turn.store, move |store| {
+            store.add(&chat, &kept, &cited, Some(&model))
         })
         .await?;
+        history.push(seq, message);
         if done {
             return Ok((reply.stop, usage));
         }
@@ -407,10 +404,9 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
         let (results, files) = run_calls(turn, &tools, &calls, over, &mut out, &mut sources).await;
         let chat = chat_id.clone();
         let message = Message::Tool { results, files };
-        saved(&turn.store, move |store| {
-            store.add(&chat, &message, &[], None).map(|_| ())
-        })
-        .await?;
+        let kept = message.clone();
+        let seq = saved(&turn.store, move |store| store.add(&chat, &kept, &[], None)).await?;
+        history.push(seq, message);
         if over {
             out.send(Event::StepLimit);
             return Ok((Stop::Done, usage));
@@ -446,27 +442,32 @@ async fn stream_step(
     .await
 }
 
-/// `messages` with their files' data read, off the async threads.
-async fn with_files(turn: &Turn, mut messages: Vec<Message>, system_bytes: u64) -> Vec<Message> {
+/// The chat's messages for the next request, with their files' data read
+/// off the async threads.
+async fn with_files(
+    turn: &Turn,
+    history: &History,
+    system_bytes: u64,
+    encoded: &Arc<Mutex<files::Encoded>>,
+) -> Vec<Message> {
+    let mut messages = history.messages();
     let has_files = messages.iter().any(|m| !m.files().is_empty());
     if !turn.send_files || !has_files {
         return messages;
     }
     let root = turn.vault.root.clone();
     let sending = files::Sending::new(turn.send_files, turn.model.target.api, &turn.model.facts);
-    let text_bytes = system_bytes
-        + messages
-            .iter()
-            .map(|m| serde_json::to_string(m).map_or(0, |json| json.len() as u64))
-            .sum::<u64>();
-    let plain = messages.clone();
+    let text_bytes = system_bytes + history.message_bytes();
+    let encoded = encoded.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        files::load(&root, &mut messages, &sending, text_bytes);
+        let mut encoded = encoded.lock().unwrap_or_else(|e| e.into_inner());
+        files::load(&root, &mut messages, &sending, text_bytes, &mut encoded);
         messages
     })
     .await
+    .ok()
     // Without its files rather than without the chat.
-    .unwrap_or(plain)
+    .unwrap_or_else(|| history.messages())
 }
 
 /// Saves what streamed of an answer that was stopped.
@@ -791,7 +792,66 @@ async fn offer(turn: &Turn, call: &Call) -> Result<String, String> {
     .map_err(|_| "The tool stopped".to_string())?
 }
 
-async fn load(store: &SharedStore, chat: &str) -> Result<(Option<Summary>, Vec<Saved>), ChatError> {
+/// The chat as the model gets it, through one answer: read once, then each
+/// message added as it's saved, with its size kept as it goes.
+struct History {
+    summary: Option<Summary>,
+    /// The messages after the summary.
+    saved: Vec<Saved>,
+    /// The size of each of them as JSON.
+    sizes: Vec<usize>,
+}
+
+fn json_size(message: &Message) -> usize {
+    serde_json::to_string(message).map_or(0, |json| json.len())
+}
+
+impl History {
+    fn new(summary: Option<Summary>, saved: Vec<Saved>) -> Self {
+        let sizes = saved
+            .iter()
+            .map(|saved| json_size(&saved.message))
+            .collect();
+        Self {
+            summary,
+            saved,
+            sizes,
+        }
+    }
+
+    fn push(&mut self, seq: i64, message: Message) {
+        self.sizes.push(json_size(&message));
+        self.saved.push(Saved {
+            seq,
+            message,
+            sources: Vec::new(),
+            model: None,
+        });
+    }
+
+    fn message_bytes(&self) -> u64 {
+        self.sizes.iter().sum::<usize>() as u64
+    }
+
+    /// The messages to send, every tool call answered.
+    fn messages(&self) -> Vec<Message> {
+        answered(
+            self.saved
+                .iter()
+                .map(|saved| saved.message.clone())
+                .collect(),
+        )
+    }
+
+    /// `summary` now stands in for the messages before `split`.
+    fn summarized(&mut self, summary: Summary, split: usize) {
+        self.summary = Some(summary);
+        self.saved.drain(..split);
+        self.sizes.drain(..split);
+    }
+}
+
+async fn load(store: &SharedStore, chat: &str) -> Result<History, ChatError> {
     let chat = chat.to_string();
     saved(store, move |store| {
         let summary = store.summary(&chat)?;
@@ -801,7 +861,7 @@ async fn load(store: &SharedStore, chat: &str) -> Result<(Option<Summary>, Vec<S
             .into_iter()
             .filter(|saved| saved.seq > through)
             .collect();
-        Ok((summary, messages))
+        Ok(History::new(summary, messages))
     })
     .await
 }
@@ -880,26 +940,32 @@ fn context_of(model: &Model) -> (u64, u64) {
     (context, answer_room)
 }
 
-fn tokens_of(
-    system: &str,
-    specs: &[ToolSpec],
-    summary: Option<&Summary>,
-    history: &[Saved],
-) -> u64 {
+/// What every request sends whatever the chat holds: the system prompt and
+/// the tools.
+fn fixed_tokens(system: &str, specs: &[ToolSpec]) -> u64 {
     let tools: usize = specs
         .iter()
         .map(|spec| spec.name.len() + spec.description.len() + spec.schema.to_string().len())
         .sum();
-    let messages: usize = history
-        .iter()
-        .map(|saved| serde_json::to_string(&saved.message).map_or(0, |json| json.len()))
-        .sum();
-    let files: u64 = history
+    estimate(system.len() + tools)
+}
+
+/// Whether the model's context holds what every request sends and the
+/// room for an answer. A context that isn't known is taken to.
+fn fits_context(model: &Model, system: &str, specs: &[ToolSpec]) -> bool {
+    let (context, answer_room) = context_of(model);
+    model.facts.context.is_none() || fixed_tokens(system, specs) + answer_room <= context
+}
+
+/// The rest of a request beside its fixed part: the summary and the
+/// messages with their files.
+fn chat_tokens(summary: Option<&Summary>, saved: &[Saved], bytes: u64) -> u64 {
+    let files: u64 = saved
         .iter()
         .flat_map(|saved| saved.message.files())
         .map(|file| file.tokens)
         .sum();
-    estimate(system.len() + tools + summary.map_or(0, |s| s.text.len()) + messages) + files
+    estimate(summary.map_or(0, |s| s.text.len()) + bytes as usize) + files
 }
 
 /// Where older messages end: before a user message, keeping the latest
@@ -911,32 +977,39 @@ fn split_point(history: &[Saved]) -> Option<usize> {
         .find(|&i| matches!(history[i].message, Message::User { .. }))
 }
 
-/// Summarizes older messages when the chat nears the model's limit. Gives
-/// the chat as it now stands when it did.
+/// Summarizes older messages when the chat nears the model's limit, unless
+/// what every request sends is over the limit already, so a summary would
+/// free nothing that matters.
 async fn make_room(
     turn: &Turn,
     system: &str,
     specs: &[ToolSpec],
-    summary: Option<Summary>,
-    history: Vec<Saved>,
+    history: &mut History,
     out: &mut Out<'_>,
-) -> Result<Option<(Option<Summary>, Vec<Saved>)>, ChatError> {
+) -> Result<(), ChatError> {
     let (context, answer_room) = context_of(&turn.model);
     let budget = ((context - answer_room) as f64 * SUMMARY_AT) as u64;
-    if tokens_of(system, specs, summary.as_ref(), &history) <= budget {
-        return Ok(Some((summary, history)));
+    let fixed = fixed_tokens(system, specs);
+    let chat = chat_tokens(
+        history.summary.as_ref(),
+        &history.saved,
+        history.message_bytes(),
+    );
+    if fixed + chat <= budget || fixed >= budget {
+        return Ok(());
     }
-    let Some(split) = split_point(&history) else {
-        return Ok(Some((summary, history)));
+    let Some(split) = split_point(&history.saved) else {
+        return Ok(());
     };
-    let through = history[split - 1].seq;
-    let text = summarize(turn, summary.as_ref(), &history[..split]).await?;
+    let through = history.saved[split - 1].seq;
+    let text = summarize(turn, history.summary.as_ref(), &history.saved[..split]).await?;
     let summary = Summary { text, through };
     let chat = turn.chat.clone();
     let kept = summary.clone();
     saved(&turn.store, move |store| store.set_summary(&chat, &kept)).await?;
+    history.summarized(summary, split);
     out.send(Event::Summarized);
-    Ok(None)
+    Ok(())
 }
 
 const SUMMARY_PROMPT: &str = "You summarize a chat between a user and the assistant \

@@ -75,6 +75,8 @@ const ERRORS: Record<ChatError["kind"], string> = {
   busy: "The provider is busy, try again soon",
   timedOut: "The provider stopped answering",
   tooLong: "This chat is longer than the model can read, start a new one",
+  contextTooSmall:
+    "This model's context is too small for the assistant's instructions and tools",
   failed: "The provider couldn't answer",
   stopped: "Stopped",
   noModel: "No model picked",

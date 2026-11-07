@@ -115,7 +115,8 @@ pub struct Change {
     /// How many calls make it.
     pub count: usize,
     pub state: ChangeState,
-    /// The files applying changed, as they were and became.
+    /// The files applying changed, as they were and became. Read for one
+    /// change only, never in a chat's list.
     #[serde(skip)]
     pub applied: Vec<FileChange>,
     /// The name of the model that proposed it.
@@ -164,6 +165,9 @@ fn json_text<T: Serialize>(value: &T) -> Result<String, String> {
 }
 
 const CHANGE_COLUMNS: &str = "id, chat, turn, kind, path, ops, state, applied, model";
+/// [`CHANGE_COLUMNS`] without what an applied change wrote, the full text
+/// of each file it touched, which only taking it back reads.
+const LISTED_CHANGE_COLUMNS: &str = "id, chat, turn, kind, path, ops, state, NULL, model";
 
 fn change_from_row(row: &rusqlite::Row) -> rusqlite::Result<Option<Change>> {
     let kind: String = row.get(3)?;
@@ -325,26 +329,26 @@ impl Store {
         let body = serde_json::to_string(message).map_err(|e| e.to_string())?;
         let sources = serde_json::to_string(sources).map_err(|e| e.to_string())?;
         let time = now();
-        let seq: i64 = self
-            .conn
+        // One commit, so one wait for the disk, for the message and its chat.
+        let tx = self.conn.unchecked_transaction().map_err(sql)?;
+        let seq: i64 = tx
             .query_row(
                 "SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE chat = ?1",
                 params![chat],
                 |row| row.get(0),
             )
             .map_err(sql)?;
-        self.conn
-            .execute(
-                "INSERT INTO messages (chat, seq, body, sources, model, created) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![chat, seq, body, sources, model, time],
-            )
-            .map_err(sql)?;
-        self.conn
-            .execute(
-                "UPDATE chats SET updated = ?2 WHERE id = ?1",
-                params![chat, time],
-            )
-            .map_err(sql)?;
+        tx.execute(
+            "INSERT INTO messages (chat, seq, body, sources, model, created) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![chat, seq, body, sources, model, time],
+        )
+        .map_err(sql)?;
+        tx.execute(
+            "UPDATE chats SET updated = ?2 WHERE id = ?1",
+            params![chat, time],
+        )
+        .map_err(sql)?;
+        tx.commit().map_err(sql)?;
         Ok(seq)
     }
 
@@ -473,12 +477,13 @@ impl Store {
         Ok(id)
     }
 
-    /// A chat's changes, in the order they were proposed.
+    /// A chat's changes, in the order they were proposed, without what
+    /// applying them wrote.
     pub fn changes(&self, chat: &str) -> Result<Vec<Change>, String> {
         let mut statement = self
             .conn
             .prepare(&format!(
-                "SELECT {CHANGE_COLUMNS} FROM changes WHERE chat = ?1 ORDER BY created, rowid"
+                "SELECT {LISTED_CHANGE_COLUMNS} FROM changes WHERE chat = ?1 ORDER BY created, rowid"
             ))
             .map_err(sql)?;
         let rows = statement
@@ -754,6 +759,34 @@ mod tests {
     fn long_titles_are_cut() {
         let title = title_of(&"word ".repeat(40));
         assert!(title.ends_with('…') && title.chars().count() <= TITLE_LENGTH + 1);
+    }
+
+    #[test]
+    fn a_chats_list_of_changes_leaves_out_what_applying_wrote() {
+        let store = store("sessions-applied");
+        let chat = store.create(Path::new("/v"), "Fix the plan").unwrap();
+        let id = store
+            .add_change(&chat, 1, Kind::Shard, "Plan.md", &[], None)
+            .unwrap();
+        let wrote = FileChange {
+            path: "Plan.md".into(),
+            before: Some("old".into()),
+            after: Some("new".into()),
+        };
+        store
+            .set_change_state(
+                &id,
+                ChangeState::Applied,
+                std::slice::from_ref(&wrote),
+                "Plan.md",
+            )
+            .unwrap();
+
+        let listed = store.changes(&chat).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].state, ChangeState::Applied);
+        assert!(listed[0].applied.is_empty());
+        assert_eq!(store.change(&id).unwrap().unwrap().applied, [wrote]);
     }
 
     #[test]

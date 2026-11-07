@@ -14,6 +14,7 @@ import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { hasModKey } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { isAssistantOn } from "@/lib/assistant";
 import { useEditorStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
@@ -29,6 +30,8 @@ type EditorSession = {
   content: string;
   value: any[];
   cacheHit: boolean;
+  /** Whether the shard has inline Ask: only while the assistant is on. */
+  inlineAsk: boolean;
 };
 
 type EditorSessions = {
@@ -190,7 +193,10 @@ export function Editor() {
     let cancelled = false;
     const tick = editorSessionTick;
 
-    void resolveSessionValue(filePath, content, initialValue).then((value) => {
+    void Promise.all([
+      resolveSessionValue(filePath, content, initialValue),
+      isAssistantOn(),
+    ]).then(([value, inlineAsk]) => {
       if (cancelled) return;
 
       startSessionTransition(() => {
@@ -200,6 +206,7 @@ export function Editor() {
           content,
           value,
           cacheHit: initialValue !== null,
+          inlineAsk,
         });
       });
     });
@@ -275,6 +282,7 @@ export function Editor() {
                 currentFilePath={session.filePath}
                 initialValue={session.value}
                 cacheHit={session.cacheHit}
+                inlineAsk={session.inlineAsk}
               />
             </EditorErrorBoundary>
           </div>

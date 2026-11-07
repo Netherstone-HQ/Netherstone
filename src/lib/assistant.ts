@@ -41,6 +41,12 @@ export async function loadAssistantEnabled() {
   }
 }
 
+/** Whether the assistant is on, reading its switch first if it isn't known. */
+export async function isAssistantOn(): Promise<boolean> {
+  if (store.getState().enabled === null) await loadAssistantEnabled();
+  return store.getState().enabled === true;
+}
+
 /** Opens the panel in the right sidebar's place, closing History there. */
 export function openAssistant() {
   const history = useHistoryStore.getState();

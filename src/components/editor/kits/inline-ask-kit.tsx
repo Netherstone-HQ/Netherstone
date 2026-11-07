@@ -23,11 +23,9 @@ import {
 } from "@/components/history/history-diff-kit";
 import { Editor as PlateEditor } from "@/components/ui/editor";
 import { diffShardValues } from "@/lib/history-diff";
-import { inlineAskBlock, inlineAskRange } from "@/lib/inline-ask";
+import { INLINE_ASK_KEY, inlineAskBlock, inlineAskRange } from "@/lib/inline-ask";
 import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
 import { useInlineAskStore } from "@/store/inline-ask";
-
-const KEY = "inlineAsk";
 
 /** How a piece of the text asked about looks. */
 type Look = "tint" | "removed" | "block";
@@ -165,7 +163,7 @@ function InlineAskLeaf(props: PlateLeafProps) {
  */
 export const InlineAskKit = [
   createPlatePlugin({
-    key: KEY,
+    key: INLINE_ASK_KEY,
     node: { isLeaf: true, component: InlineAskLeaf },
     decorate: ({ editor, entry: [node, path] }) => {
       const range = inlineAskRange(editor);
@@ -175,7 +173,7 @@ export const InlineAskKit = [
       if (!hit || RangeApi.isCollapsed(hit)) return [];
       const { phase, whole } = useInlineAskStore.getState();
       const piece = (at: { anchor: any; focus: any }, look: Look, extra = {}) =>
-        ({ ...at, [KEY]: true, askLook: look, ...extra }) as DecoratedRange;
+        ({ ...at, [INLINE_ASK_KEY]: true, askLook: look, ...extra }) as DecoratedRange;
       if (phase !== "preview") return [piece(hit, "tint")];
       if (whole) return [piece(hit, "block")];
 

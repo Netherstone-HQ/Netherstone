@@ -43,6 +43,11 @@ type MountedEditorProps = {
   currentFilePath: string;
   initialValue: any[];
   cacheHit: boolean;
+  /**
+   * With inline Ask, which only a shard opened while the assistant is on
+   * has, so with it off the editor carries nothing of it.
+   */
+  inlineAsk: boolean;
 };
 
 export const MountedEditor = memo(function MountedEditor({
@@ -50,13 +55,14 @@ export const MountedEditor = memo(function MountedEditor({
   currentFilePath,
   initialValue,
   cacheHit,
+  inlineAsk,
 }: MountedEditorProps) {
   const didWriteColdOpenCacheRef = useRef(false);
   const suppressInitialChangeRef = useRef(true);
 
   const editor = usePlateEditor({
     // Inline Ask previews with the history kit, which is built on EditorKit.
-    plugins: [...EditorKit, ...InlineAskKit],
+    plugins: inlineAsk ? [...EditorKit, ...InlineAskKit] : EditorKit,
     value: initialValue,
     chunking: { chunkSize: EDITOR_CHUNK_SIZE },
     // Plate's navigation feedback (the flash on a block a table of contents

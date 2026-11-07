@@ -59,6 +59,14 @@ export function inlineAskBlock(
   return index === paths.length - 1 ? "last" : "removed";
 }
 
+/** The inline Ask plugin's key in the editor. */
+export const INLINE_ASK_KEY = "inlineAsk";
+
+/** Whether `editor` has inline Ask: shards opened while the assistant is off don't. */
+export function hasInlineAsk(editor: PlateEditor) {
+  return INLINE_ASK_KEY in editor.plugins;
+}
+
 function redecorate(editor: PlateEditor) {
   editor.api.redecorate();
 }

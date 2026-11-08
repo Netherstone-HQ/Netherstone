@@ -27,6 +27,8 @@ pub struct Made {
     path: String,
     /// Its text now, or None when it's gone.
     content: Option<String>,
+    /// For a move, where the file was before: vault-relative.
+    from: Option<String>,
 }
 
 pub(super) fn store_error(error: String) -> String {
@@ -128,14 +130,27 @@ fn caller() -> crate::tools::Caller {
     }
 }
 
-/// What `files` left at `path`, the change's own file.
-fn made(files: &[crate::tools::proposals::FileChange], path: &str) -> Made {
+/// What `files` left at `path`, the change's own file, and for a move
+/// the file it left.
+fn made(
+    kind: crate::tools::proposals::Kind,
+    files: &[crate::tools::proposals::FileChange],
+    path: &str,
+) -> Made {
+    let from = match kind {
+        crate::tools::proposals::Kind::Move => files
+            .iter()
+            .find(|file| file.after.is_none() && file.path != path)
+            .map(|file| file.path.clone()),
+        _ => None,
+    };
     Made {
         path: path.to_string(),
         content: files
             .iter()
             .find(|file| file.path == path)
             .and_then(|file| file.after.clone()),
+        from,
     }
 }
 
@@ -170,7 +185,7 @@ pub async fn apply(id: String, expected: Option<String>) -> Result<Made, String>
         store
             .set_change_state(&id, ChangeState::Applied, &files, &path)
             .map_err(store_error)?;
-        Ok(made(&files, &path))
+        Ok(made(change.kind, &files, &path))
     })
     .await
 }
@@ -196,7 +211,7 @@ pub async fn undo(id: String) -> Result<Made, String> {
         store
             .set_change_state(&id, ChangeState::Pending, &[], &path)
             .map_err(store_error)?;
-        Ok(made(&files, &change.path))
+        Ok(made(change.kind, &files, &path))
     })
     .await
 }
@@ -214,4 +229,46 @@ pub async fn discard(id: String) -> Result<(), String> {
             .map_err(store_error)
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::proposals::{FileChange, Kind};
+
+    fn file(path: &str, before: Option<&str>, after: Option<&str>) -> FileChange {
+        FileChange {
+            path: path.to_string(),
+            before: before.map(str::to_string),
+            after: after.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_move_says_where_the_file_was() {
+        let applied = [
+            file("Trip.md", Some("# Trip"), None),
+            file("Archive/Trip.md", None, Some("# Trip")),
+        ];
+        let moved = made(Kind::Move, &applied, "Archive/Trip.md");
+        assert_eq!(moved.from.as_deref(), Some("Trip.md"));
+        assert_eq!(moved.content.as_deref(), Some("# Trip"));
+
+        // Undone, it goes back.
+        let undone = [
+            file("Trip.md", None, Some("# Trip")),
+            file("Archive/Trip.md", Some("# Trip"), None),
+        ];
+        let back = made(Kind::Move, &undone, "Trip.md");
+        assert_eq!(back.from.as_deref(), Some("Archive/Trip.md"));
+        assert_eq!(back.content.as_deref(), Some("# Trip"));
+    }
+
+    #[test]
+    fn an_undone_new_shard_is_gone() {
+        let undone = [file("Plans/Lisbon.md", Some("# Lisbon"), None)];
+        let gone = made(Kind::NewShard, &undone, "Plans/Lisbon.md");
+        assert_eq!(gone.content, None);
+        assert_eq!(gone.from, None);
+    }
 }

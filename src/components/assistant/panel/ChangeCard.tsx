@@ -71,7 +71,8 @@ function appliedWords(change: ChatChange): [string, string] {
       return ["Created ", ` in ${folderOf(change.path)}`];
     case "move": {
       const { where, renamed } = moveParts(change);
-      const old = shardName(change.path);
+      // Once applied, the change is listed where it went.
+      const old = shardName(change.moving?.from ?? change.path);
       if (where === null) return [`Renamed ${old} to `, ""];
       return renamed ? [`Moved ${old} to ${where} as `, ""] : ["Moved ", ` to ${where}`];
     }
@@ -160,7 +161,7 @@ function FileLink({
  * the open shard shows in its place, and its name brings it back into
  * view; one to another shard opens it from its name; a new shard or
  * drawing, or a changed drawing, shows in the card; a move says where it
- * goes. Once applied, its name opens what it made or changed.
+ * goes. Once applied, its name and Open open what it made or changed.
  */
 export function ChangeCard({ change }: { change: ChatChange }) {
   const busy = useAssistantStore((s) => s.busyChanges.includes(change.id));
@@ -177,6 +178,8 @@ export function ChangeCard({ change }: { change: ChatChange }) {
   if (change.state === "applied") {
     const path = appliedPath(change);
     const [before, after] = appliedWords(change);
+    // The open shard is already there to look at.
+    const canOpen = isOpenable(path) && openShardPath(vault, openPath) !== path;
     return (
       <div className="flex items-center gap-2 rounded-[10px] border bg-card py-2.5 pr-2 pl-3">
         <CheckIcon className="size-4 shrink-0 text-brand" />
@@ -189,6 +192,16 @@ export function ChangeCard({ change }: { change: ChatChange }) {
           )}
           {after}
         </span>
+        {canOpen && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => openShard({ path, section: null })}
+          >
+            Open
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"

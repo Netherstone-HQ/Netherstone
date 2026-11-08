@@ -352,6 +352,87 @@ test("shows a new shard in its card before it's made", async ({ page }) => {
   await expect(editor(page)).toContainText("Trains at 9.");
 });
 
+test("a made shard opens from its card, and once undone leaves Recent", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: { ...READY, change: { kind: "newShard", path: "Plans/Lisbon.md", after: "# Lisbon\n\nTrains at 9.\n" } },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await assistant.getByRole("button", { name: "Create" }).click();
+  await expect(assistant.getByText("Created Lisbon in Plans")).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(editor(page)).toContainText("Trains at 9.");
+  const recent = page.getByRole("region", { name: "Recent" });
+  await expect(recent.getByRole("button", { name: /Lisbon/ })).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Undo" }).click();
+  await expect(assistant.getByRole("button", { name: "Create" })).toBeVisible();
+  await expect(recent.getByRole("button", { name: /Lisbon/ })).toHaveCount(0);
+  await expect(recent.getByRole("button", { name: /Trip/ })).toBeVisible();
+});
+
+test("Recent follows a move the assistant makes, and its undo", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: { kind: "move", path: "Trip.md", after: "", moving: { folder: "Archive", name: null } },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  const recent = page.getByRole("region", { name: "Recent" });
+  await expect(recent.getByRole("button", { name: "Trip", exact: true })).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Apply" }).click();
+  await expect(assistant.getByText("Moved Trip to Archive")).toBeVisible();
+  await expect(recent.getByRole("button", { name: "Trip Archive" })).toBeVisible();
+
+  await assistant.getByRole("button", { name: "Undo" }).click();
+  await expect(recent.getByRole("button", { name: "Trip", exact: true })).toBeVisible();
+  await expect(recent.getByRole("button", { name: "Trip Archive" })).toHaveCount(0);
+});
+
+test("an applied rename names the shard as it was", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: {
+      ...READY,
+      change: { kind: "move", path: "Trip.md", after: "", moving: { folder: null, name: "Journey" } },
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const assistant = panel(page);
+  await assistant.getByRole("button", { name: "Summarize this shard" }).click();
+  await expect(assistant.getByText("Rename Trip to Journey")).toBeVisible();
+  await assistant.getByRole("button", { name: "Apply" }).click();
+  await expect(assistant.getByText("Renamed Trip to Journey")).toBeVisible();
+});
+
+test("a Recent shard that's gone comes off Recent when clicked, with a toast", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Trip.md" });
+  await page.getByRole("region", { name: "Files" }).getByRole("button", { name: "Bread", exact: true }).click();
+  await expect(editor(page)).toContainText("Use 350 g water.");
+  const recent = page.getByRole("region", { name: "Recent" });
+  await expect(recent.getByRole("button", { name: "Bread" })).toBeVisible();
+
+  // Taken away outside the app.
+  await page.evaluate(() => {
+    window.__overrides = { file_exists: () => false };
+  });
+  await recent.getByRole("button", { name: "Bread" }).click();
+  await expect(page.getByText("Couldn't find Bread")).toBeVisible();
+  await expect(recent.getByRole("button", { name: "Bread" })).toHaveCount(0);
+  await expect(recent.getByRole("button", { name: "Trip" })).toBeVisible();
+});
+
 test("shows a drawing in its card before it's made", async ({ page }) => {
   const scene = JSON.stringify({
     type: "excalidraw",

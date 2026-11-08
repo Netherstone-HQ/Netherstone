@@ -67,6 +67,7 @@
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
     --color-muted: var(--muted);
+    --color-bubble: var(--bubble);
     --color-secondary-foreground: var(--secondary-foreground);
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
@@ -141,6 +142,8 @@
     --secondary: #eeebe5;
     --secondary-foreground: #141516;
     --muted: #eeebe5;
+    /* The user's messages in the assistant panel, set off from it. */
+    --bubble: #cecbc6;
     --muted-foreground: #6b6862;
     --accent: #e8e4dd;
     --accent-foreground: #141516;
@@ -183,6 +186,7 @@
     --secondary: #2a2c2e;
     --secondary-foreground: #eeebe5;
     --muted: #2a2c2e;
+    --bubble: #2a2c2e;
     --muted-foreground: #a8a49c;
     --accent: #2a2c2e;
     --accent-foreground: #eeebe5;
@@ -225,6 +229,7 @@
     --secondary: #1c2a21;
     --secondary-foreground: #e6ece8;
     --muted: #1c2a21;
+    --bubble: #29372e;
     --muted-foreground: #93a69a;
     --accent: #1c2a21;
     --accent-foreground: #e6ece8;
@@ -267,6 +272,7 @@
     --secondary: #2b1a1a;
     --secondary-foreground: #f3e6e2;
     --muted: #2b1a1a;
+    --bubble: #413030;
     --muted-foreground: #c2a8a3;
     --accent: #4a2226;
     --accent-foreground: #f3e6e2;
@@ -307,6 +313,7 @@
     --secondary: #363634;
     --secondary-foreground: #e8e3d6;
     --muted: #363634;
+    --bubble: #434340;
     --muted-foreground: #aaa498;
     --accent: #3c3c3a;
     --accent-foreground: #e8e3d6;

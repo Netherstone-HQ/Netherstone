@@ -830,6 +830,28 @@ mod tests {
     }
 
     #[test]
+    fn an_applied_move_keeps_where_it_came_from() {
+        let store = store("sessions-moved");
+        let chat = store.create(Path::new("/v"), "Rename the plan").unwrap();
+        let ops = [Op {
+            name: "move".into(),
+            arguments: json!({ "path": "Plan.md", "new_name": "Trip" }),
+        }];
+        let id = store
+            .add_change(&chat, 1, Kind::Move, "Plan.md", &ops, None)
+            .unwrap();
+        // As applying leaves it: listed where it went.
+        store
+            .set_change_state(&id, ChangeState::Applied, &[], "Trip.md")
+            .unwrap();
+
+        let listed = store.changes(&chat).unwrap();
+        assert_eq!(listed[0].path, "Trip.md");
+        let moving = listed[0].moving.as_ref().unwrap();
+        assert_eq!(moving.from.as_deref(), Some("Plan.md"));
+    }
+
+    #[test]
     fn a_chats_list_of_changes_leaves_out_what_applying_wrote() {
         let store = store("sessions-applied");
         let chat = store.create(Path::new("/v"), "Fix the plan").unwrap();

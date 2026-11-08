@@ -6,7 +6,7 @@ use super::engine::{self, Event, Sink, Turn};
 use super::providers::Api;
 use super::setup::picked_model;
 use super::views::store;
-use super::{inline, local, memory, sessions};
+use super::{inline, local, memory};
 use crate::ai_vaults::{self, Way};
 use crate::db;
 use std::collections::HashMap;
@@ -323,60 +323,4 @@ pub fn stop_window(window: &str) {
             }
         }
     }
-}
-
-/// Gives a new chat a short name from its first question and answer, with
-/// one small call to the model. Its first title stays when that fails. Only
-/// while the assistant is on and may use the chat's vault; turning it off
-/// stops it like an answer.
-pub async fn retitle(chat: String, window: String) -> Result<String, ChatError> {
-    // Registered first, so turning off while it's setting up counts.
-    let key = format!("title:{chat}");
-    let stop = StopToken::default();
-    {
-        let mut running = running().lock().map_err(|_| ChatError::Failed)?;
-        if running.contains_key(&key) {
-            return Err(ChatError::Answering);
-        }
-        running.insert(key.clone(), (window, stop.clone()));
-    }
-    let result = retitle_run(chat, &stop).await;
-    if let Ok(mut running) = running().lock() {
-        running.remove(&key);
-    }
-    result
-}
-
-async fn retitle_run(chat: String, stop: &StopToken) -> Result<String, ChatError> {
-    let store = store()?;
-    let id = chat.clone();
-    let (info, messages) = engine::saved(&store, move |store| {
-        Ok((store.info(&id)?, store.messages(&id)?))
-    })
-    .await?;
-    let info = info.ok_or(ChatError::NoChat)?;
-    let question = messages.iter().find_map(|saved| match &saved.message {
-        Message::User { text, .. } => Some(text.clone()),
-        _ => None,
-    });
-    let answer = messages.iter().find_map(|saved| match &saved.message {
-        Message::Assistant { text, .. } if !text.trim().is_empty() => Some(text.clone()),
-        _ => None,
-    });
-    let (Some(question), Some(answer)) = (question, answer) else {
-        return Err(ChatError::Failed);
-    };
-    let model = tauri::async_runtime::spawn_blocking(move || {
-        open_vault(&PathBuf::from(info.vault))?;
-        picked_model()
-    })
-    .await
-    .map_err(|_| ChatError::Failed)??;
-    if stop.is_stopped() {
-        return Err(ChatError::Stopped);
-    }
-    let title = engine::short_title(&model, &chat, &question, &answer, stop).await?;
-    let kept = title.clone();
-    engine::saved(&store, move |store| store.set_title(&chat, &kept)).await?;
-    Ok(sessions::title_of(&title))
 }

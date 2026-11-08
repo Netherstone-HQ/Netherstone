@@ -103,7 +103,7 @@ const ERRORS: Record<ChatError["kind"], string> = {
   stopped: "Stopped",
   noModel: "No model picked",
   turnedOff: "The assistant is off",
-  vaultClosed: "This vault is off for AI",
+  vaultClosed: "AI is off for this vault",
   answering: "This chat is still answering",
   noChat: "This chat was deleted",
   storage: "Couldn't save the chat",

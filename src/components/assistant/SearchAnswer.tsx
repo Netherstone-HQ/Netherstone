@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import type { Citation } from "@/lib/open-citation";
-import { folderName } from "@/lib/open-vault";
 import { openWebLink } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
@@ -173,7 +172,7 @@ export function SearchSetupNeeded({
       : state === "vaultOff"
         ? [
             FolderIcon,
-            `${vault ? folderName(vault) : "This vault"} is off for AI`,
+            "AI is off for this vault",
             "Turn on",
             () => void turnOn(),
           ]

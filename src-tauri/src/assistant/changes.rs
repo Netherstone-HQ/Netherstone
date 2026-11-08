@@ -37,7 +37,7 @@ pub(super) fn store_error(error: String) -> String {
 pub(super) fn error_text(error: ChatError) -> String {
     match error {
         ChatError::TurnedOff => "The assistant is off".to_string(),
-        ChatError::VaultClosed => "This vault is off for AI".to_string(),
+        ChatError::VaultClosed => "AI is off for this vault".to_string(),
         _ => "Couldn't read the saved chats".to_string(),
     }
 }

@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::db::attachments::extension_for_path;
+use crate::attachments::policy::extension_for_path;
 
 /// Files that run something when opened, on Windows, macOS or Linux.
 const PROGRAM_EXTENSIONS: &[&str] = &[

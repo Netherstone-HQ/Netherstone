@@ -30,11 +30,11 @@ describe("tagVersion", () => {
 describe("renderTemplate", () => {
   it("fills in versions, links and checksums", () => {
     const text = renderTemplate(
-      "{{version}} {{pkgver}} {{url.macArm}} {{sha256.macIntel}}",
+      "{{version}} {{url.macArm}} {{sha256.macIntel}}",
       release,
     );
     expect(text).toBe(
-      `0.6.0-beta.2 0.6.0beta.2 ${assetUrl("macArm", version)} ${"1".repeat(64)}`,
+      `0.6.0-beta.2 ${assetUrl("macArm", version)} ${"1".repeat(64)}`,
     );
     expect(assetUrl("macArm", version)).toBe(
       "https://github.com/Netherstone-HQ/Netherstone/releases/download/v0.6.0-beta.2/Netherstone_0.6.0-beta.2_aarch64.dmg",

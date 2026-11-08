@@ -70,7 +70,7 @@ pub fn create_shard(
     change(vault, caller, params.summary.as_deref(), &[], || {
         let writes = crate::locks::vault_writes()?;
         let path = crate::import::prepare_new_shard(&vault.root, &wanted)?;
-        crate::write_shard(
+        crate::shards::write_shard(
             &writes,
             &vault.root,
             &path.to_string_lossy(),
@@ -410,10 +410,10 @@ pub(super) fn move_recorded(
     recorded(vault, caller, summary, &touched, || {
         let mut at = source.to_string_lossy().into_owned();
         if let Some(destination) = &destination {
-            at = crate::move_path(&vault.root, &at, &destination.to_string_lossy())?;
+            at = crate::shards::paths::move_path(&vault.root, &at, &destination.to_string_lossy())?;
         }
         if let Some(name) = new_name {
-            at = crate::rename_path(&vault.root, &at, name)?;
+            at = crate::shards::paths::rename_path(&vault.root, &at, name)?;
         }
         let at = PathBuf::from(at);
         Ok((

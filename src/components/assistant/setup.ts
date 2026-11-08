@@ -58,7 +58,7 @@ export function useSetup(active = true) {
   // The probe can take a moment: only the latest read lands.
   const latest = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<Setup | null> => {
     const read = ++latest.current;
     try {
       const [status, picked, vaults] = await Promise.all([
@@ -74,9 +74,12 @@ export function useSetup(active = true) {
         status.enabled && picked?.local
           ? await findLocalServerDown().catch(() => null)
           : null;
-      if (read === latest.current) setSetup({ status, picked, vaultAllowed, serverDown });
+      const next = { status, picked, vaultAllowed, serverDown };
+      if (read === latest.current) setSetup(next);
+      return next;
     } catch (error) {
       console.error("[Netherstone] Couldn't read the assistant's setup:", error);
+      return null;
     }
   }, [vault]);
 
@@ -153,12 +156,32 @@ function activity(tool: { name: string; paths: string[] }) {
   }
 }
 
-/** What an answer coming in says while there's no text to show. */
-export function waitingText(answering: {
-  text: string;
-  reasoning: string;
-  tool: { name: string; paths: string[] } | null;
-}) {
+/** What the wait before asking the provider again says, by why. */
+const RETRYING: Partial<Record<ChatError["kind"], string>> = {
+  busy: "The provider is busy, asking again",
+  rateLimited: "The provider is getting too many requests, asking again",
+  unreachable: "Couldn't reach the provider, asking again",
+};
+
+/**
+ * What an answer coming in says while there's no text to show. A model on
+ * this computer may load from disk before its first word.
+ */
+export function waitingText(
+  answering: {
+    text: string;
+    reasoning: string;
+    tool: { name: string; paths: string[] } | null;
+    retrying: ChatError["kind"] | null;
+  },
+  local = false,
+) {
+  if (answering.retrying) {
+    return RETRYING[answering.retrying] ?? "Asking the provider again";
+  }
   if (answering.tool) return activity(answering.tool);
-  return answering.reasoning ? "Thinking" : "Waiting for the answer";
+  if (answering.reasoning) return "Thinking";
+  return local && !answering.text
+    ? "Waiting for the model, which may be loading"
+    : "Waiting for the answer";
 }

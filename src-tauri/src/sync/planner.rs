@@ -5,7 +5,7 @@
 //! with a reason, so setup and sync can tell the user what stays on this device
 //! instead of discovering it from a failed push.
 
-use crate::db::attachments::{
+use crate::attachments::policy::{
     ATTACHMENTS_DIR_NAME, AttachmentSyncStatus, SYNC_SOFT_LIMIT_BYTES, extension_for_path,
     sync_status_for_attachment,
 };
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn oversized_files_are_skipped() {
         let vault = temp_dir("oversized");
-        let big = vec![b'a'; (crate::db::attachments::SYNC_SOFT_LIMIT_BYTES + 1) as usize];
+        let big = vec![b'a'; (crate::attachments::policy::SYNC_SOFT_LIMIT_BYTES + 1) as usize];
         write(&vault, "_attachments/huge.png", &big);
 
         let file = fs::File::create(vault.join("Huge.md")).unwrap();

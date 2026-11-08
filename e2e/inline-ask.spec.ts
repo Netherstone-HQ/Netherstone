@@ -161,6 +161,25 @@ test("Escape closes the prompt, and Stop leaves the text as it was", async ({ pa
   await expect(editor(page)).toContainText(WHY);
 });
 
+test("an answer that fails says why under the prompt, with Try again", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Why.md",
+    assistant: { ...READY, inlineFailOnce: "rateLimited" },
+  });
+  await select(page, "the app keeps working");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await prompt(page).fill("Make it shorter");
+  await prompt(page).press("Enter");
+
+  // No toast: the prompt says it, and keeps what was asked.
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(prompt(page)).toHaveValue("Make it shorter");
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("button", { name: "Apply" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 test("turning the assistant off leaves nothing behind", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Why.md", assistant: READY });
   await select(page, "the app keeps working when you lose your connection");

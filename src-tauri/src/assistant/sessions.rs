@@ -85,6 +85,12 @@ CREATE TABLE IF NOT EXISTS memory_offers (
     created INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS memory_offers_by_chat ON memory_offers (chat, created);
+CREATE TABLE IF NOT EXISTS endings (
+    chat TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    turn INTEGER NOT NULL,
+    ending TEXT NOT NULL,
+    PRIMARY KEY (chat, turn)
+);
 ";
 
 /// Where a proposed change stands.
@@ -431,7 +437,7 @@ impl Store {
 
     pub fn delete_all(&self) -> Result<(), String> {
         self.conn
-            .execute_batch("DELETE FROM changes; DELETE FROM memory_offers; DELETE FROM messages; DELETE FROM chats; VACUUM;")
+            .execute_batch("DELETE FROM endings; DELETE FROM changes; DELETE FROM memory_offers; DELETE FROM messages; DELETE FROM chats; VACUUM;")
             .map_err(sql)?;
         self.clear_log()
     }
@@ -550,6 +556,53 @@ impl Store {
                 .map_err(sql)?;
         }
         Ok(())
+    }
+
+    // ── Endings ──────────────────────────────────────────────────────────────
+
+    /// How the answer to `turn` ended when it didn't end well, or None when
+    /// it did: the chat shows it under that turn later too.
+    pub fn set_ending(
+        &self,
+        chat: &str,
+        turn: i64,
+        ending: Option<&serde_json::Value>,
+    ) -> Result<(), String> {
+        match ending {
+            Some(ending) => self.conn.execute(
+                "INSERT INTO endings (chat, turn, ending) VALUES (?1, ?2, ?3) \
+                 ON CONFLICT (chat, turn) DO UPDATE SET ending = excluded.ending",
+                params![chat, turn, json_text(ending)?],
+            ),
+            None => self.conn.execute(
+                "DELETE FROM endings WHERE chat = ?1 AND turn = ?2",
+                params![chat, turn],
+            ),
+        }
+        .map(|_| ())
+        .map_err(sql)
+    }
+
+    /// A chat's endings, by the turn they ended.
+    pub fn endings(&self, chat: &str) -> Result<Vec<(i64, serde_json::Value)>, String> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT turn, ending FROM endings WHERE chat = ?1 ORDER BY turn")
+            .map_err(sql)?;
+        let rows = statement
+            .query_map(params![chat], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(sql)?;
+        let mut found = Vec::new();
+        for row in rows {
+            let (turn, text) = row.map_err(sql)?;
+            // One that can't be read is left out rather than the chat.
+            if let Ok(ending) = serde_json::from_str(&text) {
+                found.push((turn, ending));
+            }
+        }
+        Ok(found)
     }
 
     // ── Memory offers ────────────────────────────────────────────────────────
@@ -701,6 +754,21 @@ mod tests {
         let info = store.info(&chat).unwrap().unwrap();
         assert_eq!(info.title, "What did I plan for the trip?");
         assert_eq!(info.vault, "/vaults/Notes");
+    }
+
+    #[test]
+    fn an_ending_stays_with_its_turn_until_the_answer_goes_on() {
+        let store = store("sessions-endings");
+        let chat = store.create(Path::new("/vaults/Notes"), "Hi").unwrap();
+        let failed = serde_json::json!({ "kind": "error", "error": "busy" });
+        store.set_ending(&chat, 1, Some(&failed)).unwrap();
+        store
+            .set_ending(&chat, 3, Some(&serde_json::json!({ "kind": "stopped" })))
+            .unwrap();
+        store.set_ending(&chat, 3, None).unwrap();
+        assert_eq!(store.endings(&chat).unwrap(), vec![(1, failed)]);
+        store.delete(&chat).unwrap();
+        assert!(store.endings(&chat).unwrap().is_empty());
     }
 
     #[test]

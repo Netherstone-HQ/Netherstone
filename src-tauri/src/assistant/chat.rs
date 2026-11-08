@@ -208,6 +208,8 @@ pub enum Stop {
 pub enum Delta<'a> {
     Text(&'a str),
     Reasoning(&'a str),
+    /// The call failed for now and is tried again after a wait.
+    Retrying(ChatError),
 }
 
 /// Why a chat couldn't go on. The frontend words each one.
@@ -388,6 +390,7 @@ pub async fn stream(
             return Err(failure.error);
         }
         attempt += 1;
+        on_delta(Delta::Retrying(failure.error));
         tokio::select! {
             _ = tokio::time::sleep(wait) => {}
             _ = stop.stopped() => return Err(ChatError::Stopped),
@@ -402,6 +405,21 @@ fn adapter_for(target: &Target, model: &str) -> AdapterKind {
     match responses {
         true => AdapterKind::OpenAIResp,
         false => models::adapter(target.api),
+    }
+}
+
+/// How a request to `target` is signed. genai's OpenAI-style adapter won't
+/// send without a key, so a server that takes none (LM Studio, llama.cpp, a
+/// Custom server without one) gets the request at its own address with no
+/// key header.
+fn auth_for(target: &Target, iden: &ModelIden) -> AuthData {
+    match &target.key {
+        Some(key) => AuthData::from_single(key.clone()),
+        None if iden.adapter_kind == AdapterKind::OpenAI => AuthData::RequestOverride {
+            url: format!("{}chat/completions", target.base_url),
+            headers: genai::Headers::default(),
+        },
+        None => AuthData::None,
     }
 }
 
@@ -422,10 +440,7 @@ async fn stream_genai(
     // such as in environment variables.
     let service = ServiceTarget {
         endpoint: Endpoint::from_owned(target.base_url.clone()),
-        auth: target
-            .key
-            .clone()
-            .map_or(AuthData::None, AuthData::from_single),
+        auth: auth_for(target, &iden),
         model: iden.clone(),
     };
     let family = family(target, request.model);
@@ -447,6 +462,7 @@ async fn stream_genai(
     };
 
     let mut streamed = false;
+    let mut think = ThinkSplit::default();
     loop {
         let wait = if streamed { waits.between } else { waits.first };
         let next = tokio::select! {
@@ -463,7 +479,7 @@ async fn stream_genai(
         match event {
             ChatStreamEvent::Chunk(chunk) => {
                 streamed = true;
-                on_delta(Delta::Text(&chunk.content));
+                think.feed(&chunk.content, on_delta);
             }
             ChatStreamEvent::ReasoningChunk(chunk) => {
                 streamed = true;
@@ -473,6 +489,7 @@ async fn stream_genai(
                 streamed = true;
             }
             ChatStreamEvent::End(end) => {
+                think.finish(on_delta);
                 let content = end.captured_content.unwrap_or_default();
                 let usage = end.captured_usage.map_or(Usage::default(), |usage| Usage {
                     input: usage.prompt_tokens.unwrap_or(0).max(0) as u64,
@@ -491,6 +508,88 @@ async fn stream_genai(
             ChatStreamEvent::Start | ChatStreamEvent::Heartbeat => {}
         }
     }
+}
+
+const THINK_OPEN: &str = "<think>";
+const THINK_CLOSE: &str = "</think>";
+
+/// Splits a `<think>` block at the start of an answer into reasoning, as
+/// local models give it in the text when the server doesn't split it.
+#[derive(Default)]
+struct ThinkSplit {
+    state: ThinkState,
+    held: String,
+}
+
+#[derive(Default, PartialEq)]
+enum ThinkState {
+    /// Not yet known whether the answer opens with a block.
+    #[default]
+    Start,
+    Inside,
+    After,
+}
+
+impl ThinkSplit {
+    fn feed(&mut self, chunk: &str, out: &mut (dyn FnMut(Delta) + Send)) {
+        match self.state {
+            ThinkState::After => out(Delta::Text(chunk)),
+            ThinkState::Start => {
+                self.held.push_str(chunk);
+                let start = self.held.trim_start();
+                if let Some(rest) = start.strip_prefix(THINK_OPEN) {
+                    let rest = rest.to_string();
+                    self.held.clear();
+                    self.state = ThinkState::Inside;
+                    self.feed(&rest, out);
+                } else if !THINK_OPEN.starts_with(start) {
+                    self.state = ThinkState::After;
+                    let held = std::mem::take(&mut self.held);
+                    out(Delta::Text(&held));
+                }
+            }
+            ThinkState::Inside => {
+                self.held.push_str(chunk);
+                if let Some(end) = self.held.find(THINK_CLOSE) {
+                    let held = std::mem::take(&mut self.held);
+                    out(Delta::Reasoning(&held[..end]));
+                    self.state = ThinkState::After;
+                    let rest = held[end + THINK_CLOSE.len()..].trim_start();
+                    if !rest.is_empty() {
+                        out(Delta::Text(rest));
+                    }
+                    return;
+                }
+                // Kept back: what could be the start of the closing tag.
+                let mut cut = self.held.len().saturating_sub(THINK_CLOSE.len() - 1);
+                while !self.held.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                if cut > 0 {
+                    let sure: String = self.held.drain(..cut).collect();
+                    out(Delta::Reasoning(&sure));
+                }
+            }
+        }
+    }
+
+    fn finish(&mut self, out: &mut (dyn FnMut(Delta) + Send)) {
+        let held = std::mem::take(&mut self.held);
+        if held.is_empty() {
+            return;
+        }
+        match self.state {
+            ThinkState::Inside => out(Delta::Reasoning(&held)),
+            _ => out(Delta::Text(&held)),
+        }
+    }
+}
+
+/// `text` with a `<think>` block it opens with taken out, and that block.
+fn split_think(text: &str) -> Option<(String, String)> {
+    let rest = text.trim_start().strip_prefix(THINK_OPEN)?;
+    let (thought, answer) = rest.split_once(THINK_CLOSE).unwrap_or((rest, ""));
+    Some((answer.trim_start().to_string(), thought.trim().to_string()))
 }
 
 fn options(target: &Target, request: &Request<'_>) -> ChatOptions {
@@ -702,6 +801,14 @@ fn from_genai(content: MessageContent, family: &str) -> Reply {
                 signatures: call.thought_signatures.unwrap_or_default(),
             }),
             ContentPart::Binary(_) | ContentPart::ToolResponse(_) => {}
+        }
+    }
+    if reasoning.is_empty()
+        && let Some((answer, thought)) = split_think(&reply.text)
+    {
+        reply.text = answer;
+        if !thought.is_empty() {
+            reasoning.push(ReasoningPart::Text(thought));
         }
     }
     let has_signed_calls = reply.calls.iter().any(|call| !call.signatures.is_empty());

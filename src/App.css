@@ -397,6 +397,13 @@
         cursor: pointer;
     }
 
+    /* WebView2 draws its own reveal and clear buttons inside password and
+       text fields; the app's fields don't have them in any other engine. */
+    input::-ms-reveal,
+    input::-ms-clear {
+        display: none;
+    }
+
     /* One stroke weight for every icon; Lucide's default 2 reads heavy at 18px. */
     .lucide {
         stroke-width: 1.6;
@@ -713,4 +720,21 @@
         opacity: 0;
         transform: translate(10px, -28px) scale(1.15);
     }
+}
+
+/* A shard shown in a chat card: headings scale with its small text. */
+.card-document h1 {
+    margin-top: 0.4em;
+    font-size: 1.5em;
+    line-height: 1.3;
+}
+
+.card-document h2 {
+    font-size: 1.3em;
+    line-height: 1.3;
+}
+
+.card-document :is(h3, h4, h5, h6) {
+    font-size: 1.1em;
+    line-height: 1.4;
 }

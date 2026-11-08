@@ -110,7 +110,7 @@ fn kept_blobs(
 fn is_attachment(path: &str) -> bool {
     path.starts_with(&format!(
         "{}/",
-        crate::db::attachments::ATTACHMENTS_DIR_NAME
+        crate::attachments::policy::ATTACHMENTS_DIR_NAME
     ))
 }
 

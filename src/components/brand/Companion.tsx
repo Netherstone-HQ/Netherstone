@@ -249,8 +249,13 @@ export function Companion() {
     rig.setSpot(card ? () => perchSpot(card) : null);
     useCompanionStore.setState({ perched: card !== null });
     if (!card) return;
+    // The card moves when anything around it resizes, like the panel as it
+    // slides in, without resizing itself.
     const observer = new ResizeObserver(() => rig.relocate());
-    observer.observe(card);
+    for (let el: HTMLElement | null = card; el; el = el.parentElement) {
+      observer.observe(el);
+      if (el.hasAttribute("data-companion-home")) break;
+    }
     return () => observer.disconnect();
   }, [assistant, perch, menu]);
 

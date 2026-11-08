@@ -36,10 +36,8 @@ export { STAGE, type Spot } from "./companion-pose";
 
 const ENTRY_X = 560;
 
-// Seconds. Dev builds cycle faster so the whole loop is quick to check.
-export const PACE = import.meta.env.DEV
-  ? { minSit: 3, sleep: [8, 14], idle: 8, nodGap: 3 }
-  : { minSit: 20, sleep: [90, 240], idle: 60, nodGap: 20 };
+/** Seconds. */
+export const PACE = { minSit: 20, sleep: [90, 240], idle: 60, nodGap: 20 };
 /** How long after the last edit he keeps watching the editor. */
 const WATCH_MS = 8000;
 /** As the assistant: seconds between glances. */

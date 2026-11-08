@@ -14,7 +14,8 @@ use super::policy::{
 };
 use super::store::register_untracked_attachment;
 use crate::db::attachments::{
-    is_tracked, now_unix_seconds, referenced_attachments, refresh_attachment_counts, vault_key,
+    is_tracked, now_unix_seconds, referenced_attachments, refresh_attachment_counts, shard_key,
+    vault_key,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -253,11 +254,13 @@ pub fn sync_references_for_saved_markdown(
     let references = parse_attachment_references(content);
     let now = now_unix_seconds();
 
-    let previous = referenced_attachments(conn, file_path)?;
+    let vault = vault_key(vault_path);
+    let key = shard_key(vault_path, file_path);
+    let previous = referenced_attachments(conn, &vault, &key)?;
 
     conn.execute(
-        "DELETE FROM attachment_references WHERE file_path = ?1",
-        params![file_path],
+        "DELETE FROM attachment_references WHERE vault_path = ?1 AND file_path = ?2",
+        params![vault, key],
     )
     .map_err(|e| format!("Failed to clear attachment references: {}", e))?;
 
@@ -276,12 +279,11 @@ pub fn sync_references_for_saved_markdown(
         }
         conn.execute(
             "INSERT OR REPLACE INTO attachment_references (file_path, vault_path, asset_path, reference_kind, detected_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![file_path, vault_key(vault_path), asset_path, reference_kind.as_str(), now],
+            params![key, vault, asset_path, reference_kind.as_str(), now],
         )
         .map_err(|e| format!("Failed to insert attachment reference: {}", e))?;
     }
 
-    let vault = vault_key(vault_path);
     let mut touched = previous;
     touched.extend(
         current_by_path

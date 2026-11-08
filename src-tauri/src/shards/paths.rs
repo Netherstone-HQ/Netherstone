@@ -68,7 +68,7 @@ fn moved_markdown_paths(old_path: &str, new_path: &Path) -> Vec<(String, String)
 
 /// Points the AST cache and attachment references at the new paths after a
 /// rename or move, so a folder takes the cached state of its shards along.
-fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) {
+fn sync_caches_after_path_change(vault: &Path, old_path: &str, new_path: &Path, action: &str) {
     let conn = match db::open_connection() {
         Ok(conn) => conn,
         Err(error) => {
@@ -91,7 +91,9 @@ fn sync_caches_after_path_change(old_path: &str, new_path: &Path, action: &str) 
             );
         }
 
-        if let Err(error) = db::attachments::rename_reference_file_path(&conn, &previous, &next) {
+        if let Err(error) =
+            db::attachments::rename_reference_file_path(&conn, vault, &previous, &next)
+        {
             eprintln!(
                 "[Netherstone] Failed to update attachment references {} -> {}: {}",
                 previous, next, error
@@ -286,7 +288,7 @@ pub(crate) fn rename_path(
     drop(writes);
 
     let new_path_string = new_path.to_string_lossy().to_string();
-    sync_caches_after_path_change(old_path, &new_path, "rename");
+    sync_caches_after_path_change(vault, old_path, &new_path, "rename");
     rewrite_links_after_path_change(vault, old_path, &new_path, "rename");
 
     Ok(new_path_string)
@@ -348,7 +350,7 @@ pub(crate) fn move_path(
     drop(writes);
 
     let new_path_string = new_path.to_string_lossy().to_string();
-    sync_caches_after_path_change(source_path, &new_path, "move");
+    sync_caches_after_path_change(vault, source_path, &new_path, "move");
     rewrite_links_after_path_change(vault, source_path, &new_path, "move");
 
     Ok(new_path_string)
@@ -357,12 +359,12 @@ pub(crate) fn move_path(
 #[tauri::command(async)]
 pub(crate) fn delete_vault_path(target_path: String) -> Result<(), String> {
     vault_access::get().check_inside(Path::new(&target_path))?;
-    delete_path(Path::new(&target_path))
+    delete_path(&vault_access::get().open_vault()?, Path::new(&target_path))
 }
 
-/// Moves a shard, drawing or folder to the OS trash and forgets the shards'
-/// cached state.
-pub(crate) fn delete_path(target: &Path) -> Result<(), String> {
+/// Moves a shard, drawing or folder of `vault` to the OS trash and forgets
+/// the shards' cached state.
+pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
     let target_path = target.to_string_lossy();
     let writes = locks::vault_writes()?;
     if !target.exists() {
@@ -394,9 +396,11 @@ pub(crate) fn delete_path(target: &Path) -> Result<(), String> {
                     }
                 }
 
-                if let Err(error) =
-                    db::attachments::remove_references_for_markdown_file(&conn, &markdown_path)
-                {
+                if let Err(error) = db::attachments::remove_references_for_markdown_file(
+                    &conn,
+                    vault,
+                    &markdown_path,
+                ) {
                     eprintln!(
                         "[Netherstone] Failed to remove attachment references for {}: {}",
                         markdown_path, error

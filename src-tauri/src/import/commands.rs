@@ -106,7 +106,7 @@ pub(crate) fn undo_import(
                 .components()
                 .any(|c| matches!(c, std::path::Component::ParentDir));
         if inside && vault::is_markdown_path(shard) && shard.exists() {
-            delete_path(shard)?;
+            delete_path(vault, shard)?;
         }
     }
     if Path::new(&target_dir).starts_with(vault) {

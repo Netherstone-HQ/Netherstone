@@ -228,6 +228,7 @@ describe("SearchModal with the assistant", () => {
       messages: [],
       answering: null,
       ending: null,
+      search: null,
     });
     vi.mocked(invoke).mockReset();
     vi.mocked(openVaultFile).mockClear();
@@ -249,6 +250,15 @@ describe("SearchModal with the assistant", () => {
 
   it("asks with Tab, streams the cited answer in place, and continues in chat", async () => {
     const { asks, messages } = assistantOn();
+    // A chat open in the panel, and a shard in Recent.
+    const earlier = [{ seq: 1, role: "user" as const, text: "Earlier", shards: [] }];
+    useAssistantStore.setState({
+      chat: { id: "panel-chat", title: "Earlier" },
+      messages: earlier,
+    });
+    useUIStore.setState({
+      recentFiles: [{ path: `${VAULT}/Notes/Plan.md`, name: "Plan.md" }],
+    });
     const onOpenChange = vi.fn();
     renderSearch(onOpenChange);
     fireEvent.change(input(), { target: { value: "when do we go" } });
@@ -264,15 +274,21 @@ describe("SearchModal with the assistant", () => {
       vault: VAULT,
       text: "when do we go",
       shards: [],
+      recent: ["Notes/Plan.md"],
     });
     expect(await screen.findByText("Waiting for the answer")).toBeTruthy();
 
     asks[0].send({ type: "chat", id: "chat-1" });
     asks[0].send({ type: "text", text: ANSWER });
     expect(await screen.findByText(/We go in May/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open Trip.md" }).textContent).toBe("1");
+    // The cite names its shard, then its number in the list.
+    expect(screen.getByRole("button", { name: "Open Trip.md" }).textContent).toBe("Trip1");
     // The shard results stay below.
     expect(screen.getByText("Lisbon in May")).toBeTruthy();
+    // The panel keeps its own chat while search answers.
+    expect(useAssistantStore.getState().chat?.id).toBe("panel-chat");
+    expect(useAssistantStore.getState().messages).toBe(earlier);
+    expect(useAssistantStore.getState().answering).toBeNull();
 
     messages.push(
       { seq: 1, role: "user", text: "when do we go" },
@@ -308,8 +324,9 @@ describe("SearchModal with the assistant", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("stops the answer when search closes while it streams", async () => {
+  it("stops the answer when search closes while it streams, and leaves the panel's chat", async () => {
     const { asks } = assistantOn();
+    useAssistantStore.setState({ chat: { id: "panel-chat", title: "Earlier" } });
     const view = renderSearch();
     fireEvent.change(input(), { target: { value: "when" } });
     await screen.findByText("Ask about this");
@@ -318,8 +335,12 @@ describe("SearchModal with the assistant", () => {
     await waitFor(() => expect(asks).toHaveLength(1));
     asks[0].send({ type: "chat", id: "chat-1" });
 
+    expect(useAssistantStore.getState().chat?.id).toBe("panel-chat");
+
     view.rerender(<SearchModal open={false} onOpenChange={() => {}} />);
     expect(invoke).toHaveBeenCalledWith("assistant_stop", { chat: "chat-1" });
+    expect(useAssistantStore.getState().search).toBeNull();
+    expect(useAssistantStore.getState().chat?.id).toBe("panel-chat");
   });
 
   it("stops the answer and drops the group when the assistant is turned off", async () => {

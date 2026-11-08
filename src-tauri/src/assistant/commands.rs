@@ -92,8 +92,8 @@ impl assistant::Sink for ChatEvents {
     }
 }
 
-/// Sends a message in a chat, or starts one about `vault`, streaming the
-/// answer over `events`. Gives the chat's id.
+/// Sends a message in a chat, or starts one about `vault`, with the user's
+/// Recent list, streaming the answer over `events`. Gives the chat's id.
 #[tauri::command]
 pub(crate) async fn assistant_send(
     window: tauri::Window,
@@ -101,10 +101,11 @@ pub(crate) async fn assistant_send(
     vault: String,
     text: String,
     shards: Vec<String>,
+    recent: Vec<String>,
     events: tauri::ipc::Channel<assistant::Event>,
 ) -> Result<String, assistant::ChatError> {
     let label = window.label().to_string();
-    assistant::send(chat, vault, text, shards, label, ChatEvents(events)).await
+    assistant::send(chat, vault, text, shards, recent, label, ChatEvents(events)).await
 }
 
 /// Asks for a change to a selection in a shard, streaming the Markdown

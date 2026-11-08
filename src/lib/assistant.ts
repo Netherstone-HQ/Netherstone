@@ -60,7 +60,7 @@ function showText(run: Run, text: string) {
   const { answering } = viewOf(run.place);
   if (!answering) return;
   setView(run.place, {
-    answering: { ...answering, text: answering.text + text, tool: null, retrying: null },
+    answering: { ...answering, text: answering.text + text },
   });
 }
 
@@ -143,8 +143,18 @@ export async function openChat(id: string) {
   });
 }
 
+/** Events that show after the text before them, so that text shows at once. */
+const AFTER_TEXT: ReadonlySet<ChatEvent["type"]> = new Set([
+  "reasoning",
+  "tool",
+  "retrying",
+  "failed",
+  "stopped",
+]);
+
 function onEvent(event: ChatEvent, text: string, run: Run): Ending | null {
   const { place } = run;
+  if (AFTER_TEXT.has(event.type)) run.pacer.flush();
   const { answering, chat } = viewOf(place);
   if (!answering) return null;
   switch (event.type) {
@@ -155,6 +165,9 @@ function onEvent(event: ChatEvent, text: string, run: Run): Ending | null {
       });
       return null;
     case "text":
+      if (answering.tool || answering.retrying) {
+        setView(place, { answering: { ...answering, tool: null, retrying: null } });
+      }
       run.pacer.push(event.text);
       return null;
     case "reasoning":
@@ -167,8 +180,6 @@ function onEvent(event: ChatEvent, text: string, run: Run): Ending | null {
       });
       return null;
     case "tool":
-      // Text from before the tool shows first.
-      run.pacer.flush();
       setView(place, {
         answering: {
           ...answering,
@@ -184,10 +195,8 @@ function onEvent(event: ChatEvent, text: string, run: Run): Ending | null {
     case "stepLimit":
       return { kind: "stepLimit" };
     case "failed":
-      run.pacer.flush();
       return { kind: "error", error: event.error.kind };
     case "stopped":
-      run.pacer.flush();
       return { kind: "stopped" };
     case "retrying":
       setView(place, { answering: { ...answering, retrying: event.error.kind } });

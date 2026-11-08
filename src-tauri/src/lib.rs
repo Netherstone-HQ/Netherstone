@@ -47,11 +47,13 @@ pub fn run_mcp_server() {
 fn register_links(_app: &tauri::App) {
     #[cfg(any(windows, target_os = "linux"))]
     {
-        use tauri::Manager;
         use tauri_plugin_deep_link::DeepLinkExt;
         // Only Linux has AppImages, and only there does Env have the field.
         #[cfg(target_os = "linux")]
-        let appimage = _app.env().appimage.is_some();
+        let appimage = {
+            use tauri::Manager;
+            _app.env().appimage.is_some()
+        };
         #[cfg(not(target_os = "linux"))]
         let appimage = false;
         let without_installer = cfg!(debug_assertions) || appimage;

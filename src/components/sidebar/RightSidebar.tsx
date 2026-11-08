@@ -11,7 +11,7 @@ import { ListTreeIcon } from "lucide-react";
 import { HistoryPanel } from "@/components/history/HistoryPanel";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
-import { ASSISTANT_WIDTH, SHARD_MIN_WIDTH } from "@/store/ui";
+import { ASSISTANT_WIDTH, HISTORY_WIDTH, SHARD_MIN_WIDTH } from "@/store/ui";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
@@ -134,6 +134,7 @@ export function RightSidebar() {
   const containerRef = useRef<HTMLDivElement>(null);
   const assistantWidth = useUIStore((s) => s.assistantWidth);
   const fitted = useFittedWidth(containerRef, assistantWidth);
+  const historyWidth = Math.min(HISTORY_WIDTH, fitted.most);
   if (
     shown.isPanelOpen !== isPanelOpen ||
     shown.showsHistory !== showsHistory ||
@@ -164,14 +165,25 @@ export function RightSidebar() {
       className={cn(
         "relative shrink-0 overflow-hidden",
         slides && !resizing && "transition-[width] duration-200 ease-linear",
-        !isPanelOpen ? "w-0" : showsAssistant ? "w-(--assistant-width)" : "w-72",
+        !isPanelOpen
+          ? "w-0"
+          : showsAssistant
+            ? "w-(--assistant-width)"
+            : showsHistory
+              ? "w-(--history-width)"
+              : "w-72",
       )}
-      style={{ "--assistant-width": `${fitted.width}px` } as CSSProperties}
+      style={
+        {
+          "--assistant-width": `${fitted.width}px`,
+          "--history-width": `${historyWidth}px`,
+        } as CSSProperties
+      }
       inert={!isPanelOpen}
     >
       {showsHistory ? (
         <div className="absolute inset-y-0 right-0">
-          <HistoryPanel place="notes" filePath={filePath} />
+          <HistoryPanel place="notes" filePath={filePath} width={historyWidth} />
         </div>
       ) : null}
       {showsAssistant ? (

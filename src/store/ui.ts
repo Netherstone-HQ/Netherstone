@@ -42,6 +42,9 @@ const MAX_RECENT_FILES_HISTORY = 25;
 /** The assistant panel's widths in px: as designed, and how far it drags. */
 export const ASSISTANT_WIDTH = { default: 400, min: 320, max: 640 };
 
+/** History opens as wide as the assistant does by default, in the same place. */
+export const HISTORY_WIDTH = ASSISTANT_WIDTH.default;
+
 /**
  * The least room the shard keeps beside the assistant: the inline Ask
  * prompt's width plus the editor's gutters. Past it, the panel narrows.

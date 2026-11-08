@@ -706,7 +706,7 @@
     will-change: transform;
 }
 
-/* Nothing moves while the window is hidden or in the background. */
+/* Nothing moves while the window is hidden. */
 .companion[data-paused] * {
     animation-play-state: paused;
 }

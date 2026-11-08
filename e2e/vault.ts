@@ -171,6 +171,8 @@ type MockAssistant = {
   inlineFailOnce?: string;
   /** The first answer proposes its change, then fails with this error. */
   failOnce?: string;
+  /** Answers wait after their tools until the test calls `__answer()`. */
+  hold?: boolean;
 };
 
 declare global {
@@ -180,6 +182,8 @@ declare global {
     __memory: string[];
     /** Every inline Ask sent. */
     __asked: { shard: string; selection: string; whole: boolean; prompt: string }[];
+    /** Lets an answer held by `hold` go on. */
+    __answer?: () => void;
     /** Commands a test answers its own way. */
     __overrides?: Record<string, (args: unknown) => unknown>;
   }
@@ -544,7 +548,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             setup.vaultAllowed = (args as unknown as { allowed: boolean }).allowed;
             return null;
           },
-          assistant_send: (args) => {
+          assistant_send: async (args) => {
             const { chat, text, shards, events } = args as unknown as {
               chat: string | null;
               text: string;
@@ -586,6 +590,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
               delete setup.failOnce;
               return found.id;
             }
+            if (setup.hold) await new Promise<void>((resolve) => (window.__answer = resolve));
             if (reads.length) send({ type: "sources", shards: reads });
             for (const piece of answer) send({ type: "text", text: piece });
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });

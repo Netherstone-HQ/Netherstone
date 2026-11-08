@@ -37,14 +37,13 @@ export { STAGE, type Spot } from "./companion-pose";
 const ENTRY_X = 560;
 
 // Seconds. Dev builds cycle faster so the whole loop is quick to check.
-const PACE = import.meta.env.DEV
-  ? { sit: [5, 9], minSit: 3, sleep: [8, 14], idle: 8, nodGap: 3 }
-  : { sit: [40, 120], minSit: 20, sleep: [90, 240], idle: 60, nodGap: 20 };
+export const PACE = import.meta.env.DEV
+  ? { minSit: 3, sleep: [8, 14], idle: 8, nodGap: 3 }
+  : { minSit: 20, sleep: [90, 240], idle: 60, nodGap: 20 };
 /** How long after the last edit he keeps watching the editor. */
 const WATCH_MS = 8000;
-/** As the assistant: seconds between glances, and how long until he dozes. */
+/** As the assistant: seconds between glances. */
 const GLANCE = [3.5, 7.5];
-const DOZE_MS = 24_000;
 /** The panel slides in before he hops onto it. */
 const HOP_DELAY = 220;
 /** Two clicks this close together are a double click. */
@@ -92,8 +91,14 @@ export class CompanionRig {
   /** Asked for while he couldn't play it yet. */
   private workWaiting = false;
   /** What he's showing now, which can differ from `work` for a moment. */
-  private state: Work | "hello" | "enter" | "hop" | "leave" | "heavy" =
-    "enter";
+  private state:
+    | Work
+    | "hello"
+    | "enter"
+    | "hop"
+    | "leave"
+    | "heavy"
+    | "wake" = "enter";
   private menu: CompanionMenu | null = null;
   /**
    * A change to several shards under way: the shards changed so far, and
@@ -110,6 +115,8 @@ export class CompanionRig {
   private wakeEarly: (() => void) | null = null;
   private pointerX: number | null = null;
   private lastActivity = performance.now();
+  /** Whether you're using a page in the browser panel, out of his sight. */
+  private elsewhere = false;
   private lastEdit = -Infinity;
   private lastNod = -Infinity;
   private pendingClick = 0;
@@ -150,8 +157,11 @@ export class CompanionRig {
 
     this.listen(window, "pointermove", (e) => {
       this.pointerX = e.clientX;
-      this.lastActivity = performance.now();
+      this.active();
     });
+    for (const type of ["pointerdown", "keydown", "wheel"] as const) {
+      this.listen(window, type, () => this.active());
+    }
     this.listen(this.drawing.parts.hit, "click", (e) =>
       this.clicked(e.detail),
     );
@@ -166,12 +176,9 @@ export class CompanionRig {
         this.flag("resting", true);
       }
     });
-    // Nothing moves while the window is hidden or in the background.
-    this.listen(window, "blur", () => this.pause(true));
-    this.listen(window, "focus", () => this.pause(false));
-    this.listen(document, "visibilitychange", () =>
-      this.pause(document.hidden || !document.hasFocus()),
-    );
+    // Nothing moves while the window is hidden. Unfocused, on another
+    // screen or behind the browser panel, he carries on as usual.
+    this.listen(document, "visibilitychange", () => this.pause(document.hidden));
 
     if (reducedMotion) {
       this.state = "idle";
@@ -256,6 +263,17 @@ export class CompanionRig {
     this.bulkUp();
   }
 
+  /**
+   * A change was discarded. Still bulked up from a change to several
+   * shards, he shrinks back, spits his shard out and goes back to idle.
+   */
+  discarded() {
+    if (!this.assistant || !this.heavy) return;
+    this.work = "idle";
+    this.workWaiting = false;
+    this.heavyEnd("stop");
+  }
+
   /** Waves, walks off to the right, and then `gone` runs. */
   leave(gone: () => void) {
     // Mid-hop, he lands where he was going first.
@@ -295,11 +313,22 @@ export class CompanionRig {
     });
   }
 
+  /**
+   * Whether you're using a page in the browser panel. Its clicks and keys
+   * never reach this view, so he counts it all as activity.
+   */
+  setElsewhere(elsewhere: boolean) {
+    if (elsewhere === this.elsewhere) return;
+    this.elsewhere = elsewhere;
+    this.active();
+  }
+
   /** The open shard was edited. */
   noticeEdit() {
     const now = performance.now();
     const wasQuiet = now - this.lastEdit > WATCH_MS;
-    this.lastEdit = this.lastActivity = now;
+    this.lastEdit = now;
+    this.active();
     if (this.assistant || this.reduced) return;
     if (wasQuiet && this.sitting && !this.reacting) {
       void this.tween({ faceX: -7 }, 450);
@@ -539,9 +568,13 @@ export class CompanionRig {
       return;
     }
     const resting = this.work === "idle" || this.work === "sleep";
-    if (this.state === "sleep") {
+    if (this.state === "sleep" || this.state === "wake") {
       this.work = "idle";
-      const waking = this.wakeUpQuick();
+      // Waking slowly already, he just gets up.
+      const waking =
+        this.state === "sleep"
+          ? this.wakeUpQuick()
+          : this.run((step) => this.settle(step));
       const gen = this.gen;
       await waking;
       // Something else came first, like the assistant going off.
@@ -553,8 +586,23 @@ export class CompanionRig {
 
   // ── On his own ────────────────────────────────────────────────────────────
 
+  /** How long until he's been left alone long enough to doze, in ms. */
+  private untilDrowsy() {
+    if (this.elsewhere) return PACE.idle * 1000;
+    return this.lastActivity + PACE.idle * 1000 - performance.now();
+  }
+
   private drowsy() {
-    return performance.now() - this.lastActivity > PACE.idle * 1000;
+    return this.untilDrowsy() <= 0;
+  }
+
+  /** You did something: he notices, and wakes if he'd dozed off. */
+  private active() {
+    this.lastActivity = performance.now();
+    if (this.wakeEarly) this.wakeEarly();
+    else if (this.assistant && this.state === "sleep" && this.work === "idle") {
+      this.wakeGently();
+    }
   }
 
   /** Toward the editor while you write, otherwise toward the pointer. */
@@ -636,11 +684,11 @@ export class CompanionRig {
     this.sitting = true;
     try {
       const start = performance.now();
-      const until = start + between(PACE.sit);
-      // Left alone, he lies down early, but never straight after getting up.
+      // He lies down only once you've left him alone awhile, and never
+      // straight after getting up.
       const restless = () =>
         this.drowsy() && performance.now() - start > PACE.minSit * 1000;
-      while (performance.now() < until && !restless()) {
+      while (!restless()) {
         await step(this.wait(between([4, 10])));
         if (!this.reacting) {
           await step(this.tween({ faceX: this.lookTarget() }, 500));
@@ -858,18 +906,33 @@ export class CompanionRig {
     this.pose.gemHidden = true;
   }
 
-  /** Glances around, and dozes off when left alone long enough. */
+  /** Glances around, and dozes off once you've left him alone long enough. */
   private idle() {
     this.state = "idle";
     void this.run(async (step) => {
       await this.settle(step);
-      const until = performance.now() + DOZE_MS;
-      while (performance.now() < until) {
-        await step(this.wait(between(GLANCE)));
-        if (this.reduced) continue;
-        await step(this.tween({ faceX: this.lookAtPointer(0.3) }, 500));
+      if (this.reduced) return;
+      for (;;) {
+        const left = this.untilDrowsy();
+        if (left <= 0) break;
+        const glance = between(GLANCE);
+        await step(this.wait(Math.min(glance, left)));
+        if (glance < left) {
+          await step(this.tween({ faceX: this.lookAtPointer(0.3) }, 500));
+        }
       }
-      if (!this.reduced) await this.sleepNow(step);
+      await this.sleepNow(step);
+    });
+  }
+
+  /** Dozed off as the assistant, he wakes slowly when you're back. */
+  private wakeGently() {
+    // Still lying down, he just gets up again.
+    if (!this.host.hasAttribute("data-zz")) return this.idle();
+    this.state = "wake";
+    void this.run(async (step) => {
+      await this.wakeUp(step);
+      this.idle();
     });
   }
 

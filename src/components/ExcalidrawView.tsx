@@ -152,7 +152,8 @@ export function ExcalidrawView() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
+        {/* The companion's corner is the drawing's, left of the panels. */}
+        <div data-companion-home className="relative min-w-0 flex-1">
           {/* The drawing stays laid out under an earlier version, as it was. */}
           <div
             className={cn("h-full", shownVersion && "invisible")}

@@ -187,7 +187,8 @@ const ModeAwareNotes = React.memo(function ModeAwareNotes({
           defaultSize={isBrowserPanelOpen ? "68%" : "100%"}
           minSize="40%"
         >
-          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+          {/* The companion's corner is this area's, left of the browser. */}
+          <div data-companion-home className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
             <div className="relative flex min-h-0 flex-1">
               <EditorOrVersion children={children} />
 

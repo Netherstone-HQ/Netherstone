@@ -643,6 +643,10 @@
    only animate transform and opacity, so they stay off the main thread. */
 
 .companion {
+    /* Breaths he takes after dozing off before he lies still: about half a
+       minute, enough to read as asleep. An endless animation would redraw
+       the window every frame for as long as he sleeps. */
+    --companion-sleep-cycles: 10;
     --companion-fill: #fff;
     --companion-shade: #ece9f2;
     --companion-ink: #2b2733;
@@ -680,26 +684,31 @@
     opacity: 0;
 }
 
-/* With reduced motion, the z's stand still. */
-.companion[data-still] .companion-z {
+/* With reduced motion, and once he lies still, the z's stand still. */
+.companion:is([data-still], [data-resting]) .companion-z {
     opacity: 1;
 }
 
-.companion[data-still] .companion-z:nth-child(2) {
+.companion:is([data-still], [data-resting]) .companion-z:nth-child(2) {
     transform: translate(7px, -9px);
 }
 
-.companion[data-still] .companion-z:nth-child(3) {
+.companion:is([data-still], [data-resting]) .companion-z:nth-child(3) {
     transform: translate(14px, -18px);
 }
 
 .companion[data-breathing] .companion-z {
-    animation: companion-z 3.45s ease-in-out infinite;
+    animation: companion-z 3.45s ease-in-out var(--companion-sleep-cycles);
 }
 
 .companion[data-breathing] .companion-body {
-    animation: companion-breathe 3.6s ease-in-out infinite;
+    animation: companion-breathe 3.6s ease-in-out var(--companion-sleep-cycles);
     will-change: transform;
+}
+
+/* Nothing moves while the window is hidden or in the background. */
+.companion[data-paused] * {
+    animation-play-state: paused;
 }
 
 @keyframes companion-breathe {

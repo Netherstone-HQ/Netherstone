@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CompanionRig, hopFlight, STAGE, type Spot } from "./companion-motion";
@@ -118,6 +120,58 @@ describe("CompanionRig", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(feet(host)).toEqual(HOME);
     rig.stop();
+  });
+
+  it("breathes a while once asleep, then lies still with his z's showing", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    await vi.advanceTimersByTimeAsync(10_000); // walked in and sat down
+    rig.setWork("sleep");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(host.hasAttribute("data-breathing")).toBe(true);
+    expect(host.hasAttribute("data-zz")).toBe(true);
+
+    // The first of his z's runs out of floats (App.css).
+    const ended = new Event("animationend", { bubbles: true });
+    Object.defineProperty(ended, "animationName", { value: "companion-z" });
+    host.querySelector('[data-part="root"]')!.dispatchEvent(ended);
+    expect(host.hasAttribute("data-breathing")).toBe(false);
+    expect(host.hasAttribute("data-resting")).toBe(true);
+    expect(host.hasAttribute("data-zz")).toBe(true);
+
+    // He still wakes from there.
+    rig.wakeFromSleep();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(host.hasAttribute("data-resting")).toBe(false);
+    expect(host.hasAttribute("data-zz")).toBe(false);
+    rig.stop();
+  });
+
+  it("goes straight to each pose while the window is in the background", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    await vi.advanceTimersByTimeAsync(10_000);
+    window.dispatchEvent(new Event("blur"));
+    expect(host.hasAttribute("data-paused")).toBe(true);
+
+    // Past the panel's slide-in, he's there: the hop takes no frames.
+    rig.setSpot(() => PERCH);
+    await vi.advanceTimersByTimeAsync(221);
+    expect(feet(host)).toEqual(PERCH);
+
+    window.dispatchEvent(new Event("focus"));
+    expect(host.hasAttribute("data-paused")).toBe(false);
+    rig.stop();
+  });
+
+  it("has no endless animation in his styles", () => {
+    const css = readFileSync(path.resolve(__dirname, "../../App.css"), "utf8");
+    const rules = css.match(/[^{}]*\.companion[^{}]*\{[^}]*\}/g) ?? [];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) expect(rule).not.toMatch(/infinite/);
+    expect(css).toMatch(/\.companion\[data-paused\][^{]*\{[^}]*animation-play-state: paused/);
   });
 
   it("opens the menu on a click only as the assistant", async () => {

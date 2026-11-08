@@ -20,6 +20,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
@@ -95,7 +96,19 @@ impl Vault {
         if !shown {
             return Err(not_in_vault());
         }
-        let full = self.root.join(path);
+        // Part by part, with this system's separators and each existing
+        // name as it is on disk, as the vault scan spells it: tables keyed
+        // by full path then hold one row per shard, not one per spelling.
+        let full = path
+            .components()
+            .filter_map(|part| match part {
+                Component::Normal(name) => Some(name),
+                _ => None,
+            })
+            .fold(self.root.clone(), |full, name| {
+                let name = name_on_disk(&full, name);
+                full.join(name)
+            });
 
         // The nearest part that exists, by its real name: a link, or another
         // name for the same folder (like a Windows short name), must still
@@ -186,6 +199,29 @@ impl Vault {
             .clone()?;
         Ok((conn, now))
     }
+}
+
+/// `name` in `folder` as the folder spells it. Where names ignore case,
+/// `health.md` finds `Health.md`, and only the disk's spelling matches the
+/// scan's. A name that isn't there stays as it is.
+fn name_on_disk(folder: &Path, name: &OsStr) -> OsString {
+    if !folder.join(name).exists() {
+        return name.to_owned();
+    }
+    let names: Vec<OsString> = std::fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.file_name())
+        .collect();
+    if names.iter().any(|entry| entry == name) {
+        return name.to_owned();
+    }
+    let wanted = name.to_string_lossy().to_lowercase();
+    names
+        .into_iter()
+        .find(|entry| entry.to_string_lossy().to_lowercase() == wanted)
+        .unwrap_or_else(|| name.to_owned())
 }
 
 // ── Paging ───────────────────────────────────────────────────────────────────

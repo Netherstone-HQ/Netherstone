@@ -5,7 +5,7 @@ use super::tools::{offer, propose};
 use super::*;
 use crate::assistant::catalog;
 use crate::assistant::chat::tests::{Answer, KEY, serve};
-use crate::assistant::chat::{Call, CallResult, Message};
+use crate::assistant::chat::{Call, CallResult, Message, Request};
 use crate::assistant::memory;
 use crate::assistant::prompts::change_states;
 use crate::assistant::providers::Api;
@@ -73,6 +73,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         allowed: Arc::new(|| true),
         send_files: false,
         added: Vec::new(),
+        recent: Vec::new(),
         asked: Default::default(),
         step_limited: Default::default(),
         memory: Arc::new(List::at(vault_dir.join("memory.txt"))),
@@ -414,6 +415,76 @@ async fn memory_goes_with_the_chat_and_the_model_only_offers_items() {
         (offers[0].text.as_str(), offers[0].turn, offers[0].state),
         ("I write in British English", 1, ChangeState::Pending)
     );
+}
+
+#[tokio::test]
+async fn the_recent_list_goes_with_the_chat() {
+    let done = "data: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Plan, then Trip.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+    let server = serve(vec![Answer::ok("text/event-stream", done)]);
+    let mut turn = turn(
+        "engine-recent",
+        server.target(Api::OpenAi, Some(KEY)),
+        "gpt-5.5",
+    );
+    turn.recent = vec!["Notes/Plan.md".to_string(), "Trip.md".to_string()];
+    answer(&turn, &Collect::default()).await.unwrap();
+    let sent = &server.requests()[0];
+    assert!(sent.contains("The user's Recent list"));
+    assert!(sent.contains("\\n- Notes/Plan.md\\n- Trip.md"));
+
+    // An empty list says nothing.
+    turn.recent.clear();
+    answer(&turn, &Collect::default()).await.unwrap();
+    assert!(!server.requests()[1].contains("Recent list"));
+}
+
+/// Text held back goes out on the next tick, without waiting for the
+/// provider's next chunk.
+#[tokio::test]
+async fn held_text_goes_out_before_the_next_chunk() {
+    let chunk = |text: &str| {
+        format!(
+            "data: {{\"id\":\"c\",\"choices\":[{{\"index\":0,\"delta\":{{\"role\":\"assistant\",\"content\":\"{text}\"}}}}]}}\n\n"
+        )
+    };
+    // The first words go at once and the next are held; then the provider
+    // goes quiet.
+    let sent = format!("{}{}", chunk("We go"), chunk(" to Lisbon"));
+    let mut quiet = Answer::ok("text/event-stream", format!("{sent}data: [DONE]\n\n"));
+    quiet.hold = Some(sent.len());
+    let server = serve(vec![quiet]);
+    struct StopOnAll(Collect, StopToken);
+    impl Sink for StopOnAll {
+        fn send(&self, event: Event) -> bool {
+            self.0.send(event);
+            if self.0.text() == "We go to Lisbon" {
+                self.1.stop();
+            }
+            true
+        }
+    }
+    let stop = StopToken::default();
+    let sink = StopOnAll(Collect::default(), stop.clone());
+    let mut out = Out::new(&sink, &stop);
+    let messages = [Message::user("Hi")];
+    let request = Request {
+        system: "",
+        messages: &messages,
+        tools: &[],
+        model: "gpt-5.5",
+        thinking: false,
+        cache_key: "chat",
+    };
+    let target = server.target(Api::OpenAi, Some(KEY));
+    // Only a guard, so a missed tick fails instead of waiting on the provider.
+    let streamed = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        stream_into(&target, &request, &mut out, &stop),
+    )
+    .await
+    .expect("the held text never went out");
+    assert!(matches!(streamed, Err(ChatError::Stopped)));
+    assert_eq!(sink.0.text(), "We go to Lisbon");
 }
 
 #[tokio::test]

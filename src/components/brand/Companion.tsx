@@ -45,7 +45,7 @@ import {
 import { openAssistant, sendMessage } from "@/lib/assistant";
 import { openShardPath } from "@/lib/assistant-changes";
 import { useEditorStore } from "@/store";
-import { useAssistantStore } from "@/store/assistant";
+import { searchChat, useAssistantStore } from "@/store/assistant";
 import { useCompanionStore } from "@/store/companion";
 import { useInlineAskStore } from "@/store/inline-ask";
 import { useSettingsStore } from "@/store/settings";
@@ -213,7 +213,7 @@ export function Companion() {
         if (prev.isSaving && !state.isSaving && !state.isDirty) rig.nod();
       }),
       useAssistantStore.subscribe((state, prev) => {
-        const work = chatWork(prev, state);
+        const work = chatWork(prev, state) ?? chatWork(searchChat(prev), searchChat(state));
         if (work) rig.setWork(work);
         const now = changedFiles(changed, prev, state);
         if (now.length > changed.length) rig.setChanged(now.length);

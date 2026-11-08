@@ -34,7 +34,8 @@ How Netherstone stores the images, files, audio and video that shards link to.
 calls), `policy` (file types, names, sync rules), `references` (what shards
 link to), `store` (copying files in), `report` and `cleanup`. The tables are
 `attachments` and `attachment_references` in `db/schema.rs`, read and written
-in `db/attachments.rs`.
+in `db/attachments.rs`. A reference names its shard by the shard's path in the
+vault, with `/` (`shard_key`), so every spelling of one path is one row.
 
 1. **Insert:** dropping, pasting or picking a file writes it to
    `_attachments/` and records it. The file is written and flushed under a

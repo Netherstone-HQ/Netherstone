@@ -3,13 +3,13 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { isSetUp } from "@/components/assistant/models";
+import { ModelPicker } from "@/components/assistant/providers/ModelPicker";
 import {
   FreeWaysToStart,
-  ModelPicker,
   ProviderCards,
-  ProviderRow,
-  useProviderSetup,
-} from "@/components/settings/sections/AiAssistantSettings";
+} from "@/components/assistant/providers/ProviderCards";
+import { ProviderRow } from "@/components/assistant/providers/ProviderRow";
+import { useProviderSetup } from "@/components/assistant/providers/useProviderSetup";
 import { Button } from "@/components/ui/button";
 import {
   getAssistantStatus,

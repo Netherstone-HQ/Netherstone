@@ -67,6 +67,7 @@ function clearChat() {
     messages: [],
     changes: [],
     memories: [],
+    endings: [],
     answering: null,
     ending: null,
   });
@@ -89,6 +90,7 @@ export async function openChat(id: string) {
     messages: view.messages,
     changes: view.changes,
     memories: view.memories,
+    endings: view.endings,
     answering: null,
     ending: null,
   });
@@ -107,17 +109,30 @@ function onEvent(event: ChatEvent, text: string): Ending | null {
       return null;
     case "text":
       store.setState({
-        answering: { ...answering, text: answering.text + event.text, tool: null },
+        answering: {
+          ...answering,
+          text: answering.text + event.text,
+          tool: null,
+          retrying: null,
+        },
       });
       return null;
     case "reasoning":
       store.setState({
-        answering: { ...answering, reasoning: answering.reasoning + event.text },
+        answering: {
+          ...answering,
+          reasoning: answering.reasoning + event.text,
+          retrying: null,
+        },
       });
       return null;
     case "tool":
       store.setState({
-        answering: { ...answering, tool: { name: event.name, paths: event.paths } },
+        answering: {
+          ...answering,
+          tool: { name: event.name, paths: event.paths },
+          retrying: null,
+        },
       });
       return null;
     case "done":
@@ -130,6 +145,9 @@ function onEvent(event: ChatEvent, text: string): Ending | null {
       return { kind: "error", error: event.error.kind };
     case "stopped":
       return { kind: "stopped" };
+    case "retrying":
+      store.setState({ answering: { ...answering, retrying: event.error.kind } });
+      return null;
     case "sources":
     case "summarized":
       return null;
@@ -153,7 +171,7 @@ export async function sendMessage(
   const before = state.messages;
   store.setState({
     messages: [...before, { seq: -1, role: "user", text, shards }],
-    answering: { chat: state.chat?.id ?? null, text: "", reasoning: "", tool: null },
+    answering: { chat: state.chat?.id ?? null, text: "", reasoning: "", tool: null, retrying: null },
     ending: null,
     ...(fromSearch ? {} : { draft: "", added: [], openShardRemoved: false }),
   });
@@ -172,11 +190,14 @@ export async function sendMessage(
       messages: view.messages,
       changes: view.changes,
       memories: view.memories,
+      endings: view.endings,
       answering: null,
       ending,
     });
-    // A new chat that got its answer gets a short title, without waiting.
-    if (state.chat === null && ending === null) void retitle(id);
+    // A chat's first answer, even after one that failed, gets it a short
+    // title, without waiting.
+    const answered = view.messages.filter((m) => m.role === "assistant" && m.text);
+    if (ending === null && answered.length === 1) void retitle(id);
   } catch (error) {
     if (run !== followed) return;
     // Nothing was saved: the message goes back to the box.
@@ -192,10 +213,91 @@ export async function sendMessage(
   }
 }
 
+/**
+ * Goes on with the answer to the chat's last message after it ended on an
+ * error: what it proposed before stays, and it carries on from there.
+ */
+export async function retryAnswer() {
+  const state = store.getState();
+  const chat = state.chat;
+  const vault = useVaultStore.getState().currentVaultPath;
+  if (!chat || !vault || state.answering) return;
+  const run = ++followed;
+  stopAsked = false;
+  store.setState({
+    answering: { chat: chat.id, text: "", reasoning: "", tool: null, retrying: null },
+    ending: null,
+  });
+  let ending: Ending | null = null;
+  try {
+    await sendChat(chat.id, vault, "", [], (event) => {
+      if (run !== followed) return;
+      ending = onEvent(event, "") ?? ending;
+    });
+    if (run !== followed) return;
+    const view = await getChat(chat.id);
+    if (run !== followed) return;
+    store.setState({
+      messages: view.messages,
+      changes: view.changes,
+      memories: view.memories,
+      endings: view.endings,
+      answering: null,
+      ending,
+    });
+    const answered = view.messages.filter((m) => m.role === "assistant" && m.text);
+    if (ending === null && answered.length === 1) void retitle(chat.id);
+  } catch (error) {
+    if (run !== followed) return;
+    store.setState({
+      answering: null,
+      ending: { kind: "error", error: chatErrorKind(error) },
+    });
+  }
+}
+
+/** The panel's chat while search asks in a new one, until it's carried on. */
+let beforeSearch: Pick<
+  ReturnType<typeof store.getState>,
+  "chat" | "messages" | "changes" | "memories" | "endings" | "ending"
+> | null = null;
+
 /** Asks `text` from search, in a new chat the panel can carry on. */
 export async function askFromSearch(text: string) {
+  if (beforeSearch === null) {
+    const { chat, messages, changes, memories, endings, ending } = store.getState();
+    beforeSearch = { chat, messages, changes, memories, endings, ending };
+  }
   clearChat();
   await sendMessage(text, [], { fromSearch: true });
+}
+
+/** Search's chat goes on in the panel: the chat it had before is left. */
+export function keepSearchChat() {
+  beforeSearch = null;
+}
+
+/** Search closed without carrying its chat on: the panel's comes back. */
+export async function leaveSearchChat() {
+  if (beforeSearch === null) return;
+  const run = ++followed;
+  const before = beforeSearch;
+  beforeSearch = null;
+  store.setState({ ...before, answering: null });
+  if (!before.chat) return;
+  // Read again: it may have moved on while search was open.
+  try {
+    const view = await getChat(before.chat.id);
+    if (run !== followed) return;
+    store.setState({
+      messages: view.messages,
+      changes: view.changes,
+      memories: view.memories,
+      endings: view.endings,
+    });
+  } catch {
+    // What it had stays shown.
+  }
 }
 
 async function retitle(id: string) {
@@ -225,14 +327,16 @@ export async function removeAllChats() {
   newChat();
 }
 
-// Turned off: the answer stops and the changes and memory items not
-// applied go, so nothing is left in the shard or the panel. The app drops
-// them too.
+// Turned off: the answer stops, changes not applied are discarded and
+// memory items not added go, so nothing is left in the shard. The app
+// does the same.
 store.subscribe((state, previous) => {
   if (state.enabled === false && previous.enabled === true) {
     stopAnswer();
     store.setState({
-      changes: state.changes.filter((change) => change.state !== "pending"),
+      changes: state.changes.map((change) =>
+        change.state === "pending" ? { ...change, state: "discarded" as const } : change,
+      ),
       memories: state.memories.filter((memory) => memory.state !== "pending"),
     });
   }

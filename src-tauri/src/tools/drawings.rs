@@ -758,6 +758,45 @@ fn embed_tag(relative: &str) -> String {
     )
 }
 
+/// `markdown` with the pictures of each drawing it shows left blank, as
+/// embed writes them, to tell a shard's own changes from the app filling
+/// those pictures in.
+pub(super) fn without_pictures(markdown: &str) -> String {
+    let mut out = String::with_capacity(markdown.len());
+    let mut rest = markdown;
+    while let Some(start) = rest.find("<img") {
+        let Some(len) = rest[start..].find('>') else {
+            break;
+        };
+        let end = start + len + 1;
+        out.push_str(&rest[..start]);
+        let tag = &rest[start..end];
+        if tag.contains(" data-excalidraw=\"") {
+            out.push_str(&blank_attribute(
+                &blank_attribute(tag, " src=\""),
+                " data-dark-src=\"",
+            ));
+        } else {
+            out.push_str(tag);
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `tag` with the value of the attribute that starts with `name` emptied.
+fn blank_attribute(tag: &str, name: &str) -> String {
+    let Some(at) = tag.find(name) else {
+        return tag.to_string();
+    };
+    let value = at + name.len();
+    match tag[value..].find('"') {
+        Some(len) => format!("{}{}", &tag[..value], &tag[value + len..]),
+        None => tag.to_string(),
+    }
+}
+
 /// The drawing `text` after `params`: a new one for create, from `text` for
 /// add, update and remove. Embed changes a shard, not the drawing.
 pub(super) fn scene_after(text: Option<&str>, params: &EditDrawingParams) -> ToolResult<String> {

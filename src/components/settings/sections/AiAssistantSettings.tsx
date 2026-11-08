@@ -153,6 +153,19 @@ export function useProviderSetup({
 
 export type ProviderSetup = ReturnType<typeof useProviderSetup>;
 
+/** Where a shard's images and PDFs go with it: wherever the model runs. */
+function filesGoTo(status: AssistantStatus) {
+  const provider = status.providers.find((p) => p.id === status.model?.provider);
+  if (provider?.setup === "local") {
+    return "They go to your local server with the shard's text and stay on this computer";
+  }
+  if (provider?.setup === "custom") {
+    return "They go to your custom server with the shard's text";
+  }
+  if (provider) return `They go to ${provider.name} with the shard's text`;
+  return "They go to the model's provider with the shard's text";
+}
+
 export function AiAssistantSettings() {
   const switchId = useId();
   const filesId = useId();
@@ -224,7 +237,7 @@ export function AiAssistantSettings() {
         </SettingRow>
         <SettingRow
           label="Send images and PDFs"
-          description="They leave this computer with the shard's text"
+          description={filesGoTo(status)}
           htmlFor={filesId}
         >
           <Switch
@@ -455,10 +468,19 @@ function Spinner() {
 }
 
 /** What a saved provider says next to its name. */
-function Saved({ children }: { children: React.ReactNode }) {
+function Saved({
+  children,
+  live = true,
+}: {
+  children: React.ReactNode;
+  /** Whether it's answering now: a stopped server has no green dot. */
+  live?: boolean;
+}) {
   return (
     <span className="inline-flex flex-wrap items-center">
-      <span className="mr-2 inline-block size-1.5 rounded-full bg-emerald-500" />
+      {live ? (
+        <span className="mr-2 inline-block size-1.5 rounded-full bg-emerald-500" />
+      ) : null}
       {children}
     </span>
   );
@@ -778,7 +800,7 @@ function LocalRow({
       <ProviderRow
         name={provider.name}
         description={
-          <Saved>
+          <Saved live={down.length < servers.length}>
             {servers.map((server, i) => (
               <span key={server.address} className="inline-flex items-center">
                 {i > 0 ? <Dot /> : null}

@@ -7,7 +7,6 @@ import {
   type TRange,
 } from "platejs";
 import type { PlateEditor } from "platejs/react";
-import { toast } from "sonner";
 
 import { endingText } from "@/components/assistant/setup";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
@@ -120,6 +119,7 @@ export function openInlineAsk(editor: PlateEditor) {
     prompt: "",
     draft: "",
     preview: null,
+    error: null,
   });
   redecorate(editor);
 }
@@ -132,7 +132,14 @@ export function closeInlineAsk({ refocus = false } = {}) {
   if (current.request) void stopChat(current.request).catch(() => {});
   const range = current.range.unref();
   for (const ref of current.blocks) ref.unref();
-  store.setState({ phase: null, whole: false, prompt: "", draft: "", preview: null });
+  store.setState({
+    phase: null,
+    whole: false,
+    prompt: "",
+    draft: "",
+    preview: null,
+    error: null,
+  });
   redecorate(current.editor);
   if (refocus && range) {
     current.editor.tf.select(range);
@@ -188,8 +195,9 @@ function asInline(nodes: TElement[]): TElement[] {
   return [{ type: "p", children } as TElement];
 }
 
+/** Back to the prompt, saying why under it, with what was asked kept. */
 function failed(error: ChatError["kind"]) {
-  toast.error(endingText({ kind: "error", error }));
+  store.setState({ phase: "prompt", error: endingText({ kind: "error", error }) });
 }
 
 function errorKind(error: unknown): ChatError["kind"] {
@@ -212,7 +220,7 @@ export async function sendInlineAsk(prompt: string) {
   const id = `inline-${crypto.randomUUID()}`;
   current.request = id;
   current.sent = askedText(current);
-  store.setState({ phase: "working", prompt: text, draft: text });
+  store.setState({ phase: "working", prompt: text, draft: text, error: null });
 
   const still = () => open === current && current.request === id;
   let answer = "";
@@ -248,7 +256,6 @@ export async function sendInlineAsk(prompt: string) {
   const markdown = cleanAnswer(answer);
   if (error || !markdown) {
     failed(error ?? "failed");
-    store.setState({ phase: "prompt" });
     return;
   }
 
@@ -260,7 +267,6 @@ export async function sendInlineAsk(prompt: string) {
   if (open !== current) return;
   if (value.length === 0) {
     failed("failed");
-    store.setState({ phase: "prompt" });
     return;
   }
   store.setState({

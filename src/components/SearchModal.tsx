@@ -34,6 +34,8 @@ import { useVaultStore } from "@/store/vault";
 import { useAssistantStore } from "@/store/assistant";
 import {
   askFromSearch,
+  keepSearchChat,
+  leaveSearchChat,
   loadAssistantEnabled,
   openAssistant,
   stopAnswer,
@@ -183,6 +185,8 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
       ) {
         stopAnswer();
       }
+      // The panel shows the chat it had, unless it took search's.
+      if (!handedOffRef.current) void leaveSearchChat();
       handedOffRef.current = false;
       setAsked(null);
       setWaiting(false);
@@ -328,7 +332,9 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
   const continueInChat = () => {
     handedOffRef.current = true;
+    keepSearchChat();
     openAssistant();
+    useAssistantStore.setState({ focusComposer: true });
     onOpenChange(false);
   };
 
@@ -402,7 +408,8 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
         }
       />
     );
-  } else if (hasQuery && rows.length === 0 && answeredQuery === query) {
+  } else if (hasQuery && rows.length === 0 && answeredQuery === query && !waiting) {
+    // Under an answer, no matching shards goes unsaid.
     body = (
       <Notice
         icon={SearchXIcon}

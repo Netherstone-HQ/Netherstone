@@ -39,6 +39,15 @@ export type SidebarSection =
 
 const MAX_RECENT_FILES_HISTORY = 25;
 
+/** The assistant panel's widths in px: as designed, and how far it drags. */
+export const ASSISTANT_WIDTH = { default: 400, min: 320, max: 640 };
+
+/**
+ * The least room the shard keeps beside the assistant: the inline Ask
+ * prompt's width plus the editor's gutters. Past it, the panel narrows.
+ */
+export const SHARD_MIN_WIDTH = 440 + 2 * 64;
+
 export interface RecentFileEntry {
   path: string;
   name: string;
@@ -56,6 +65,9 @@ interface UIState {
   toggleSidebar: () => void;
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
+  /** The assistant panel's width, as last dragged. */
+  assistantWidth: number;
+  setAssistantWidth: (width: number) => void;
   /** Which sidebar sections are collapsed. Missing ones are expanded. */
   collapsedSections: Partial<Record<SidebarSection, boolean>>;
   toggleSection: (section: SidebarSection) => void;
@@ -181,6 +193,8 @@ export const useUIStore = create<UIState>()(
         set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       sidebarWidth: 256,
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
+      assistantWidth: ASSISTANT_WIDTH.default,
+      setAssistantWidth: (width) => set({ assistantWidth: width }),
       collapsedSections: {},
       toggleSection: (section) =>
         set((state) => ({
@@ -362,6 +376,7 @@ export const useUIStore = create<UIState>()(
         recentFiles: state.recentFiles,
         pinnedFiles: state.pinnedFiles,
         sidebarWidth: state.sidebarWidth,
+        assistantWidth: state.assistantWidth,
         collapsedSections: state.collapsedSections,
         openFolders: state.openFolders,
         appMode: state.appMode,

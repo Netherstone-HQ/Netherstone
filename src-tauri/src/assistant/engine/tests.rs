@@ -61,6 +61,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         send_files: false,
         added: Vec::new(),
         asked: Default::default(),
+        step_limited: Default::default(),
         memory: Arc::new(List::at(vault_dir.join("memory.txt"))),
     }
 }
@@ -973,4 +974,64 @@ fn titles_lose_what_models_wrap_them_in() {
         Some("Bread water")
     );
     assert_eq!(clean_title("  \n \"\" "), None);
+}
+
+#[test]
+fn earlier_changes_are_told_as_they_stand() {
+    let change = |turn, kind, path: &str, state| Change {
+        id: format!("{turn}-{path}"),
+        chat: "c".into(),
+        turn,
+        kind,
+        path: path.into(),
+        ops: Vec::new(),
+        count: 1,
+        state,
+        applied: Vec::new(),
+        model: None,
+        moving: None,
+    };
+    let changes = [
+        change(
+            1,
+            proposals::Kind::NewShard,
+            "Test notes.md",
+            ChangeState::Applied,
+        ),
+        change(1, proposals::Kind::Shard, "Hub.md", ChangeState::Discarded),
+        change(3, proposals::Kind::Shard, "Plan.md", ChangeState::Pending),
+        // This message's own changes aren't earlier ones.
+        change(5, proposals::Kind::Shard, "Now.md", ChangeState::Pending),
+    ];
+    let told = change_states(&changes, 5);
+    assert!(
+        told.contains("\n- new shard Test notes.md: applied"),
+        "{told}"
+    );
+    assert!(told.contains("\n- change to Hub.md: discarded"), "{told}");
+    assert!(
+        told.contains("\n- change to Plan.md: not applied or discarded yet"),
+        "{told}"
+    );
+    assert!(!told.contains("Now.md"), "{told}");
+    assert_eq!(change_states(&changes[3..], 5), "");
+}
+
+#[test]
+fn questions_that_got_no_answer_are_left_out() {
+    let answer = Message::Assistant {
+        text: "Lisbon".into(),
+        calls: Vec::new(),
+        reasoning: None,
+    };
+    let sent = without_unanswered(vec![
+        Message::user("first"),
+        answer.clone(),
+        Message::user("failed"),
+        Message::user("asked again"),
+    ]);
+    assert_eq!(
+        sent,
+        vec![Message::user("first"), answer, Message::user("asked again")]
+    );
 }

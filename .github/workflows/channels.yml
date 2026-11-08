@@ -5,7 +5,6 @@ name: Channels
 #
 #   winget     opens a pull request on microsoft/winget-pkgs from wSoltani's fork
 #   Homebrew   commits the cask to Netherstone-HQ/homebrew-tap, then installs it
-#   AUR        pushes netherstone-bin
 #
 # Each channel is skipped, with a warning, until its secret is set. Their
 # files are in packaging/<channel>/, filled in by scripts/channels.mjs.
@@ -35,7 +34,7 @@ env:
   TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GH_REPO: ${{ github.repository }}
-  # Commits to the tap and the AUR are Wassim's.
+  # Commits to the tap are Wassim's.
   COMMIT_NAME: Wassim Soltani
   COMMIT_EMAIL: 56431363+wSoltani@users.noreply.github.com
 
@@ -47,7 +46,6 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       winget: ${{ steps.secrets.outputs.winget }}
       homebrew: ${{ steps.secrets.outputs.homebrew }}
-      aur: ${{ steps.secrets.outputs.aur }}
     steps:
       - uses: actions/checkout@v7
 
@@ -68,7 +66,6 @@ jobs:
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
           PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
           ready() {
             if [ -n "$3" ]; then
@@ -79,7 +76,6 @@ jobs:
           }
           ready winget WINGET_TOKEN "$WINGET_TOKEN"
           ready homebrew PACKAGES_TOKEN "$PACKAGES_TOKEN"
-          ready aur AUR_SSH_PRIVATE_KEY "$AUR_SSH_PRIVATE_KEY"
 
   winget:
     name: winget
@@ -177,61 +173,3 @@ jobs:
 
       - name: Uninstall
         run: brew uninstall --cask --zap netherstone
-
-  aur:
-    name: AUR
-    needs: check
-    if: needs.check.outputs.aur == 'true'
-    runs-on: ubuntu-24.04
-    env:
-      VERSION: ${{ needs.check.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-
-      # Releases before the package manager builds have no Linux tarball.
-      - id: package
-        name: Write the PKGBUILD
-        run: |
-          gh api "repos/$GH_REPO/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
-          tarball=$(node scripts/channels.mjs asset linuxTarball "$VERSION")
-          if ! jq -e --arg name "$tarball" '.assets | any(.name == $name)' "$RUNNER_TEMP/release.json" > /dev/null; then
-            echo "::warning::$TAG has no $tarball, so it can't go on the AUR."
-            exit 0
-          fi
-          node scripts/channels.mjs render aur "$RUNNER_TEMP/release.json" "$RUNNER_TEMP/aur"
-          echo "ready=true" >> "$GITHUB_OUTPUT"
-
-      # makepkg writes .SRCINFO from the PKGBUILD, and only runs on Arch, as a
-      # user other than root.
-      - name: Write .SRCINFO
-        if: steps.package.outputs.ready == 'true'
-        run: |
-          docker run --rm -v "$RUNNER_TEMP/aur:/pkg" archlinux:base-devel bash -c \
-            'useradd --create-home builder && cd /pkg && su builder -c "makepkg --printsrcinfo" > .SRCINFO'
-          cat "$RUNNER_TEMP/aur/.SRCINFO"
-
-      - name: Push to the AUR
-        if: steps.package.outputs.ready == 'true'
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
-          git clone ssh://aur@aur.archlinux.org/netherstone-bin.git "$RUNNER_TEMP/repo"
-          cp "$RUNNER_TEMP/aur/PKGBUILD" "$RUNNER_TEMP/aur/.SRCINFO" "$RUNNER_TEMP/repo/"
-          cd "$RUNNER_TEMP/repo"
-          git add PKGBUILD .SRCINFO
-          if git diff --cached --quiet; then
-            echo "The AUR already has Netherstone $VERSION."
-            exit 0
-          fi
-          git -c user.name="$COMMIT_NAME" -c user.email="$COMMIT_EMAIL" \
-            commit --message "Netherstone $VERSION"
-          git push origin HEAD:master

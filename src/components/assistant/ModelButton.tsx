@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ChevronDownIcon, ImageOffIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Dot } from "@/components/ui/dot";
@@ -13,6 +13,24 @@ import { type ModelChoice, setAssistantModel } from "@/lib/commands/assistant";
 
 import { ModelList, isSetUp, useModelLists } from "./models";
 import type { Setup } from "./setup";
+
+const NO_IMAGES = "This model can't see images, so they're left out";
+
+function MaybeHint({
+  label,
+  children,
+}: {
+  label: string | null;
+  children: React.ReactElement;
+}) {
+  return label ? (
+    <Hint label={label} side="top">
+      {children}
+    </Hint>
+  ) : (
+    children
+  );
+}
 
 /** The model the chat uses, and the list to pick another. */
 export function ModelButton({
@@ -40,6 +58,9 @@ export function ModelButton({
     if (open) loadAll(status.providers);
   }, [open, loadAll, status.providers]);
 
+  // Said on the button, so the shard's pictures being left out is no surprise.
+  const noImages = !!picked && !picked.images && sendFiles && !disabled;
+
   const pick = async (choice: ModelChoice) => {
     onOpenChange(false);
     try {
@@ -53,6 +74,7 @@ export function ModelButton({
   return (
     <div className="flex min-w-0 items-center gap-1">
       <Popover open={open} onOpenChange={onOpenChange}>
+        <MaybeHint label={noImages ? NO_IMAGES : null}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -76,6 +98,7 @@ export function ModelButton({
             ) : null}
           </button>
         </PopoverTrigger>
+        </MaybeHint>
         <PopoverContent align="start" side="top" className="w-75 p-0">
           <ModelList
             providers={status.providers}
@@ -85,16 +108,6 @@ export function ModelButton({
           />
         </PopoverContent>
       </Popover>
-      {picked && !picked.images && sendFiles && !disabled ? (
-        <Hint label="This model can't see images" side="top">
-          <span
-            aria-label="This model can't see images"
-            className="inline-flex size-6 shrink-0 items-center justify-center text-muted-foreground"
-          >
-            <ImageOffIcon className="size-3.5" />
-          </span>
-        </Hint>
-      ) : null}
     </div>
   );
 }

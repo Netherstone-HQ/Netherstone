@@ -18,6 +18,7 @@ import {
   setMcpEnabled,
   setMcpVaultAllowed,
 } from "@/lib/commands/mcp";
+import { useAssistantStore } from "@/store/assistant";
 
 export function AiAppsSettings() {
   const switchId = useId();
@@ -77,6 +78,8 @@ export function AiAppsSettings() {
   }
 
   const off = enabled !== true;
+  // The assistant reads the same vaults, so they stay switchable while it's on.
+  const assistantOn = useAssistantStore((s) => s.enabled === true);
   // Apps on this computer first, then the ones to download.
   const appGroups = [
     apps.filter((app) => app.installed || app.connected),
@@ -117,7 +120,7 @@ export function AiAppsSettings() {
             <VaultRow
               key={vault.path}
               vault={vault}
-              disabled={off}
+              disabled={off && !assistantOn}
               onChange={(allowed) => void allowVault(vault, allowed)}
             />
           ))}

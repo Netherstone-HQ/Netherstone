@@ -177,7 +177,7 @@ export interface ChatError {
     | "storage";
 }
 
-export type ChatStop = "done" | "tools" | "length" | "filtered";
+type ChatStop = "done" | "tools" | "length" | "filtered";
 
 /** What the panel hears while a chat answers, in order. */
 export type ChatEvent =
@@ -187,6 +187,7 @@ export type ChatEvent =
   | { type: "tool"; name: string; paths: string[] }
   | { type: "sources"; shards: string[] }
   | { type: "summarized" }
+  | { type: "retrying"; error: ChatError }
   | { type: "done"; stop: ChatStop }
   | { type: "stepLimit" }
   | { type: "failed"; error: ChatError }
@@ -225,7 +226,7 @@ export interface ChatChange {
   path: string;
   /** How many calls make it. */
   count: number;
-  state: "pending" | "applied";
+  state: "pending" | "applied" | "discarded";
   /** For a move: the folder it goes to ("" for the top), and its new name. */
   moving?: { folder: string | null; name: string | null };
 }
@@ -243,6 +244,18 @@ export interface ChatView extends ChatInfo {
   messages: ShownMessage[];
   changes: ChatChange[];
   memories: ChatMemory[];
+  /** How answers that didn't end well ended, by the turn they answered. */
+  endings: SavedEnding[];
+}
+
+/** An answer's ending, kept with the turn it answered. */
+export interface SavedEnding {
+  turn: number;
+  ending:
+    | { kind: "error"; error: ChatError["kind"] }
+    | { kind: "stop"; stop: Exclude<ChatStop, "done" | "tools"> }
+    | { kind: "stepLimit" }
+    | { kind: "stopped" };
 }
 
 /**

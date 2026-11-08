@@ -11,6 +11,7 @@ import {
   getChat,
   undoChange,
 } from "@/lib/commands/assistant";
+import { fillDrawingPictures } from "@/lib/drawing-exports";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import {
@@ -62,8 +63,15 @@ export function usePreviewedChange(): ChatChange | null {
   const historyOpen = useHistoryStore((s) => s.openIn === "notes");
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
+  const setAside = store((s) => s.previewSetAside);
   if (!shown || historyOpen) return null;
-  return previewedChange(changes, openShardPath(vault, openPath));
+  const change = previewedChange(changes, openShardPath(vault, openPath));
+  return change?.id === setAside ? null : change;
+}
+
+/** Back to editing the open shard, the change waiting in its card. */
+export function setPreviewAside(change: ChatChange) {
+  store.setState({ previewSetAside: change.id });
 }
 
 function errorText(error: unknown) {
@@ -109,10 +117,11 @@ async function writeChange(
   // text already on screen.
   const shown = state.plateEditor?.children;
   let typed = false;
+  let made: MadeChange;
   state.setIsSaving(true);
   try {
     suppressVaultChangePath(filePath);
-    const made = await write(state.markdownContent);
+    made = await write(state.markdownContent);
     // Typed while it was written: what's typed stays, and the written text
     // comes in around it as an outside change does.
     typed = useEditorStore.getState().plateEditor?.children !== shown;
@@ -121,6 +130,10 @@ async function writeChange(
     useEditorStore.getState().setIsSaving(false);
   }
   if (typed) await reloadOpenShardIfChanged();
+  // A drawing the change shows gets its picture now, as on opening the shard.
+  if (made.content !== null) {
+    await fillDrawingPictures(filePath, made.content, vault);
+  }
   return true;
 }
 
@@ -198,8 +211,13 @@ export function discardAssistantChange(change: ChatChange) {
       toast.error("Couldn't discard the change", { description: errorText(error) });
       return;
     }
+    // It stays in the chat, marked as discarded.
     store.setState({
-      changes: store.getState().changes.filter((c) => c.id !== change.id),
+      changes: store
+        .getState()
+        .changes.map((c) =>
+          c.id === change.id ? { ...c, state: "discarded" as const } : c,
+        ),
     });
   });
 }

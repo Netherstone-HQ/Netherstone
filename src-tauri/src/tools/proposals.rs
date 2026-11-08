@@ -108,12 +108,14 @@ pub fn target(vault: &Vault, op: &Op) -> ToolResult<Target> {
 }
 
 /// Where a move puts its file or folder: the folder ("" for the top of the
-/// vault) and the new name, each when the move gives it.
+/// vault) and the new name, each when the move gives it, and the path it
+/// moves from, as the call names it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Moving {
     pub folder: Option<String>,
     pub name: Option<String>,
+    pub from: Option<String>,
 }
 
 /// Where the move in `ops` puts its file, if they hold one.
@@ -128,6 +130,7 @@ pub fn moving(ops: &[Op]) -> Option<Moving> {
     Some(Moving {
         folder: text("to_folder"),
         name: text("new_name"),
+        from: text("path"),
     })
 }
 
@@ -542,11 +545,13 @@ mod tests {
             moving(&moved),
             Some(Moving {
                 folder: Some("Archive".into()),
-                name: None
+                name: None,
+                from: Some("Plans".into()),
             })
         );
         let renamed = [op("move", json!({ "path": "Plan.md", "new_name": "Trip" }))];
         assert_eq!(moving(&renamed).unwrap().name.as_deref(), Some("Trip"));
+        assert_eq!(moving(&renamed).unwrap().from.as_deref(), Some("Plan.md"));
         let edited = [op("edit_shard", json!({ "path": "Plan.md" }))];
         assert_eq!(moving(&edited), None);
     }

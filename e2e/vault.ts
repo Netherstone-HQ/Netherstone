@@ -486,7 +486,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           responsesOnly: false,
         };
         type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
-        type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string; moving?: unknown };
+        type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string; from?: string; moving?: { folder: string | null; name: string | null; from?: string } };
         type Offer = { id: string; turn: number; text: string; state: string };
         type Ended = { turn: number; ending: unknown };
         const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[]; endings: Ended[] }[] = [];
@@ -576,7 +576,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
               const { kind = "shard", moving, also = [] } = setup.change;
               for (const path of [setup.change.path, ...also]) {
                 send({ type: "tool", name: "edit_shard", paths: [path] });
-                found.changes.push({ id: `change-${++changes}`, turn, kind, path, count: 1, state: "pending", ...(moving ? { moving } : {}) });
+                found.changes.push({ id: `change-${++changes}`, turn, kind, path, count: 1, state: "pending", ...(moving ? { moving: { ...moving, from: path } } : {}) });
               }
             }
             if (setup.remember) {
@@ -659,22 +659,47 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             const { change } = findChange((args as unknown as { change: string }).change);
             return { path: change.path, before: files[change.path] ?? "", after: setup.change?.after };
           },
+          // As the app: a new file is made and an undo takes it away; a move
+          // says where the file was.
           assistant_apply: (args) => {
             const { change } = findChange((args as unknown as { change: string }).change);
             const after = setup.change?.after ?? "";
+            change.state = "applied";
+            if (change.kind === "move") {
+              const { folder = null, name = null } = change.moving ?? {};
+              const parts = change.path.split("/");
+              const old = parts.pop() ?? change.path;
+              const renamed = name ? `${name.replace(/\.md$/i, "")}.md` : old;
+              const where = folder === null ? parts.join("/") : folder;
+              const moved = where ? `${where}/${renamed}` : renamed;
+              files[moved] = files[change.path];
+              delete files[change.path];
+              change.from = change.path;
+              change.path = moved;
+              return { path: moved, content: files[moved], from: change.from };
+            }
             change.before = files[change.path];
             files[change.path] = after;
             window.__saves.push({ filePath: `${vaultPath}/${change.path}`, content: after });
-            change.state = "applied";
-            return { path: change.path, content: after };
+            return { path: change.path, content: after, from: null };
           },
           assistant_undo: (args) => {
             const { change } = findChange((args as unknown as { change: string }).change);
-            const before = change.before ?? "";
-            files[change.path] = before;
-            window.__saves.push({ filePath: `${vaultPath}/${change.path}`, content: before });
             change.state = "pending";
-            return { path: change.path, content: before };
+            if (change.kind === "move" && change.from) {
+              const moved = change.path;
+              files[change.from] = files[moved];
+              delete files[moved];
+              change.path = change.from;
+              return { path: change.path, content: files[change.path], from: moved };
+            }
+            if (change.before === undefined) {
+              delete files[change.path];
+              return { path: change.path, content: null, from: null };
+            }
+            files[change.path] = change.before;
+            window.__saves.push({ filePath: `${vaultPath}/${change.path}`, content: change.before });
+            return { path: change.path, content: change.before, from: null };
           },
           assistant_discard: (args) => {
             const { change } = findChange((args as unknown as { change: string }).change);

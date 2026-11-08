@@ -3,13 +3,13 @@ import {
   FolderIcon,
   InfoIcon,
   KeyboardIcon,
-  MessageSquareIcon,
   PaintbrushIcon,
   PaperclipIcon,
   PencilLineIcon,
   PlugIcon,
   RefreshCwIcon,
   SettingsIcon,
+  SparklesIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -106,11 +106,12 @@ export const SETTINGS_CATEGORIES: Category[] = [
     label: "AI apps",
     icon: PlugIcon,
     Content: AiAppsSettings,
+    startsGroup: true,
   },
   {
     id: "ai-assistant",
     label: "AI assistant",
-    icon: MessageSquareIcon,
+    icon: SparklesIcon,
     Content: AiAssistantSettings,
   },
   {

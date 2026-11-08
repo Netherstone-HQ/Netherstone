@@ -333,6 +333,7 @@ async fn files_a_provider_turns_down_are_left_out_and_the_model_told() {
     let requests = server.requests();
     assert_eq!(requests.len(), 4);
     assert!(requests[2].contains("file_data"));
+    assert!(requests[2].contains("The app attached the images and PDFs of the shards just read:"));
     assert!(!requests[3].contains("file_data") && !requests[3].contains("image_url"));
     assert!(requests[3].contains("turned down the images and PDFs"));
 }
@@ -1011,6 +1012,12 @@ async fn added_shards_go_with_the_message_and_count_as_read() {
         .encode(std::fs::read(turn.vault.root.join("_attachments/map.png")).unwrap());
     let first = &server.requests()[0];
     assert!(first.contains("<shard path=\\\"Trip.md\\\">"), "{first}");
+    // The app attached them, not the user.
+    assert!(first.contains("The app attached these shards:"), "{first}");
+    assert!(
+        first.contains("The app attached the images and PDFs in these shards:"),
+        "{first}"
+    );
     assert!(first.contains(&png) && first.contains("\"type\":\"document\""));
     let Some(Message::User { files, .. }) = messages(&turn).into_iter().next() else {
         panic!("the message is saved");

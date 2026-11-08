@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { foldThinking } from "./thinking";
+import { answerTexts, foldThinking } from "./steps";
 
 describe("foldThinking", () => {
   it("shows thinking between tools with the step after it", () => {
@@ -28,5 +28,20 @@ describe("foldThinking", () => {
       { role: "user" as const, text: "Go on" },
     ];
     expect(foldThinking(steps)).toEqual(steps);
+  });
+});
+
+describe("answerTexts", () => {
+  it("puts each answer's text on its last message with text", () => {
+    const answers = answerTexts([
+      { seq: 1, role: "user", text: "Is the return booked?" },
+      { seq: 2, role: "assistant", text: "Let me look." },
+      { seq: 4, role: "assistant", text: "Not yet." },
+      // A step that only ran a tool, then stopped.
+      { seq: 6, role: "assistant", text: "" },
+      { seq: 7, role: "user", text: "Book it" },
+      { seq: 8, role: "assistant", text: "" },
+    ]);
+    expect([...answers]).toEqual([[4, "Let me look.\n\nNot yet."]]);
   });
 });

@@ -19,24 +19,22 @@ import { EndingNote } from "../EndingNote";
 import { WaitingLine } from "../WaitingLine";
 import { Answer, Thinking } from "./Answer";
 import { openLink, openShard } from "./open";
-import { foldThinking, joinThinking } from "./thinking";
+import { answerTexts, foldThinking, joinThinking } from "./steps";
 
 /**
- * Each message, with the changes and memory items an answer offered, and
- * its whole text, under the last message of that answer.
+ * Each message, with the changes and memory items an answer offered under
+ * its last message, and the whole answer's text under its last message
+ * with text, for its Copy row.
  */
 function withChanges(
   messages: ShownMessage[],
   changes: ChatChange[],
   memories: ChatMemory[],
 ) {
+  const answers = answerTexts(messages);
   let turn = 0;
-  let texts: string[] = [];
   return messages.map((message, index) => {
-    if (message.role === "user") {
-      turn = message.seq;
-      texts = [];
-    } else if (message.text) texts.push(message.text);
+    if (message.role === "user") turn = message.seq;
     const next = messages[index + 1];
     const endsAnswer =
       message.role === "assistant" && (!next || next.role === "user");
@@ -47,7 +45,7 @@ function withChanges(
       endsTurn: !next || next.role === "user",
       changes: endsAnswer ? changes.filter((c) => c.turn === turn) : [],
       memories: endsAnswer ? memories.filter((m) => m.turn === turn) : [],
-      copy: endsAnswer && texts.length ? texts.join("\n\n") : undefined,
+      copy: message.role === "assistant" ? answers.get(message.seq) : undefined,
     };
   });
 }

@@ -162,8 +162,8 @@ export const Answer = memo(function Answer({
   /** Whether a shard is open to add the answer to. */
   canAdd: boolean;
   /**
-   * The whole answer, on its last message, for its Copy row. Steps before
-   * it have none, so they sit close.
+   * The whole answer, on its last message with text, for its Copy row.
+   * Steps before it have none, so they sit close.
    */
   copy?: string;
 }) {

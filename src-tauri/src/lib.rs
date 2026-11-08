@@ -15,6 +15,7 @@ mod integrations;
 pub mod launch;
 mod links;
 mod locks;
+mod main_view;
 mod markdown_text;
 mod mcp;
 mod open_access;
@@ -117,6 +118,7 @@ pub fn run() {
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 assistant::stop_window(webview.window().label());
+                main_view::take_over(webview);
             }
         })
         // Commands are marked `async` so Tauri runs them on its async runtime.

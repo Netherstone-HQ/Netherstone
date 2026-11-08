@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 import {
   EyeOffIcon,
@@ -18,6 +19,7 @@ import {
 import {
   changedFiles,
   chatWork,
+  discarded,
   inlineWork,
 } from "@/components/brand/companion-work";
 import {
@@ -123,12 +125,24 @@ function perchSpot(card: HTMLElement): Spot {
   return { x: rect.right - 52, y: rect.top + 1 };
 }
 
-/** His corner, at the bottom right of the window. */
+/** The area shown now that his corner belongs to, if it marks one. */
+function homeArea(): HTMLElement | null {
+  for (const area of document.querySelectorAll<HTMLElement>("[data-companion-home]")) {
+    if (area.getClientRects().length > 0) return area;
+  }
+  return null;
+}
+
+/**
+ * His corner: the bottom right of the notes or the drawing, left of a
+ * browser panel, or of the window elsewhere.
+ */
 function homeSpot(): Spot {
   const { width, height, ground, restX, scale } = STAGE;
+  const area = homeArea()?.getBoundingClientRect();
   return {
-    x: window.innerWidth - 12 - (width - restX) * scale,
-    y: window.innerHeight - (height - ground) * scale,
+    x: (area?.right ?? window.innerWidth) - 12 - (width - restX) * scale,
+    y: (area?.bottom ?? window.innerHeight) - (height - ground) * scale,
   };
 }
 
@@ -152,8 +166,12 @@ export function Companion() {
   // He's the assistant only while it's on.
   const assistant = useAssistantStore((s) => s.enabled === true);
   const perch = useCompanionStore((s) => s.perch);
-  // Settings covers the panel, so he goes home, out of sight, while it's open.
+  // Settings covers the panel, so he hides while it's open.
   const settingsShown = useUIStore((s) => s.activeNavItem === "settings");
+  // What can move his corner or the panel without resizing the window.
+  const appMode = useUIStore((s) => s.appMode);
+  const browserShown = useUIStore((s) => s.isBrowserPanelOpen);
+  const canvasBrowserShown = useUIStore((s) => s.isCanvasBrowserPanelOpen);
   const { setup } = useSetup(assistant);
   const noProvider = assistant && setupState(setup) === "noProvider";
   // The menu offers only what isn't on screen already and has a shard to use.
@@ -174,6 +192,20 @@ export function Companion() {
     rigRef.current = rig;
     const onResize = () => rig.relocate();
     window.addEventListener("resize", onResize);
+    // A click in the browser panel moves focus to its own view, in the same
+    // window: while it has it, you're using a page there.
+    const appWindow = "__TAURI_INTERNALS__" in window ? getCurrentWindow() : null;
+    const onBlur = () =>
+      void appWindow
+        ?.isFocused()
+        .then((focused) => rig.setElsewhere(focused && !document.hasFocus()))
+        .catch(() => {});
+    const onFocus = () => rig.setElsewhere(false);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    const stopFocus = appWindow?.onFocusChanged(({ payload: focused }) => {
+      if (!focused) rig.setElsewhere(false);
+    });
     let changed: readonly string[] = [];
     const unsubscribe = [
       useEditorStore.subscribe((state, prev) => {
@@ -186,6 +218,8 @@ export function Companion() {
         const now = changedFiles(changed, prev, state);
         if (now.length > changed.length) rig.setChanged(now.length);
         changed = now;
+        // Turning the assistant off discards too, and sends him home instead.
+        if (state.enabled !== false && discarded(prev, state)) rig.discarded();
       }),
       useInlineAskStore.subscribe((state, prev) => {
         const work = inlineWork(prev.phase, state.phase);
@@ -195,26 +229,47 @@ export function Companion() {
     return () => {
       for (const stop of unsubscribe) stop();
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      void stopFocus?.then((stop) => stop());
       rig.stop();
       rigRef.current = null;
       useCompanionStore.setState({ perched: false });
     };
   }, []);
 
-  // As the assistant he sits on the panel's composer while it's open.
+  // As the assistant he sits on the panel's composer while it's open. Over
+  // Settings he's only hidden, and stays where he is.
   useEffect(() => {
     const rig = rigRef.current;
     if (!rig) return;
     rig.setAssistant(assistant, menu);
     if (!assistant) setMenu(false);
-    const card = assistant && !settingsShown ? perch : null;
+    const card = assistant ? perch : null;
     rig.setSpot(card ? () => perchSpot(card) : null);
     useCompanionStore.setState({ perched: card !== null });
     if (!card) return;
+    // The card moves when anything around it resizes, like the panel as it
+    // slides in, without resizing itself.
     const observer = new ResizeObserver(() => rig.relocate());
-    observer.observe(card);
+    for (let el: HTMLElement | null = card; el; el = el.parentElement) {
+      observer.observe(el);
+      if (el.hasAttribute("data-companion-home")) break;
+    }
     return () => observer.disconnect();
-  }, [assistant, perch, menu, settingsShown]);
+  }, [assistant, perch, menu]);
+
+  // His corner and the panel move when the browser panel opens, closes or is
+  // dragged, which only resizes the area beside it. The area itself comes
+  // and goes with the mode and the vault.
+  useEffect(() => {
+    const rig = rigRef.current;
+    const area = homeArea();
+    if (!rig || !area) return;
+    const observer = new ResizeObserver(() => rig.relocate());
+    observer.observe(area);
+    return () => observer.disconnect();
+  }, [appMode, browserShown, canvasBrowserShown, vault]);
 
   // With no provider set up, he sleeps until there is one.
   useEffect(() => {

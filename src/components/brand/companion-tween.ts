@@ -25,7 +25,7 @@ interface Tween<K extends string> {
 
 export class Tweens<K extends string> {
   alive = true;
-  /** While the window is hidden or in the background, moves jump to their end. */
+  /** While the window is hidden, moves jump to their end. */
   paused = false;
   private tweens: Tween<K>[] = [];
   private frameId = 0;

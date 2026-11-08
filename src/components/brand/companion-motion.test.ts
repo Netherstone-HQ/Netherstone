@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CompanionRig, hopFlight, STAGE, type Spot } from "./companion-motion";
+import { CompanionRig, hopFlight, PACE, STAGE, type Spot } from "./companion-motion";
 
 const PARTS = [
   "hit", "root", "front", "back", "frontBody", "backBody", "frontLegL",
@@ -45,6 +45,28 @@ function feet(host: HTMLElement): Spot {
 
 const menu = { isOpen: () => false, open: () => {}, close: () => {} };
 
+/** You move the pointer, as anyone using the app does. */
+const stir = () => window.dispatchEvent(new MouseEvent("pointermove", { clientX: 600 }));
+
+/** Lets `ms` go by while you're using the app, stirring every second. */
+async function whileActive(ms: number) {
+  for (let t = 0; t < ms; t += 1000) {
+    stir();
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+}
+
+const asleep = (host: HTMLElement) => host.hasAttribute("data-zz");
+/** Whether he's lying down, turned away, as he does to sleep. */
+const lyingDown = (host: HTMLElement) =>
+  host.querySelector('[data-part="back"]')!.getAttribute("visibility") !== "hidden";
+
+/** Sets whether the window is hidden, as minimizing or covering it does. */
+function setHidden(hidden: boolean) {
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
 beforeEach(() => {
   vi.useFakeTimers({
     toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance"],
@@ -60,7 +82,7 @@ describe("CompanionRig", () => {
     const host = makeHost();
     const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
     rig.setAssistant(true, menu);
-    await vi.advanceTimersByTimeAsync(10_000); // walked in and sat down
+    await whileActive(10_000); // walked in and sat down
     expect(feet(host)).toEqual(HOME);
 
     rig.setSpot(() => PERCH);
@@ -148,21 +170,135 @@ describe("CompanionRig", () => {
     rig.stop();
   });
 
-  it("goes straight to each pose while the window is in the background", async () => {
+  it("carries on as usual while the window is only unfocused, and jumps to each pose while it's hidden", async () => {
     const host = makeHost();
     const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
     rig.setAssistant(true, menu);
-    await vi.advanceTimersByTimeAsync(10_000);
-    window.dispatchEvent(new Event("blur"));
-    expect(host.hasAttribute("data-paused")).toBe(true);
+    await whileActive(10_000);
 
-    // Past the panel's slide-in, he's there: the hop takes no frames.
+    // Unfocused, as on a second screen or with the browser panel in use,
+    // he still hops all the way.
+    window.dispatchEvent(new Event("blur"));
+    expect(host.hasAttribute("data-paused")).toBe(false);
     rig.setSpot(() => PERCH);
-    await vi.advanceTimersByTimeAsync(221);
+    await vi.advanceTimersByTimeAsync(220 + 220 + 200 + 50);
+    expect(feet(host)).not.toEqual(HOME);
+    expect(feet(host)).not.toEqual(PERCH);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(feet(host)).toEqual(PERCH);
 
-    window.dispatchEvent(new Event("focus"));
+    // Hidden, the hop takes no frames.
+    setHidden(true);
+    expect(host.hasAttribute("data-paused")).toBe(true);
+    rig.setSpot(null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(feet(host)).toEqual(HOME);
+
+    setHidden(false);
     expect(host.hasAttribute("data-paused")).toBe(false);
+    rig.stop();
+  });
+
+  it("as the assistant, never dozes off while you're using the app", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    // Longer than the 24 s he used to count from each return to idle.
+    for (let t = 0; t < 60_000; t += 1000) {
+      await whileActive(1000);
+      expect(lyingDown(host)).toBe(false);
+    }
+
+    // Left alone for his idle pace, he lies down and sleeps.
+    await vi.advanceTimersByTimeAsync(PACE.idle * 1000 - 500);
+    expect(lyingDown(host)).toBe(false);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(lyingDown(host)).toBe(true);
+    expect(asleep(host)).toBe(true);
+    rig.stop();
+  });
+
+  it("as the assistant, wakes slowly when you're back", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    await vi.advanceTimersByTimeAsync(PACE.idle * 1000 + 15_000);
+    expect(asleep(host)).toBe(true);
+
+    stir();
+    expect(asleep(host)).toBe(false);
+    // Not with a jump: he's still lying there a moment.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(lyingDown(host)).toBe(true);
+    await whileActive(8000);
+    expect(lyingDown(host)).toBe(false);
+    rig.stop();
+  });
+
+  it("as the assistant, stays awake while you use a page in the browser panel", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    await whileActive(5000);
+    // Its clicks and keys never reach him.
+    rig.setElsewhere(true);
+    await vi.advanceTimersByTimeAsync(4 * PACE.idle * 1000);
+    expect(lyingDown(host)).toBe(false);
+
+    // Back from it, he counts from then.
+    rig.setElsewhere(false);
+    await vi.advanceTimersByTimeAsync(PACE.idle * 1000 - 500);
+    expect(lyingDown(host)).toBe(false);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(asleep(host)).toBe(true);
+    rig.stop();
+  });
+
+  it("as the assistant, gets straight back up when you're back while he lies down", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    // Turned away, on his way down.
+    while (!lyingDown(host)) await vi.advanceTimersByTimeAsync(16);
+    stir();
+    // Up in about a second, rather than lying all the way down first.
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(lyingDown(host)).toBe(false);
+    expect(asleep(host)).toBe(false);
+    rig.stop();
+  });
+
+  it("as the assistant, sleeps on while there's no provider, whatever you do", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    rig.setAssistant(true, menu);
+    await whileActive(8000);
+    rig.setWork("sleep");
+    await whileActive(8000);
+    expect(asleep(host)).toBe(true);
+    expect(lyingDown(host)).toBe(true);
+    rig.stop();
+  });
+
+  it("on his own, lies down only once you've left him alone, and wakes when you're back", async () => {
+    const host = makeHost();
+    const rig = new CompanionRig(host, { reducedMotion: false, home: () => HOME });
+    for (let t = 0; t < 4 * PACE.idle * 1000; t += 1000) {
+      await whileActive(1000);
+      expect(lyingDown(host)).toBe(false);
+    }
+    // He looks around every 4 to 10 s while he sits, and lies down at the
+    // first look after his idle pace.
+    await vi.advanceTimersByTimeAsync(PACE.idle * 1000 - 500);
+    expect(lyingDown(host)).toBe(false);
+    while (!asleep(host)) await vi.advanceTimersByTimeAsync(100);
+
+    stir();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(asleep(host)).toBe(false);
+    expect(lyingDown(host)).toBe(true);
+    await whileActive(8000);
+    expect(lyingDown(host)).toBe(false);
     rig.stop();
   });
 
@@ -267,6 +403,26 @@ describe("CompanionRig", () => {
       expect(muscled(host)).toBe(true);
       expect(gemShown(host)).toBe(false);
       expect([...(await leans(host, 6000))].sort()).toEqual(["left", "right"]);
+      rig.stop();
+    });
+
+    it("shrinks back and spits his shard out, without Done, when a change is discarded mid-flex", async () => {
+      const { host, rig } = await reading();
+      rig.setChanged(3);
+      await vi.advanceTimersByTimeAsync(3000);
+      // The answer lands while he still flexes, then a change is discarded.
+      rig.setWork("done");
+      await vi.advanceTimersByTimeAsync(200);
+      expect(muscled(host)).toBe(true);
+      rig.discarded();
+      let happy = false;
+      for (let t = 0; t < 4000; t += 16) {
+        await vi.advanceTimersByTimeAsync(16);
+        happy ||= part(host, "happy").getAttribute("visibility") === "visible";
+      }
+      expect(happy).toBe(false);
+      expect(muscled(host)).toBe(false);
+      expect(gemShown(host)).toBe(true);
       rig.stop();
     });
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { changedFiles, chatWork, inlineWork } from "./companion-work";
+import { changedFiles, chatWork, discarded, inlineWork } from "./companion-work";
 
-const idle = { answering: null, ending: null, messages: [{}] };
+const CHAT = { id: "chat-1" };
+const idle = { chat: CHAT, answering: null, ending: null, messages: [{}], changes: [] };
 const answering = (tool: string | null) => ({
+  ...idle,
   answering: { tool: tool ? { name: tool } : null },
-  ending: null,
-  messages: [{}],
 });
 
 describe("chatWork", () => {
@@ -56,9 +56,8 @@ describe("inlineWork", () => {
 
 describe("changedFiles", () => {
   const tool = (name: string, paths: string[]) => ({
+    ...idle,
     answering: { tool: { name, paths } },
-    ending: null,
-    messages: [{}],
   });
 
   it("counts each file the answer changes once", () => {
@@ -81,8 +80,38 @@ describe("changedFiles", () => {
     expect(changedFiles(one, first, tool("create_shard", ["Notes"]))).toHaveLength(2);
   });
 
-  it("starts again with each answer", () => {
-    expect(changedFiles(["A.md", "B.md"], tool("edit_shard", ["B.md"]), idle)).toEqual([]);
-    expect(changedFiles(["A.md"], idle, tool("edit_shard", ["B.md"]))).toEqual(["B.md"]);
+  it("keeps the count once the answer ends, and starts again with each new message", () => {
+    expect(changedFiles(["A.md", "B.md"], tool("edit_shard", ["B.md"]), idle)).toEqual(["A.md", "B.md"]);
+    const sent = { ...idle, messages: [{}, {}] };
+    expect(changedFiles(["A.md"], idle, { ...tool("edit_shard", ["B.md"]), messages: [{}, {}] })).toEqual(["B.md"]);
+    expect(changedFiles(["A.md"], sent, { ...sent, answering: { tool: null } })).toEqual([]);
+  });
+
+  it("carries on counting when Try again goes on after an error", () => {
+    const failed = { ...idle, ending: { kind: "error" } };
+    expect(changedFiles(["A.md"], failed, tool("edit_shard", ["B.md"]))).toEqual(["A.md", "B.md"]);
+    // Not in another chat.
+    const other = { ...tool("edit_shard", ["B.md"]), chat: { id: "chat-2" } };
+    expect(changedFiles(["A.md"], failed, other)).toEqual(["B.md"]);
+  });
+});
+
+describe("discarded", () => {
+  const changes = (...states: [number, string][]) => ({
+    ...idle,
+    changes: states.map(([turn, state], i) => ({ id: `c${i}`, turn, state })),
+  });
+
+  it("is true when a pending change from the last answer is discarded", () => {
+    expect(discarded(changes([1, "pending"]), changes([1, "discarded"]))).toBe(true);
+    expect(discarded(changes([1, "applied"]), changes([1, "applied"]))).toBe(false);
+    expect(discarded(changes([1, "discarded"]), changes([1, "discarded"]))).toBe(false);
+    expect(discarded(idle, changes([1, "discarded"]))).toBe(false);
+  });
+
+  it("leaves out an earlier answer's change, and anything while an answer comes", () => {
+    expect(discarded(changes([1, "pending"], [2, "pending"]), changes([1, "discarded"], [2, "pending"]))).toBe(false);
+    const coming = { ...changes([1, "discarded"]), answering: { tool: null } };
+    expect(discarded(changes([1, "pending"]), coming)).toBe(false);
   });
 });

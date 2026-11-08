@@ -12,7 +12,10 @@ import {
   undoChange,
 } from "@/lib/commands/assistant";
 import { fillDrawingPictures } from "@/lib/drawing-exports";
-import { toVaultRelativePath } from "@/lib/drawing-files";
+import {
+  resolveVaultRelativePath,
+  toVaultRelativePath,
+} from "@/lib/drawing-files";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import {
   reloadOpenShardIfChanged,
@@ -23,6 +26,7 @@ import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
+import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 
 const store = useAssistantStore;
@@ -94,9 +98,9 @@ async function reloadChanges(chat: string) {
 async function writeChange(
   change: ChatChange,
   write: (expected: string | null) => Promise<MadeChange>,
-): Promise<boolean> {
+): Promise<void> {
   const vault = useVaultStore.getState().currentVaultPath;
-  if (!vault) return false;
+  if (!vault) return;
   await flushPendingAutosave();
   const state = useEditorStore.getState();
   const filePath = state.currentFilePath;
@@ -106,8 +110,8 @@ async function writeChange(
     filePath !== null &&
     openShardPath(vault, filePath) === change.path;
   if (!isOpen || !filePath) {
-    await write(null);
-    return true;
+    followMadeChange(await write(null), vault);
+    return;
   }
   if (state.isDirty || state.outsideChange) {
     throw new Error("Your latest changes aren't saved yet. Try again in a moment.");
@@ -134,7 +138,20 @@ async function writeChange(
   if (made.content !== null) {
     await fillDrawingPictures(filePath, made.content, vault);
   }
-  return true;
+}
+
+/**
+ * Recent and Pinned follow what a change did: a moved file is listed at
+ * its new place, and one it took away is no longer listed.
+ */
+function followMadeChange(made: MadeChange, vault: string) {
+  const { remapRememberedPaths, forgetRememberedPaths } = useUIStore.getState();
+  const path = resolveVaultRelativePath(made.path, vault);
+  if (made.from !== null) {
+    remapRememberedPaths(resolveVaultRelativePath(made.from, vault), path);
+  } else if (made.content === null) {
+    forgetRememberedPaths(path);
+  }
 }
 
 async function showWritten(filePath: string, markdown: string) {

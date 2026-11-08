@@ -227,8 +227,11 @@ export interface ChatChange {
   /** How many calls make it. */
   count: number;
   state: "pending" | "applied" | "discarded";
-  /** For a move: the folder it goes to ("" for the top), and its new name. */
-  moving?: { folder: string | null; name: string | null };
+  /**
+   * For a move: the folder it goes to ("" for the top), its new name, and
+   * where it was, as the model named it.
+   */
+  moving?: { folder: string | null; name: string | null; from?: string | null };
 }
 
 /** An item an answer offered to add to memory. */
@@ -272,6 +275,8 @@ export interface ChangePreview {
 export interface MadeChange {
   path: string;
   content: string | null;
+  /** For a move, where the file was before. */
+  from: string | null;
 }
 
 export async function previewChange(change: string): Promise<ChangePreview> {

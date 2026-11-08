@@ -25,6 +25,8 @@ interface Tween<K extends string> {
 
 export class Tweens<K extends string> {
   alive = true;
+  /** While the window is hidden or in the background, moves jump to their end. */
+  paused = false;
   private tweens: Tween<K>[] = [];
   private frameId = 0;
   private last = 0;
@@ -90,11 +92,11 @@ export class Tweens<K extends string> {
 
   // Promises from a stopped run never settle, so the sequence just ends.
   // A newer tween takes over any values an older one was still moving.
-  // With reduced motion, he goes straight to each pose.
+  // With reduced motion, or while paused, he goes straight to each pose.
   to(to: Partial<Record<K, number>>, ms: number, ease: Ease = inOut) {
     return new Promise<void>((resolve) => {
       if (!this.alive) return;
-      if (this.reduced) {
+      if (this.reduced || this.paused) {
         Object.assign(this.values, to);
         this.render();
         resolve();

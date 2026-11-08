@@ -156,6 +156,22 @@ export class CompanionRig {
       this.clicked(e.detail),
     );
     this.cleanups.push(() => clearTimeout(this.pendingClick));
+    // Asleep, he breathes for a while and then lies still (see App.css). The
+    // first of the sleep animations to run out ends them all, so the z's
+    // never blink out before they stand still.
+    this.listen(host, "animationend", (e) => {
+      const sleepy = e.animationName === "companion-breathe" || e.animationName === "companion-z";
+      if (sleepy && host.hasAttribute("data-breathing")) {
+        this.flag("breathing", false);
+        this.flag("resting", true);
+      }
+    });
+    // Nothing moves while the window is hidden or in the background.
+    this.listen(window, "blur", () => this.pause(true));
+    this.listen(window, "focus", () => this.pause(false));
+    this.listen(document, "visibilitychange", () =>
+      this.pause(document.hidden || !document.hasFocus()),
+    );
 
     if (reducedMotion) {
       this.state = "idle";
@@ -292,10 +308,10 @@ export class CompanionRig {
 
   // ── Engine ────────────────────────────────────────────────────────────────
 
-  private listen<K extends keyof WindowEventMap>(
+  private listen<K extends keyof (WindowEventMap & DocumentEventMap)>(
     target: EventTarget,
     type: K,
-    fn: (e: WindowEventMap[K]) => void,
+    fn: (e: (WindowEventMap & DocumentEventMap)[K]) => void,
   ) {
     target.addEventListener(type, fn as EventListener, { passive: true });
     this.cleanups.push(() =>
@@ -322,6 +338,17 @@ export class CompanionRig {
 
   private flag(name: string, on: boolean) {
     this.host.toggleAttribute(`data-${name}`, on);
+  }
+
+  /** Breathing while asleep; either way, he isn't lying still yet. */
+  private breathe(on: boolean) {
+    this.flag("breathing", on);
+    this.flag("resting", false);
+  }
+
+  private pause(paused: boolean) {
+    this.motion.paused = paused;
+    this.flag("paused", paused);
   }
 
   private stepFor(gen: number): Step {
@@ -646,7 +673,7 @@ export class CompanionRig {
     );
     await step(this.tween({ squash: 0.6 }, 160));
     await step(this.tween({ squash: 0 }, 380, overshoot));
-    this.flag("breathing", true);
+    this.breathe(true);
     this.flag("zz", true);
   }
 
@@ -667,7 +694,7 @@ export class CompanionRig {
   private async wakeUp(step: Step) {
     this.flag("zz", false);
     await step(this.wait(700));
-    this.flag("breathing", false);
+    this.breathe(false);
     await step(this.tween({ lie: 0.93 }, 300));
     await step(this.tween({ lie: 1 }, 300));
     await step(this.wait(400));
@@ -777,7 +804,7 @@ export class CompanionRig {
     const p = this.pose;
     if (p.lie > 0 || p.back) {
       this.flag("zz", false);
-      this.flag("breathing", false);
+      this.breathe(false);
       await step(this.tween({ lie: 0, armsIn: 0 }, 700));
       await this.turnAround(step, false, true);
       p.mouth = "flat";
@@ -881,7 +908,7 @@ export class CompanionRig {
     );
     await step(this.tween({ squash: 0.6 }, 160));
     await step(this.tween({ squash: 0 }, 380, overshoot));
-    this.flag("breathing", true);
+    this.breathe(true);
     this.flag("zz", true);
   }
 
@@ -897,7 +924,7 @@ export class CompanionRig {
         return;
       }
       await step(this.wait(300));
-      this.flag("breathing", false);
+      this.breathe(false);
       await step(this.tween({ lie: 0.93 }, 260));
       await step(this.tween({ lie: 1 }, 260));
       await step(

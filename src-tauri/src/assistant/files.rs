@@ -125,6 +125,19 @@ fn inside(root: &Path, path: &str) -> Option<std::path::PathBuf> {
     full.starts_with(root.canonicalize().ok()?).then_some(full)
 }
 
+/// Whether the file a shard at `shard` names as `path`, outside the
+/// attachments folder, is there: beside the shard or from the vault's root.
+/// Only checked, never read.
+fn on_disk(root: &Path, shard: &str, path: &str) -> bool {
+    let path = urlencoding::decode(path).map_or(path.to_string(), |decoded| decoded.into_owned());
+    let beside = Path::new(shard)
+        .parent()
+        .map_or(root.to_path_buf(), |folder| root.join(folder));
+    [beside.join(&path), root.join(&path)]
+        .iter()
+        .any(|full| full.is_file())
+}
+
 /// What a chat's model may be sent.
 #[derive(Debug, Clone, Copy)]
 pub struct Sending {
@@ -245,7 +258,11 @@ pub fn choose(
         .unsent
         .into_iter()
         // A missing file is a broken link the shard's text already shows.
-        .filter(|(path, why)| *why != Unsent::Format || inside(root, path).is_some())
+        .filter(|(path, why)| match why {
+            Unsent::Format => inside(root, path).is_some(),
+            Unsent::Outside => on_disk(root, shard, path),
+            Unsent::Web => true,
+        })
         .map(|(path, why)| {
             let reason = match why {
                 Unsent::Format => "a format models don't take",
@@ -458,7 +475,7 @@ mod tests {
     fn names_images_that_are_never_sent() {
         let markdown = "![gem](_attachments/diagram.svg) ![a](_attachments/a.png)\n\n\
             ![photo](_attachments/IMG_1.HEIC) ![again](_attachments/diagram.svg)\n\n\
-            ![web](https://example.com/b.png) <img src=\"pics/c.png\" />\n\n\
+            ![web](https://example.com/b.png) <img src=\"pics/c.png\" /> ![old](old/gone.png)\n\n\
             [a link](_attachments/notes.svg) [site](https://example.com/d.png)\n";
         assert_eq!(
             in_shard(markdown),
@@ -469,12 +486,15 @@ mod tests {
                     ("_attachments/IMG_1.HEIC".into(), Unsent::Format),
                     ("https://example.com/b.png".into(), Unsent::Web),
                     ("pics/c.png".into(), Unsent::Outside),
+                    ("old/gone.png".into(), Unsent::Outside),
                 ],
             }
         );
 
         let root = vault("files-unsent");
         std::fs::write(root.join("_attachments/diagram.svg"), "<svg/>").unwrap();
+        std::fs::create_dir_all(root.join("pics")).unwrap();
+        std::fs::write(root.join("pics/c.png"), "").unwrap();
         let facts = Facts {
             images: true,
             ..Facts::default()
@@ -486,7 +506,7 @@ mod tests {
             &Sending::new(true, Api::Anthropic, &facts),
         );
         assert!(sent.is_empty());
-        // The HEIC file is missing: a broken link, not named.
+        // The HEIC file and old/gone.png are missing: broken links, not named.
         assert_eq!(
             note.unwrap(),
             "Hub.md shows images you weren't sent: \

@@ -1,4 +1,4 @@
-import { expect, mockVault, test } from "./vault";
+import { caretAfter, editor, expect, mockVault, test } from "./vault";
 
 /** The composer's model button: one row, all on one center line. */
 
@@ -88,4 +88,27 @@ test("has no thinking control for a model that doesn't think", async ({ page }) 
   const panel = page.getByRole("complementary", { name: "Assistant" });
   await expect(panel.getByRole("button", { name: "Model" })).toBeVisible();
   await expect(panel.getByRole("button", { name: /^Thinking/ })).toHaveCount(0);
+});
+
+test("shows the same thinking control in inline Ask, before Send", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Trip.md", assistant: READY });
+  await caretAfter(page, "by train");
+  await editor(page).evaluate((root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const at = node.data.indexOf("Lisbon in May");
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + "Lisbon in May".length);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(range);
+      return;
+    }
+  });
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  const button = (await page.getByRole("button", { name: "Thinking: Low" }).boundingBox())!;
+  const send = (await page.getByRole("button", { name: "Send" }).boundingBox())!;
+  expect(send.x - (button.x + button.width)).toBeGreaterThanOrEqual(8);
 });

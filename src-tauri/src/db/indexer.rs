@@ -355,7 +355,9 @@ fn store_shard(
     insert_drawing_embeds(conn, file_id, &content)
         .map_err(|e| format!("Failed to insert drawing embed: {}", e))?;
 
-    super::attachments::sync_references_for_saved_markdown(conn, vault_path, path_str, &content)?;
+    crate::attachments::references::sync_references_for_saved_markdown(
+        conn, vault_path, path_str, &content,
+    )?;
 
     let words = match words {
         Words::Ready(words) => words,
@@ -481,7 +483,7 @@ pub(super) fn insert_drawing_embeds(
     let mut stmt = conn.prepare_cached(
         "INSERT OR IGNORE INTO drawing_embeds (file_id, drawing_path) VALUES (?1, ?2)",
     )?;
-    for drawing in super::attachments::parse_drawing_embeds(content) {
+    for drawing in crate::attachments::references::parse_drawing_embeds(content) {
         stmt.execute(params![file_id, drawing])?;
     }
     Ok(())

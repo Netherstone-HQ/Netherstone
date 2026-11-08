@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::db::attachments::extension_for_path;
+use crate::attachments::policy::extension_for_path;
 
 /// Files a shard can show from outside the vault. Anything else (documents,
 /// keys, settings) is never served, even when a shard links to it.

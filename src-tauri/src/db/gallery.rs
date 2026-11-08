@@ -4,11 +4,13 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use super::attachments::{
+use super::attachments::vault_key;
+use crate::attachments::policy::{
     ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, is_interrupted_write,
-    parse_drawing_exports, path_from_asset_path, reference_kind_for_path, scan_attachment_files,
-    vault_key,
+    path_from_asset_path, reference_kind_for_path,
 };
+use crate::attachments::references::parse_drawing_exports;
+use crate::attachments::store::scan_attachment_files;
 
 /// A file in the vault's attachment folder, as the Gallery shows it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -301,7 +303,7 @@ pub fn prune_thumbnails(folder: &Path, vault_path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::attachments::sync_references_for_saved_markdown;
+    use crate::attachments::references::sync_references_for_saved_markdown;
     use crate::db::init_schema;
     use rusqlite::params;
     use std::path::PathBuf;

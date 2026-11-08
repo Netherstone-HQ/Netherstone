@@ -15,7 +15,8 @@ use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::db::attachments::{ATTACHMENTS_DIR_NAME, vault_key};
+use crate::attachments::policy::ATTACHMENTS_DIR_NAME;
+use crate::db::attachments::vault_key;
 use crate::vault;
 use crate::vault_access::is_within;
 

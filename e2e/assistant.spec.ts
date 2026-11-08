@@ -390,7 +390,7 @@ test("says where a move goes", async ({ page }) => {
   await expect(assistant.getByRole("button", { name: "Move Trip to Archive" })).toHaveCount(0);
   await expect(assistant.getByText("1 change")).toHaveCount(0);
 
-  await assistant.getByRole("button", { name: "Create" }).click();
+  await assistant.getByRole("button", { name: "Apply" }).click();
   await expect(assistant.getByText("Moved Trip to Archive")).toBeVisible();
 });
 

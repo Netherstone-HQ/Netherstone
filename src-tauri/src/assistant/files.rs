@@ -35,24 +35,64 @@ fn kind_of(path: &str) -> Option<(Kind, &'static str)> {
     })
 }
 
-/// The vault files `markdown` shows or links to that a model could take:
-/// its images, its drawings as their pictures (the light one), and PDFs.
-/// In order, once each.
-pub fn in_shard(markdown: &str) -> Vec<String> {
-    let mut found: Vec<String> = Vec::new();
-    let mut add = |value: &str| {
-        if let Some(path) = normalize_attachment_path(value)
-            && kind_of(&path).is_some()
-            && !found.contains(&path)
+/// Why an image a shard shows isn't sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unsent {
+    /// A type models don't take, like SVG or HEIC.
+    Format,
+    /// In the vault but outside its attachments folder.
+    Outside,
+    /// On the web.
+    Web,
+}
+
+/// What a shard shows: the vault files a model could take, and the images
+/// that are never sent, with why.
+#[derive(Debug, Default, PartialEq)]
+pub struct Shown {
+    pub files: Vec<String>,
+    pub unsent: Vec<(String, Unsent)>,
+}
+
+/// What `markdown` shows or links to: its images, its drawings as their
+/// pictures (the light one), and PDFs, in order, once each.
+pub fn in_shard(markdown: &str) -> Shown {
+    let mut shown = Shown::default();
+    let mut add = |value: &str, image: bool| {
+        let value = value.trim();
+        let path = normalize_attachment_path(value);
+        if let Some(path) = &path
+            && kind_of(path).is_some()
         {
-            found.push(path);
+            if !shown.files.contains(path) {
+                shown.files.push(path.clone());
+            }
+            return;
+        }
+        // Only images are named when they aren't sent: a link is just text.
+        if !image || value.is_empty() || value.starts_with('#') || value.starts_with("data:") {
+            return;
+        }
+        let lower = value.to_ascii_lowercase();
+        let why = if lower.starts_with("http://")
+            || lower.starts_with("https://")
+            || lower.starts_with("//")
+        {
+            Unsent::Web
+        } else if path.is_some() {
+            Unsent::Format
+        } else {
+            Unsent::Outside
+        };
+        let name = path.unwrap_or_else(|| value.to_string());
+        if !shown.unsent.iter().any(|(seen, _)| *seen == name) {
+            shown.unsent.push((name, why));
         }
     };
     for event in Parser::new_ext(markdown, markdown_options()) {
         match event {
-            Event::Start(Tag::Image { dest_url, .. } | Tag::Link { dest_url, .. }) => {
-                add(&dest_url)
-            }
+            Event::Start(Tag::Image { dest_url, .. }) => add(&dest_url, true),
+            Event::Start(Tag::Link { dest_url, .. }) => add(&dest_url, false),
             Event::Html(html) | Event::InlineHtml(html) => {
                 for tag in html.split('<') {
                     if tag
@@ -60,14 +100,14 @@ pub fn in_shard(markdown: &str) -> Vec<String> {
                         .is_some_and(|name| name.eq_ignore_ascii_case("img"))
                         && let Some(src) = extract_html_attr_value(tag, "src")
                     {
-                        add(&src);
+                        add(&src, true);
                     }
                 }
             }
             _ => {}
         }
     }
-    found
+    shown
 }
 
 /// The file at `path` (vault-relative) when it's really in the vault at
@@ -124,18 +164,18 @@ fn megabytes(bytes: u64) -> String {
     format!("{} MB", bytes.div_ceil(1_000_000))
 }
 
-/// Which of the files of the shard at `shard` (vault-relative) go to the
+/// Which of the files the shard at `shard` (vault-relative) shows go to the
 /// model, and a line for the tool's result naming what goes and what
-/// doesn't.
+/// doesn't, with why.
 pub fn choose(
     root: &Path,
     shard: &str,
-    paths: Vec<String>,
+    shown: Shown,
     sending: &Sending,
 ) -> (Vec<File>, Option<String>) {
     let mut sent = Vec::new();
     let (mut off, mut unseen, mut big) = (Vec::new(), Vec::new(), Vec::new());
-    for path in paths {
+    for path in shown.files {
         let Some((kind, mime)) = kind_of(&path) else {
             continue;
         };
@@ -199,6 +239,27 @@ pub fn choose(
         lines.push(format!(
             "{shard} shows files too big to send: {}. Tell the user they were skipped.",
             names.join(", ")
+        ));
+    }
+    let never: Vec<String> = shown
+        .unsent
+        .into_iter()
+        // A missing file is a broken link the shard's text already shows.
+        .filter(|(path, why)| *why != Unsent::Format || inside(root, path).is_some())
+        .map(|(path, why)| {
+            let reason = match why {
+                Unsent::Format => "a format models don't take",
+                Unsent::Outside => "outside the vault's _attachments folder, so not sent",
+                Unsent::Web => "on the web, which isn't fetched",
+            };
+            format!("{path} ({reason})")
+        })
+        .collect();
+    if !never.is_empty() {
+        lines.push(format!(
+            "{shard} shows images you weren't sent: {}. Tell the user you couldn't \
+             see them, and why. Their alt text, if any, is all you know of them.",
+            never.join(", ")
         ));
     }
     (sent, (!lines.is_empty()).then(|| lines.join("\n")))
@@ -384,13 +445,58 @@ mod tests {
             [site](https://example.com/a.png) ![again](_attachments/map.png) \
             [notes](_attachments/notes.txt) ![svg](_attachments/x.svg)\n";
         assert_eq!(
-            in_shard(markdown),
+            in_shard(markdown).files,
             [
                 "_attachments/map.png",
                 "_attachments/Plan B.pdf",
                 "_attachments/Flow.png"
             ]
         );
+    }
+
+    #[test]
+    fn names_images_that_are_never_sent() {
+        let markdown = "![gem](_attachments/diagram.svg) ![a](_attachments/a.png)\n\n\
+            ![photo](_attachments/IMG_1.HEIC) ![again](_attachments/diagram.svg)\n\n\
+            ![web](https://example.com/b.png) <img src=\"pics/c.png\" />\n\n\
+            [a link](_attachments/notes.svg) [site](https://example.com/d.png)\n";
+        assert_eq!(
+            in_shard(markdown),
+            Shown {
+                files: vec!["_attachments/a.png".into()],
+                unsent: vec![
+                    ("_attachments/diagram.svg".into(), Unsent::Format),
+                    ("_attachments/IMG_1.HEIC".into(), Unsent::Format),
+                    ("https://example.com/b.png".into(), Unsent::Web),
+                    ("pics/c.png".into(), Unsent::Outside),
+                ],
+            }
+        );
+
+        let root = vault("files-unsent");
+        std::fs::write(root.join("_attachments/diagram.svg"), "<svg/>").unwrap();
+        let facts = Facts {
+            images: true,
+            ..Facts::default()
+        };
+        let (sent, note) = choose(
+            &root,
+            "Hub.md",
+            in_shard(markdown),
+            &Sending::new(true, Api::Anthropic, &facts),
+        );
+        assert!(sent.is_empty());
+        // The HEIC file is missing: a broken link, not named.
+        assert_eq!(
+            note.unwrap(),
+            "Hub.md shows images you weren't sent: \
+             _attachments/diagram.svg (a format models don't take), \
+             https://example.com/b.png (on the web, which isn't fetched), \
+             pics/c.png (outside the vault's _attachments folder, so not sent). \
+             Tell the user you couldn't see them, and why. \
+             Their alt text, if any, is all you know of them."
+        );
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     fn vault(name: &str) -> std::path::PathBuf {
@@ -407,12 +513,15 @@ mod tests {
         root
     }
 
-    fn paths() -> Vec<String> {
-        vec![
-            "_attachments/map.png".to_string(),
-            "_attachments/plan.pdf".to_string(),
-            "_attachments/gone.png".to_string(),
-        ]
+    fn paths() -> Shown {
+        Shown {
+            files: vec![
+                "_attachments/map.png".to_string(),
+                "_attachments/plan.pdf".to_string(),
+                "_attachments/gone.png".to_string(),
+            ],
+            unsent: Vec::new(),
+        }
     }
 
     #[test]
@@ -486,18 +595,17 @@ mod tests {
         let sending = Sending::new(true, Api::Anthropic, &facts);
         let escape = "_attachments/../../files-outside-secret.png".to_string();
         // A link with .. isn't an attachment, and isn't sent if asked for.
-        assert!(in_shard(&format!("![x]({escape})")).is_empty());
-        let (sent, note) = choose(&root, "Trip.md", vec![escape], &sending);
+        assert!(in_shard(&format!("![x]({escape})")).files.is_empty());
+        let only = |path: &str| Shown {
+            files: vec![path.to_string()],
+            unsent: Vec::new(),
+        };
+        let (sent, note) = choose(&root, "Trip.md", only(&escape), &sending);
         assert!(sent.is_empty() && note.is_none());
         #[cfg(unix)]
         {
             std::os::unix::fs::symlink(&outside, root.join("_attachments/link.png")).unwrap();
-            let (sent, _) = choose(
-                &root,
-                "Trip.md",
-                vec!["_attachments/link.png".into()],
-                &sending,
-            );
+            let (sent, _) = choose(&root, "Trip.md", only("_attachments/link.png"), &sending);
             assert!(sent.is_empty());
         }
         std::fs::remove_file(&outside).unwrap();

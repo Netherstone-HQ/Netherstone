@@ -21,8 +21,7 @@ import {
   getVaultFileDisplayName,
   isSamePath,
 } from "@/lib/drawing-files";
-import { openVaultFile } from "@/lib/open-vault-file";
-import { shownRecentFiles } from "@/lib/recent-files";
+import { openRecentFile, shownRecentFiles } from "@/lib/recent-files";
 import { cn } from "@/lib/utils";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 
@@ -86,7 +85,7 @@ export function RecentFilesSection() {
                     className={ROW_BUTTON_CLASS}
                     onClick={async () => {
                       try {
-                        await openVaultFile(file.path);
+                        await openRecentFile(file.path);
                       } catch (error) {
                         console.error("Failed to open recent file:", error);
                       }

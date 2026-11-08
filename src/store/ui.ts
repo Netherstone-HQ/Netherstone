@@ -122,6 +122,8 @@ interface UIState {
   // ── Recent and Pinned Files ────────────────────────────────────────────────
   recentFiles: RecentFileEntry[];
   pushRecentFile: (file: RecentFileEntry) => void;
+  /** Takes `path` off Recent, when it's no longer there to open. */
+  dropRecentFile: (path: string) => void;
   clearRecentFiles: () => void;
   /** Files pinned to the top of the sidebar, across vaults (shown per vault). */
   pinnedFiles: RecentFileEntry[];
@@ -288,6 +290,12 @@ export const useUIStore = create<UIState>()(
               (entry) => !isSamePath(entry.path, file.path),
             ),
           ].slice(0, MAX_RECENT_FILES_HISTORY),
+        })),
+      dropRecentFile: (path) =>
+        set((state) => ({
+          recentFiles: state.recentFiles.filter(
+            (entry) => !isSamePath(entry.path, path),
+          ),
         })),
       clearRecentFiles: () => set({ recentFiles: [] }),
       pinnedFiles: [],

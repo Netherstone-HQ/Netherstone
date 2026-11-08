@@ -3,6 +3,11 @@
 //! vault and out of sync. It's read at the start of every answer and sent
 //! with it. The assistant only offers items; the user adds them.
 
+use super::changes::{error_text, store_error, with_store};
+use super::chat::ChatError;
+use super::sessions::{self, ChangeState, Offer};
+use crate::ai_vaults::{self, Way};
+use crate::db;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -173,6 +178,96 @@ impl List {
         let _held = lock();
         self.write(&[])
     }
+}
+
+// ── Commands ─────────────────────────────────────────────────────────────────
+
+fn memory_list() -> Result<List, String> {
+    List::open().map_err(|error| {
+        eprintln!("[Netherstone] {error}");
+        "Couldn't open memory".to_string()
+    })
+}
+
+/// The memory list, for Settings. It stays saved while the assistant is off.
+pub fn memory() -> Result<Memory, String> {
+    memory_list()?.shown()
+}
+
+/// Puts `text` in `item`'s place, and gives the list as it now is.
+pub fn edit_memory(item: &str, text: &str) -> Result<Memory, String> {
+    let list = memory_list()?;
+    list.edit(item, text)?;
+    list.shown()
+}
+
+pub fn delete_memory(item: &str) -> Result<Memory, String> {
+    let list = memory_list()?;
+    list.remove(item)?;
+    list.shown()
+}
+
+pub fn delete_all_memory() -> Result<(), String> {
+    memory_list()?.clear()
+}
+
+/// The offer `id` while it's `wanted`, and the assistant is on.
+fn offer_in(store: &sessions::Store, id: &str, wanted: ChangeState) -> Result<Offer, String> {
+    let conn = db::open_connection()?;
+    if !ai_vaults::is_on(&conn, Way::Assistant)? {
+        return Err(error_text(ChatError::TurnedOff));
+    }
+    store
+        .offer(id)
+        .map_err(store_error)?
+        .filter(|offer| offer.state == wanted)
+        .ok_or_else(|| "That memory item isn't there anymore".to_string())
+}
+
+/// Adds an item the assistant offered to memory.
+pub async fn remember(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        let offer = offer_in(store, &id, ChangeState::Pending)?;
+        let added = memory_list()?.add(&offer.text)?;
+        store
+            .set_offer_state(&id, ChangeState::Applied, added)
+            .map_err(store_error)
+    })
+    .await
+}
+
+/// Takes an added item back out of memory. It can then be added again.
+pub async fn forget(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        let offer = offer_in(store, &id, ChangeState::Applied)?;
+        // An item that was in memory before stays, and so does one another
+        // offer added and still shows as added.
+        if offer.added && !store.added_elsewhere(&offer).map_err(store_error)? {
+            let list = memory_list()?;
+            if !list.remove(&offer.text)? {
+                return Err("That item was changed or deleted in Settings".to_string());
+            }
+        }
+        store
+            .set_offer_state(&id, ChangeState::Pending, false)
+            .map_err(store_error)
+    })
+    .await
+}
+
+/// Drops an offered item, adding nothing.
+pub async fn discard_offer(id: String) -> Result<(), String> {
+    with_store(move |store| {
+        store
+            .offer(&id)
+            .map_err(store_error)?
+            .filter(|offer| offer.state == ChangeState::Pending)
+            .ok_or_else(|| "That memory item isn't there anymore".to_string())?;
+        store
+            .set_offer_state(&id, ChangeState::Discarded, false)
+            .map_err(store_error)
+    })
+    .await
 }
 
 #[cfg(test)]

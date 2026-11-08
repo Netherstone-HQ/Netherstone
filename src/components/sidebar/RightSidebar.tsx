@@ -134,6 +134,7 @@ export function RightSidebar() {
   const containerRef = useRef<HTMLDivElement>(null);
   const assistantWidth = useUIStore((s) => s.assistantWidth);
   const fitted = useFittedWidth(containerRef, assistantWidth);
+  const historyWidth = Math.min(HISTORY_WIDTH, fitted.most);
   if (
     shown.isPanelOpen !== isPanelOpen ||
     shown.showsHistory !== showsHistory ||
@@ -175,14 +176,14 @@ export function RightSidebar() {
       style={
         {
           "--assistant-width": `${fitted.width}px`,
-          "--history-width": `${HISTORY_WIDTH}px`,
+          "--history-width": `${historyWidth}px`,
         } as CSSProperties
       }
       inert={!isPanelOpen}
     >
       {showsHistory ? (
         <div className="absolute inset-y-0 right-0">
-          <HistoryPanel place="notes" filePath={filePath} />
+          <HistoryPanel place="notes" filePath={filePath} width={historyWidth} />
         </div>
       ) : null}
       {showsAssistant ? (

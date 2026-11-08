@@ -159,9 +159,12 @@ function DayLabel({ children }: { children: string }) {
 export function HistoryPanel({
   place,
   filePath,
+  width = HISTORY_WIDTH,
 }: {
   place: HistoryPlace;
   filePath: string;
+  /** Narrower in a narrow window, so the shard keeps its room. */
+  width?: number;
 }) {
   const history = useFileHistory(filePath);
   const versions = history?.versions ?? null;
@@ -221,7 +224,7 @@ export function HistoryPanel({
     <aside
       aria-label="History"
       className="flex h-full flex-col border-l bg-sidebar text-ui text-sidebar-foreground"
-      style={{ width: HISTORY_WIDTH }}
+      style={{ width }}
     >
       <div className="flex h-toolbar shrink-0 items-center border-b border-sidebar-border pr-2.5 pl-4">
         <span className="font-medium">History</span>

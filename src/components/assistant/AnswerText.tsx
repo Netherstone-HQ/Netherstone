@@ -143,15 +143,19 @@ function hasDefinition(tree: Node) {
 }
 
 /**
- * `markdown` parsed. When it only adds to the end of `previous`, as an
- * answer streaming in does, the blocks before `previous`'s last are kept
- * as they were, and only the rest is parsed again.
+ * `markdown` parsed. When it keeps everything before `previous`'s last
+ * block, as an answer streaming in does, those blocks are kept as they
+ * were, and only the rest is parsed again. The end may differ, as a
+ * streaming answer's unfinished Markdown is closed for the time being.
  */
 function parseTree(markdown: string, previous?: ParsedAnswer): Node {
   const blocks = previous?.tree.children ?? [];
+  const lastStart =
+    previous && blocks.length > 1 ? blocks[blocks.length - 1].position?.start.offset : undefined;
   const from =
-    previous && blocks.length > 1 && markdown.startsWith(previous.source)
-      ? blocks[blocks.length - 1].position?.start.offset
+    lastStart !== undefined &&
+    markdown.slice(0, lastStart) === previous!.source.slice(0, lastStart)
+      ? lastStart
       : undefined;
   if (from === undefined) return parser.parse(markdown) as Node;
   const rest = parser.parse(markdown.slice(from)) as Node;
@@ -311,7 +315,7 @@ export function AnswerText({
         return (
           <code
             key={key}
-            className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
+            className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] leading-none"
           >
             {node.value}
           </code>

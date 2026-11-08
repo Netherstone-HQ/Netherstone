@@ -169,6 +169,7 @@ const RETRYING: Partial<Record<ChatError["kind"], string>> = {
  */
 export function waitingText(
   answering: {
+    steps: unknown[];
     text: string;
     reasoning: string;
     tool: { name: string; paths: string[] } | null;
@@ -181,7 +182,7 @@ export function waitingText(
   }
   if (answering.tool) return activity(answering.tool);
   if (answering.reasoning) return "Thinking";
-  return local && !answering.text
+  return local && !answering.text && answering.steps.length === 0
     ? "Waiting for the model, which may be loading"
     : "Waiting for the answer";
 }

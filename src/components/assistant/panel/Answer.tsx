@@ -80,13 +80,24 @@ function AddToShardButton({ text }: { text: string }) {
   );
 }
 
-function Thinking({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
+/**
+ * The thinking shown open, by its text, so it stays open when an answer
+ * streaming in is saved and shown again.
+ */
+const openThinking = new Set<string>();
+
+export function Thinking({ text }: { text: string }) {
+  const [open, setOpen] = useState(() => openThinking.has(text));
+  const toggle = () => {
+    if (open) openThinking.delete(text);
+    else openThinking.add(text);
+    setOpen(!open);
+  };
   return (
     <div className="flex flex-col gap-1">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
         aria-expanded={open}
         className="flex w-fit items-center gap-1 text-muted-foreground text-ui-sm hover:text-foreground"
       >

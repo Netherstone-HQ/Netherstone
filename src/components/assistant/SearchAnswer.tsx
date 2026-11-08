@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import type { Citation } from "@/lib/open-citation";
 import { openWebLink } from "@/lib/open-web-link";
+import { settledMarkdown } from "@/lib/streaming-markdown";
 import { cn } from "@/lib/utils";
 import { searchChat, useAssistantStore } from "@/store/assistant";
 import { useVaultStore } from "@/store/vault";
@@ -19,7 +20,8 @@ import { useVaultStore } from "@/store/vault";
 import { AnswerText, CiteNumber, useParsedAnswer } from "./AnswerText";
 import { shardName } from "./Composer";
 import { EndingNote } from "./EndingNote";
-import { type Setup, type SetupState, serverDownText, waitingText } from "./setup";
+import { type Setup, type SetupState, serverDownText } from "./setup";
+import { WaitingLine } from "./WaitingLine";
 
 /** A group's name in the search list, like Recent. */
 export function GroupLabel({ children }: { children: string }) {
@@ -74,8 +76,14 @@ export function SearchAnswer({
     (s) => searchChat(s),
   );
 
+  // Steps join as they do once saved.
   const text = answering
-    ? answering.text
+    ? settledMarkdown(
+        [...answering.steps, answering]
+          .map((step) => step.text)
+          .filter(Boolean)
+          .join("\n\n"),
+      )
     : messages
         .filter((m) => m.role === "assistant" && m.text)
         .map((m) => m.text)
@@ -91,12 +99,8 @@ export function SearchAnswer({
           onOpenLink={openLink}
         />
       ) : null}
-      {answering && (answering.tool || !answering.text) ? (
-        <p className="flex items-center gap-2 text-muted-foreground text-ui-sm">
-          <LoaderCircleIcon className="size-3.5 animate-spin" />
-          {waitingText(answering)}
-        </p>
-      ) : null}
+      {/* Gone once the text shows: nothing takes its place when it ends. */}
+      {answering && (answering.tool || !text) ? <WaitingLine answering={answering} /> : null}
       {ending ? <EndingNote ending={ending} onOpenLink={openLink} /> : null}
       {answer.cited.length > 0 || chat ? (
         <div className="flex min-w-0 items-center gap-4">

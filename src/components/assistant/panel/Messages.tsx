@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef } from "react";
-import { LoaderCircleIcon } from "lucide-react";
 
 import { retryAnswer } from "@/lib/assistant";
 import { openShardPath } from "@/lib/assistant-changes";
+import { settledMarkdown } from "@/lib/streaming-markdown";
 import type {
   ChatChange,
   ChatMemory,
@@ -16,8 +16,8 @@ import { useVaultStore } from "@/store/vault";
 
 import { AnswerText, useParsedAnswer } from "../AnswerText";
 import { EndingNote } from "../EndingNote";
-import { waitingText } from "../setup";
-import { Answer } from "./Answer";
+import { WaitingLine } from "../WaitingLine";
+import { Answer, Thinking } from "./Answer";
 import { openLink, openShard } from "./open";
 
 /**
@@ -58,36 +58,73 @@ function UserMessage({ message }: { message: ShownMessage }) {
  * The answer as it comes in. The only part of the chat that changes while
  * it streams, so it alone re-renders, and it keeps itself in view.
  */
-function Streaming({ onGrow, local }: { onGrow: () => void; local: boolean }) {
+function Streaming({
+  onGrow,
+  local,
+  canAdd,
+}: {
+  onGrow: () => void;
+  local: boolean;
+  canAdd: boolean;
+}) {
   const answering = useAssistantStore((s) => s.answering);
-  const answer = useParsedAnswer(answering?.text ?? "");
+  const answer = useParsedAnswer(settledMarkdown(answering?.text ?? ""));
+  const steps = answering?.steps;
+  // Each step as the message it's saved as, so nothing moves once it is.
+  const ended = useMemo(
+    () =>
+      (steps ?? []).map(
+        (step, index): ShownMessage => ({
+          seq: -1 - index,
+          role: "assistant",
+          ...step,
+        }),
+      ),
+    [steps],
+  );
   useEffect(onGrow, [answering, onGrow]);
   if (!answering) return null;
   return (
-    <div className="flex flex-col gap-2.5">
-      {answering.text ? (
-        <AnswerText
-          answer={answer}
-          onOpenShard={openShard}
-          onOpenLink={openLink}
+    <>
+      {ended.map((message) => (
+        <Answer
+          key={message.seq}
+          message={message}
+          changes={NONE}
+          memories={NONE}
+          canAdd={canAdd}
         />
-      ) : null}
-      {answering.tool || !answering.text ? (
-        <p className="flex items-center gap-2 text-muted-foreground text-ui-sm">
-          <LoaderCircleIcon className="size-3.5 animate-spin" />
-          {waitingText(answering, local)}
-        </p>
-      ) : null}
-    </div>
+      ))}
+      <div className="flex flex-col gap-2.5">
+        {answering.text ? (
+          <>
+            {answering.reasoning ? (
+              <Thinking text={answering.reasoning} />
+            ) : null}
+            <AnswerText
+              answer={answer}
+              onOpenShard={openShard}
+              onOpenLink={openLink}
+            />
+          </>
+        ) : null}
+        {/* As tall as the Copy row that takes its place. */}
+        <WaitingLine answering={answering} local={local} className="h-7" />
+      </div>
+    </>
   );
 }
 
+const NONE: never[] = [];
+
 /**
  * Keeps the newest message in view while it grows, unless scrolled up:
- * when `deps` change, or when `follow` is called.
+ * when `deps` change, when `follow` is called, and when the content's
+ * size changes, like a picture loading after its text.
  */
 function useStickToBottom(deps: unknown[]) {
   const ref = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const stuck = useRef(true);
   const follow = useCallback(() => {
     const element = ref.current;
@@ -95,13 +132,20 @@ function useStickToBottom(deps: unknown[]) {
   }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(follow, deps);
+  useEffect(() => {
+    const element = content.current;
+    if (!element) return;
+    const observer = new ResizeObserver(follow);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [follow]);
   const onScroll = () => {
     const element = ref.current;
     if (!element) return;
     stuck.current =
       element.scrollHeight - element.scrollTop - element.clientHeight < 24;
   };
-  return { ref, onScroll, follow };
+  return { ref, content, onScroll, follow };
 }
 
 export function Messages({
@@ -125,7 +169,7 @@ export function Messages({
   const canAdd = openShardPath(vault, openPath) !== null;
   // Room under the last message while the companion sits on the composer.
   const perched = useCompanionStore((s) => s.perched);
-  const { ref, onScroll, follow } = useStickToBottom([
+  const { ref, content, onScroll, follow } = useStickToBottom([
     messages,
     changes,
     memories,
@@ -143,7 +187,9 @@ export function Messages({
   // it's being answered again, and no error while the server notice says why.
   const ended = answering
     ? null
-    : (ending ?? endings.find((saved) => saved.turn === lastAsked)?.ending ?? null);
+    : (ending ??
+      endings.find((saved) => saved.turn === lastAsked)?.ending ??
+      null);
   const lastEnding = serverDown && ended?.kind === "error" ? null : ended;
   const endedEarlier = (turn: number) =>
     turn === lastAsked
@@ -155,37 +201,41 @@ export function Messages({
       ref={ref}
       onScroll={onScroll}
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
+        "min-h-0 flex-1 overflow-y-auto p-4",
         perched && "pb-[96px]",
       )}
     >
-      {shown.map(({ message, changes, memories, turn, endsTurn }) => {
-        const earlier = endsTurn ? endedEarlier(turn) : null;
-        return (
-          <Fragment key={message.seq}>
-            {message.role === "user" ? (
-              <UserMessage message={message} />
-            ) : (
-              <Answer
-                message={message}
-                changes={changes}
-                memories={memories}
-                canAdd={canAdd}
-              />
-            )}
-            {earlier ? <EndingNote ending={earlier} onOpenLink={openLink} /> : null}
-          </Fragment>
-        );
-      })}
-      <Streaming onGrow={follow} local={local} />
-      {lastEnding ? (
-        <EndingNote
-          ending={lastEnding}
-          onOpenLink={openLink}
-          onRetry={canRetry ? () => void retryAnswer() : undefined}
-          partly={changes.some((change) => change.turn === lastAsked)}
-        />
-      ) : null}
+      <div ref={content} className="flex flex-col gap-4">
+        {shown.map(({ message, changes, memories, turn, endsTurn }) => {
+          const earlier = endsTurn ? endedEarlier(turn) : null;
+          return (
+            <Fragment key={message.seq}>
+              {message.role === "user" ? (
+                <UserMessage message={message} />
+              ) : (
+                <Answer
+                  message={message}
+                  changes={changes}
+                  memories={memories}
+                  canAdd={canAdd}
+                />
+              )}
+              {earlier ? (
+                <EndingNote ending={earlier} onOpenLink={openLink} />
+              ) : null}
+            </Fragment>
+          );
+        })}
+        <Streaming onGrow={follow} local={local} canAdd={canAdd} />
+        {lastEnding ? (
+          <EndingNote
+            ending={lastEnding}
+            onOpenLink={openLink}
+            onRetry={canRetry ? () => void retryAnswer() : undefined}
+            partly={changes.some((change) => change.turn === lastAsked)}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

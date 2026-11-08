@@ -175,6 +175,15 @@ type MockAssistant = {
   failOnce?: string;
   /** Answers wait after their tools until the test calls `__answer()`. */
   hold?: boolean;
+  /**
+   * The answer's first this many pieces are a step that ends with a tool,
+   * so the rest is a step of its own, saved as its own message.
+   */
+  toolAfter?: number;
+  /** What the model thinks before the answer, as it streams in. */
+  reasoning?: string;
+  /** Each piece of the answer waits until the test calls `__piece()`. */
+  stepped?: boolean;
 };
 
 declare global {
@@ -188,6 +197,8 @@ declare global {
     __asked: { shard: string; selection: string; whole: boolean; prompt: string }[];
     /** Lets an answer held by `hold` go on. */
     __answer?: () => void;
+    /** Sends the next piece of a `stepped` answer. */
+    __piece?: () => void;
     /** Commands a test answers its own way. */
     __overrides?: Record<string, (args: unknown) => unknown>;
   }
@@ -491,7 +502,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           caching: true,
           responsesOnly: false,
         };
-        type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
+        type Shown = { seq: number; role: string; text: string; reasoning?: string; shards?: string[]; sources?: string[] };
         type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string; from?: string; moving?: { folder: string | null; name: string | null; from?: string } };
         type Offer = { id: string; turn: number; text: string; state: string };
         type Ended = { turn: number; ending: unknown };
@@ -610,10 +621,22 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             }
             if (setup.hold) await new Promise<void>((resolve) => (window.__answer = resolve));
             if (reads.length) send({ type: "sources", shards: reads });
-            for (const piece of answer) send({ type: "text", text: piece });
+            const split = setup.toolAfter ?? answer.length;
+            const steps = [answer.slice(0, split), answer.slice(split)].filter((step) => step.length);
+            for (const [index, step] of steps.entries()) {
+              if (index > 0) send({ type: "tool", name: "read", paths: ["Trip.md"] });
+              if (index === 0 && setup.reasoning) send({ type: "reasoning", text: setup.reasoning });
+              for (const piece of step) {
+                if (setup.stepped) await new Promise<void>((resolve) => (window.__piece = resolve));
+                send({ type: "text", text: piece });
+              }
+            }
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
             found.endings = found.endings.filter((ended) => ended.turn !== turn);
-            found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: answer.join(""), sources: reads });
+            for (const [index, step] of steps.entries()) {
+              const reasoning = index === 0 ? setup.reasoning : undefined;
+              found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: step.join(""), reasoning, sources: reads });
+            }
             found.updated = now;
             return found.id;
           },

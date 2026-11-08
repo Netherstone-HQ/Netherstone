@@ -10,7 +10,7 @@ import {
   discardChange,
   getChat,
   undoChange,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import { fillDrawingPictures } from "@/lib/drawing-exports";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { upsertAstCache } from "@/lib/editor-ast-cache";

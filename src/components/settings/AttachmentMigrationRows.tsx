@@ -23,7 +23,7 @@ import {
   confirmAttachmentCopies,
   persistAttachmentFile,
   type ExternalFile,
-} from "@/lib/commands";
+} from "@/lib/commands/attachments";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { importLinkedFile, rewriteShards } from "@/lib/shard-rewrite";
 import { useAttachmentReportStore } from "@/store";

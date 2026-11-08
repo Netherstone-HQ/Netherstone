@@ -10,7 +10,7 @@ import {
   type AssistantStatus,
   setAssistantEnabled,
   setAssistantSendFiles,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import { useAssistantStore } from "@/store/assistant";
 import { ModelPicker } from "@/components/assistant/providers/ModelPicker";
 import {

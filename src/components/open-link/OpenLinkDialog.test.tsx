@@ -4,7 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { copy as vaultCopy } from "@/components/onboarding/copy";
-import type { LinkListing, LinkProgress, LinkRefusal } from "@/lib/commands";
+import type {
+  LinkListing,
+  LinkProgress,
+  LinkRefusal,
+} from "@/lib/commands/open-source";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { openLink, useOpenLink } from "@/lib/open-link";
 import { useUIStore, useVaultStore } from "@/store";

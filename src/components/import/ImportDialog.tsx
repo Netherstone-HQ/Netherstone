@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { listImportSources, pickImportPaths, undoImport } from "@/lib/commands";
+import {
+  listImportSources,
+  pickImportPaths,
+  undoImport,
+} from "@/lib/commands/import";
 import { useImportDialogStore, type ImportStep } from "@/lib/import";
 import { appImportIO } from "@/lib/import/app-io";
 import { carriesFiles, readDrop } from "@/lib/import/dropped";

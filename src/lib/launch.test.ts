@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { takeLaunch, type Launched } from "@/lib/commands";
+import { takeLaunch, type Launched } from "@/lib/commands/launch";
 import { useImportDialogStore } from "@/lib/import";
 import { openLaunched, waitingText } from "@/lib/launch";
 import { openLink } from "@/lib/open-link";
@@ -10,7 +10,7 @@ import { openVaultFile } from "@/lib/open-vault-file";
 import { useVaultStore } from "@/store";
 import { toast } from "sonner";
 
-vi.mock("@/lib/commands", () => ({ takeLaunch: vi.fn() }));
+vi.mock("@/lib/commands/launch", () => ({ takeLaunch: vi.fn() }));
 vi.mock("@/lib/nested-vault", () => ({ chooseVaultFolder: async (folder: string) => folder }));
 vi.mock("@/lib/open-vault", () => ({
   folderName: (path: string) => path.split("/").pop(),

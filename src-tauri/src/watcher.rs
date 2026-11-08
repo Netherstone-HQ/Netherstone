@@ -99,7 +99,8 @@ impl FolderTracker {
 /// True for a file in the vault's attachment folder, so the Gallery can
 /// follow it. Hidden files and leftovers from a write in progress are not.
 fn is_attachment_path(root: &Path, path: &Path) -> bool {
-    let Ok(relative) = path.strip_prefix(root.join(crate::db::attachments::ATTACHMENTS_DIR_NAME))
+    let Ok(relative) =
+        path.strip_prefix(root.join(crate::attachments::policy::ATTACHMENTS_DIR_NAME))
     else {
         return false;
     };

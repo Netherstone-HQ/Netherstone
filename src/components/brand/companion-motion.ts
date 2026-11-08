@@ -1,26 +1,40 @@
-// Moves the companion by writing SVG transforms straight to the DOM. Frames
-// only run while a tween is in flight; breathing and the floating z's are CSS
-// animations (see App.css), so a sitting or sleeping companion costs no script
-// time between the odd blink or glance.
+// The companion's rig: what he does and when. Tweens run a frame at a time
+// only while one is in flight (companion-tween.ts), and each frame is drawn
+// as SVG transforms (companion-draw.ts). Breathing and the floating z's are
+// CSS animations (see App.css), so a sitting or sleeping companion costs no
+// script time between the odd blink or glance.
 //
 // He has two lives. On his own he walks in, sits, lies down and sleeps, and
 // answers a poke. As the assistant he answers a click with a menu, hops onto
 // the panel's composer and back, and shows what the assistant is doing.
 
-/** Stage size in SVG units; it's drawn at `scale` CSS pixels per unit. */
-export const STAGE = {
-  width: 440,
-  height: 160,
-  ground: 150,
-  restX: 300,
-  scale: 0.6,
-} as const;
+import { CompanionDrawing } from "./companion-draw";
+import {
+  type Animatable,
+  FLEXES,
+  MAX_BULK,
+  type Mouth,
+  NEUTRAL,
+  type Pose,
+  type Spot,
+  STAGE,
+  type Target,
+} from "./companion-pose";
+import {
+  CANCEL,
+  easeIn,
+  easeOut,
+  inOut,
+  linear,
+  overshoot,
+  type Ease,
+  type Step,
+  Tweens,
+} from "./companion-tween";
+
+export { STAGE, type Spot } from "./companion-pose";
 
 const ENTRY_X = 560;
-/** Half the body's width, which is how high it sits when lying down. */
-const HALF_WIDTH = 40;
-/** Where the gem rests while he sleeps, in stage units. */
-const GEM_GROUND = { x: STAGE.restX - 60, y: STAGE.ground - 12 };
 
 // Seconds. Dev builds cycle faster so the whole loop is quick to check.
 const PACE = import.meta.env.DEV
@@ -36,185 +50,8 @@ const HOP_DELAY = 220;
 /** Two clicks this close together are a double click. */
 const DOUBLE_CLICK_MS = 220;
 
-type Ease = (p: number) => number;
-const linear: Ease = (p) => p;
-const inOut: Ease = (p) =>
-  p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
-const easeIn: Ease = (p) => p * p;
-const easeOut: Ease = (p) => 1 - (1 - p) ** 2;
-const overshoot: Ease = (p) =>
-  1 + 2.70158 * (p - 1) ** 3 + 1.70158 * (p - 1) ** 2;
-
-const MOUTHS = {
-  smile: { d: "M-2,-60Q2,-56 6,-60", fill: "none" },
-  o: {
-    d: "M-0.6,-59.5a2.6,3 0 1,0 5.2,0a2.6,3 0 1,0-5.2,0Z",
-    fill: "var(--companion-ink)",
-  },
-  flat: { d: "M-1,-59Q2,-58.4 5,-59", fill: "none" },
-  /** Wide open, to eat his shard or spit it out. */
-  big: {
-    d: "M-3.5,-59.5a5.5,6 0 1,0 11,0a5.5,6 0 1,0-11,0Z",
-    fill: "var(--companion-ink)",
-  },
-  /** Unsure, for a shrug. */
-  wobble: { d: "M-2,-58.8q1.5,-1.8 3,0t3,0", fill: "none" },
-  grin: { d: "M-3,-60.5Q2,-54.5 7,-60.5Z", fill: "var(--companion-ink)" },
-};
-type Mouth = keyof typeof MOUTHS;
-
-interface Pose {
-  x: number;
-  walk: number;
-  phase: number;
-  sit: number;
-  squash: number;
-  lie: number;
-  /** Horizontal scale while turning around; 0 is edge-on. */
-  turn: number;
-  faceX: number;
-  faceY: number;
-  eye: number;
-  blink: number;
-  /** Closed, happy eyes once past 0.5. */
-  happy: number;
-  armsUpL: number;
-  armsUpR: number;
-  armsIn: number;
-  /** The raised right arm swinging side to side, from -1 to 1. */
-  wiggle: number;
-  nod: number;
-  /** Leaning sideways, from -1 to 1. */
-  tilt: number;
-  /** 0 holds the gem in his lap, 1 has it on the ground beside him. */
-  gemDown: number;
-  /** Holding the gem up to read it. */
-  gemUp: number;
-  /** 1 keeps the gem in his back; on the way out it rides in his right hand. */
-  stow: number;
-  /** How far along a hop is, from 0 to 1. */
-  hopP: number;
-  /** How muscled his arms and legs are, up to 1.3. */
-  bulk: number;
-  /** The gem on its way into his mouth, shrinking as it goes. */
-  eat: number;
-  /** The gem popping out of his mouth, spinning, from 0 to 1. */
-  pop: number;
-  /** Flexing, which widens his arms. */
-  flex: number;
-  /** 1 while the gem is in his tummy and his hands are free. */
-  empty: number;
-  gemHidden: boolean;
-  /** Showing the back view. */
-  back: boolean;
-  mouth: Mouth;
-}
-
-type Animatable = Exclude<
-  keyof Pose,
-  "back" | "phase" | "mouth" | "gemHidden"
->;
-type Target = Partial<Record<Animatable, number>>;
-
-/** Sitting still with the gem in his lap. */
-const NEUTRAL: Target = {
-  sit: 1,
-  turn: 1,
-  walk: 0,
-  squash: 0,
-  lie: 0,
-  faceX: 0,
-  faceY: 0,
-  eye: 1,
-  happy: 0,
-  armsUpL: 0,
-  armsUpR: 0,
-  armsIn: 0,
-  wiggle: 0,
-  nod: 0,
-  tilt: 0,
-  gemDown: 0,
-  gemUp: 0,
-  stow: 0,
-  bulk: 0,
-  eat: 0,
-  pop: 0,
-  flex: 0,
-};
-
-interface Tween {
-  from: Target;
-  to: Target;
-  start: number;
-  ms: number;
-  ease: Ease;
-  done: () => void;
-}
-
-const PARTS = [
-  "hit",
-  "root",
-  "front",
-  "back",
-  "frontBody",
-  "backBody",
-  "frontLegL",
-  "frontLegR",
-  "frontArmL",
-  "frontArmR",
-  "backArmL",
-  "backArmR",
-  "backLegL",
-  "backLegR",
-  "face",
-  "eyeL",
-  "eyeR",
-  "shine",
-  "happy",
-  "mouth",
-  "shadow",
-  "gem",
-  "handL",
-  "handR",
-] as const;
-
-type Parts = Record<(typeof PARTS)[number], SVGElement>;
-
-/** The limbs that bulk up, each with a plain and a muscled shape. */
-const LIMBS = [
-  "frontLegL",
-  "frontLegR",
-  "frontArmL",
-  "frontArmR",
-  "backArmL",
-  "backArmR",
-] as const;
-
-type Limb = { plain: SVGElement | null; muscle: SVGElement | null };
-
-/** Past this, a limb shows its muscled shape. */
-const BULKED = 0.12;
-/** The most muscled he gets. */
-const MAX_BULK = 1.3;
-
-/**
- * His flexes, in turn: double biceps, then his left arm leaning left, then
- * his right arm leaning right.
- */
-const FLEXES: Target[] = [
-  { armsUpL: 0.74, armsUpR: 0.74, tilt: 0 },
-  { armsUpL: 0.74, armsUpR: 0.1, tilt: -0.5 },
-  { armsUpL: 0.1, armsUpR: 0.74, tilt: 0.5 },
-];
-
 /** How a change to several shards ended. */
 type HeavyEnd = "done" | "error" | "stop";
-
-/** Where his feet are, in viewport pixels. */
-export interface Spot {
-  x: number;
-  y: number;
-}
 
 /** What the assistant is doing, as he shows it. */
 export type Work = "idle" | "search" | "read" | "done" | "shrug" | "sleep";
@@ -226,26 +63,17 @@ export interface CompanionMenu {
   close: () => void;
 }
 
-const CANCEL = Symbol("cancel");
-/** Awaits a move, and ends the sequence if a newer one has started. */
-type Step = <T>(move: Promise<T>) => Promise<T>;
-
 const between = ([min, max]: readonly number[]) =>
   (min + Math.random() * (max - min)) * 1000;
 const clamp = (value: number, limit: number) =>
   Math.max(-limit, Math.min(limit, value));
 
 export class CompanionRig {
-  private readonly parts: Parts;
-  private readonly limbs: Record<(typeof LIMBS)[number], Limb>;
+  private readonly drawing: CompanionDrawing;
+  private readonly motion: Tweens<Animatable>;
   private readonly reduced: boolean;
   private readonly pose: Pose;
-  private readonly timers = new Set<number>();
   private readonly cleanups: (() => void)[] = [];
-  private alive = true;
-  private tweens: Tween[] = [];
-  private frameId = 0;
-  private last = 0;
   /** Bumped by every new sequence; older ones end at their next step. */
   private gen = 0;
 
@@ -290,21 +118,7 @@ export class CompanionRig {
     private readonly host: HTMLElement,
     { reducedMotion, home }: { reducedMotion: boolean; home: () => Spot },
   ) {
-    this.parts = Object.fromEntries(
-      PARTS.map((name) => [
-        name,
-        host.querySelector<SVGElement>(`[data-part="${name}"]`),
-      ]),
-    ) as Parts;
-    this.limbs = Object.fromEntries(
-      LIMBS.map((name) => [
-        name,
-        {
-          plain: this.parts[name].querySelector<SVGElement>("[data-plain]"),
-          muscle: this.parts[name].querySelector<SVGElement>("[data-muscle]"),
-        },
-      ]),
-    ) as Record<(typeof LIMBS)[number], Limb>;
+    this.drawing = new CompanionDrawing(host);
     this.reduced = reducedMotion;
     this.home = home;
     this.spot = home();
@@ -323,18 +137,25 @@ export class CompanionRig {
       back: false,
       mouth: "smile",
     };
+    this.motion = new Tweens<Animatable>(
+      this.pose,
+      reducedMotion,
+      (dt) => {
+        this.pose.phase += dt * 0.0085 * this.pose.walk;
+        this.render();
+      },
+      () => this.render(),
+    );
     host.toggleAttribute("data-still", reducedMotion);
 
     this.listen(window, "pointermove", (e) => {
       this.pointerX = e.clientX;
       this.lastActivity = performance.now();
     });
-    this.listen(this.parts.hit, "click", (e) => this.clicked(e.detail));
-    this.cleanups.push(() => {
-      clearTimeout(this.pendingClick);
-      this.tweens = [];
-      if (this.frameId) cancelAnimationFrame(this.frameId);
-    });
+    this.listen(this.drawing.parts.hit, "click", (e) =>
+      this.clicked(e.detail),
+    );
+    this.cleanups.push(() => clearTimeout(this.pendingClick));
 
     if (reducedMotion) {
       this.state = "idle";
@@ -350,11 +171,9 @@ export class CompanionRig {
   // ── Outside ───────────────────────────────────────────────────────────────
 
   stop() {
-    this.alive = false;
     this.gen++;
     for (const cleanup of this.cleanups) cleanup();
-    for (const id of this.timers) clearTimeout(id);
-    this.timers.clear();
+    this.motion.stop();
   }
 
   /** Whether he's the assistant, rather than on his own. */
@@ -485,68 +304,15 @@ export class CompanionRig {
   }
 
   private later(ms: number, fn: () => void) {
-    const id = window.setTimeout(() => {
-      this.timers.delete(id);
-      if (this.alive) fn();
-    }, ms);
-    this.timers.add(id);
+    this.motion.later(ms, fn);
   }
 
   private wait(ms: number) {
-    return new Promise<void>((resolve) => this.later(ms, resolve));
+    return this.motion.wait(ms);
   }
 
-  private frame = (now: number) => {
-    this.frameId = 0;
-    const dt = Math.min(now - this.last, 64);
-    this.last = now;
-    const pose = this.pose;
-    this.tweens = this.tweens.filter((t) => {
-      const p = Math.min(1, (now - t.start) / t.ms);
-      const keys = Object.keys(t.to) as Animatable[];
-      for (const key of keys) {
-        const from = t.from[key] ?? 0;
-        pose[key] = from + ((t.to[key] ?? 0) - from) * t.ease(p);
-      }
-      if (p < 1 && keys.length) return true;
-      t.done();
-      return false;
-    });
-    pose.phase += dt * 0.0085 * pose.walk;
-    this.render();
-    if (this.tweens.length) this.frameId = requestAnimationFrame(this.frame);
-  };
-
-  // Promises from a stopped run never settle, so the sequence just ends.
-  // A newer tween takes over any values an older one was still moving.
-  // With reduced motion, he goes straight to each pose.
   private tween(to: Target, ms: number, ease: Ease = inOut) {
-    return new Promise<void>((resolve) => {
-      if (!this.alive) return;
-      if (this.reduced) {
-        Object.assign(this.pose, to);
-        this.render();
-        resolve();
-        return;
-      }
-      const from: Target = {};
-      for (const key of Object.keys(to) as Animatable[]) {
-        from[key] = this.pose[key];
-        for (const t of this.tweens) delete t.to[key];
-      }
-      this.tweens.push({
-        from,
-        to,
-        start: performance.now(),
-        ms,
-        ease,
-        done: resolve,
-      });
-      if (!this.frameId) {
-        this.last = performance.now();
-        this.frameId = requestAnimationFrame(this.frame);
-      }
-    });
+    return this.motion.to(to, ms, ease);
   }
 
   private setMouth(mouth: Mouth) {
@@ -561,7 +327,7 @@ export class CompanionRig {
   private stepFor(gen: number): Step {
     return async (move) => {
       const value = await move;
-      if (gen !== this.gen || !this.alive) throw CANCEL;
+      if (gen !== this.gen || !this.motion.alive) throw CANCEL;
       return value;
     };
   }
@@ -572,9 +338,7 @@ export class CompanionRig {
    */
   private async run(sequence: (step: Step) => Promise<void>) {
     const gen = ++this.gen;
-    this.tweens = this.tweens.filter((t) =>
-      Object.keys(t.to).every((key) => key === "blink"),
-    );
+    this.motion.keepOnly("blink");
     if (this.hop) {
       this.spot = this.hopPoint();
       this.hop = null;
@@ -727,7 +491,7 @@ export class CompanionRig {
       detail >= 2
         ? fn()
         : (this.pendingClick = window.setTimeout(
-            () => this.alive && fn(),
+            () => this.motion.alive && fn(),
             DOUBLE_CLICK_MS,
           ));
     if (this.assistant) now(() => void this.menuClick());
@@ -1414,164 +1178,8 @@ export class CompanionRig {
   }
 
   // ── Drawing ───────────────────────────────────────────────────────────────
-
-  /** Swaps a limb to its muscled shape once he bulks up, mirrored per side. */
-  private limb(name: (typeof LIMBS)[number], side: number, width: number) {
-    const { plain, muscle } = this.limbs[name];
-    if (!plain || !muscle) return;
-    const big = this.pose.bulk > BULKED;
-    // "inherit", so a limb in the hidden back view stays hidden.
-    plain.setAttribute("visibility", big ? "hidden" : "inherit");
-    muscle.setAttribute("visibility", big ? "inherit" : "hidden");
-    if (big) place(muscle, `scale(${side * width} 1)`);
-  }
-
   private render() {
-    const p = this.pose;
-    const el = this.parts;
-    const { ground, restX, scale } = STAGE;
-
-    const at = this.hopPoint();
-    this.host.style.transform = `translate(${at.x - restX * scale}px, ${at.y - ground * scale}px)`;
-
-    const w = p.walk;
-    const ph = p.phase;
-    const b = p.bulk;
-    // A heavy pebble waddles: it rocks side to side more than it bounces,
-    // and squashes a little each time a foot lands.
-    const bob = -Math.abs(Math.sin(ph)) * 3 * w;
-    const land = (1 - Math.abs(Math.sin(ph))) * w;
-
-    place(
-      el.root,
-      `translate(${p.x} ${ground - (HALF_WIDTH + 1) * p.lie}) rotate(${90 * p.lie + Math.sin(ph) * 5 * w}) scale(${p.turn} 1)`,
-    );
-
-    const armsUp = (p.armsUpL + p.armsUpR) / 2;
-    const sx = 1 + 0.03 * p.sit + 0.07 * p.squash + 0.02 * land + 0.1 * b;
-    const sy =
-      1 -
-      0.05 * p.sit -
-      0.09 * p.squash +
-      0.06 * armsUp -
-      0.03 * p.nod -
-      0.03 * land +
-      0.03 * b;
-    const lift = 8 * p.sit + bob;
-    const body = `translate(0 ${lift}) rotate(${p.tilt * 6} 0 -40) scale(${sx} ${sy})`;
-    place(el.frontBody, body);
-    place(el.backBody, body);
-
-    const down = p.gemDown;
-    // Eating, the gem rises to his mouth.
-    const raise = p.gemUp + 1.35 * p.eat;
-    const muscle = Math.min(b, MAX_BULK) / MAX_BULK;
-    const legWidth = 0.55 + 0.7 * muscle;
-    const armWidth = (0.5 + 0.75 * muscle) * (1 + 0.18 * p.flex);
-    const holds = { L: 0, R: 0 };
-    let handAngle = 0;
-    for (const [side, s] of [
-      ["L", -1],
-      ["R", 1],
-    ] as const) {
-      const up = s < 0 ? p.armsUpL : p.armsUpR;
-      const hold = (1 - down) * (1 - up) * (1 - p.stow) * (1 - p.empty);
-      holds[side] = hold;
-      const swing = Math.sin(ph + (s > 0 ? Math.PI : 0));
-      const step = Math.max(0, swing) * 6 * w;
-      place(
-        el[`frontLeg${side}`],
-        `translate(${s * (17 + 4 * p.sit + 5 * b)} ${-22 + 12 * p.sit - step}) rotate(${-swing * 10 * w}) scale(1 ${1 - 0.45 * p.sit + 0.15 * b})`,
-      );
-      this.limb(`frontLeg${side}`, s, legWidth);
-      const wiggle = s > 0 ? p.wiggle * 22 : 0;
-      const angle =
-        -s *
-          (12 -
-            44 * hold -
-            52 * raise * hold +
-            150 * up -
-            18 * p.armsIn +
-            wiggle) +
-        Math.sin(ph) * 12 * w * (1 - hold);
-      if (s > 0) handAngle = angle;
-      const arm = `translate(${s * (30 + 6 * b)} -50) rotate(${angle}) scale(1 ${1 + 0.08 * b})`;
-      this.limb(`frontArm${side}`, s, armWidth);
-      this.limb(`backArm${side}`, s, armWidth);
-      place(el[`frontArm${side}`], arm);
-      place(el[`backArm${side}`], arm);
-    }
-
-    // The gem sits in his lap, rises to read, and arcs down to the ground
-    // beside him. Coming out of his back, it starts in his right hand.
-    const arc = Math.sin(Math.PI * down);
-    const rad = (handAngle * Math.PI) / 180;
-    const handX = p.x + p.turn * sx * (30 - 26 * Math.sin(rad));
-    const handY = ground + lift + sy * (-50 + 26 * Math.cos(rad));
-    const lapX = p.x + 2 * sx;
-    const lapY = ground + lift - 30 * sy - raise * 21;
-    const heldX = lapX + (handX - lapX) * p.stow;
-    const heldY = lapY + (handY - lapY) * p.stow;
-    const gemX = heldX + (GEM_GROUND.x - heldX) * down;
-    // Spat out, it arcs up and spins once on its way back to his hands.
-    const gemY =
-      heldY +
-      (GEM_GROUND.y - heldY) * down -
-      arc * 16 -
-      Math.sin(Math.PI * p.pop) * 34;
-    const gemScale = 1 - 0.62 * p.eat;
-    place(
-      el.gem,
-      `translate(${gemX} ${gemY}) rotate(${-arc * 20 + p.pop * 360}) scale(${gemScale})`,
-    );
-    show(el.gem, !p.gemHidden);
-
-    for (const [side, s] of [
-      ["L", -1],
-      ["R", 1],
-    ] as const) {
-      const hand = el[`hand${side}`];
-      place(
-        hand,
-        `translate(${gemX + s * 13 * Math.max(gemScale, 0.55)} ${gemY + 3})`,
-      );
-      show(hand, holds[side] > 0.5 && !p.back && !p.gemHidden && p.pop === 0);
-    }
-
-    // Lying on his side, the lower leg rests along the floor and the upper
-    // one slants down across it, so they cross near the feet.
-    const legScale = 0.4 + 1.2 * p.lie;
-    place(
-      el.backLegR,
-      `translate(11 ${-12 + 4 * p.lie}) rotate(${-22 * p.lie}) scale(1 ${legScale})`,
-    );
-    place(
-      el.backLegL,
-      `translate(-11 ${-12 + 4 * p.lie}) rotate(${-44 * p.lie}) scale(1 ${legScale})`,
-    );
-
-    place(el.face, `translate(${p.faceX} ${4 * p.nod + p.faceY})`);
-    const open = p.eye * p.blink;
-    const happy = p.happy > 0.5;
-    el.eyeL.setAttribute("ry", String(5.5 * open + 0.8));
-    el.eyeR.setAttribute("ry", String(5.5 * open + 0.8));
-    show(el.eyeL, !happy);
-    show(el.eyeR, !happy);
-    show(el.happy, happy);
-    show(el.shine, open > 0.6 && !happy);
-    const mouth = MOUTHS[p.mouth];
-    if (el.mouth.getAttribute("d") !== mouth.d) {
-      el.mouth.setAttribute("d", mouth.d);
-      el.mouth.style.fill = mouth.fill;
-    }
-
-    show(el.front, !p.back);
-    show(el.back, p.back);
-
-    // His shadow shrinks while he's in the air.
-    const air = this.hop ? 1 - 0.4 * Math.sin(Math.PI * p.hopP) : 1;
-    el.shadow.setAttribute("cx", String(p.x + 27 * p.lie));
-    el.shadow.setAttribute("rx", String((42 + 46 * p.lie + 10 * b) * air));
+    this.drawing.draw(this.pose, this.hopPoint(), this.hop !== null);
   }
 }
 
@@ -1579,8 +1187,3 @@ export class CompanionRig {
 export function hopFlight(from: Spot, to: Spot) {
   return 300 + Math.min(260, Math.hypot(to.x - from.x, to.y - from.y) * 1.4);
 }
-
-const place = (el: SVGElement, transform: string) =>
-  el.setAttribute("transform", transform);
-const show = (el: SVGElement, visible: boolean) =>
-  el.setAttribute("visibility", visible ? "visible" : "hidden");

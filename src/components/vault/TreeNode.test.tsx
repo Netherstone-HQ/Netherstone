@@ -46,6 +46,15 @@ function openMenuOn(text: string) {
   return event;
 }
 
+// The command wrappers refuse to run outside the app.
+beforeEach(() => {
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("TreeNode right-click menu", () => {
   beforeEach(() => {
     useVaultStore.setState({ currentVaultPath: VAULT, newFolderParent: null });

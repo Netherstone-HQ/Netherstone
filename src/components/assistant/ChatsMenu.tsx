@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { openChat, removeAllChats, removeChat } from "@/lib/assistant";
-import { type ChatInfo, listChats } from "@/lib/commands";
+import { type ChatInfo, listChats } from "@/lib/commands/assistant";
 import { isSamePath } from "@/lib/drawing-files";
 import { formatDay, formatShortDay, formatTime } from "@/lib/history";
 import { Button } from "@/components/ui/button";

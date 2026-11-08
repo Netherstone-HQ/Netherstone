@@ -2,7 +2,8 @@
 import { createSlateEditor, NodeApi, type Descendant } from "platejs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SerializationKit } from "@/components/editor/serialization-kit";
-import { fileExists, readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
+import { fileExists } from "@/lib/commands/attachments";
+import { readMarkdownFile, saveMarkdownFile } from "@/lib/commands/shards";
 import {
   keepVersion,
   mergeOutsideValue,
@@ -14,9 +15,12 @@ import {
 import { useEditorStore } from "@/store/editor";
 import { loadMarkdown } from "@/test/markdown";
 
-vi.mock("@/lib/commands", () => ({
+vi.mock("@/lib/commands/shards", () => ({
   readMarkdownFile: vi.fn(),
   saveMarkdownFile: vi.fn(async () => {}),
+}));
+
+vi.mock("@/lib/commands/attachments", () => ({
   fileExists: vi.fn(async () => false),
 }));
 

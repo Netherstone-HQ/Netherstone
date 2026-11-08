@@ -5,7 +5,8 @@ import {
   isSamePath,
 } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
-import { createDrawingFile, scanVault } from "@/lib/commands";
+import { createDrawingFile } from "@/lib/commands/drawings";
+import { scanVault } from "@/lib/commands/vault";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";

@@ -1,4 +1,6 @@
-import { fileExists, saveMarkdownFile, scanVault } from "@/lib/commands";
+import { fileExists } from "@/lib/commands/attachments";
+import { saveMarkdownFile } from "@/lib/commands/shards";
+import { scanVault } from "@/lib/commands/vault";
 import { joinPath } from "@/lib/open-vault";
 import { useVaultStore } from "@/store";
 import startHere from "./start-here.md?raw";

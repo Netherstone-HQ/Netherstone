@@ -1,6 +1,7 @@
 //! Attachment commands: copying files in, the Gallery, cleanup, and files
 //! shards link to.
 
+use super::{cleanup, policy, report, store};
 use crate::vault_access::{self, open_vault_only};
 use crate::{asset_scope, copy_access, db, export, open_access, vault};
 use std::path::Path;
@@ -60,7 +61,7 @@ pub(crate) fn persist_attachment_file(
     app: tauri::AppHandle,
     source_path: String,
     vault_path: String,
-) -> Result<db::attachments::PersistedAttachment, String> {
+) -> Result<store::PersistedAttachment, String> {
     copy_access::get().check(vault_access::get(), Path::new(&source_path))?;
     copy_into_attachments(&app, &source_path, &vault_path)
 }
@@ -97,13 +98,13 @@ pub(crate) fn copy_into_attachments(
     app: &tauri::AppHandle,
     source_path: &str,
     vault_path: &str,
-) -> Result<db::attachments::PersistedAttachment, String> {
+) -> Result<store::PersistedAttachment, String> {
     open_vault_only(vault_path)?;
     let source = std::path::Path::new(source_path);
     let vault = std::path::Path::new(vault_path);
     let conn = db::open_connection()?;
 
-    let attachment = db::attachments::persist_attachment_file(&conn, vault, source)?;
+    let attachment = store::persist_attachment_file(&conn, vault, source)?;
     // Through an attachment folder linked in from elsewhere, the new file
     // isn't covered by the vault's scope yet.
     asset_scope::show_linked_file(app, Path::new(&attachment.absolute_path));
@@ -117,7 +118,7 @@ pub(crate) fn copy_into_attachments(
 pub(crate) fn persist_attachment_bytes(
     app: tauri::AppHandle,
     request: tauri::ipc::Request<'_>,
-) -> Result<db::attachments::PersistedAttachment, String> {
+) -> Result<store::PersistedAttachment, String> {
     let file_name =
         export::header(&request, "x-file-name").ok_or("The file is missing its name.")?;
     let vault_path =
@@ -126,12 +127,8 @@ pub(crate) fn persist_attachment_bytes(
     let vault = std::path::Path::new(&vault_path);
     let conn = db::open_connection()?;
 
-    let attachment = db::attachments::persist_attachment_bytes(
-        &conn,
-        vault,
-        &file_name,
-        export::raw_body(&request)?,
-    )?;
+    let attachment =
+        store::persist_attachment_bytes(&conn, vault, &file_name, export::raw_body(&request)?)?;
     asset_scope::show_linked_file(&app, Path::new(&attachment.absolute_path));
     Ok(attachment)
 }
@@ -141,7 +138,7 @@ pub(crate) fn persist_attachment_bytes(
 #[tauri::command(async)]
 pub(crate) fn reconcile_attachments(
     vault_path: String,
-) -> Result<db::attachments::AttachmentReport, String> {
+) -> Result<report::AttachmentReport, String> {
     open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
     if !vault.is_dir() {
@@ -154,7 +151,7 @@ pub(crate) fn reconcile_attachments(
     }
 
     let conn = db::open_connection()?;
-    db::attachments::reconcile_vault_attachments(&conn, vault, &shard_paths)
+    report::reconcile_vault_attachments(&conn, vault, &shard_paths)
 }
 
 /// The open vault's attachments for the Gallery, newest added first.
@@ -199,7 +196,7 @@ pub(crate) fn gallery_thumbnail(
 pub(crate) fn clean_up_attachments(
     vault_path: String,
     asset_paths: Vec<String>,
-) -> Result<db::attachments::CleanupResult, String> {
+) -> Result<cleanup::CleanupResult, String> {
     open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
     if !vault.is_dir() {
@@ -216,14 +213,9 @@ pub(crate) fn clean_up_attachments(
         .map_err(|e| e.to_string())?
         .as_secs() as i64;
     let conn = db::open_connection()?;
-    db::attachments::clean_up_vault_attachments(
-        &conn,
-        vault,
-        &shard_paths,
-        &asset_paths,
-        now,
-        |path| trash::delete(path).map_err(|e| e.to_string()),
-    )
+    cleanup::clean_up_vault_attachments(&conn, vault, &shard_paths, &asset_paths, now, |path| {
+        trash::delete(path).map_err(|e| e.to_string())
+    })
 }
 
 /// The original name of a missing attachment and, when a file with the same
@@ -232,10 +224,10 @@ pub(crate) fn clean_up_attachments(
 pub(crate) fn describe_missing_attachment(
     vault_path: String,
     asset_path: String,
-) -> Result<db::attachments::MissingAttachmentInfo, String> {
+) -> Result<report::MissingAttachmentInfo, String> {
     open_vault_only(&vault_path)?;
     let conn = db::open_connection()?;
-    db::attachments::describe_missing_attachment(&conn, Path::new(&vault_path), &asset_path)
+    report::describe_missing_attachment(&conn, Path::new(&vault_path), &asset_path)
 }
 
 /// Whether each vault attachment in `asset_paths` syncs, by today's rules, in
@@ -244,13 +236,13 @@ pub(crate) fn describe_missing_attachment(
 pub(crate) fn attachment_sync_infos(
     vault_path: String,
     asset_paths: Vec<String>,
-) -> Result<Vec<Option<db::attachments::AttachmentSyncInfo>>, String> {
+) -> Result<Vec<Option<policy::AttachmentSyncInfo>>, String> {
     open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
     Ok(asset_paths
         .iter()
         .map(|asset_path| {
-            db::attachments::attachment_sync_info(vault, asset_path).unwrap_or_else(|e| {
+            policy::attachment_sync_info(vault, asset_path).unwrap_or_else(|e| {
                 eprintln!("[Netherstone] Couldn't check whether a file syncs: {}", e);
                 None
             })

@@ -8,7 +8,7 @@ import {
   retitleChat,
   sendChat,
   stopChat,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import { isSamePath } from "@/lib/drawing-files";
 import { type Ending, useAssistantStore } from "@/store/assistant";
 import { useHistoryStore } from "@/store/history";

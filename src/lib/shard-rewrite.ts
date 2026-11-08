@@ -1,5 +1,5 @@
 import { flushPendingAutosave } from "@/hooks/useAutosave";
-import { readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
+import { readMarkdownFile, saveMarkdownFile } from "@/lib/commands/shards";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useEditorStore } from "@/store/editor";
 

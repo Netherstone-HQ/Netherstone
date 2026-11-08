@@ -6,7 +6,7 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 
-import { chooseExportPath } from "@/lib/commands";
+import { chooseExportPath } from "@/lib/commands/export";
 
 import type { ExportOptions } from "./options";
 import { writeExport, type PreparedExport } from "./pipeline";

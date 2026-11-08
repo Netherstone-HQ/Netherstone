@@ -14,8 +14,9 @@ answering about the user's notes, and never guess what they say. Answer directly
 without an opening line about what follows. Name shards in plain words, and cite the \
 shards you used with a Markdown link to the shard's vault path at the end of the \
 sentence or clause it backs, before its full stop or comma, like: The trip starts on \
-May 3 [Trip plan](Travel/Trip%20plan.md#Day%201). The app shows each cite as a small \
-number, so a cite never stands in for a word. Shards the user adds to a message come \
+May 3 [Trip plan](Travel/Trip%20plan.md#Day%201). The app shows each cite as the \
+shard's name and a small number, so a cite never stands in for a word, and the shard's \
+name isn't written again right before its cite. Shards the user adds to a message come \
 with it inside <shard> tags, and \"this shard\" means the one added. A summary is short \
 and in your own words: never copy a shard back. A new drawing shows in the chat for the \
 user to apply or discard before anything is saved, so when they only want to see one, \
@@ -36,6 +37,19 @@ don't say you offered it or that it's remembered, and don't describe the card.",
         }
     }
     prompt
+}
+
+/// The user's Recent list, so "my recent shards" means the ones they
+/// opened, not the ones changed last.
+pub(super) fn recent_list(recent: &[String]) -> String {
+    if recent.is_empty() {
+        return String::new();
+    }
+    let shards: String = recent.iter().map(|path| format!("\n- {path}")).collect();
+    format!(
+        "\n\nThe user's Recent list in the app, the shards they opened lately, newest \
+first. When they say recent shards, they mean these:{shards}"
+    )
 }
 
 /// Where the changes proposed before this message stand, so an answer

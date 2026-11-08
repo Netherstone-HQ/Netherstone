@@ -13,7 +13,7 @@ import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import type { Citation } from "@/lib/open-citation";
 import { openWebLink } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
-import { useAssistantStore } from "@/store/assistant";
+import { searchChat, useAssistantStore } from "@/store/assistant";
 import { useVaultStore } from "@/store/vault";
 
 import { AnswerText, CiteNumber, useParsedAnswer } from "./AnswerText";
@@ -70,10 +70,9 @@ export function SearchAnswer({
   onOpenShard: (citation: Citation) => void;
   onContinue: () => void;
 }) {
-  const answering = useAssistantStore((s) => s.answering);
-  const messages = useAssistantStore((s) => s.messages);
-  const ending = useAssistantStore((s) => s.ending);
-  const chat = useAssistantStore((s) => s.chat);
+  const { answering, messages, ending, chat } = useAssistantStore(
+    (s) => searchChat(s),
+  );
 
   const text = answering
     ? answering.text

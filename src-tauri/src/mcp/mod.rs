@@ -4,6 +4,8 @@
 //! offers the vault tools (`crate::tools`), the shard format guide and a few
 //! ready-made prompts. It does nothing while "Connect your AI apps" is off.
 
+pub mod commands;
+
 use crate::ai_vaults::{self, Way};
 use crate::db::settings::{self, KnownVault};
 use crate::tools::{self, Caller, Page, Tool, Vault, guide};

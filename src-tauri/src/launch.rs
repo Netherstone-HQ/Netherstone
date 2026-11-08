@@ -334,6 +334,14 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Hands the window the folders, files and links opened from outside the
+/// app: the folder may then open as the vault, the files, once `can_import`,
+/// may be imported, and the link, once `can_open_link`, may be opened.
+#[tauri::command(async)]
+pub(crate) fn take_launch(can_import: bool, can_open_link: bool) -> Taken {
+    get().take(can_import, can_open_link)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

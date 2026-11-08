@@ -208,7 +208,12 @@ pub fn history(vault: &Vault, _: &Caller, params: HistoryParams) -> ToolResult<H
                     if is_drawing {
                         crate::vault::write_atomically(&writes, &path, content.as_bytes())
                     } else {
-                        crate::write_shard(&writes, &vault.root, &path.to_string_lossy(), content)
+                        crate::shards::write_shard(
+                            &writes,
+                            &vault.root,
+                            &path.to_string_lossy(),
+                            content,
+                        )
                     }
                 },
             )?;

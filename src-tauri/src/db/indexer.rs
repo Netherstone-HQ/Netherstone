@@ -152,7 +152,7 @@ fn read_shard(file_path: &Path) -> Result<ShardFile, String> {
         last_modified,
         created_at,
         file_size: metadata.len() as i64,
-        content_hash: crate::hash_markdown_content(&content),
+        content_hash: crate::shards::hash_markdown_content(&content),
         content,
     })
 }

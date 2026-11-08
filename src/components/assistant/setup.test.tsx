@@ -34,6 +34,7 @@ const picked = (local: boolean): PickedModel => ({
   provider: local ? "Local server" : "Anthropic",
   local,
   images: false,
+  thinking: null,
 });
 
 /** The app's answers, with the local server answering or not. */

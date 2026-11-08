@@ -67,6 +67,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         model: Model {
             target,
             id: model.to_string(),
+            thinking: facts.reasoning.then_some(Thinking::Low),
             facts,
         },
         stop: StopToken::default(),
@@ -472,7 +473,7 @@ async fn held_text_goes_out_before_the_next_chunk() {
         messages: &messages,
         tools: &[],
         model: "gpt-5.5",
-        thinking: false,
+        thinking: None,
         cache_key: "chat",
     };
     let target = server.target(Api::OpenAi, Some(KEY));

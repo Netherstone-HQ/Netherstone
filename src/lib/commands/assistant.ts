@@ -150,6 +150,16 @@ export interface PickedModel {
   local: boolean;
   /** Whether it takes images. */
   images: boolean;
+  /** How much it thinks, for a model that can; null for one that can't. */
+  thinking: Thinking | null;
+}
+
+/** How much a model that can think does before it answers. */
+export type Thinking = "low" | "medium" | "high";
+
+/** Sets how much the picked model thinks, remembered for that model. */
+export async function setAssistantThinking(level: Thinking): Promise<void> {
+  await invoke("assistant_set_thinking", { level });
 }
 
 /** Null when no model is picked or its provider isn't set up anymore. */

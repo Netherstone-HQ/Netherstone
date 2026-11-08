@@ -236,7 +236,7 @@ async fn stream_step(
         messages,
         tools: specs,
         model: &turn.model.id,
-        thinking: turn.model.facts.reasoning,
+        thinking: turn.model.thinking,
         cache_key: &turn.chat,
     };
     stream_into(&turn.model.target, &request, out, &turn.stop).await

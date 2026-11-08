@@ -46,6 +46,7 @@ fn ask(name: &str, target: Target, whole: bool) -> Ask {
         model: Model {
             target,
             id: "a-chat-model".to_string(),
+            thinking: None,
             facts,
         },
         stop: StopToken::default(),

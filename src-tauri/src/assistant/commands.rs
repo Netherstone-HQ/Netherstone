@@ -29,6 +29,12 @@ pub(crate) fn assistant_set_model(choice: Option<assistant::ModelChoice>) -> Res
     assistant::set_model(choice)
 }
 
+/// How much the picked model thinks, remembered for that model.
+#[tauri::command]
+pub(crate) fn assistant_set_thinking(level: assistant::Thinking) -> Result<(), String> {
+    assistant::set_thinking(level)
+}
+
 /// The models a set-up provider offers, asked of the provider.
 #[tauri::command]
 pub(crate) async fn assistant_models(

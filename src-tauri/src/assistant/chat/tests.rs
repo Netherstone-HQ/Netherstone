@@ -132,7 +132,7 @@ fn request<'a>(messages: &'a [Message]) -> Request<'a> {
         messages,
         tools: &[],
         model: "gpt-5.5",
-        thinking: false,
+        thinking: None,
         cache_key: "chat",
     }
 }
@@ -172,6 +172,35 @@ async fn streams_text_and_keeps_the_key_in_a_header() {
     )));
     // Nothing is kept on the provider's side.
     assert!(!request.contains("\"store\":true"));
+}
+
+#[tokio::test]
+async fn asks_a_model_that_thinks_for_the_level_picked() {
+    let server = serve(vec![Answer::ok("text/event-stream", OPENAI_TEXT)]);
+    let target = server.target(Api::OpenAi, Some(KEY));
+    for (thinking, sent) in [
+        (None, None),
+        (Some(Thinking::Low), Some("low")),
+        (Some(Thinking::Medium), Some("medium")),
+        (Some(Thinking::High), Some("high")),
+    ] {
+        let messages = hello();
+        let request = Request {
+            thinking,
+            ..request(&messages)
+        };
+        stream(&target, &request, &mut |_| {}, &StopToken::default())
+            .await
+            .unwrap();
+        let body = server.requests().pop().unwrap();
+        match sent {
+            Some(level) => assert!(
+                body.contains(&format!("\"reasoning_effort\":\"{level}\"")),
+                "{body}"
+            ),
+            None => assert!(!body.contains("reasoning_effort"), "{body}"),
+        }
+    }
 }
 
 #[tokio::test]

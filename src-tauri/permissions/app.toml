@@ -13,6 +13,7 @@ commands.allow = [
   "assistant_set_enabled",
   "assistant_set_send_files",
   "assistant_set_model",
+  "assistant_set_thinking",
   "assistant_models",
   "assistant_save_key",
   "assistant_find_local",

@@ -140,6 +140,8 @@ type MockAssistant = {
   picked?: boolean;
   /** Whether the picked model takes images. */
   images?: boolean;
+  /** The picked model's thinking; null for a model that doesn't think. Low when left out. */
+  thinking?: "low" | "medium" | "high" | null;
   sendFiles?: boolean;
   /** The answer to every message, in the pieces it streams in. */
   answer?: string[];
@@ -535,11 +537,22 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           }),
           assistant_picked: () =>
             setup.picked
-              ? { id: model.id, name: model.name, provider: "Anthropic", local: false, images: model.images }
+              ? {
+                  id: model.id,
+                  name: model.name,
+                  provider: "Anthropic",
+                  local: false,
+                  images: model.images,
+                  thinking: setup.thinking === undefined ? "low" : setup.thinking,
+                }
               : null,
           assistant_models: () => [model],
           assistant_set_model: () => {
             setup.picked = true;
+            return null;
+          },
+          assistant_set_thinking: (args) => {
+            setup.thinking = (args as unknown as { level: "low" | "medium" | "high" }).level;
             return null;
           },
           mcp_vaults: () => [{ path: vaultPath, name: "Vault", allowed: setup.vaultAllowed ?? false }],

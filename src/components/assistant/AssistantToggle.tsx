@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { MessageSquareIcon } from "lucide-react";
+import { SparklesIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
@@ -39,7 +39,7 @@ export function AssistantToggle() {
           isOpen && "bg-accent text-foreground",
         )}
       >
-        <MessageSquareIcon />
+        <SparklesIcon />
       </Button>
     </Hint>
   );

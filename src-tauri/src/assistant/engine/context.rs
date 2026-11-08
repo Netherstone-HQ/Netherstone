@@ -156,7 +156,7 @@ async fn summarize(
         messages: &messages,
         tools: &[],
         model: &turn.model.id,
-        thinking: false,
+        thinking: None,
         cache_key: &turn.chat,
     };
     let reply = chat::stream(&turn.model.target, &request, &mut |_| {}, &turn.stop).await?;

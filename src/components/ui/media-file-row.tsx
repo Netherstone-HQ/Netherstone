@@ -237,7 +237,7 @@ function describeFile(info: AttachmentSyncInfo) {
 function withDots(parts: React.ReactNode[]) {
   return parts.map((part, index) => (
     <React.Fragment key={index}>
-      {index > 0 ? <Dot className="mx-0.5 translate-y-0" /> : null}
+      {index > 0 ? <Dot className="mx-0.5" /> : null}
       {part}
     </React.Fragment>
   ));

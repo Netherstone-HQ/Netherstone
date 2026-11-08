@@ -22,18 +22,13 @@ interface Answering {
 /** How an answer ended, when it didn't end well. */
 export type Ending = SavedEnding["ending"];
 
-interface AssistantState {
-  /** The assistant's switch in Settings. Null until it's read. */
-  enabled: boolean | null;
-  /** Whether the panel is open in the right sidebar's place. */
-  isOpen: boolean;
+/** A chat as it's shown: the panel's, or the one asked from search. */
+export interface ChatView {
   /** The chat shown, or null for a new one. */
   chat: { id: string; title: string } | null;
   messages: ShownMessage[];
   /** The changes the chat's answers proposed, pending or applied. */
   changes: ChatChange[];
-  /** Changes being applied, undone or discarded now. */
-  busyChanges: string[];
   /** The memory items the chat's answers offered, pending or added. */
   memories: ChatMemory[];
   answering: Answering | null;
@@ -41,6 +36,30 @@ interface AssistantState {
   ending: Ending | null;
   /** How the chat's earlier answers ended, kept with the chat. */
   endings: SavedEnding[];
+}
+
+export const NO_CHAT: ChatView = {
+  chat: null,
+  messages: [],
+  changes: [],
+  memories: [],
+  answering: null,
+  ending: null,
+  endings: [],
+};
+
+interface AssistantState extends ChatView {
+  /** The assistant's switch in Settings. Null until it's read. */
+  enabled: boolean | null;
+  /** Whether the panel is open in the right sidebar's place. */
+  isOpen: boolean;
+  /** Changes being applied, undone or discarded now. */
+  busyChanges: string[];
+  /**
+   * The chat asked from search, apart from the panel's until it's carried
+   * on there. Null while search hasn't asked.
+   */
+  search: ChatView | null;
   /** What's typed but not sent. */
   draft: string;
   /** Shards added with @, vault-relative. */
@@ -62,14 +81,9 @@ interface AssistantState {
 export const useAssistantStore = create<AssistantState>((set) => ({
   enabled: null,
   isOpen: false,
-  chat: null,
-  messages: [],
-  changes: [],
+  ...NO_CHAT,
   busyChanges: [],
-  memories: [],
-  answering: null,
-  ending: null,
-  endings: [],
+  search: null,
   draft: "",
   added: [],
   openShardRemoved: false,
@@ -83,3 +97,8 @@ export const useAssistantStore = create<AssistantState>((set) => ({
   setAdded: (added) => set({ added }),
   setOpenShardRemoved: (openShardRemoved) => set({ openShardRemoved }),
 }));
+
+/** The chat asked from search, or none. */
+export function searchChat(state: { search: ChatView | null }): ChatView {
+  return state.search ?? NO_CHAT;
+}

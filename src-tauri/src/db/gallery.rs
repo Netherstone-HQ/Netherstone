@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use super::attachments::vault_key;
+use super::attachments::{shard_path_from_key, vault_key};
 use crate::attachments::policy::{
     ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, is_interrupted_write,
     path_from_asset_path, reference_kind_for_path,
@@ -88,11 +88,12 @@ pub fn list_vault_attachments(
                 Ok((row.get::<_, String>(0)?, row.get(1)?))
             })
             .map_err(|e| format!("Failed to query attachment references: {}", e))?;
-        for (file_path, asset_path) in rows.filter_map(Result::ok) {
+        for (key, asset_path) in rows.filter_map(Result::ok) {
+            let shard_path = shard_path_from_key(vault_path, &key);
             shards_by_asset
                 .entry(asset_path)
                 .or_default()
-                .push(file_path);
+                .push(shard_path.to_string_lossy().into_owned());
         }
     }
 
@@ -344,6 +345,80 @@ mod tests {
         let path = write(vault, name, content);
         sync_references_for_saved_markdown(conn, vault, &path, content).unwrap();
         path
+    }
+
+    #[test]
+    fn a_shard_saved_under_two_spellings_is_used_once() {
+        let vault = temp_vault("spellings");
+        let conn = connection();
+        write(&vault, "_attachments/Photo.png", "bytes");
+        register(&conn, &vault, "_attachments/Photo.png", 1);
+        std::fs::create_dir_all(vault.join("Folder")).unwrap();
+        let content = "![](_attachments/Photo.png)\n";
+        // As the scan spells it, then as a tool joined it.
+        let scanned = save_shard(&conn, &vault, "Folder/Media.md", content);
+        let joined = format!("{}/./Folder//Media.md", vault.display());
+        sync_references_for_saved_markdown(&conn, &vault, &joined, content).unwrap();
+
+        let files = list_vault_attachments(&conn, &vault).unwrap();
+        assert_eq!(files[0].shard_paths, [scanned]);
+        let count: i64 = conn
+            .query_row("SELECT ref_count FROM attachments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Deleting it by either spelling leaves nothing behind.
+        crate::db::attachments::remove_references_for_markdown_file(&conn, &vault, &joined)
+            .unwrap();
+        let files = list_vault_attachments(&conn, &vault).unwrap();
+        assert!(files[0].shard_paths.is_empty());
+    }
+
+    #[test]
+    fn renaming_a_shard_by_another_spelling_moves_its_row() {
+        let vault = temp_vault("rename-spelling");
+        let conn = connection();
+        write(&vault, "_attachments/Photo.png", "bytes");
+        register(&conn, &vault, "_attachments/Photo.png", 1);
+        let content = "![](_attachments/Photo.png)\n";
+        let joined = format!("{}//Media.md", vault.display());
+        write(&vault, "Media.md", content);
+        sync_references_for_saved_markdown(&conn, &vault, &joined, content).unwrap();
+
+        let old = vault.join("Media.md");
+        let new = vault.join("Health.md");
+        std::fs::rename(&old, &new).unwrap();
+        crate::db::attachments::rename_reference_file_path(
+            &conn,
+            &vault,
+            &old.to_string_lossy(),
+            &new.to_string_lossy(),
+        )
+        .unwrap();
+
+        let files = list_vault_attachments(&conn, &vault).unwrap();
+        assert_eq!(files[0].shard_paths, [new.to_string_lossy().to_string()]);
+    }
+
+    #[test]
+    fn two_vaults_with_a_shard_of_the_same_name_keep_their_own_rows() {
+        let first = temp_vault("same-name-a");
+        let second = temp_vault("same-name-b");
+        let conn = connection();
+        let content = "![](_attachments/Photo.png)\n";
+        for vault in [&first, &second] {
+            write(vault, "_attachments/Photo.png", "bytes");
+            register(&conn, vault, "_attachments/Photo.png", 1);
+            save_shard(&conn, vault, "Media.md", content);
+        }
+
+        for vault in [&first, &second] {
+            let files = list_vault_attachments(&conn, vault).unwrap();
+            assert_eq!(
+                files[0].shard_paths,
+                [vault.join("Media.md").to_string_lossy().to_string()]
+            );
+        }
     }
 
     #[test]

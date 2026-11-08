@@ -9,14 +9,19 @@ use crate::assistant::chat::{
     self, ChatError, Delta, Message, Request, Stop, StopToken, ToolSpec, Usage,
 };
 use crate::assistant::files;
-use crate::assistant::prompts::{FILES_REFUSED, change_states, system_prompt, with_summary};
+use crate::assistant::models::Target;
+use crate::assistant::prompts::{
+    FILES_REFUSED, change_states, recent_list, system_prompt, with_summary,
+};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::time::MissedTickBehavior;
 
 /// Model calls in one answer, tool rounds included.
 pub const MAX_STEPS: usize = 12;
-/// Text is sent in small batches rather than token by token.
+/// Text is sent in small batches rather than token by token, and what's
+/// held goes out on a steady tick, so it never waits for the next chunk.
 const BATCH_BYTES: usize = 256;
 const BATCH_WAIT: Duration = Duration::from_millis(50);
 
@@ -71,6 +76,13 @@ impl<'a> Out<'a> {
         }
     }
 
+    /// Sends what's held, if anything is.
+    fn flush_held(&mut self) {
+        if !self.text.is_empty() || !self.reasoning.is_empty() {
+            self.flush();
+        }
+    }
+
     /// A new step: its first words show at once.
     fn start_step(&mut self) {
         self.step_text.clear();
@@ -113,6 +125,7 @@ pub async fn answer(turn: &Turn, sink: &dyn Sink) -> Result<(Stop, Usage), ChatE
     let changes = saved(&turn.store, move |store| store.changes(&chat)).await?;
     let mut system = system_prompt(&vault_name, &remembered);
     system.push_str(&change_states(&changes, turn.asked.load(Ordering::SeqCst)));
+    system.push_str(&recent_list(&turn.recent));
     let mut out = Out::new(sink, &turn.stop);
     let mut sources: Vec<String> = turn.added.clone();
     if !sources.is_empty() {
@@ -226,13 +239,30 @@ async fn stream_step(
         thinking: turn.model.thinking,
         cache_key: &turn.chat,
     };
-    chat::stream(
-        &turn.model.target,
-        &request,
-        &mut |delta| out.delta(delta),
-        &turn.stop,
-    )
-    .await
+    stream_into(&turn.model.target, &request, out, &turn.stop).await
+}
+
+/// Streams a reply into `out`, sending what it holds on each tick as well
+/// as when a chunk comes.
+pub(in crate::assistant) async fn stream_into(
+    target: &Target,
+    request: &Request<'_>,
+    out: &mut Out<'_>,
+    stop: &StopToken,
+) -> Result<chat::Reply, ChatError> {
+    let out = Mutex::new(out);
+    let held = || out.lock().unwrap_or_else(|e| e.into_inner());
+    let mut on_delta = |delta: Delta| held().delta(delta);
+    let streaming = chat::stream(target, request, &mut on_delta, stop);
+    tokio::pin!(streaming);
+    let mut tick = tokio::time::interval(BATCH_WAIT);
+    tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            result = &mut streaming => return result,
+            _ = tick.tick() => held().flush_held(),
+        }
+    }
 }
 
 /// The chat's messages for the next request, with their files' data read

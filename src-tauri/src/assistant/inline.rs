@@ -4,7 +4,7 @@
 //! and writes it only on Apply, as an ordinary edit.
 
 use super::chat::{self, Added, ChatError, Message, Request, Stop, StopToken, Usage};
-use super::engine::{Model, Out, Sink};
+use super::engine::{Model, Out, Sink, stream_into};
 use super::files;
 use super::prompts::{INLINE_FILES_REFUSED, INLINE_PART, INLINE_SYSTEM};
 use crate::tools::Vault;
@@ -63,13 +63,7 @@ async fn stream(
         thinking: ask.model.thinking,
         cache_key: &ask.shard,
     };
-    chat::stream(
-        &ask.model.target,
-        &request,
-        &mut |delta| out.delta(delta),
-        &ask.stop,
-    )
-    .await
+    stream_into(&ask.model.target, &request, out, &ask.stop).await
 }
 
 /// The question, with the shard as it is on disk and its images and PDFs

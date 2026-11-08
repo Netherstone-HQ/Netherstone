@@ -34,11 +34,10 @@ import { useVaultStore } from "@/store/vault";
 import { useAssistantStore } from "@/store/assistant";
 import {
   askFromSearch,
-  keepSearchChat,
+  continueSearchChat,
   leaveSearchChat,
   loadAssistantEnabled,
   openAssistant,
-  stopAnswer,
 } from "@/lib/assistant";
 import { type Citation, openCitation } from "@/lib/open-citation";
 import {
@@ -155,7 +154,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const searchIdRef = useRef(0);
 
   const assistantOn = useAssistantStore((s) => s.enabled === true);
-  const answering = useAssistantStore((s) => s.answering !== null);
+  const answering = useAssistantStore((s) => s.search?.answering != null);
   const openSettings = useUIStore((s) => s.openSettings);
   const { setup, reload } = useSetup(open && assistantOn);
   const setup_ = setupState(setup);
@@ -164,10 +163,6 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   /** Asked before the assistant was ready: it waits for what's needed. */
   const [waiting, setWaiting] = useState(false);
   const [askSelected, setAskSelected] = useState(false);
-  const askedRef = useRef<string | null>(null);
-  askedRef.current = asked;
-  /** The answer went on to the panel, so closing search leaves it running. */
-  const handedOffRef = useRef(false);
 
   useEffect(() => {
     if (open && useAssistantStore.getState().enabled === null) {
@@ -177,17 +172,9 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
   useEffect(() => {
     if (!open) {
-      // Closing search stops an answer asked here, unless the panel took it.
-      if (
-        askedRef.current !== null &&
-        !handedOffRef.current &&
-        useAssistantStore.getState().answering
-      ) {
-        stopAnswer();
-      }
-      // The panel shows the chat it had, unless it took search's.
-      if (!handedOffRef.current) void leaveSearchChat();
-      handedOffRef.current = false;
+      // Closing search stops an answer asked here, unless the panel took
+      // it, and its chat goes.
+      leaveSearchChat();
       setAsked(null);
       setWaiting(false);
       setAskSelected(false);
@@ -331,8 +318,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   };
 
   const continueInChat = () => {
-    handedOffRef.current = true;
-    keepSearchChat();
+    continueSearchChat();
     openAssistant();
     useAssistantStore.setState({ focusComposer: true });
     onOpenChange(false);

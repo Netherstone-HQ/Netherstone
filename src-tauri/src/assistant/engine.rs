@@ -22,7 +22,7 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Arc, Mutex};
 
-pub(super) use run::{Out, answer};
+pub(super) use run::{Out, answer, stream_into};
 pub use tools::attach;
 
 /// What the webview hears while a chat answers, in order.
@@ -127,6 +127,8 @@ pub struct Turn {
     pub send_files: bool,
     /// The shards added to the message being answered, which count as read.
     pub added: Vec<String>,
+    /// The user's Recent list, newest first, vault-relative.
+    pub recent: Vec<String>,
     /// The user message being answered, once it's saved: the changes
     /// proposed in this answer belong to it.
     pub asked: AtomicI64,

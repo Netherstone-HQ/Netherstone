@@ -306,7 +306,7 @@ export async function discardChange(change: string): Promise<void> {
 
 /**
  * Sends `text` in `chat`, or starts a chat about `vault`, with `shards`
- * added. Events stream to `onEvent`; resolves with the chat's id once the
+ * added and the user's Recent list (vault-relative). Events stream to `onEvent`; resolves with the chat's id once the
  * answer ends.
  */
 export async function sendChat(
@@ -314,11 +314,12 @@ export async function sendChat(
   vault: string,
   text: string,
   shards: string[],
+  recent: string[],
   onEvent: (event: ChatEvent) => void,
 ): Promise<string> {
   const events = new Channel<ChatEvent>();
   events.onmessage = onEvent;
-  return invoke("assistant_send", { chat, vault, text, shards, events });
+  return invoke("assistant_send", { chat, vault, text, shards, recent, events });
 }
 
 /**

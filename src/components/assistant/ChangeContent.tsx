@@ -41,7 +41,7 @@ function ShardDocument({ value, label }: { value: any[]; label: string }) {
     navigationFeedback: false,
   });
   return (
-    <div className={`${FRAME} px-3 py-2`}>
+    <div className={`${FRAME} card-document px-3 py-2`}>
       <Plate editor={editor} readOnly>
         <PlateEditor
           variant="none"

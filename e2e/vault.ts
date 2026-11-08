@@ -156,6 +156,8 @@ type MockAssistant = {
     after: string;
     kind?: "shard" | "newShard" | "drawing" | "newDrawing" | "move";
     moving?: { folder: string | null; name: string | null };
+    /** More shards the same answer changes the same way. */
+    also?: string[];
   };
   /** An item every answer offers to add to memory. */
   remember?: string;
@@ -165,6 +167,10 @@ type MockAssistant = {
   inline?: string[];
   /** Inline Asks get no answer until they're stopped. */
   holdInline?: boolean;
+  /** The first inline Ask fails with this error. */
+  inlineFailOnce?: string;
+  /** The first answer proposes its change, then fails with this error. */
+  failOnce?: string;
 };
 
 declare global {
@@ -174,6 +180,8 @@ declare global {
     __memory: string[];
     /** Every inline Ask sent. */
     __asked: { shard: string; selection: string; whole: boolean; prompt: string }[];
+    /** Commands a test answers its own way. */
+    __overrides?: Record<string, (args: unknown) => unknown>;
   }
 }
 
@@ -413,7 +421,11 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         get_tagged_files: () => [],
         search_files: () => [],
         find_shards_containing: () => [],
-        stale_drawing_pictures: () => [],
+        // A drawing shown without its pictures yet needs them made.
+        stale_drawing_pictures: ({ drawings }) =>
+          (drawings as unknown as { drawingPath: string; imagePaths: (string | null)[] }[])
+            .filter((drawing) => drawing.imagePaths.includes(null))
+            .map((drawing) => drawing.drawingPath),
         sync_get_vault_record: () => null,
         // Versions are named by file and position: "Note.md#0" is the newest.
         history_list_versions: ({ filePath }) => {
@@ -474,7 +486,8 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         type Shown = { seq: number; role: string; text: string; shards?: string[]; sources?: string[] };
         type Change = { id: string; turn: number; kind: string; path: string; count: number; state: string; before?: string; moving?: unknown };
         type Offer = { id: string; turn: number; text: string; state: string };
-        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[] }[] = [];
+        type Ended = { turn: number; ending: unknown };
+        const chats: { id: string; title: string; vault: string; created: number; updated: number; messages: Shown[]; changes: Change[]; memories: Offer[]; endings: Ended[] }[] = [];
         const memory = [...(setup.memory ?? [])];
         window.__memory = memory;
         const findOffer = (id: string) => {
@@ -544,27 +557,39 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             const now = Date.now();
             let found = chats.find((c) => c.id === chat);
             if (!found) {
-              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [], memories: [] };
+              found = { id: `chat-${chats.length + 1}`, title: text, vault: vaultPath, created: now, updated: now, messages: [], changes: [], memories: [], endings: [] };
               chats.unshift(found);
             }
             const answer = setup.answer ?? ["Done."];
             const reads = setup.reads ?? [];
-            found.messages.push({ seq: found.messages.length + 1, role: "user", text, shards });
-            const turn = found.messages.length;
+            // No text goes on with the last message's answer.
+            if (text) found.messages.push({ seq: found.messages.length + 1, role: "user", text, shards });
+            const turn = [...found.messages].reverse().find((m) => m.role === "user")!.seq;
             send({ type: "chat", id: found.id });
             for (const path of reads) send({ type: "tool", name: "read", paths: [path] });
-            if (setup.change) {
-              send({ type: "tool", name: "edit_shard", paths: [setup.change.path] });
-              const { kind = "shard", moving } = setup.change;
-              found.changes.push({ id: `change-${++changes}`, turn, kind, path: setup.change.path, count: 1, state: "pending", ...(moving ? { moving } : {}) });
+            if (setup.change && text) {
+              const { kind = "shard", moving, also = [] } = setup.change;
+              for (const path of [setup.change.path, ...also]) {
+                send({ type: "tool", name: "edit_shard", paths: [path] });
+                found.changes.push({ id: `change-${++changes}`, turn, kind, path, count: 1, state: "pending", ...(moving ? { moving } : {}) });
+              }
             }
             if (setup.remember) {
               send({ type: "tool", name: "remember", paths: [] });
               found.memories.push({ id: `offer-${++changes}`, turn, text: setup.remember, state: "pending" });
             }
+            if (setup.failOnce) {
+              // The step that proposed the change is kept, as the app keeps it.
+              found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: "", sources: [] });
+              send({ type: "failed", error: { kind: setup.failOnce } });
+              found.endings.push({ turn, ending: { kind: "error", error: setup.failOnce } });
+              delete setup.failOnce;
+              return found.id;
+            }
             if (reads.length) send({ type: "sources", shards: reads });
             for (const piece of answer) send({ type: "text", text: piece });
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
+            found.endings = found.endings.filter((ended) => ended.turn !== turn);
             found.messages.push({ seq: found.messages.length + 1, role: "assistant", text: answer.join(""), sources: reads });
             found.updated = now;
             return found.id;
@@ -588,6 +613,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
                   resolve(null);
                 };
               });
+            }
+            if (setup.inlineFailOnce && window.__asked.length === 1) {
+              send({ type: "failed", error: { kind: setup.inlineFailOnce } });
+              return null;
             }
             for (const piece of setup.inline ?? ["Done."]) send({ type: "text", text: piece });
             send({ type: "done", stop: "done", usage: { input: 1, output: 1 } });
@@ -643,15 +672,15 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             return { path: change.path, content: before };
           },
           assistant_discard: (args) => {
-            const { chat, change } = findChange((args as unknown as { change: string }).change);
-            chat.changes = chat.changes.filter((c) => c !== change);
+            const { change } = findChange((args as unknown as { change: string }).change);
+            change.state = "discarded";
             return null;
           },
           // Off drops every change and memory item not applied yet, as the app does.
           assistant_set_enabled: (args) => {
             if (!(args as unknown as { enabled: boolean }).enabled) {
               for (const chat of chats) {
-                chat.changes = chat.changes.filter((c) => c.state !== "pending");
+                for (const change of chat.changes) if (change.state === "pending") change.state = "discarded";
                 chat.memories = chat.memories.filter((m) => m.state !== "pending");
               }
             }
@@ -714,6 +743,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           `http://asset.localhost/${encodeURIComponent(path)}`,
         invoke: async (command: string, args: Args = {}, options?: Options) => {
           window.__commands.push({ command, args });
+          // A test can answer a command its own way, set before or after load.
+          const override = window.__overrides?.[command];
+          if (override) return override(args);
           if (handlers[command]) return handlers[command](args, options);
           if (command.startsWith("plugin:event|listen")) {
             const { event, handler } = args as unknown as { event: string; handler: number };

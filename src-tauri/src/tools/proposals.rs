@@ -307,6 +307,21 @@ pub fn apply(
     Ok(file_changes(changes))
 }
 
+/// Whether a file still holds what a change wrote. The pictures the app
+/// fills in for a drawing the change showed don't count as a change.
+fn left_as_applied(now: Option<&[u8]>, after: Option<&str>) -> bool {
+    match (now, after) {
+        (Some(now), Some(after)) => match std::str::from_utf8(now) {
+            Ok(now) => {
+                now == after || drawings::without_pictures(now) == drawings::without_pictures(after)
+            }
+            Err(_) => false,
+        },
+        (None, None) => true,
+        _ => false,
+    }
+}
+
 /// Puts back the files `applied` changed, as long as each is still as it
 /// left it, and notes that in History by `caller` with `summary`. A file
 /// it made is taken out again; History keeps it.
@@ -325,7 +340,7 @@ pub fn undo(
     let writes = crate::locks::vault_writes()?;
     for (file, path) in applied.iter().zip(&paths) {
         let now = std::fs::read(path).ok();
-        if now.as_deref() != file.after.as_deref().map(str::as_bytes) {
+        if !left_as_applied(now.as_deref(), file.after.as_deref()) {
             let name = path
                 .file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
@@ -464,6 +479,57 @@ mod tests {
             history.current.unwrap().summary.as_deref(),
             Some("Undid it")
         );
+    }
+
+    #[test]
+    fn an_embed_is_undone_after_the_app_fills_in_its_pictures() {
+        let vault = super::super::tests::vault("proposals-embed");
+        let shard = vault.root.join("Hub.md");
+        std::fs::write(
+            &shard, "# Hub
+",
+        )
+        .unwrap();
+        std::fs::create_dir_all(vault.root.join("Diagrams")).unwrap();
+        std::fs::write(
+            vault.root.join("Diagrams/Map.excalidraw"),
+            crate::vault::EMPTY_DRAWING,
+        )
+        .unwrap();
+        let ops = [op(
+            "edit_drawing",
+            json!({ "path": "Diagrams/Map.excalidraw", "action": "embed", "shard": "Hub.md" }),
+        )];
+        let target = target(&vault, &ops[0]).unwrap();
+        let applied = apply(&vault, &caller(), None, &target, &ops, None).unwrap();
+        let embedded = std::fs::read_to_string(&shard).unwrap();
+        assert!(
+            embedded.contains("<img src=\"\" data-dark-src=\"\""),
+            "{embedded}"
+        );
+
+        // The app fills in the pictures when the shard shows.
+        let filled = embedded.replace(
+            "<img src=\"\" data-dark-src=\"\"",
+            "<img src=\"_attachments/Map.png\" data-dark-src=\"_attachments/Map-dark.png\"",
+        );
+        std::fs::write(&shard, &filled).unwrap();
+        undo(&vault, &caller(), None, &applied).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&shard).unwrap(),
+            "# Hub
+"
+        );
+
+        // Any other edit still keeps it from being undone.
+        let applied = apply(&vault, &caller(), None, &target, &ops, None).unwrap();
+        let edited = format!(
+            "{}Mine
+",
+            std::fs::read_to_string(&shard).unwrap()
+        );
+        std::fs::write(&shard, &edited).unwrap();
+        assert!(undo(&vault, &caller(), None, &applied).is_err());
     }
 
     #[test]

@@ -85,3 +85,18 @@ test("the callout emoji and toggle arrow sit on the first line", async ({ page }
     expect(Math.abs((await middle(arrow)) - (await firstLineMiddle(toggle)))).toBeLessThan(1.5);
   }
 });
+
+test("a block with no text of its own puts its handle on its label", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Media.md": '# Media\n\n<img src="" alt="Map" width="480" />\n\nAfter.\n' },
+    open: "Media.md",
+  });
+  const label = editor(page).getByText("No source found");
+  await expect(label).toBeVisible();
+
+  const target = block("No source found", page);
+  await target.hover({ position: { x: 40, y: 20 } });
+  const handle = target.locator(".slate-blockToolbar button");
+  await expect(handle).toBeVisible();
+  expect(Math.abs((await middle(handle)) - (await middle(label)))).toBeLessThan(1.5);
+});

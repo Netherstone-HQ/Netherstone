@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import type {
   ChatChange,
-  ChatMemory,
   ChatError,
-  ChatStop,
+  ChatMemory,
+  SavedEnding,
   ShownMessage,
 } from "@/lib/commands";
 
@@ -15,14 +15,12 @@ interface Answering {
   reasoning: string;
   /** The tool running now, if one is. */
   tool: { name: string; paths: string[] } | null;
+  /** Why the provider is being asked again, while it waits to. */
+  retrying: ChatError["kind"] | null;
 }
 
-/** How the last answer ended, when it didn't end well. */
-export type Ending =
-  | { kind: "error"; error: ChatError["kind"] }
-  | { kind: "stop"; stop: Exclude<ChatStop, "done" | "tools"> }
-  | { kind: "stepLimit" }
-  | { kind: "stopped" };
+/** How an answer ended, when it didn't end well. */
+export type Ending = SavedEnding["ending"];
 
 interface AssistantState {
   /** The assistant's switch in Settings. Null until it's read. */
@@ -39,7 +37,10 @@ interface AssistantState {
   /** The memory items the chat's answers offered, pending or added. */
   memories: ChatMemory[];
   answering: Answering | null;
+  /** How the answer shown last ended, as it ends here. */
   ending: Ending | null;
+  /** How the chat's earlier answers ended, kept with the chat. */
+  endings: SavedEnding[];
   /** What's typed but not sent. */
   draft: string;
   /** Shards added with @, vault-relative. */
@@ -48,6 +49,8 @@ interface AssistantState {
   openShardRemoved: boolean;
   /** Asks the composer to take focus once it's shown. */
   focusComposer: boolean;
+  /** A change to the open shard set aside to edit it, by id. */
+  previewSetAside: string | null;
 
   setEnabled: (enabled: boolean) => void;
   setOpen: (isOpen: boolean) => void;
@@ -66,10 +69,12 @@ export const useAssistantStore = create<AssistantState>((set) => ({
   memories: [],
   answering: null,
   ending: null,
+  endings: [],
   draft: "",
   added: [],
   openShardRemoved: false,
   focusComposer: false,
+  previewSetAside: null,
 
   setEnabled: (enabled) =>
     set((state) => ({ enabled, isOpen: enabled && state.isOpen })),

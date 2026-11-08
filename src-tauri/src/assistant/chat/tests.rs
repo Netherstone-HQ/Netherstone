@@ -175,6 +175,18 @@ async fn streams_text_and_keeps_the_key_in_a_header() {
 }
 
 #[tokio::test]
+async fn an_openai_style_server_without_a_key_answers() {
+    let server = serve(vec![Answer::ok("text/event-stream", OPENAI_TEXT)]);
+    let (reply, _) = stream_text(&server.target(Api::OpenAi, None), &hello())
+        .await
+        .unwrap();
+    assert_eq!(reply.text, "Hello");
+    let request = &server.requests()[0];
+    assert!(request.starts_with("POST /chat/completions "), "{request}");
+    assert!(!request.to_ascii_lowercase().contains("authorization:"));
+}
+
+#[tokio::test]
 async fn a_rate_limit_is_tried_again_after_the_wait_asked_for() {
     let mut limited = Answer::status(429, r#"{"error":"slow down"}"#);
     limited.headers = "retry-after-ms: 50\r\n".to_string();
@@ -371,4 +383,49 @@ fn odd_retry_waits_are_ignored() {
     }
     headers.insert("retry-after", "2".parse().unwrap());
     assert_eq!(retry_after(&headers), Some(Duration::from_secs(2)));
+}
+
+#[test]
+fn a_think_block_streamed_in_pieces_is_reasoning() {
+    let mut split = ThinkSplit::default();
+    let (mut text, mut thought) = (String::new(), String::new());
+    let mut out = |delta: Delta| match delta {
+        Delta::Text(piece) => text.push_str(piece),
+        Delta::Reasoning(piece) => thought.push_str(piece),
+        Delta::Retrying(_) => {}
+    };
+    for piece in [
+        "\n<thi",
+        "nk>Plan é",
+        "rst</th",
+        "ink>\n\nLisbon",
+        " in May",
+    ] {
+        split.feed(piece, &mut out);
+    }
+    split.finish(&mut out);
+    assert_eq!(
+        (text.as_str(), thought.as_str()),
+        ("Lisbon in May", "Plan érst")
+    );
+}
+
+#[test]
+fn an_answer_without_a_think_block_is_left_as_it_is() {
+    let mut split = ThinkSplit::default();
+    let mut text = String::new();
+    let mut out = |delta: Delta| {
+        if let Delta::Text(piece) = delta {
+            text.push_str(piece);
+        }
+    };
+    for piece in ["<", "b>bold</b>"] {
+        split.feed(piece, &mut out);
+    }
+    split.finish(&mut out);
+    assert_eq!(text, "<b>bold</b>");
+    assert_eq!(
+        split_think("<think>Plan</think>\nLisbon"),
+        Some(("Lisbon".to_string(), "Plan".to_string()))
+    );
 }

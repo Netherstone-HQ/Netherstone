@@ -77,7 +77,7 @@ fn pack_locked(sync_root: &Path, mut record: state::VaultSyncRecord) -> Result<P
 }
 
 fn is_attachment(path: &str) -> bool {
-    path.split('/').next() == Some(crate::db::attachments::ATTACHMENTS_DIR_NAME)
+    path.split('/').next() == Some(crate::attachments::policy::ATTACHMENTS_DIR_NAME)
 }
 
 /// Every object the repository still needs: the versions on every branch,

@@ -30,8 +30,11 @@ How Netherstone stores the images, files, audio and video that shards link to.
 
 ## Lifecycle
 
-`src-tauri/src/db/attachments.rs` holds the logic; the tables are
-`attachments` and `attachment_references` in `db/schema.rs`.
+`src-tauri/src/attachments/` holds the logic: `commands` (what the app
+calls), `policy` (file types, names, sync rules), `references` (what shards
+link to), `store` (copying files in), `report` and `cleanup`. The tables are
+`attachments` and `attachment_references` in `db/schema.rs`, read and written
+in `db/attachments.rs`.
 
 1. **Insert:** dropping, pasting or picking a file writes it to
    `_attachments/` and records it. The file is written and flushed under a

@@ -1,6 +1,6 @@
 //! Import commands: picking, reading and saving what's imported.
 
-use crate::attachments::copy_into_attachments;
+use crate::attachments::commands::copy_into_attachments;
 use crate::shards::{paths::delete_path, write_shard};
 use crate::vault_access::{self, in_open_vault, open_vault_only};
 use crate::{db, import, locks, shard_links, vault};
@@ -80,7 +80,7 @@ pub(crate) fn import_attachment(
     app: tauri::AppHandle,
     path: String,
     vault_path: String,
-) -> Result<db::attachments::PersistedAttachment, String> {
+) -> Result<crate::attachments::store::PersistedAttachment, String> {
     import::picked().check(Path::new(&path))?;
     copy_into_attachments(&app, &path, &vault_path)
 }

@@ -24,7 +24,9 @@ pub(crate) fn write_shard(
     vault::write_atomically(writes, Path::new(file_path), content.as_bytes())?;
 
     let synced = db::open_connection().and_then(|conn| {
-        db::attachments::sync_references_for_saved_markdown(&conn, vault, file_path, content)
+        crate::attachments::references::sync_references_for_saved_markdown(
+            &conn, vault, file_path, content,
+        )
     });
     if let Err(error) = synced {
         eprintln!(

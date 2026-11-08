@@ -6,7 +6,8 @@
 use super::catalog::Facts;
 use super::chat::{File, Message};
 use super::providers::{Api, Limits};
-use crate::db::attachments::{extract_html_attr_value, normalize_attachment_path};
+use crate::attachments::policy::normalize_attachment_path;
+use crate::attachments::references::extract_html_attr_value;
 use crate::markdown_text::markdown_options;
 use base64::Engine;
 use pulldown_cmark::{Event, Parser, Tag};

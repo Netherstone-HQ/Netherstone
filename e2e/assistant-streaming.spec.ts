@@ -164,7 +164,7 @@ for (const { window: width, panel: panelWidth } of WIDTHS) {
   });
 }
 
-test("shows thinking before a tool with the text after it, as one", async ({ page }) => {
+test("shows thinking between tools as one, with the text after it", async ({ page }) => {
   await mockVault(page, {
     files: FILES,
     open: "Trip.md",
@@ -173,6 +173,7 @@ test("shows thinking before a tool with the text after it, as one", async ({ pag
       vaultAllowed: true,
       picked: true,
       answer: ["We go ", "in May."],
+      thoughts: ["List the folders.", "Read the overview."],
       toolAfter: 0,
       reasoning: "Read the trip first.\n\n",
       stepped: true,
@@ -200,8 +201,8 @@ test("shows thinking before a tool with the text after it, as one", async ({ pag
   await expect(thinking).toHaveCount(1);
   // Still open, with no blank lines after the thinking.
   await expect(thinking).toHaveAttribute("aria-expanded", "true");
-  await expect(panel.getByText("Read the trip first.")).toHaveJSProperty(
+  await expect(panel.getByText("List the folders.")).toHaveJSProperty(
     "textContent",
-    "Read the trip first.",
+    "List the folders.\n\nRead the overview.\n\nRead the trip first.",
   );
 });

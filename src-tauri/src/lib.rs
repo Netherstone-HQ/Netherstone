@@ -111,6 +111,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::ScaleFactorChanged { .. } => window_icon::apply(window),
+            tauri::WindowEvent::Resized(size) => main_view::fit(window, *size),
             // A chat stops with the window it streams to.
             tauri::WindowEvent::Destroyed => assistant::stop_window(window.label()),
             _ => {}

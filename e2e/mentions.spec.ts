@@ -87,6 +87,12 @@ test("a link shows it opens while Ctrl is held over it, and only that link chang
   // in the shard is restyled.
   await expect(page.locator("[data-mod-held]")).toHaveCount(1);
   await expect(link).toHaveAttribute("data-mod-held");
+  // Moving to another link with Ctrl held moves the mark.
+  const more = editor(page).getByRole("link", { name: "more" });
+  await more.hover();
+  await expect(more).toHaveAttribute("data-mod-held");
+  await expect(page.locator("[data-mod-held]")).toHaveCount(1);
+  await link.hover();
   await page.keyboard.up("ControlOrMeta");
   await expect.poll(cursor).toBe("text");
 });

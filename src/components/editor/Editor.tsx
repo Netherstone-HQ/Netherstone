@@ -58,7 +58,11 @@ function useModKeyLinks(ref: RefObject<HTMLElement | null>) {
     if (!root) return;
     let held = false;
     let link: Element | null = null;
-    const show = () => link?.toggleAttribute("data-mod-held", held);
+    const show = () => {
+      // A link the editor has since replaced is let go.
+      if (link && !link.isConnected) link = null;
+      link?.toggleAttribute("data-mod-held", held);
+    };
     const update = (event: KeyboardEvent) => {
       held = hasModKey(event);
       show();
@@ -67,20 +71,24 @@ function useModKeyLinks(ref: RefObject<HTMLElement | null>) {
       held = false;
       show();
     };
-    const hover = (event: globalThis.MouseEvent) => {
-      const next =
-        event.target instanceof Element ? event.target.closest(".editor-link") : null;
+    const point = (next: Element | null) => {
       if (next !== link) link?.removeAttribute("data-mod-held");
       link = next;
-      held = hasModKey(event);
       show();
     };
+    const hover = (event: globalThis.MouseEvent) => {
+      held = hasModKey(event);
+      point(event.target instanceof Element ? event.target.closest(".editor-link") : null);
+    };
+    const leave = () => point(null);
     root.addEventListener("mouseover", hover);
+    root.addEventListener("mouseleave", leave);
     window.addEventListener("keydown", update);
     window.addEventListener("keyup", update);
     window.addEventListener("blur", release);
     return () => {
       root.removeEventListener("mouseover", hover);
+      root.removeEventListener("mouseleave", leave);
       window.removeEventListener("keydown", update);
       window.removeEventListener("keyup", update);
       window.removeEventListener("blur", release);

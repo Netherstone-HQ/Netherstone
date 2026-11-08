@@ -281,8 +281,9 @@ describe("SearchModal with the assistant", () => {
     asks[0].send({ type: "chat", id: "chat-1" });
     asks[0].send({ type: "text", text: ANSWER });
     expect(await screen.findByText(/We go in May/)).toBeTruthy();
-    // The cite names its shard, then its number in the list.
-    expect(screen.getByRole("button", { name: "Open Trip.md" }).textContent).toBe("Trip1");
+    // The cite names its shard, then its number in the list, once the
+    // paced text reaches it.
+    expect((await screen.findByRole("button", { name: "Open Trip.md" })).textContent).toBe("Trip1");
     // The shard results stay below.
     expect(screen.getByText("Lisbon in May")).toBeTruthy();
     // The panel keeps its own chat while search answers.

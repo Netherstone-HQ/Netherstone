@@ -32,7 +32,7 @@ export function LinkElement(props: PlateElementProps<TLinkElement>) {
     <PlateElement
       {...props}
       as="a"
-      className="cursor-text font-medium text-primary underline decoration-primary underline-offset-4 group-data-mod-held/editor:cursor-pointer"
+      className="editor-link cursor-text font-medium text-primary underline decoration-primary underline-offset-4"
       attributes={{
         ...props.attributes,
         ...linkAttributes,

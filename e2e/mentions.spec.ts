@@ -66,3 +66,27 @@ test("an old mention: link still opens the linked shard, and saves as a relative
   await chip.click();
   await expect(editor(page)).toContainText("Content.");
 });
+
+test("a link shows it opens while Ctrl is held over it, and only that link changes", async ({
+  page,
+}) => {
+  await mockVault(page, {
+    files: {
+      ...FILES,
+      "Note.md": "# Note\n\nRead [the plan](https://plans.example) and [more](https://more.example).\n",
+    },
+    open: "Note.md",
+  });
+  const link = editor(page).getByRole("link", { name: "the plan" });
+  const cursor = () => link.evaluate((el) => getComputedStyle(el).cursor);
+  await link.hover();
+  expect(await cursor()).toBe("text");
+  await page.keyboard.down("ControlOrMeta");
+  await expect.poll(cursor).toBe("pointer");
+  // Pressing Ctrl, as for a paste, marks that link alone, so nothing else
+  // in the shard is restyled.
+  await expect(page.locator("[data-mod-held]")).toHaveCount(1);
+  await expect(link).toHaveAttribute("data-mod-held");
+  await page.keyboard.up("ControlOrMeta");
+  await expect.poll(cursor).toBe("text");
+});

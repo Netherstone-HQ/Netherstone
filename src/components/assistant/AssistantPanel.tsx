@@ -350,6 +350,7 @@ export function AssistantPanel() {
               open={pickerOpen}
               onOpenChange={setPickerOpen}
               onPicked={() => void reload()}
+              onDone={() => useAssistantStore.setState({ focusComposer: true })}
             />
           ) : null
         }

@@ -25,8 +25,8 @@ import {
   mergeDrawings,
   readDrawingFile,
   saveDrawingFile,
-  scanVault,
-} from "@/lib/commands";
+} from "@/lib/commands/drawings";
+import { scanVault } from "@/lib/commands/vault";
 import {
   getDrawingAltText,
   parseDrawing,

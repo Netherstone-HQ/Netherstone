@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   ArrowDownUpIcon,
@@ -50,6 +49,12 @@ import {
   isSamePath,
   remapPathAfterMove,
 } from "@/lib/drawing-files";
+import {
+  deleteVaultPath,
+  moveFile,
+  renameFile,
+  saveMarkdownFile,
+} from "@/lib/commands/shards";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
@@ -257,10 +262,7 @@ export function useVaultItem(
 
     suppressVaultChangePaths([currentFilePath]);
 
-    await invoke("save_markdown_file", {
-      filePath: currentFilePath,
-      content,
-    });
+    await saveMarkdownFile(currentFilePath, content);
 
     if (plateEditor) {
       try {
@@ -372,10 +374,7 @@ export function useVaultItem(
       suppressPathChange(node, null);
       useHistoryStore.getState().startPathChange(node.path);
 
-      const newPath = await invoke<string>("rename_file", {
-        oldPath: node.path,
-        newName: trimmedName,
-      });
+      const newPath = await renameFile(node.path, trimmedName);
 
       await finishPathChange(newPath, persistedOpenFile, "rename");
       cancelRename();
@@ -399,9 +398,7 @@ export function useVaultItem(
       // the shard back after it has gone to the trash.
       if (deletesOpenFile) await flushPendingAutosave();
 
-      await invoke("delete_vault_path", {
-        targetPath: node.path,
-      });
+      await deleteVaultPath(node.path);
 
       const { activeDrawingPath, openDrawing } = useUIStore.getState();
       if (activeDrawingPath && isPathWithin(activeDrawingPath, node.path)) {
@@ -437,10 +434,7 @@ export function useVaultItem(
       suppressPathChange(node, null);
       useHistoryStore.getState().startPathChange(node.path);
 
-      const newPath = await invoke<string>("move_file", {
-        sourcePath: node.path,
-        destinationDir: destinationPath,
-      });
+      const newPath = await moveFile(node.path, destinationPath);
 
       await finishPathChange(newPath, persistedOpenFile, "move");
     } catch (error) {

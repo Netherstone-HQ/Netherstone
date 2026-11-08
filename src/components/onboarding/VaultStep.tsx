@@ -16,7 +16,7 @@ import {
   createVault,
   defaultVaultLocation,
   openVaultDialog,
-} from "@/lib/commands";
+} from "@/lib/commands/vault";
 import { errorMessage } from "@/lib/github-account";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, joinPath, openVault } from "@/lib/open-vault";

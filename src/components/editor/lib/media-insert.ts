@@ -5,7 +5,7 @@ import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
 import {
   persistAttachmentBytes,
   type PersistedAttachment,
-} from "@/lib/commands";
+} from "@/lib/commands/attachments";
 import { useEditorStore, useVaultStore } from "@/store";
 import type { PlateEditor } from "platejs/react";
 

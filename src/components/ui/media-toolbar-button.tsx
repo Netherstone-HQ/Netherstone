@@ -22,7 +22,7 @@ import {
   persistAttachmentFile,
   type MediaDialogKind,
   type PersistedAttachment,
-} from "@/lib/commands";
+} from "@/lib/commands/attachments";
 import { useEditorStore, useSettingsStore, useVaultStore } from "@/store";
 import type { MediaInsertionPreference } from "@/store/settings";
 import {

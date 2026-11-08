@@ -5,7 +5,7 @@ import type {
   ChatError,
   ChatStop,
   ShownMessage,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 
 /** An answer streaming in. */
 interface Answering {

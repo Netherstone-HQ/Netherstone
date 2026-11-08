@@ -26,7 +26,7 @@ import {
   attachmentSyncInfo,
   describeMissingAttachment,
   type MissingAttachmentInfo,
-} from "@/lib/commands";
+} from "@/lib/commands/attachments";
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { isVaultAttachmentReference } from "@/lib/media-source";
 import { REVEAL_LABEL } from "@/lib/platform";

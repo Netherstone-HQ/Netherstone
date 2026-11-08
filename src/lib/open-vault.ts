@@ -1,5 +1,5 @@
 import { flushPendingAutosave, writeOpenShardCache } from "@/hooks/useAutosave";
-import { scanVault, setOpenVault } from "@/lib/commands";
+import { scanVault, setOpenVault } from "@/lib/commands/vault";
 import { isPathWithin } from "@/lib/drawing-files";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 

@@ -30,6 +30,15 @@ function search(query: string) {
   });
 }
 
+// The command wrappers refuse to run outside the app.
+beforeEach(() => {
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("SearchModal", () => {
   beforeEach(() => {
     useVaultStore.setState({ currentVaultPath: VAULT });

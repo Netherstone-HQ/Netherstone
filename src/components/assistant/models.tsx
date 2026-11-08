@@ -15,7 +15,7 @@ import {
   type ModelChoice,
   type ProviderError,
   listAssistantModels,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 
 /** A provider's models, or why they couldn't be listed. */
 export type Models =

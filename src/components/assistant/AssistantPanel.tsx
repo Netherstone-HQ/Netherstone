@@ -42,12 +42,12 @@ import {
   discardMemory,
   undoMemory,
 } from "@/lib/assistant-memory";
-import {
-  type ChatChange,
-  type ChatMemory,
-  type ShownMessage,
-  setMcpVaultAllowed,
-} from "@/lib/commands";
+import type {
+  ChatChange,
+  ChatMemory,
+  ShownMessage,
+} from "@/lib/commands/assistant";
+import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import { folderName } from "@/lib/open-vault";
 import { openCitation } from "@/lib/open-citation";
 import { openWebLink } from "@/lib/open-web-link";

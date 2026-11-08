@@ -17,7 +17,7 @@ import {
   type McpVault,
   setMcpEnabled,
   setMcpVaultAllowed,
-} from "@/lib/commands";
+} from "@/lib/commands/mcp";
 
 export function AiAppsSettings() {
   const switchId = useId();

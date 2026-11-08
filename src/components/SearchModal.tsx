@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import {
   CornerDownLeftIcon,
   FileIcon,
@@ -25,6 +24,7 @@ import {
   isDrawingPath,
   isPathWithin,
 } from "@/lib/drawing-files";
+import { type SearchResult, searchFiles } from "@/lib/commands/shards";
 import { openFileHistory, openVaultFile } from "@/lib/open-vault-file";
 import { fileName } from "@/lib/sync";
 import { cn } from "@/lib/utils";
@@ -47,18 +47,6 @@ import {
 } from "./assistant/SearchAnswer";
 import { setupState, useSetup } from "./assistant/setup";
 import { HighlightedText, type TextPart } from "./HighlightedText";
-
-interface SearchResult {
-  path: string;
-  name: string;
-  /** The name without its extension, with the words searched for highlighted. */
-  title: TextPart[];
-  /** The text around the words searched for, which are highlighted. */
-  snippet: TextPart[];
-  /** The heading the snippet is under. */
-  section: string | null;
-  rank: number;
-}
 
 /** A row in the list: a search result, or a recent file before any search. */
 interface Row {
@@ -257,10 +245,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
     setIsSearching(true);
     try {
-      const searchResults = await invoke<SearchResult[]>("search_files", {
-        query: searchQuery,
-        limit: 20,
-      });
+      const searchResults = await searchFiles(searchQuery, 20);
       if (id !== searchIdRef.current) return;
       setResults(searchResults);
       setAnsweredQuery(searchQuery);

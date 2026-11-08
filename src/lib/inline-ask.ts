@@ -13,7 +13,7 @@ import { endingText } from "@/components/assistant/setup";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { openShardPath } from "@/lib/assistant-changes";
-import { type ChatError, askInline, stopChat } from "@/lib/commands";
+import { type ChatError, askInline, stopChat } from "@/lib/commands/assistant";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";

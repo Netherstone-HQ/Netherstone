@@ -13,7 +13,7 @@ import {
   persistAttachmentFile,
   type MediaDialogKind,
   type PersistedAttachment,
-} from "@/lib/commands";
+} from "@/lib/commands/attachments";
 import {
   isAbsoluteFilesystemPath,
   normalizeMediaSourceValue,

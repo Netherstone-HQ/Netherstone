@@ -8,7 +8,7 @@ import {
 } from "@/components/history/history-diff-kit";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
-import { type ChatChange, previewChange } from "@/lib/commands";
+import { type ChatChange, previewChange } from "@/lib/commands/assistant";
 import { diffShardValues } from "@/lib/history-diff";
 import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
 

@@ -5,7 +5,13 @@
  * export fonts stay out of startup.
  */
 
-import { exportPdf, fetchExportAsset, readExportAsset, readMarkdownFile, writeExportFile } from "@/lib/commands";
+import {
+  exportPdf,
+  fetchExportAsset,
+  readExportAsset,
+  writeExportFile,
+} from "@/lib/commands/export";
+import { readMarkdownFile } from "@/lib/commands/shards";
 
 import { createBrowserAssetIO } from "./assets";
 import type { ExportOptions } from "./options";

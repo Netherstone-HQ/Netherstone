@@ -47,7 +47,7 @@ test("turns the vault on for AI from the panel", async ({ page }) => {
     assistant: { ...READY, vaultAllowed: false },
   });
   await page.getByRole("button", { name: "Show assistant" }).click();
-  await expect(panel(page).getByText("Vault is off for AI")).toBeVisible();
+  await expect(panel(page).getByText("AI is off for this vault")).toBeVisible();
   await panel(page).getByRole("button", { name: "Turn on" }).click();
   await expect(panel(page).getByRole("button", { name: "Summarize this shard" })).toBeVisible();
 });

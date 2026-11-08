@@ -22,7 +22,6 @@ import {
 } from "@/lib/assistant";
 import { openShardPath } from "@/lib/assistant-changes";
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
-import { folderName } from "@/lib/open-vault";
 import { useAssistantStore } from "@/store/assistant";
 import { useCompanionStore } from "@/store/companion";
 import { useEditorStore } from "@/store/editor";
@@ -199,7 +198,7 @@ export function AssistantPanel() {
 
   const vaultOff = {
     icon: <FolderIcon className="size-4.5" />,
-    text: `${vault ? folderName(vault) : "This vault"} is off for AI`,
+    text: "AI is off for this vault",
     action: (
       <Button type="button" variant="outline" size="sm" onClick={() => void turnOn()}>
         Turn on

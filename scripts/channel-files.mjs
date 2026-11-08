@@ -4,7 +4,6 @@
 // Each channel's files live in packaging/<channel>/ with placeholders:
 //
 //   {{version}}       the app version, e.g. 0.6.0-beta.2
-//   {{pkgver}}        the version without "-", for pacman (0.6.0beta.2)
 //   {{url.<asset>}}   the download link of a release asset (see ASSETS)
 //   {{sha256.<asset>}} its SHA-256, from the release's asset digests
 
@@ -48,7 +47,6 @@ export function renderTemplate(template, release) {
 
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
     if (key === "version") return version;
-    if (key === "pkgver") return version.replaceAll("-", "");
     const [kind, asset] = key.split(".");
     if (kind === "url") return assetUrl(asset, version);
     if (kind === "sha256") {

@@ -163,7 +163,7 @@ jobs:
           args: ${{ matrix.args }}
 
   # Package managers that update the app themselves get it without the
-  # updater: the Linux .deb's files in a tarball, for the AUR.
+  # updater: the Linux .deb's files in a tarball, for channels like Snap.
   build-packages:
     name: Build (Linux, for package managers)
     needs: check-version

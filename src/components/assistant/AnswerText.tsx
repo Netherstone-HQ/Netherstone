@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useMemo } from "react";
+import { Fragment, memo, type ReactNode, useMemo, useRef } from "react";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
@@ -127,20 +127,57 @@ function linkText(node: Node, citation: Citation) {
  * order, and which shard links are cites and which are names.
  */
 export type ParsedAnswer = {
+  /** The Markdown parsed. */
+  source: string;
   tree: Node;
   cited: Citation[];
   links: Map<Node, "cite" | "name">;
 };
 
-function parseAnswer(markdown: string): ParsedAnswer {
-  const tree = parser.parse(markdown) as Node;
-  const links = shardLinksIn(tree);
-  return { tree, cited: citationsIn(links), links };
+function hasDefinition(tree: Node) {
+  let found = false;
+  walk(tree, (node) => {
+    if (node.type === "definition") found = true;
+  });
+  return found;
 }
 
-/** `text` parsed, again only when it changes. */
+/**
+ * `markdown` parsed. When it only adds to the end of `previous`, as an
+ * answer streaming in does, the blocks before `previous`'s last are kept
+ * as they were, and only the rest is parsed again.
+ */
+function parseTree(markdown: string, previous?: ParsedAnswer): Node {
+  const blocks = previous?.tree.children ?? [];
+  const from =
+    previous && blocks.length > 1 && markdown.startsWith(previous.source)
+      ? blocks[blocks.length - 1].position?.start.offset
+      : undefined;
+  if (from === undefined) return parser.parse(markdown) as Node;
+  const rest = parser.parse(markdown.slice(from)) as Node;
+  // A definition can change how earlier blocks read, like `![map][m]`
+  // above `[m]: url`: the whole is parsed again.
+  if (hasDefinition(rest)) return parser.parse(markdown) as Node;
+  walk(rest, (node) => {
+    if (node.position?.start.offset !== undefined) node.position.start.offset += from;
+    if (node.position?.end.offset !== undefined) node.position.end.offset += from;
+  });
+  return { type: "root", children: [...blocks.slice(0, -1), ...(rest.children ?? [])] };
+}
+
+function parseAnswer(markdown: string, previous?: ParsedAnswer): ParsedAnswer {
+  const tree = parseTree(markdown, previous);
+  const links = shardLinksIn(tree);
+  return { source: markdown, tree, cited: citationsIn(links), links };
+}
+
+/** `text` parsed, again only when it changes, and only its end as it grows. */
 export function useParsedAnswer(text: string): ParsedAnswer {
-  return useMemo(() => parseAnswer(text), [text]);
+  const last = useRef<ParsedAnswer | undefined>(undefined);
+  return useMemo(() => {
+    last.current = parseAnswer(text, last.current);
+    return last.current;
+  }, [text]);
 }
 
 /**
@@ -169,29 +206,54 @@ export function withoutCitations(markdown: string): string {
   return text;
 }
 
-export function CiteNumber({
+const CITE_NUMBER =
+  "inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-[5px] bg-brand/12 px-1 align-[1px] font-medium text-[12px] text-brand leading-4.5";
+
+export function CiteNumber({ number }: { number: number }) {
+  return <span className={CITE_NUMBER}>{number}</span>;
+}
+
+/**
+ * A cite in an answer: the shard's name, then its number in the list under
+ * the answer, so it reads without looking down.
+ */
+function Cite({
+  name,
   number,
-  onClick,
   label,
+  onClick,
 }: {
+  name: string;
   number: number;
-  onClick?: () => void;
-  label?: string;
+  label: string;
+  onClick: () => void;
 }) {
-  const className =
-    "inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-[5px] bg-brand/12 px-1 align-[1px] font-medium text-[12px] text-brand leading-4.5";
-  if (!onClick) return <span className={className}>{number}</span>;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={cn(className, "mx-0.5 hover:bg-brand/20")}
+      className="group text-brand"
     >
-      {number}
+      <span className="underline-offset-2 group-hover:underline">{name}</span>
+      <span className={cn(CITE_NUMBER, "ml-1 group-hover:bg-brand/20")}>
+        {number}
+      </span>
     </button>
   );
 }
+
+/**
+ * One top-level block of an answer. While an answer streams in, the blocks
+ * before its last are the same nodes from one batch to the next, so they
+ * don't render again.
+ */
+const Block = memo(
+  function Block({ node, render }: { node: Node; render: (node: Node) => ReactNode }) {
+    return render(node);
+  },
+  (previous, next) => previous.node === next.node,
+);
 
 /**
  * An answer's Markdown. A cite shows as its number from `cited` and a shard
@@ -207,6 +269,9 @@ export function AnswerText({
   onOpenShard: (citation: Citation) => void;
   onOpenLink: (href: string) => void;
 }) {
+  // Read when clicked, so blocks that didn't render again open as now.
+  const open = useRef({ onOpenShard, onOpenLink });
+  open.current = { onOpenShard, onOpenLink };
   // Where `![alt][name]` images point.
   const definitions = useMemo(() => {
     const found = new Map<string, string>();
@@ -222,8 +287,6 @@ export function AnswerText({
     const children = () =>
       (node.children ?? []).map((child, i) => render(child, i));
     switch (node.type) {
-      case "root":
-        return <Fragment key={key}>{children()}</Fragment>;
       case "paragraph":
         return (
           <p key={key} className="my-0">
@@ -358,7 +421,7 @@ export function AnswerText({
             <button
               key={key}
               type="button"
-              onClick={() => onOpenShard(citation)}
+              onClick={() => open.current.onOpenShard(citation)}
               className="text-brand underline-offset-2 hover:underline"
             >
               {linkText(node, citation)}
@@ -368,11 +431,12 @@ export function AnswerText({
         if (citation) {
           const index = cited.findIndex((c) => c.path === citation.path);
           return (
-            <CiteNumber
+            <Cite
               key={key}
+              name={shardName(citation.path)}
               number={index + 1}
               label={`Open ${citation.path}`}
-              onClick={() => onOpenShard(citation)}
+              onClick={() => open.current.onOpenShard(citation)}
             />
           );
         }
@@ -382,7 +446,7 @@ export function AnswerText({
             href={href}
             onClick={(event) => {
               event.preventDefault();
-              onOpenLink(href);
+              open.current.onOpenLink(href);
             }}
             className="text-brand underline-offset-2 hover:underline"
           >
@@ -396,6 +460,10 @@ export function AnswerText({
   };
 
   return (
-    <div className="flex flex-col gap-2.5 break-words">{render(tree, "root")}</div>
+    <div className="flex flex-col gap-2.5 break-words">
+      {(tree.children ?? []).map((node, index) => (
+        <Block key={index} node={node} render={(block) => render(block, index)} />
+      ))}
+    </div>
   );
 }

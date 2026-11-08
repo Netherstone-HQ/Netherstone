@@ -78,8 +78,9 @@ test("answers with the open shard, cited", async ({ page }) => {
   expect(await page.evaluate(() => window.__sent)).toEqual([
     { chat: null, text: "Summarize this shard", shards: ["Trip.md"] },
   ]);
-  // The cited shard, numbered in the text and listed with its section.
-  await expect(assistant.getByRole("button", { name: "Open Trip.md" })).toHaveText("1");
+  // The cited shard, by name and number in the text, and listed with its
+  // section.
+  await expect(assistant.getByRole("button", { name: "Open Trip.md" })).toHaveText("Trip1");
   const source = assistant.getByRole("button", { name: /^1\s*Trip\s*Plans$/ });
   await expect(source).toBeVisible();
   await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText(
@@ -535,6 +536,8 @@ test("asks from search, and carries on in the panel", async ({ page }) => {
   expect(await page.evaluate(() => window.__sent)).toEqual([
     { chat: null, text: "when do we go", shards: [] },
   ]);
+  // With the Recent list, so "my recent shards" means these.
+  expect(await page.evaluate(() => window.__recent)).toEqual([["Bread.md"]]);
   await search.getByRole("button", { name: "Continue in chat" }).click();
   await expect(search).toHaveCount(0);
   await expect(panel(page).getByText("We go to Lisbon in May")).toBeVisible();
@@ -571,7 +574,7 @@ test("reads shards named in a sentence by name, and numbers only cites", async (
 
   await expect(assistant.getByText(/^Linked from Trip: Bread uses 350 g of water/)).toBeVisible();
   await expect(assistant.getByRole("button", { name: "Trip", exact: true })).toBeVisible();
-  await expect(assistant.getByRole("button", { name: "Open Bread.md" })).toHaveText("1");
+  await expect(assistant.getByRole("button", { name: "Open Bread.md" })).toHaveText("Bread1");
   // Only the cite is listed; nothing else the answer read.
   await expect(assistant.getByRole("button", { name: /^1\s*Bread$/ })).toBeVisible();
   await expect(assistant.getByRole("button", { name: /^\d\s*Trip/ })).toHaveCount(0);
@@ -767,6 +770,12 @@ test("leaves the panel's chat as it was when search's answer isn't carried on", 
   await expect(search.getByText("Ask about this")).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(search.getByText("We go to Lisbon in May")).toBeVisible();
+  // While search is open, the panel keeps its chat.
+  await expect(assistant.getByRole("button", { name: "Chats", includeHidden: true })).toHaveText(
+    "Summarize this shard",
+  );
+  await expect(assistant.getByText("when do we go")).toHaveCount(0);
+  await expect(assistant.getByText("We go to Lisbon in May")).toHaveCount(1);
   await page.keyboard.press("Escape");
 
   await expect(assistant.getByRole("button", { name: "Chats" })).toHaveText("Summarize this shard");

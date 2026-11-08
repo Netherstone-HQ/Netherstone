@@ -177,6 +177,8 @@ declare global {
   interface Window {
     /** Every message sent to the assistant. */
     __sent: { chat: string | null; text: string; shards: string[] }[];
+    /** The Recent list sent with each message. */
+    __recent: string[][];
     __memory: string[];
     /** Every inline Ask sent. */
     __asked: { shard: string; selection: string; whole: boolean; prompt: string }[];
@@ -507,6 +509,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         };
         let changes = 0;
         window.__sent = [];
+        window.__recent = [];
         window.__asked = [];
         const held: Record<string, () => void> = {};
         return {
@@ -545,13 +548,15 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             return null;
           },
           assistant_send: (args) => {
-            const { chat, text, shards, events } = args as unknown as {
+            const { chat, text, shards, recent, events } = args as unknown as {
               chat: string | null;
               text: string;
               shards: string[];
+              recent: string[];
               events: { id: number };
             };
             window.__sent.push({ chat, text, shards });
+            window.__recent.push(recent);
             let index = 0;
             const send = (message: unknown) => callbacks[events.id]?.({ index: index++, message });
             const now = Date.now();

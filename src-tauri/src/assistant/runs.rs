@@ -33,7 +33,8 @@ pub(super) fn open_vault(path: &std::path::Path) -> Result<crate::tools::Vault, 
 }
 
 /// Sends `text` in `chat`, or in a new chat about `vault`, with `shards`
-/// added to it, and streams the answer to `sink`. Gives the chat's id once the answer ends.
+/// added to it, and streams the answer to `sink`. `recent` is the user's
+/// Recent list, vault-relative. Gives the chat's id once the answer ends.
 /// No text in a chat goes on with its last message's answer, after one that
 /// ended on an error.
 pub async fn send(
@@ -41,6 +42,7 @@ pub async fn send(
     vault: String,
     text: String,
     shards: Vec<String>,
+    recent: Vec<String>,
     window: String,
     sink: impl Sink + 'static,
 ) -> Result<String, ChatError> {
@@ -124,6 +126,7 @@ pub async fn send(
         allowed: Arc::new(move || open_vault(&vault_path).is_ok()),
         send_files,
         added: shards,
+        recent,
         asked: Default::default(),
         step_limited: Default::default(),
         memory: Arc::new(memory::List::open().map_err(|error| {

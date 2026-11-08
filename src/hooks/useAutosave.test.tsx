@@ -114,6 +114,7 @@ const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 beforeEach(() => {
   workerCache = null;
   vi.useFakeTimers();
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
   vi.mocked(invoke).mockResolvedValue(null);
   vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -236,7 +237,6 @@ describe("autosave", () => {
   });
 
   it("never writes over a change made outside the app", async () => {
-    vi.stubGlobal("__TAURI_INTERNALS__", {});
     const editor = openNote(NOTE_A, "Hello\n\nBye\n");
     rememberSavedValue(editor, editor.children);
     vi.mocked(invoke).mockImplementation(async (command, args) => {

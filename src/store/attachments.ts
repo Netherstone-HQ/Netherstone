@@ -1,6 +1,9 @@
 import { create } from "zustand";
 
-import { reconcileAttachments, type AttachmentReport } from "@/lib/commands";
+import {
+  reconcileAttachments,
+  type AttachmentReport,
+} from "@/lib/commands/attachments";
 
 interface AttachmentReportState {
   /** The vault the report describes. */

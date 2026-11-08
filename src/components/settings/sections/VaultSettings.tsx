@@ -14,7 +14,7 @@ import {
   SettingsGroup,
 } from "@/components/settings/settings-ui";
 import { Button } from "@/components/ui/button";
-import { openVaultDialog } from "@/lib/commands";
+import { openVaultDialog } from "@/lib/commands/vault";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { openVault } from "@/lib/open-vault";
 import { REVEAL_LABEL } from "@/lib/platform";

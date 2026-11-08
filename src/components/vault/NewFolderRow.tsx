@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import {
   TreeGuides,
   getRowIndent,
 } from "@/components/vault/tree-layout";
+import { createFolder } from "@/lib/commands/shards";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store";
 
@@ -38,7 +38,7 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
 
     isCreatingRef.current = true;
     try {
-      await invoke<string>("create_folder", { parent, name: trimmedName });
+      await createFolder(parent, trimmedName);
       await refreshVault(useVaultStore.getState().currentVaultPath);
       close();
     } catch (error) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { getBacklinks, getFileMetadata } from "@/lib/commands/shards";
 import { isAttachmentOnlyChange } from "@/lib/gallery";
 import { useEditorStore, useVaultStore } from "@/store";
 import {
@@ -91,8 +91,8 @@ export function useIndexedShard(isEnabled: boolean): IndexedShard | null {
       const request = ++latestRequest;
       try {
         const [details, linkedFrom] = await Promise.all([
-          invoke<FileMetadata | null>("get_file_metadata", { filePath }),
-          invoke<Backlink[]>("get_backlinks", { filePath }),
+          getFileMetadata(filePath),
+          getBacklinks(filePath),
         ]);
         if (isCurrent && request === latestRequest) {
           setIndexed({ filePath, details, linkedFrom });

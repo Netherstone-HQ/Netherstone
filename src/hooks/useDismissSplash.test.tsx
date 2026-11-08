@@ -2,12 +2,12 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useVaultStore } from "@/store";
-import { scanVault } from "@/lib/commands";
+import { scanVault } from "@/lib/commands/vault";
 import { dismissSplash } from "@/lib/splash";
 import { useVaultInit } from "./useVaultInit";
 import { useDismissSplash } from "./useDismissSplash";
 
-vi.mock("@/lib/commands", () => ({ scanVault: vi.fn() }));
+vi.mock("@/lib/commands/vault", () => ({ scanVault: vi.fn() }));
 vi.mock("@/lib/splash", () => ({ dismissSplash: vi.fn() }));
 
 function Shell() {

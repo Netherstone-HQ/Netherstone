@@ -2,7 +2,7 @@
 // edited on its own. The "Start here" shard new vaults get is in
 // start-here.md next to this file.
 
-import type { VaultFolderError } from "@/lib/commands";
+import type { VaultFolderError } from "@/lib/commands/vault";
 
 export const copy = {
   common: {

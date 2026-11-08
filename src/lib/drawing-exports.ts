@@ -5,15 +5,17 @@ import type {
 } from "@excalidraw/excalidraw/types";
 
 import { flushPendingAutosave } from "@/hooks/useAutosave";
+import { persistAttachmentBytes } from "@/lib/commands/attachments";
+import {
+  findShardsContaining,
+  readDrawingFile,
+  staleDrawingPictures,
+} from "@/lib/commands/drawings";
 import {
   appendMarkdownToFile,
-  findShardsContaining,
-  persistAttachmentBytes,
-  readDrawingFile,
   readMarkdownFile,
   saveMarkdownFile,
-  staleDrawingPictures,
-} from "@/lib/commands";
+} from "@/lib/commands/shards";
 import {
   buildDrawingImageTag,
   getDrawingLinkNeedles,

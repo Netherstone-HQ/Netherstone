@@ -11,7 +11,11 @@ import {
   useProviderSetup,
 } from "@/components/settings/sections/AiAssistantSettings";
 import { Button } from "@/components/ui/button";
-import { getAssistantStatus, setAssistantEnabled, setMcpVaultAllowed } from "@/lib/commands";
+import {
+  getAssistantStatus,
+  setAssistantEnabled,
+} from "@/lib/commands/assistant";
+import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import { folderName } from "@/lib/open-vault";
 import { useAssistantStore } from "@/store/assistant";
 import { copy } from "./copy";

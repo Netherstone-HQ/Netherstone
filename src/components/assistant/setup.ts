@@ -8,8 +8,8 @@ import {
   findLocalServerDown,
   getAssistantStatus,
   getPickedModel,
-  listMcpVaults,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
+import { listMcpVaults } from "@/lib/commands/mcp";
 import { isSamePath } from "@/lib/drawing-files";
 import type { Ending } from "@/store/assistant";
 import { useUIStore } from "@/store/ui";

@@ -24,7 +24,7 @@ import {
   cleanUpAttachments,
   type AttachmentReport,
   type UnusedAttachment,
-} from "@/lib/commands";
+} from "@/lib/commands/attachments";
 import { missingFileRows, type BrokenLink } from "@/lib/data";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { replaceAttachmentPath, rewriteShards } from "@/lib/shard-rewrite";

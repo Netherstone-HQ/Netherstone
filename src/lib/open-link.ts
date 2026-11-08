@@ -9,7 +9,7 @@ import {
   type LinkListing,
   type LinkProgress,
   type LinkRefusal,
-} from "@/lib/commands";
+} from "@/lib/commands/open-source";
 import type { ImportProgress } from "@/lib/import/engine";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { openVault } from "@/lib/open-vault";

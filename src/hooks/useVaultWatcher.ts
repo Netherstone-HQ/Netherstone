@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { fileExists } from "@/lib/commands/attachments";
 import {
-  fileExists,
   scanVault,
   startVaultWatcher,
   stopVaultWatcher,
-} from "@/lib/commands";
+} from "@/lib/commands/vault";
 import {
   isPathWithin,
   isSamePath,

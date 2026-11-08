@@ -59,7 +59,7 @@ import {
   setAssistantEnabled,
   setAssistantModel,
   setAssistantSendFiles,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import { useAssistantStore } from "@/store/assistant";
 import { cn } from "@/lib/utils";
 

@@ -14,7 +14,7 @@ import {
   discardAssistantChange,
   setPreviewAside,
 } from "@/lib/assistant-changes";
-import { type ChatChange, previewChange } from "@/lib/commands";
+import { type ChatChange, previewChange } from "@/lib/commands/assistant";
 import { diffShardValues } from "@/lib/history-diff";
 import { remoteMediaIn, withRemoteMediaAsLinks } from "@/lib/remote-media";
 import { useAssistantStore } from "@/store/assistant";

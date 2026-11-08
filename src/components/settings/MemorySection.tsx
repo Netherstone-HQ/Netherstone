@@ -22,7 +22,7 @@ import {
   deleteMemory,
   editMemory,
   getMemory,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 
 function showError(error: unknown) {
   toast.error(error instanceof Error ? error.message : String(error));

@@ -1,5 +1,6 @@
 import { flushPendingAutosave } from "@/hooks/useAutosave";
-import { fileExists, scanVault } from "@/lib/commands";
+import { fileExists } from "@/lib/commands/attachments";
+import { scanVault } from "@/lib/commands/vault";
 import {
   flushPendingDrawingSave,
   isSamePath,

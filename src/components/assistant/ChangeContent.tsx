@@ -5,7 +5,7 @@ import { resolveSessionValue } from "@/components/editor/lib/session-value";
 import { VersionPreviewKit } from "@/components/history/history-diff-kit";
 import { useThemeMode } from "@/components/theme/theme-provider";
 import { Editor as PlateEditor } from "@/components/ui/editor";
-import { type ChatChange, previewChange } from "@/lib/commands";
+import { type ChatChange, previewChange } from "@/lib/commands/assistant";
 import { previewDrawing } from "@/lib/drawing-exports";
 import { resolveVaultRelativePath } from "@/lib/drawing-files";
 import { withRemoteMediaAsLinks } from "@/lib/remote-media";

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import {
   Dialog,
   DialogContent,
@@ -15,9 +14,11 @@ import { isPathWithin, resolveVaultRelativePath } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store/editor";
 import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
-import { useVaultStore, type FileTreeNode } from "@/store/vault";
+import { useVaultStore } from "@/store/vault";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { indexVault } from "@/lib/refresh-vault";
+import { saveMarkdownFile } from "@/lib/commands/shards";
+import { scanVault } from "@/lib/commands/vault";
 
 interface NewShardDialogProps {
   open: boolean;
@@ -70,18 +71,13 @@ export function NewShardDialog({
 
       const initialContent = `# ${shardName.replace(/\.md$/, "")}\n\n`;
 
-      await invoke("save_markdown_file", {
-        filePath,
-        content: initialContent,
-      });
+      await saveMarkdownFile(filePath, initialContent);
 
       await openEditorFile(filePath);
       // Ctrl+N works from any mode; the new shard opens in the editor.
       useUIStore.getState().openMode("editor");
 
-      const fileTree = await invoke<FileTreeNode[]>("scan_vault", {
-        vaultPath: currentVaultPath,
-      });
+      const fileTree = await scanVault(currentVaultPath);
       useVaultStore.getState().setFileTree(fileTree);
 
       await indexVault(currentVaultPath);

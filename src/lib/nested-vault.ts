@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { findNestedVault, type NestedVault } from "@/lib/commands";
+import { findNestedVault, type NestedVault } from "@/lib/commands/vault";
 
 type Question = NestedVault & {
   folder: string;

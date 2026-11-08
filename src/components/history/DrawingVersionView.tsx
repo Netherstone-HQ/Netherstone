@@ -3,7 +3,7 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { FilePlusIcon } from "lucide-react";
 
 import type { RowAction } from "@/components/vault/RowActions";
-import { readDrawingFile } from "@/lib/commands";
+import { readDrawingFile } from "@/lib/commands/drawings";
 import { parseDrawing, type ExportableScene } from "@/lib/drawing-exports";
 import { readVersion, type FileVersion } from "@/lib/history";
 import { saveVersionCopy } from "@/lib/history-restore";

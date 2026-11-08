@@ -1,6 +1,6 @@
 import { convertFileSrc, isTauri } from "@tauri-apps/api/core";
 
-import { fileExists, showLinkedFile } from "@/lib/commands";
+import { fileExists, showLinkedFile } from "@/lib/commands/attachments";
 
 type AssetSourceKind = "remote" | "vault" | "local";
 type MediaSourceKind = AssetSourceKind | "blob" | "data" | "unknown";

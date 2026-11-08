@@ -16,7 +16,7 @@ import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
-import { readMarkdownFile } from "@/lib/commands";
+import { readMarkdownFile } from "@/lib/commands/shards";
 import { hasInlineAsk } from "@/lib/inline-ask";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
@@ -43,8 +43,8 @@ vi.mock("@/lib/editor-ast-cache", () => ({
   })),
 }));
 
-vi.mock("@/lib/commands", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/commands")>()),
+vi.mock("@/lib/commands/shards", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/commands/shards")>()),
   readMarkdownFile: vi.fn(),
 }));
 

@@ -151,8 +151,8 @@ for (const { window: width, panel: panelWidth } of WIDTHS) {
       });
     }
 
-    // Saved: each step has its Copy row.
-    await expect(panel.getByRole("button", { name: "Copy" })).toHaveCount(2);
+    // Saved: the answer has its Copy row.
+    await expect(panel.getByRole("button", { name: "Copy" })).toHaveCount(1);
     const frames = await page.evaluate(() => window.__frames);
     await expect.poll(() => page.evaluate(() => window.__frames)).toBeGreaterThan(frames + SETTLE_FRAMES);
     expect(await page.evaluate(() => window.__moves)).toEqual([]);
@@ -163,3 +163,45 @@ for (const { window: width, panel: panelWidth } of WIDTHS) {
     ).toBeLessThanOrEqual(1);
   });
 }
+
+test("shows thinking before a tool with the text after it, as one", async ({ page }) => {
+  await mockVault(page, {
+    files: FILES,
+    open: "Trip.md",
+    assistant: {
+      provider: true,
+      vaultAllowed: true,
+      picked: true,
+      answer: ["We go ", "in May."],
+      toolAfter: 0,
+      reasoning: "Read the trip first.\n\n",
+      stepped: true,
+    },
+  });
+  await page.getByRole("button", { name: "Show assistant" }).click();
+  const panel = page.getByRole("complementary", { name: "Assistant" });
+  await panel.getByRole("textbox", { name: "Message" }).fill("When do we go?");
+  await page.keyboard.press("Enter");
+  const thinking = panel.getByRole("button", { name: "Thinking", exact: true });
+  // While the tool runs, then as the text comes, then saved.
+  await expect(thinking).toHaveCount(1);
+  await thinking.click();
+  for (const shown of ["We go", "We go in May."]) {
+    await page.waitForFunction(() => window.__piece);
+    await page.evaluate(() => {
+      const next = window.__piece!;
+      window.__piece = undefined;
+      next();
+    });
+    await expect(panel.getByText(shown, { exact: true })).toBeVisible();
+    await expect(thinking).toHaveCount(1);
+  }
+  await expect(panel.getByRole("button", { name: "Copy" })).toHaveCount(1);
+  await expect(thinking).toHaveCount(1);
+  // Still open, with no blank lines after the thinking.
+  await expect(thinking).toHaveAttribute("aria-expanded", "true");
+  await expect(panel.getByText("Read the trip first.")).toHaveJSProperty(
+    "textContent",
+    "Read the trip first.",
+  );
+});

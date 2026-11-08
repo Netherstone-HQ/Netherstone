@@ -19,10 +19,11 @@ import { EndingNote } from "../EndingNote";
 import { WaitingLine } from "../WaitingLine";
 import { Answer, Thinking } from "./Answer";
 import { openLink, openShard } from "./open";
+import { foldThinking, joinThinking } from "./thinking";
 
 /**
- * Each message, with the changes and memory items an answer offered under
- * the last message of that answer.
+ * Each message, with the changes and memory items an answer offered, and
+ * its whole text, under the last message of that answer.
  */
 function withChanges(
   messages: ShownMessage[],
@@ -30,8 +31,12 @@ function withChanges(
   memories: ChatMemory[],
 ) {
   let turn = 0;
+  let texts: string[] = [];
   return messages.map((message, index) => {
-    if (message.role === "user") turn = message.seq;
+    if (message.role === "user") {
+      turn = message.seq;
+      texts = [];
+    } else if (message.text) texts.push(message.text);
     const next = messages[index + 1];
     const endsAnswer =
       message.role === "assistant" && (!next || next.role === "user");
@@ -42,6 +47,7 @@ function withChanges(
       endsTurn: !next || next.role === "user",
       changes: endsAnswer ? changes.filter((c) => c.turn === turn) : [],
       memories: endsAnswer ? memories.filter((m) => m.turn === turn) : [],
+      copy: endsAnswer && texts.length ? texts.join("\n\n") : undefined,
     };
   });
 }
@@ -70,20 +76,26 @@ function Streaming({
   const answering = useAssistantStore((s) => s.answering);
   const answer = useParsedAnswer(settledMarkdown(answering?.text ?? ""));
   const steps = answering?.steps;
-  // Each step as the message it's saved as, so nothing moves once it is.
-  const ended = useMemo(
-    () =>
-      (steps ?? []).map(
+  // Each step as the message it's saved as, so nothing moves once it is,
+  // and the thinking before the step coming in now.
+  const { ended, carried } = useMemo(() => {
+    const shown = foldThinking(
+      [...(steps ?? []), { text: "", reasoning: "" }].map(
         (step, index): ShownMessage => ({
           seq: -1 - index,
           role: "assistant",
           ...step,
         }),
       ),
-    [steps],
-  );
+    );
+    return {
+      ended: shown.slice(0, -1),
+      carried: shown[shown.length - 1].reasoning ?? "",
+    };
+  }, [steps]);
   useEffect(onGrow, [answering, onGrow]);
   if (!answering) return null;
+  const thinking = joinThinking(carried, answering.reasoning);
   return (
     <>
       {ended.map((message) => (
@@ -96,17 +108,17 @@ function Streaming({
         />
       ))}
       <div className="flex flex-col gap-2.5">
+        {/* Thinking shows above text once it starts, or thinking before
+            a tool shows on, as it will once saved. */}
+        {thinking && (answering.text || carried) ? (
+          <Thinking text={thinking} />
+        ) : null}
         {answering.text ? (
-          <>
-            {answering.reasoning ? (
-              <Thinking text={answering.reasoning} />
-            ) : null}
-            <AnswerText
-              answer={answer}
-              onOpenShard={openShard}
-              onOpenLink={openLink}
-            />
-          </>
+          <AnswerText
+            answer={answer}
+            onOpenShard={openShard}
+            onOpenLink={openLink}
+          />
         ) : null}
         {/* As tall as the Copy row that takes its place. */}
         <WaitingLine answering={answering} local={local} className="h-7" />
@@ -179,7 +191,7 @@ export function Messages({
   // New arrays only when the chat changes, so answers that didn't change
   // don't render again.
   const shown = useMemo(
-    () => withChanges(messages, changes, memories),
+    () => withChanges(foldThinking(messages), changes, memories),
     [messages, changes, memories],
   );
   const lastAsked = [...messages].reverse().find((m) => m.role === "user")?.seq;
@@ -206,7 +218,7 @@ export function Messages({
       )}
     >
       <div ref={content} className="flex flex-col gap-4">
-        {shown.map(({ message, changes, memories, turn, endsTurn }) => {
+        {shown.map(({ message, changes, memories, copy, turn, endsTurn }) => {
           const earlier = endsTurn ? endedEarlier(turn) : null;
           return (
             <Fragment key={message.seq}>
@@ -218,6 +230,7 @@ export function Messages({
                   changes={changes}
                   memories={memories}
                   canAdd={canAdd}
+                  copy={copy}
                 />
               )}
               {earlier ? (

@@ -177,10 +177,11 @@ type MockAssistant = {
   hold?: boolean;
   /**
    * The answer's first this many pieces are a step that ends with a tool,
-   * so the rest is a step of its own, saved as its own message.
+   * so the rest is a step of its own, saved as its own message. With
+   * `reasoning`, 0 is a first step that only thinks.
    */
   toolAfter?: number;
-  /** What the model thinks before the answer, as it streams in. */
+  /** What the model thinks in the answer's first step. */
   reasoning?: string;
   /** Each piece of the answer waits until the test calls `__piece()`. */
   stepped?: boolean;
@@ -622,7 +623,10 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             if (setup.hold) await new Promise<void>((resolve) => (window.__answer = resolve));
             if (reads.length) send({ type: "sources", shards: reads });
             const split = setup.toolAfter ?? answer.length;
-            const steps = [answer.slice(0, split), answer.slice(split)].filter((step) => step.length);
+            // A first step of no text still thinks, when the answer does.
+            const steps = [answer.slice(0, split), answer.slice(split)].filter(
+              (step, index) => step.length || (index === 0 && setup.reasoning),
+            );
             for (const [index, step] of steps.entries()) {
               if (index > 0) send({ type: "tool", name: "read", paths: ["Trip.md"] });
               if (index === 0 && setup.reasoning) send({ type: "reasoning", text: setup.reasoning });

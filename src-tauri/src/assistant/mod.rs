@@ -4,6 +4,7 @@
 
 mod catalog;
 mod chat;
+pub mod commands;
 mod engine;
 mod files;
 mod inline;

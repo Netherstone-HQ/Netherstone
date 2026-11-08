@@ -1,3 +1,5 @@
+pub mod commands;
+
 use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;

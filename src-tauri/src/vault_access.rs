@@ -182,6 +182,16 @@ pub(crate) fn is_within(folder: &Path, path: &Path) -> bool {
     !folder.is_empty() && path.starts_with(&folder)
 }
 
+/// Refuses `vault_path` unless it is the open vault.
+pub(crate) fn open_vault_only(vault_path: &str) -> Result<(), String> {
+    get().check_vault(Path::new(vault_path))
+}
+
+/// Refuses `path` unless it is the open vault or inside it.
+pub(crate) fn in_open_vault(path: &str) -> Result<(), String> {
+    get().check_path(Path::new(path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

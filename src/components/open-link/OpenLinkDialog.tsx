@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Dot } from "@/components/ui/dot";
 import { Progress } from "@/components/ui/progress";
-import { defaultVaultLocation, type LinkListing, type LinkRefusal } from "@/lib/commands";
+import type { LinkListing, LinkRefusal } from "@/lib/commands/open-source";
+import { defaultVaultLocation } from "@/lib/commands/vault";
 import {
   cancelOpeningLink,
   closeLink,

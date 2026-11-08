@@ -1,14 +1,13 @@
+import { fileExists, persistAttachmentBytes } from "@/lib/commands/attachments";
 import {
-  fileExists,
   fixImportedLinks,
   importAttachment,
-  persistAttachmentBytes,
   readImportFile,
   readImportFileRange,
   reserveImportPaths,
   saveImportedShard,
-  vaultFreeSpace,
-} from "@/lib/commands";
+} from "@/lib/commands/import";
+import { vaultFreeSpace } from "@/lib/commands/vault";
 
 import type { ImportIO } from "./engine";
 import { serializeImported } from "./serialize";

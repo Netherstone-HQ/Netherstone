@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { saveMarkdownFile } from "@/lib/commands/shards";
 import { useEditorStore, useVaultStore } from "@/store";
 import { upsertAstCache, writeShardCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
@@ -214,9 +214,7 @@ export function useAutosave() {
       try {
         suppressVaultChangePath(filePath);
 
-        await invoke("save_markdown_file", {
-          filePath,
-          content,
+        await saveMarkdownFile(filePath, content, {
           // What you type counts toward the Overview page's writing.
           recordWriting: true,
           expectedContent,

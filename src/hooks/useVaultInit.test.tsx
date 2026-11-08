@@ -2,11 +2,11 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useEditorStore, useSettingsStore, useUIStore, useVaultStore } from "@/store";
-import { scanVault } from "@/lib/commands";
+import { scanVault } from "@/lib/commands/vault";
 import { openMarkdownFile } from "@/lib/editor-ast-cache";
 import { useVaultInit } from "./useVaultInit";
 
-vi.mock("@/lib/commands", () => ({ scanVault: vi.fn() }));
+vi.mock("@/lib/commands/vault", () => ({ scanVault: vi.fn() }));
 vi.mock("@/lib/editor-ast-cache", () => ({ openMarkdownFile: vi.fn() }));
 
 function Shell() {

@@ -7,7 +7,7 @@ import {
   forgetOffer,
   getChat,
   rememberOffer,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import { useAssistantStore } from "@/store/assistant";
 
 const store = useAssistantStore;

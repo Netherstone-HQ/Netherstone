@@ -3,7 +3,9 @@ import { toast } from "sonner";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
-import { fileExists, saveDrawingFile, saveMarkdownFile } from "@/lib/commands";
+import { fileExists } from "@/lib/commands/attachments";
+import { saveDrawingFile } from "@/lib/commands/drawings";
+import { saveMarkdownFile } from "@/lib/commands/shards";
 import {
   finishDrawingSession,
   getVaultFileDisplayName,

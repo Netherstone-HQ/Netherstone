@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssistantToggle } from "@/components/assistant/AssistantToggle";
 import { setupState, useSetup } from "@/components/assistant/setup";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { AssistantProvider, AssistantStatus } from "@/lib/commands";
+import type {
+  AssistantProvider,
+  AssistantStatus,
+} from "@/lib/commands/assistant";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { useAssistantStore } from "@/store/assistant";

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 
-import { takeLaunch } from "@/lib/commands";
+import { takeLaunch } from "@/lib/commands/launch";
 import { isImporting, openImportDialog, useImportDialogStore } from "@/lib/import";
 import { DRAWING_EXTENSION, isPathWithin } from "@/lib/drawing-files";
 import { chooseVaultFolder } from "@/lib/nested-vault";

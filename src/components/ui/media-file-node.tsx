@@ -17,7 +17,7 @@ import {
   canShowInBrowserPanel,
   openFileInBrowserPanel,
 } from "@/lib/browser-panel-files";
-import { openFile } from "@/lib/commands";
+import { openFile } from "@/lib/commands/attachments";
 import {
   resolveMediaSource,
   resolveMediaSourceSync,

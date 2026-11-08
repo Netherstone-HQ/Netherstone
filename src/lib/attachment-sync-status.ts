@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 
-import type { PersistedAttachment } from "@/lib/commands";
+import type { PersistedAttachment } from "@/lib/commands/attachments";
 import { formatSizeLimit } from "@/lib/sync";
 
 export type AttachmentSyncStatus = PersistedAttachment["syncStatus"];

@@ -25,7 +25,7 @@ import {
   setIntegration,
   type Integration,
   type Integrations,
-} from "@/lib/commands";
+} from "@/lib/commands/integrations";
 import {
   MAX_RECENT_FILES_LIMIT,
   MIN_RECENT_FILES_LIMIT,

@@ -19,13 +19,17 @@ const svgToPng = vi.fn(async (_svg: unknown) => ({
 vi.mock("@/lib/svg-png", () => ({ svgToPng }));
 vi.mock("@/hooks/useAutosave", () => ({ flushPendingAutosave: vi.fn() }));
 vi.mock("@/lib/open-editor-file", () => ({ openEditorFile: vi.fn() }));
-vi.mock("@/lib/commands", () => ({
+vi.mock("@/lib/commands/drawings", () => ({
   findShardsContaining: vi.fn(),
   readDrawingFile: async (path: string) => files.get(path) ?? "",
   staleDrawingPictures: vi.fn(),
+}));
+vi.mock("@/lib/commands/attachments", () => ({
   persistAttachmentBytes: async (fileName: string) => ({
     assetPath: `_attachments/${fileName}`,
   }),
+}));
+vi.mock("@/lib/commands/shards", () => ({
   readMarkdownFile: async (path: string) => files.get(path) ?? "",
   saveMarkdownFile: async (path: string, content: string) => {
     files.set(path, content);
@@ -37,7 +41,7 @@ vi.mock("@/lib/commands", () => ({
 
 const { addDrawingToShard, fillDrawingPictures } =
   await import("@/lib/drawing-exports");
-const { staleDrawingPictures } = await import("@/lib/commands");
+const { staleDrawingPictures } = await import("@/lib/commands/drawings");
 const { openEditorFile } = await import("@/lib/open-editor-file");
 const { useEditorStore } = await import("@/store/editor");
 

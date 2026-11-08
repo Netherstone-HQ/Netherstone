@@ -21,6 +21,15 @@ function renderRow() {
   return screen.getByLabelText("Folder name");
 }
 
+// The command wrappers refuse to run outside the app.
+beforeEach(() => {
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("NewFolderRow", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset();

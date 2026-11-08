@@ -41,7 +41,8 @@ import {
   type ChartSpec,
 } from "@/lib/chart";
 import { blobToDataUrl, chartPng, drawingWithImage } from "@/lib/chart-image";
-import { createDrawingFile, saveDrawingFile, scanVault } from "@/lib/commands";
+import { createDrawingFile, saveDrawingFile } from "@/lib/commands/drawings";
+import { scanVault } from "@/lib/commands/vault";
 import { openDrawingFile } from "@/lib/open-vault-file";
 import type { TRawBlockElement } from "@/lib/markdown-raw-blocks";
 import { cn } from "@/lib/utils";

@@ -13,7 +13,8 @@ import {
   nextBlocks,
   rebaseHistory,
 } from "@/lib/block-merge";
-import { fileExists, readMarkdownFile, saveMarkdownFile } from "@/lib/commands";
+import { fileExists } from "@/lib/commands/attachments";
+import { readMarkdownFile, saveMarkdownFile } from "@/lib/commands/shards";
 import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";

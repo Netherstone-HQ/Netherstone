@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { attachmentSyncInfo } from "./commands";
+import { attachmentSyncInfo } from "./attachments";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 

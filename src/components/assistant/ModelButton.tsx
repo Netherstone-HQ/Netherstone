@@ -9,7 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Hint } from "@/components/ui/tooltip";
-import { type ModelChoice, setAssistantModel } from "@/lib/commands";
+import { type ModelChoice, setAssistantModel } from "@/lib/commands/assistant";
 
 import { ModelList, isSetUp, useModelLists } from "./models";
 import type { Setup } from "./setup";

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getAssetLabel } from "@/components/settings/attachment-format";
-import type { MissingAttachment } from "@/lib/commands";
+import type { MissingAttachment } from "@/lib/commands/attachments";
 
 /** A shard's writing on one day, from the vault's history or this device's log. */
 export interface WritingEntry {

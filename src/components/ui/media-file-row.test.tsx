@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { attachmentSyncInfo, describeMissingAttachment } from "@/lib/commands";
+import {
+  attachmentSyncInfo,
+  describeMissingAttachment,
+} from "@/lib/commands/attachments";
 import { useVaultStore } from "@/store/vault";
 import {
   LinkedFileDetails,
@@ -11,7 +14,7 @@ import {
   VaultFileDetails,
 } from "./media-file-row";
 
-vi.mock("@/lib/commands", () => ({
+vi.mock("@/lib/commands/attachments", () => ({
   attachmentSyncInfo: vi.fn(),
   describeMissingAttachment: vi.fn(),
 }));

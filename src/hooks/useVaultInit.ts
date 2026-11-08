@@ -1,6 +1,6 @@
 import { useLayoutEffect } from "react";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
-import { scanVault } from "@/lib/commands";
+import { scanVault } from "@/lib/commands/vault";
 import { isDrawingPath, isPathWithin } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 

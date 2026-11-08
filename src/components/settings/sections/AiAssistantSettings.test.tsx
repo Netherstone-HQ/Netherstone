@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AssistantProvider, AssistantStatus } from "@/lib/commands";
+import type {
+  AssistantProvider,
+  AssistantStatus,
+} from "@/lib/commands/assistant";
 import { AiAssistantSettings } from "./AiAssistantSettings";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));

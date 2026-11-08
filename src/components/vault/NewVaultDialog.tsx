@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { defaultVaultLocation } from "@/lib/commands";
+import { defaultVaultLocation } from "@/lib/commands/vault";
 import { openEditorFile } from "@/lib/open-editor-file";
 
 /**

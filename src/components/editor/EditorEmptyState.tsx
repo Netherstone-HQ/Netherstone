@@ -9,7 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { openVaultDialog } from "@/lib/commands";
+import { openVaultDialog } from "@/lib/commands/vault";
 import { openImportDialog } from "@/lib/import";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, openVault } from "@/lib/open-vault";

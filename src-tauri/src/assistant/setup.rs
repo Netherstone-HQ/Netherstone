@@ -6,8 +6,8 @@ use super::local::{Server, ServerKind};
 use super::models::{Model, ProviderError, Target};
 use super::providers::{Api, Provider, Setup};
 use super::settings::{
-    CUSTOM, Custom, LOCAL_SERVERS, MODEL, ModelChoice, enabled, key_kept, read, saved_key, servers,
-    write,
+    self as settings, CUSTOM, Custom, LOCAL_SERVERS, MODEL, ModelChoice, Thinking, enabled,
+    key_kept, read, saved_key, servers, write,
 };
 use super::{ChatError, catalog, engine, local, providers};
 use crate::credentials;
@@ -263,10 +263,15 @@ fn picked_model_with(with_key: bool) -> Result<engine::Model, ChatError> {
         return Err(ChatError::NoModel);
     }
     let facts = catalog::facts(target.api, &choice.model);
+    let thinking = match facts.reasoning {
+        true => Some(settings::thinking(&choice).map_err(|_| ChatError::Storage)?),
+        false => None,
+    };
     Ok(engine::Model {
         target,
         id: choice.model,
         facts,
+        thinking,
     })
 }
 
@@ -281,6 +286,8 @@ pub struct Picked {
     local: bool,
     /// Whether it takes images.
     images: bool,
+    /// How much it thinks, for a model that can.
+    thinking: Option<Thinking>,
 }
 
 /// The picked model, or None when none is picked or its provider isn't
@@ -312,6 +319,7 @@ pub async fn picked() -> Result<Option<Picked>, ChatError> {
         provider: provider.name,
         local: provider.setup == Setup::Local,
         images,
+        thinking: model.thinking,
     }))
 }
 

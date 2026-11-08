@@ -60,7 +60,7 @@ async fn stream(
         messages,
         tools: &[],
         model: &ask.model.id,
-        thinking: ask.model.facts.reasoning,
+        thinking: ask.model.thinking,
         cache_key: &ask.shard,
     };
     chat::stream(

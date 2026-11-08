@@ -16,6 +16,18 @@ pub(super) const LOCAL_SERVERS: &str = "assistant_local_servers";
 pub(super) const CUSTOM: &str = "assistant_custom";
 /// The model picked for chats, as JSON.
 pub(super) const MODEL: &str = "assistant_model";
+/// How much each model thinks, by model, as JSON.
+const THINKING: &str = "assistant_thinking";
+
+/// How much a model that can think does, before it answers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Thinking {
+    #[default]
+    Low,
+    Medium,
+    High,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -172,4 +184,64 @@ pub fn set_send_files(on: bool) -> Result<(), String> {
 
 pub fn set_model(choice: Option<ModelChoice>) -> Result<(), String> {
     write(MODEL, choice.as_ref())
+}
+
+/// How much each model thinks, by `thinking_key`.
+type Levels = std::collections::HashMap<String, Thinking>;
+
+/// Where a model's thinking is kept: one entry per model, per provider and
+/// server.
+fn thinking_key(choice: &ModelChoice) -> String {
+    let server = choice.server.as_deref().unwrap_or_default();
+    format!("{}|{server}|{}", choice.provider, choice.model)
+}
+
+fn level_in(levels: &Levels, choice: &ModelChoice) -> Thinking {
+    levels
+        .get(&thinking_key(choice))
+        .copied()
+        .unwrap_or_default()
+}
+
+/// How much `choice` thinks: Low until picked otherwise.
+pub(super) fn thinking(choice: &ModelChoice) -> Result<Thinking, String> {
+    Ok(level_in(&read(THINKING)?.unwrap_or_default(), choice))
+}
+
+/// Sets how much the picked model thinks, remembered for that model.
+pub fn set_thinking(level: Thinking) -> Result<(), String> {
+    let Some(choice) = read::<ModelChoice>(MODEL)? else {
+        return Err("No model is picked".to_string());
+    };
+    let mut levels: Levels = read(THINKING)?.unwrap_or_default();
+    levels.insert(thinking_key(&choice), level);
+    write(THINKING, Some(&levels))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_model_keeps_its_own_thinking() {
+        let choice = |provider: &str, server: Option<&str>, model: &str| ModelChoice {
+            provider: provider.to_string(),
+            server: server.map(str::to_string),
+            model: model.to_string(),
+        };
+        let sonnet = choice("anthropic", None, "claude-sonnet-5-5");
+        let qwen = choice("local", Some("http://127.0.0.1:11434/"), "qwen3:8b");
+        let qwen_elsewhere = choice("local", Some("http://127.0.0.1:1234/"), "qwen3:8b");
+        let mut levels = Levels::new();
+        levels.insert(thinking_key(&sonnet), Thinking::High);
+        levels.insert(thinking_key(&qwen), Thinking::Medium);
+        assert_eq!(level_in(&levels, &sonnet), Thinking::High);
+        assert_eq!(level_in(&levels, &qwen), Thinking::Medium);
+        // Unset, or the same model on another server: Low.
+        assert_eq!(level_in(&levels, &qwen_elsewhere), Thinking::Low);
+        assert_eq!(
+            level_in(&levels, &choice("openai", None, "gpt-5.5")),
+            Thinking::Low
+        );
+    }
 }

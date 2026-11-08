@@ -128,6 +128,7 @@ pub fn run() {
             assistant::commands::assistant_set_enabled,
             assistant::commands::assistant_set_send_files,
             assistant::commands::assistant_set_model,
+            assistant::commands::assistant_set_thinking,
             assistant::commands::assistant_models,
             assistant::commands::assistant_save_key,
             assistant::commands::assistant_find_local,

@@ -8,6 +8,7 @@
 use super::catalog;
 use super::models::{self, ProviderError, Target};
 use super::providers::Api;
+use super::settings::Thinking;
 use futures_util::StreamExt;
 use genai::adapter::AdapterKind;
 use genai::chat::{
@@ -153,9 +154,8 @@ pub struct Request<'a> {
     pub messages: &'a [Message],
     pub tools: &'a [ToolSpec],
     pub model: &'a str,
-    /// Whether to ask a model that can think to do so. It stays the same
-    /// through a chat, so caching keeps working.
-    pub thinking: bool,
+    /// How much a model that can think does. None for one that can't.
+    pub thinking: Option<Thinking>,
     /// Keeps requests of one chat on the same cache.
     pub cache_key: &'a str,
 }
@@ -598,8 +598,12 @@ fn options(target: &Target, request: &Request<'_>) -> ChatOptions {
         .with_capture_tool_calls(true)
         .with_capture_reasoning_content(true)
         .with_capture_usage(true);
-    if request.thinking {
-        options = options.with_reasoning_effort(ReasoningEffort::Low);
+    if let Some(thinking) = request.thinking {
+        options = options.with_reasoning_effort(match thinking {
+            Thinking::Low => ReasoningEffort::Low,
+            Thinking::Medium => ReasoningEffort::Medium,
+            Thinking::High => ReasoningEffort::High,
+        });
     }
     match target.api {
         // Anthropic caches only what's marked.

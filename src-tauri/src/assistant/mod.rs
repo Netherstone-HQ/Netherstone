@@ -31,7 +31,10 @@ pub use models::{Model, ProviderError};
 pub use providers::Api;
 pub use runs::{ask_inline, send, stop, stop_window};
 pub use sessions::ChatInfo;
-pub use settings::{ModelChoice, Status, enabled, set_enabled, set_model, set_send_files, status};
+pub use settings::{
+    ModelChoice, Status, Thinking, enabled, set_enabled, set_model, set_send_files, set_thinking,
+    status,
+};
 pub use setup::{
     Found, Picked, find_local, local_down, models, picked, remove, save_custom, save_key,
     save_local,

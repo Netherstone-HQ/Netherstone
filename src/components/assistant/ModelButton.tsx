@@ -1,20 +1,99 @@
 import { useEffect } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { BrainIcon, CheckIcon, ChevronDownIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Dot } from "@/components/ui/dot";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Hint } from "@/components/ui/tooltip";
-import { type ModelChoice, setAssistantModel } from "@/lib/commands/assistant";
+import {
+  type ModelChoice,
+  type Thinking,
+  setAssistantModel,
+  setAssistantThinking,
+} from "@/lib/commands/assistant";
 
 import { ModelList, isSetUp, useModelLists } from "./models";
 import type { Setup } from "./setup";
 
 const NO_IMAGES = "This model can't see images, so they're left out";
+
+const LEVELS: { level: Thinking; name: string; detail: string }[] = [
+  { level: "low", name: "Low", detail: "Quickest answers" },
+  { level: "medium", name: "Medium", detail: "More thought, slower" },
+  { level: "high", name: "High", detail: "For hard questions, slowest" },
+];
+
+/** How much the picked model thinks, for a model that can. */
+function ThinkingButton({
+  level,
+  disabled,
+  onPicked,
+}: {
+  level: Thinking;
+  disabled: boolean;
+  onPicked: () => void;
+}) {
+  const current = LEVELS.find((each) => each.level === level) ?? LEVELS[0];
+
+  const pick = async (next: Thinking) => {
+    try {
+      await setAssistantThinking(next);
+      onPicked();
+    } catch {
+      toast.error("Couldn't change thinking");
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <Hint label="Thinking" side="top">
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Thinking: ${current.name}`}
+            disabled={disabled}
+            className="flex h-7 shrink-0 items-center gap-1 rounded-md pr-1.5 pl-2 text-muted-foreground text-ui-sm hover:bg-accent hover:text-foreground disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-foreground"
+          >
+            <BrainIcon className="size-3.5" />
+            {current.name}
+            {disabled ? null : <ChevronDownIcon className="size-3.5" />}
+          </button>
+        </DropdownMenuTrigger>
+      </Hint>
+      <DropdownMenuContent align="start" side="top" className="w-60">
+        <DropdownMenuLabel className="pt-1.5 pb-1 font-normal text-muted-foreground text-ui-sm">
+          Thinking
+        </DropdownMenuLabel>
+        {LEVELS.map((each) => (
+          <DropdownMenuItem
+            key={each.level}
+            role="menuitemradio"
+            aria-checked={each.level === level}
+            onSelect={() => void pick(each.level)}
+            className="justify-between"
+          >
+            <span className="flex flex-col">
+              {each.name}
+              <span className="text-muted-foreground text-ui-sm">{each.detail}</span>
+            </span>
+            {each.level === level ? <CheckIcon className="size-4" /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function MaybeHint({
   label,
@@ -108,6 +187,13 @@ export function ModelButton({
           />
         </PopoverContent>
       </Popover>
+      {picked?.thinking ? (
+        <ThinkingButton
+          level={picked.thinking}
+          disabled={disabled}
+          onPicked={onPicked}
+        />
+      ) : null}
     </div>
   );
 }

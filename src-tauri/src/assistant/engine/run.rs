@@ -223,7 +223,7 @@ async fn stream_step(
         messages,
         tools: specs,
         model: &turn.model.id,
-        thinking: turn.model.facts.reasoning,
+        thinking: turn.model.thinking,
         cache_key: &turn.chat,
     };
     chat::stream(

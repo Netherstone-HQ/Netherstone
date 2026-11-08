@@ -67,6 +67,7 @@ fn turn(name: &str, target: Target, model: &str) -> Turn {
         model: Model {
             target,
             id: model.to_string(),
+            thinking: facts.reasoning.then_some(Thinking::Low),
             facts,
         },
         stop: StopToken::default(),

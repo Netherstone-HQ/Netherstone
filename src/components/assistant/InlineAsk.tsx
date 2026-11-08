@@ -189,7 +189,7 @@ export function InlineAsk() {
               onClick={send}
               disabled={!ready || !text.trim()}
               aria-label="Send"
-              className={SEND}
+              className={`${SEND} ml-1`}
             >
               <ArrowUpIcon />
             </Button>

@@ -88,7 +88,7 @@ pub(super) async fn short_title(
         messages: &messages,
         tools: &[],
         model: &model.id,
-        thinking: false,
+        thinking: None,
         cache_key: chat,
     };
     let reply = chat::stream(&model.target, &request, &mut |_| {}, stop).await?;

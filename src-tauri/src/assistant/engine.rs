@@ -16,6 +16,7 @@ use super::chat::{ChatError, Stop, StopToken, Usage};
 use super::memory::List;
 use super::models::Target;
 use super::sessions::Store;
+use super::settings::Thinking;
 use crate::tools::Vault;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicI64};
@@ -87,6 +88,8 @@ pub struct Model {
     pub target: Target,
     pub id: String,
     pub facts: Facts,
+    /// How much it thinks, for a model that can.
+    pub thinking: Option<Thinking>,
 }
 
 pub type SharedStore = Arc<Mutex<Store>>;

@@ -11,11 +11,13 @@ mod inline;
 mod local;
 mod memory;
 mod models;
+mod prompts;
 mod providers;
 mod runs;
 mod sessions;
 mod settings;
 mod setup;
+mod titles;
 mod views;
 
 pub use changes::{Made, Preview, apply, discard, preview, undo};
@@ -27,11 +29,12 @@ pub use memory::{
 };
 pub use models::{Model, ProviderError};
 pub use providers::Api;
-pub use runs::{ask_inline, retitle, send, stop, stop_window};
+pub use runs::{ask_inline, send, stop, stop_window};
 pub use sessions::ChatInfo;
 pub use settings::{ModelChoice, Status, enabled, set_enabled, set_model, set_send_files, status};
 pub use setup::{
     Found, Picked, find_local, local_down, models, picked, remove, save_custom, save_key,
     save_local,
 };
+pub use titles::retitle;
 pub use views::{ChatView, chat_view, chats, delete_chat, delete_chats};

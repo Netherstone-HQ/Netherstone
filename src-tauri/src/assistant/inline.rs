@@ -6,6 +6,7 @@
 use super::chat::{self, Added, ChatError, Message, Request, Stop, StopToken, Usage};
 use super::engine::{Model, Out, Sink};
 use super::files;
+use super::prompts::{INLINE_FILES_REFUSED, INLINE_PART, INLINE_SYSTEM};
 use crate::tools::Vault;
 use std::sync::Arc;
 
@@ -25,25 +26,11 @@ pub struct Ask {
     pub prompt: String,
 }
 
-const SYSTEM: &str = "You are the assistant in Netherstone, an app where the user keeps \
-shards (Markdown notes) in a vault. The user selected text in a shard and asked for a \
-change to it. The shard comes inside <shard> tags and the selection inside <selection> \
-tags. Reply with only the Markdown that replaces the selection: no quotes or code fence \
-around it, and no words before or after it. Keep the selection's language and style \
-unless asked otherwise. If the request is a question, reply with the selection rewritten \
-to answer it.";
-
-const PART: &str = " The selection is part of a paragraph: reply with text that fits in \
-its place, without headings, lists or new paragraphs.";
-
-const FILES_REFUSED: &str = " The provider turned down the shard's images and PDFs, so \
-they aren't sent.";
-
 /// Streams the replacement for the selection to `sink`.
 pub async fn rewrite(ask: &Ask, sink: &dyn Sink) -> Result<(Stop, Usage), ChatError> {
-    let mut system = SYSTEM.to_string();
+    let mut system = INLINE_SYSTEM.to_string();
     if !ask.whole {
-        system.push_str(PART);
+        system.push_str(INLINE_PART);
     }
     let mut messages = vec![message(ask).await];
     let mut out = Out::new(sink, &ask.stop);
@@ -54,7 +41,7 @@ pub async fn rewrite(ask: &Ask, sink: &dyn Sink) -> Result<(Stop, Usage), ChatEr
         && out.step_text.is_empty()
     {
         files::without_data(&mut messages);
-        system.push_str(FILES_REFUSED);
+        system.push_str(INLINE_FILES_REFUSED);
         result = stream(ask, &system, &messages, &mut out).await;
     }
     out.flush();
@@ -96,7 +83,7 @@ async fn message(ask: &Ask) -> Message {
     let vault = ask.vault.clone();
     let shard = ask.shard.clone();
     let sending = files::Sending::new(ask.send_files, ask.model.target.api, &ask.model.facts);
-    let text_bytes = (SYSTEM.len() + text.len()) as u64;
+    let text_bytes = (INLINE_SYSTEM.len() + text.len()) as u64;
     let plain = Message::user(text.clone());
     tauri::async_runtime::spawn_blocking(move || {
         let markdown = vault

@@ -47,8 +47,40 @@ fn center_label(list: &mut [Value], container: &str) {
         .find(|e| str_of(e, "containerId") == Some(container) && is_live(e))
     {
         let (w, h) = (num_of(label, "width"), num_of(label, "height"));
-        label["x"] = json!(shape.0 + (shape.2 - w) / 2.0);
-        label["y"] = json!(shape.1 + (shape.3 - h) / 2.0);
+        place(
+            label,
+            [
+                ("x", json!(shape.0 + (shape.2 - w) / 2.0)),
+                ("y", json!(shape.1 + (shape.3 - h) / 2.0)),
+            ],
+        );
+    }
+}
+
+/// Sets `fields` on `element`, marking it edited when any of them moved, so
+/// a drawing merge keeps the new place.
+fn place<const N: usize>(element: &mut Value, fields: [(&str, Value); N]) {
+    let moved = fields
+        .iter()
+        .any(|(key, value)| !element.get(*key).is_some_and(|now| same_place(now, value)));
+    if !moved {
+        return;
+    }
+    for (key, value) in fields {
+        element[key] = value;
+    }
+    bump(element);
+}
+
+/// Whether two positions are equal as numbers: the canvas saves whole
+/// numbers as `100`, and the layout writes `100.0`.
+fn same_place(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
+        (Value::Array(a), Value::Array(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same_place(a, b))
+        }
+        _ => a == b,
     }
 }
 
@@ -74,11 +106,19 @@ fn route(list: &mut [Value], arrow: &str) {
     let from = edge_point(a, middle(b));
     let to = edge_point(b, middle(a));
     if let Some(element) = find_mut(list, arrow) {
-        element["x"] = json!(from.0);
-        element["y"] = json!(from.1);
-        element["width"] = json!((to.0 - from.0).abs());
-        element["height"] = json!((to.1 - from.1).abs());
-        element["points"] = json!([[0.0, 0.0], [to.0 - from.0, to.1 - from.1]]);
+        place(
+            element,
+            [
+                ("x", json!(from.0)),
+                ("y", json!(from.1)),
+                ("width", json!((to.0 - from.0).abs())),
+                ("height", json!((to.1 - from.1).abs())),
+                (
+                    "points",
+                    json!([[0.0, 0.0], [to.0 - from.0, to.1 - from.1]]),
+                ),
+            ],
+        );
     }
     if let Some(label) = list
         .iter()
@@ -87,8 +127,13 @@ fn route(list: &mut [Value], arrow: &str) {
         let id = str_of(label, "id").unwrap_or_default().to_string();
         let (w, h) = (num_of(label, "width"), num_of(label, "height"));
         if let Some(label) = find_mut(list, &id) {
-            label["x"] = json!((from.0 + to.0 - w) / 2.0);
-            label["y"] = json!((from.1 + to.1 - h) / 2.0);
+            place(
+                label,
+                [
+                    ("x", json!((from.0 + to.0 - w) / 2.0)),
+                    ("y", json!((from.1 + to.1 - h) / 2.0)),
+                ],
+            );
         }
     }
 }

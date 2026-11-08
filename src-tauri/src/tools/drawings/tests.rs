@@ -220,3 +220,79 @@ fn reading_shows_labels_as_shape_text_and_arrow_ends() {
     assert_eq!(read[2]["from"], json!("a"));
     assert_eq!(read[2]["to"], json!("b"));
 }
+
+#[test]
+fn a_rerouted_arrow_and_moved_label_survive_a_merge() {
+    let base = create(json!([
+        { "id": "a", "type": "rectangle", "x": 0, "y": 0, "width": 100, "height": 50 },
+        { "id": "b", "type": "rectangle", "x": 300, "y": 0, "width": 100, "height": 50, "text": "B" },
+        { "id": "go", "type": "arrow", "from": "a", "to": "b", "text": "Go" },
+    ]));
+    // The assistant moves b; meanwhile the drawing gains a shape elsewhere.
+    let mut moved = edit(
+        &base,
+        "update",
+        json!({ "shapes": [{ "id": "b", "x": 0, "y": 200 }] }),
+    );
+    let other = edit(
+        &base,
+        "add",
+        json!({ "shapes": [{ "id": "c", "type": "ellipse", "x": 600, "y": 0 }] }),
+    );
+    let text = |scene: &Map<String, Value>| serde_json::to_string(scene).unwrap();
+    let merged =
+        crate::sync::drawing_merge::merge(&text(&base), &text(&other), &text(&moved)).unwrap();
+    assert!(!merged.conflicted);
+    let mut merged = parse(&merged.content).unwrap();
+
+    assert_eq!(element(&mut merged, "c")["type"], json!("ellipse"));
+    for key in ["x", "y", "points"] {
+        assert_eq!(
+            element(&mut merged, "go")[key],
+            element(&mut moved, "go")[key],
+            "arrow {key}"
+        );
+    }
+    for container in ["b", "go"] {
+        let (mine, kept) = (
+            label_of(&mut moved, container),
+            label_of(&mut merged, container),
+        );
+        assert_eq!(
+            (&kept["x"], &kept["y"]),
+            (&mine["x"], &mine["y"]),
+            "label of {container}"
+        );
+    }
+}
+
+#[test]
+fn arrows_and_labels_that_stay_put_keep_their_version() {
+    let scene = create(json!([
+        { "id": "a", "type": "rectangle", "x": 0, "y": 0, "width": 100, "height": 50, "text": "A" },
+        { "id": "b", "type": "rectangle", "x": 300, "y": 0, "width": 100, "height": 50 },
+        { "id": "go", "type": "arrow", "from": "a", "to": "b" },
+    ]));
+    // The canvas saves whole numbers without a fraction.
+    let saved = serde_json::to_string(&scene)
+        .unwrap()
+        .replace(".0,", ",")
+        .replace(".0]", "]")
+        .replace(".0}", "}");
+    let mut canvas = parse(&saved).unwrap();
+    assert_eq!(element(&mut canvas, "go")["x"].to_string(), "106");
+    let label = label_of(&mut canvas, "a")["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let before = |scene: &mut Map<String, Value>, id: &str| element(scene, id)["version"].clone();
+    let (arrow_version, label_version) = (before(&mut canvas, "go"), before(&mut canvas, &label));
+
+    let mut after = edit(
+        &canvas,
+        "update",
+        json!({ "shapes": [{ "id": "a", "stroke_color": "#1971c2" }] }),
+    );
+    assert_eq!(before(&mut after, "go"), arrow_version);
+    assert_eq!(before(&mut after, &label), label_version);
+}

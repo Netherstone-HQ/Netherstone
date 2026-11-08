@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { BrainIcon, CheckIcon, ChevronDownIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,14 +39,18 @@ function ThinkingButton({
   level,
   disabled,
   onPicked,
+  onDone,
 }: {
   level: Thinking;
   disabled: boolean;
   onPicked: () => void;
+  onDone: () => void;
 }) {
   const current = LEVELS.find((each) => each.level === level) ?? LEVELS[0];
+  const picked = useRef(false);
 
   const pick = async (next: Thinking) => {
+    picked.current = true;
     try {
       await setAssistantThinking(next);
       onPicked();
@@ -57,21 +61,24 @@ function ThinkingButton({
 
   return (
     <DropdownMenu>
-      <Hint label="Thinking" side="top">
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Thinking: ${current.name}`}
-            disabled={disabled}
-            className="flex h-7 shrink-0 items-center gap-1 rounded-md pr-1.5 pl-2 text-muted-foreground text-ui-sm hover:bg-accent hover:text-foreground disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-foreground"
-          >
-            <BrainIcon className="size-3.5" />
-            {current.name}
-            {disabled ? null : <ChevronDownIcon className="size-3.5" />}
-          </button>
-        </DropdownMenuTrigger>
-      </Hint>
-      <DropdownMenuContent align="start" side="top" className="w-60">
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Thinking: ${current.name}`}
+          disabled={disabled}
+          className="flex h-7 shrink-0 items-center gap-1 rounded-md pr-1.5 pl-2 text-muted-foreground text-ui-sm hover:bg-accent hover:text-foreground disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-foreground"
+        >
+          <BrainIcon className="size-3.5" />
+          {current.name}
+          {disabled ? null : <ChevronDownIcon className="size-3.5" />}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        side="top"
+        className="w-60"
+        onCloseAutoFocus={(event) => backToInput(event, picked, onDone)}
+      >
         <DropdownMenuLabel className="pt-1.5 pb-1 font-normal text-muted-foreground text-ui-sm">
           Thinking
         </DropdownMenuLabel>
@@ -93,6 +100,21 @@ function ThinkingButton({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+/**
+ * After a pick, the cursor goes back to where the message is typed, not to
+ * the menu's button. Other closes keep the menu's own focus handling.
+ */
+function backToInput(
+  event: Event,
+  picked: React.RefObject<boolean>,
+  onDone: () => void,
+) {
+  if (!picked.current) return;
+  picked.current = false;
+  event.preventDefault();
+  onDone();
 }
 
 function MaybeHint({
@@ -119,6 +141,7 @@ export function ModelButton({
   open,
   onOpenChange,
   onPicked,
+  onDone,
 }: {
   setup: Setup;
   sendFiles: boolean;
@@ -127,6 +150,8 @@ export function ModelButton({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPicked: () => void;
+  /** Puts the cursor back in the message input once something is picked. */
+  onDone: () => void;
 }) {
   const { models, loadAll } = useModelLists();
   const { picked, status } = setup;
@@ -140,7 +165,10 @@ export function ModelButton({
   // Said on the button, so the shard's pictures being left out is no surprise.
   const noImages = !!picked && !picked.images && sendFiles && !disabled;
 
+  const pickedModel = useRef(false);
+
   const pick = async (choice: ModelChoice) => {
+    pickedModel.current = true;
     onOpenChange(false);
     try {
       await setAssistantModel(choice);
@@ -178,7 +206,12 @@ export function ModelButton({
           </button>
         </PopoverTrigger>
         </MaybeHint>
-        <PopoverContent align="start" side="top" className="w-75 p-0">
+        <PopoverContent
+          align="start"
+          side="top"
+          className="w-75 p-0"
+          onCloseAutoFocus={(event) => backToInput(event, pickedModel, onDone)}
+        >
           <ModelList
             providers={status.providers}
             models={models}
@@ -192,6 +225,7 @@ export function ModelButton({
           level={picked.thinking}
           disabled={disabled}
           onPicked={onPicked}
+          onDone={onDone}
         />
       ) : null}
     </div>

@@ -25,6 +25,9 @@ const OUTSET = 8;
 /** Its gap under the block. */
 const GAP = 8;
 
+/** A menu opened from the box (model, thinking), portaled outside it. */
+const MENU = "[data-radix-popper-content-wrapper]";
+
 const BUTTON = "size-7.5 shrink-0 rounded-[7px]";
 const SEND = `${BUTTON} bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50`;
 /** Stop is quieter than Send, as in the panel. */
@@ -101,6 +104,7 @@ export function InlineAsk() {
   const [text, setText] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
   const place = usePlace(box);
 
   // An answer that failed puts what was asked back.
@@ -120,7 +124,9 @@ export function InlineAsk() {
   useEffect(() => {
     if (!phase) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || pickerOpen) return;
+      // Escape in the model or thinking menu closes only that menu.
+      const target = event.target as Element | null;
+      if (event.key !== "Escape" || target?.closest(MENU)) return;
       event.preventDefault();
       discardInlineAsk();
     };
@@ -129,7 +135,7 @@ export function InlineAsk() {
       if (
         useInlineAskStore.getState().phase !== "prompt" ||
         box.current?.contains(target) ||
-        target?.closest("[data-radix-popper-content-wrapper]")
+        target?.closest(MENU)
       ) {
         return;
       }
@@ -141,7 +147,7 @@ export function InlineAsk() {
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("mousedown", onDown, true);
     };
-  }, [phase, pickerOpen]);
+  }, [phase]);
 
   if (!phase || !place) return null;
 
@@ -160,6 +166,7 @@ export function InlineAsk() {
         {phase === "prompt" ? (
           <>
             <input
+              ref={input}
               autoFocus
               aria-label="Ask about the selection"
               placeholder="Ask about the selection"
@@ -181,6 +188,7 @@ export function InlineAsk() {
                 open={pickerOpen}
                 onOpenChange={setPickerOpen}
                 onPicked={() => void reload()}
+                onDone={() => input.current?.focus()}
               />
             ) : null}
             <Button

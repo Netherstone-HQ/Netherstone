@@ -1,4 +1,5 @@
 use rusqlite::{Connection, OptionalExtension};
+use std::path::Path;
 
 /// SQL schema for the Netherstone knowledge base index.
 ///
@@ -110,13 +111,15 @@ CREATE INDEX IF NOT EXISTS idx_attachments_sync_status ON attachments(sync_statu
 CREATE INDEX IF NOT EXISTS idx_attachments_ref_count ON attachments(ref_count);
 CREATE INDEX IF NOT EXISTS idx_attachments_gc_candidate_at ON attachments(gc_candidate_at);
 
+-- `file_path` is the shard's path in the vault, with `/` (see
+-- `attachments::shard_key`).
 CREATE TABLE IF NOT EXISTS attachment_references (
     file_path TEXT NOT NULL,
     vault_path TEXT NOT NULL,
     asset_path TEXT NOT NULL,
     reference_kind TEXT NOT NULL CHECK(reference_kind IN ('image', 'file', 'audio', 'video')),
     detected_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    PRIMARY KEY (file_path, asset_path),
+    PRIMARY KEY (vault_path, file_path, asset_path),
     FOREIGN KEY (vault_path, asset_path) REFERENCES attachments(vault_path, asset_path) ON DELETE CASCADE
 );
 
@@ -274,6 +277,76 @@ fn drop_attachment_tables_without_vault(conn: &Connection) -> Result<(), rusqlit
     Ok(())
 }
 
+/// The primary key reference rows have had since they name each shard by
+/// its path in the vault.
+const REFERENCES_KEY: &str = "PRIMARY KEY (vault_path, file_path, asset_path)";
+
+/// The reference rows from before they named shards by their path in the
+/// vault, set aside under this name until they're moved over.
+const OLD_REFERENCES: &str = "attachment_references_full_paths";
+
+/// Sets aside reference rows that name shards by their full path, as each
+/// caller spelled it, so the schema can make the new table.
+fn set_aside_full_path_references(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let sql: Option<String> = tx
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attachment_references'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if sql.is_some_and(|sql| !sql.contains(REFERENCES_KEY)) && !table_exists(&tx, OLD_REFERENCES)? {
+        tx.execute_batch(&format!(
+            "ALTER TABLE attachment_references RENAME TO {OLD_REFERENCES};
+             DROP INDEX IF EXISTS idx_attachment_references_file_path;
+             DROP INDEX IF EXISTS idx_attachment_references_asset_path;"
+        ))?;
+    }
+    tx.commit()
+}
+
+/// Moves the set-aside rows into the new table, each shard named by its
+/// path in the vault. Two spellings of one shard become one row, and the
+/// files they link to are counted again.
+fn move_full_path_references(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    if !table_exists(&tx, OLD_REFERENCES)? {
+        return Ok(());
+    }
+    {
+        let mut read = tx.prepare(&format!(
+            "SELECT file_path, vault_path, asset_path, reference_kind, detected_at FROM {OLD_REFERENCES}"
+        ))?;
+        let mut write = tx.prepare(
+            "INSERT OR IGNORE INTO attachment_references (file_path, vault_path, asset_path, reference_kind, detected_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )?;
+        let rows = read.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?;
+        for row in rows {
+            let (file_path, vault, asset_path, kind, detected_at) = row?;
+            let key = super::attachments::shard_key(Path::new(&vault), &file_path);
+            write.execute(rusqlite::params![key, vault, asset_path, kind, detected_at])?;
+        }
+    }
+    tx.execute_batch(&format!(
+        "DROP TABLE {OLD_REFERENCES};
+         UPDATE attachments SET ref_count = (
+             SELECT COUNT(*) FROM attachment_references r
+             WHERE r.vault_path = attachments.vault_path AND r.asset_path = attachments.asset_path
+         );"
+    ))?;
+    tx.commit()
+}
+
 /// Drops the search index from before files named their vault. It held
 /// every vault's files with nothing to tell them apart, and only mirrors the
 /// shards on disk, so indexing each vault when it opens fills it again.
@@ -326,8 +399,10 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     drop_attachment_tables_without_vault(conn)?;
     drop_index_tables_without_vault(conn)?;
     drop_old_search(conn)?;
+    set_aside_full_path_references(conn)?;
     let fill_drawing_embeds = !table_exists(conn, "drawing_embeds")?;
     conn.execute_batch(SCHEMA)?;
+    move_full_path_references(conn)?;
     if !column_exists(conn, "vaults", "drive")? {
         conn.execute_batch("ALTER TABLE vaults ADD COLUMN drive INTEGER")?;
     }
@@ -417,6 +492,55 @@ mod tests {
             .query_row("SELECT last_modified FROM files", [], |row| row.get(0))
             .unwrap();
         assert_eq!(modified, 0);
+    }
+
+    #[test]
+    fn full_path_references_become_one_row_per_shard() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        // The table as releases before one path form made it.
+        conn.execute_batch(
+            "DROP TABLE attachment_references;
+             CREATE TABLE attachment_references (
+                 file_path TEXT NOT NULL,
+                 vault_path TEXT NOT NULL,
+                 asset_path TEXT NOT NULL,
+                 reference_kind TEXT NOT NULL,
+                 detected_at INTEGER NOT NULL,
+                 PRIMARY KEY (file_path, asset_path)
+             );
+             INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, sync_status, ref_count)
+             VALUES ('/v', '_attachments/a.png', 'h', 'a.png', 'png', 'image/png', 1, 'syncable', 3);
+             INSERT INTO attachment_references VALUES ('/v/Folder/Media.md', '/v', '_attachments/a.png', 'image', 1);
+             INSERT INTO attachment_references VALUES ('/v/./Folder//Media.md', '/v', '_attachments/a.png', 'image', 2);
+             INSERT INTO attachment_references VALUES ('/v/Health.md', '/v', '_attachments/a.png', 'image', 3);",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT file_path FROM attachment_references ORDER BY file_path")
+            .unwrap();
+        let keys: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(keys, ["Folder/Media.md", "Health.md"]);
+        let count: i64 = conn
+            .query_row("SELECT ref_count FROM attachments", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
+        assert!(!table_exists(&conn, OLD_REFERENCES).unwrap());
+        let indexes: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND tbl_name = 'attachment_references' AND name LIKE 'idx_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(indexes, 2);
     }
 
     #[test]

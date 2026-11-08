@@ -15,7 +15,7 @@ use super::store::{
     find_identical_attachment, register_untracked_attachments, scan_attachment_files,
 };
 use crate::db::attachments::{
-    refresh_attachment_counts, remove_references_for_markdown_file, vault_key,
+    refresh_attachment_counts, remove_references_for_key, shard_key, vault_key,
 };
 
 /// An attachment that shards in the vault link to but is not on disk.
@@ -149,7 +149,10 @@ pub fn reconcile_vault_attachments(
         .unchecked_transaction()
         .map_err(|e| format!("Failed to start attachment reconciliation: {}", e))?;
     let mut report = AttachmentReport::default();
-    let shard_paths: HashSet<&str> = markdown_paths.iter().map(String::as_str).collect();
+    let shard_keys: HashSet<String> = markdown_paths
+        .iter()
+        .map(|path| shard_key(vault_path, path))
+        .collect();
 
     // Shards deleted or moved outside the app.
     let vault = vault_key(vault_path);
@@ -162,9 +165,9 @@ pub fn reconcile_vault_attachments(
             .map_err(|e| format!("Failed to query attachment references: {}", e))?;
         rows.filter_map(Result::ok).collect()
     };
-    for file_path in referencing_paths {
-        if !shard_paths.contains(file_path.as_str()) {
-            remove_references_for_markdown_file(&tx, &file_path)?;
+    for key in referencing_paths {
+        if !shard_keys.contains(&key) {
+            remove_references_for_key(&tx, &vault, &key)?;
             report.removed_shard_count += 1;
         }
     }

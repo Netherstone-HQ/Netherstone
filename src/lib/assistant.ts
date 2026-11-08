@@ -11,6 +11,7 @@ import {
 } from "@/lib/commands/assistant";
 import { isSamePath, toVaultRelativePath } from "@/lib/drawing-files";
 import { shownRecentFiles } from "@/lib/recent-files";
+import { TextPacer } from "@/lib/text-pacer";
 import {
   type ChatView,
   type Ending,
@@ -36,15 +37,31 @@ interface Run {
   place: Place;
   /** Stop was pressed before the chat's id came. */
   stopAsked: boolean;
+  /** Shows the answer's text at a steady pace. */
+  pacer: TextPacer;
 }
 
 /** The answer each place follows, so only the one shown is. */
 const runs: Record<Place, Run | null> = { panel: null, search: null };
 
 function follow(place: Place): Run {
-  const run = { place, stopAsked: false };
+  const run: Run = {
+    place,
+    stopAsked: false,
+    pacer: new TextPacer((text) => showText(run, text)),
+  };
   runs[place] = run;
   return run;
+}
+
+/** Adds `text` to the answer `run` shows, if it's still followed. */
+function showText(run: Run, text: string) {
+  if (!isFollowed(run)) return;
+  const { answering } = viewOf(run.place);
+  if (!answering) return;
+  setView(run.place, {
+    answering: { ...answering, text: answering.text + text, tool: null, retrying: null },
+  });
 }
 
 function isFollowed(run: Run) {
@@ -126,7 +143,8 @@ export async function openChat(id: string) {
   });
 }
 
-function onEvent(event: ChatEvent, text: string, place: Place): Ending | null {
+function onEvent(event: ChatEvent, text: string, run: Run): Ending | null {
+  const { place } = run;
   const { answering, chat } = viewOf(place);
   if (!answering) return null;
   switch (event.type) {
@@ -137,14 +155,7 @@ function onEvent(event: ChatEvent, text: string, place: Place): Ending | null {
       });
       return null;
     case "text":
-      setView(place, {
-        answering: {
-          ...answering,
-          text: answering.text + event.text,
-          tool: null,
-          retrying: null,
-        },
-      });
+      run.pacer.push(event.text);
       return null;
     case "reasoning":
       setView(place, {
@@ -156,6 +167,8 @@ function onEvent(event: ChatEvent, text: string, place: Place): Ending | null {
       });
       return null;
     case "tool":
+      // Text from before the tool shows first.
+      run.pacer.flush();
       setView(place, {
         answering: {
           ...answering,
@@ -171,8 +184,10 @@ function onEvent(event: ChatEvent, text: string, place: Place): Ending | null {
     case "stepLimit":
       return { kind: "stepLimit" };
     case "failed":
+      run.pacer.flush();
       return { kind: "error", error: event.error.kind };
     case "stopped":
+      run.pacer.flush();
       return { kind: "stopped" };
     case "retrying":
       setView(place, { answering: { ...answering, retrying: event.error.kind } });
@@ -191,7 +206,7 @@ function listen(run: Run, text: string, onEnding: (ending: Ending) => void) {
   return (event: ChatEvent) => {
     if (event.type === "chat" && run.stopAsked) void stopChat(event.id);
     if (!isFollowed(run)) return;
-    const ending = onEvent(event, text, run.place);
+    const ending = onEvent(event, text, run);
     if (ending) onEnding(ending);
   };
 }
@@ -241,6 +256,8 @@ export async function sendMessage(
       recentPaths(vault),
       listen(run, text, (end) => (ending = end)),
     );
+    // The answer finishes showing at its pace before the saved chat replaces it.
+    await run.pacer.whenShown();
     if (!isFollowed(run)) return;
     const saved = await getChat(id);
     if (!isFollowed(run)) return;
@@ -258,6 +275,7 @@ export async function sendMessage(
     const answered = saved.messages.filter((m) => m.role === "assistant" && m.text);
     if (ending === null && answered.length === 1) void retitle(id);
   } catch (error) {
+    run.pacer.flush();
     if (!isFollowed(run)) return;
     // Nothing was saved: the message goes back to the box.
     const now = viewOf(run.place);
@@ -296,6 +314,7 @@ export async function retryAnswer() {
       recentPaths(vault),
       listen(run, "", (end) => (ending = end)),
     );
+    await run.pacer.whenShown();
     if (!isFollowed(run)) return;
     const view = await getChat(chat.id);
     if (!isFollowed(run)) return;
@@ -310,6 +329,7 @@ export async function retryAnswer() {
     const answered = view.messages.filter((m) => m.role === "assistant" && m.text);
     if (ending === null && answered.length === 1) void retitle(chat.id);
   } catch (error) {
+    run.pacer.flush();
     if (!isFollowed(run)) return;
     store.setState({
       answering: null,
@@ -363,6 +383,8 @@ async function retitle(id: string) {
 export function stopAnswer(place: Place = "panel") {
   const chat = viewOf(place).answering?.chat;
   const run = runs[place];
+  // What's waiting shows at once.
+  run?.pacer.flush();
   if (chat) void stopChat(chat);
   else if (run && viewOf(place).answering) run.stopAsked = true;
 }

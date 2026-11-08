@@ -13,7 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { AssistantProvider, ModelChoice } from "@/lib/commands";
+import type { AssistantProvider, ModelChoice } from "@/lib/commands/assistant";
 
 export function ModelPicker({
   providers,

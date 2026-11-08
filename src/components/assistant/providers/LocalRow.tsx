@@ -16,7 +16,7 @@ import {
   type ProviderError,
   findLocalServers,
   saveLocalServer,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import {
   ErrorLine,
   ProviderRow,

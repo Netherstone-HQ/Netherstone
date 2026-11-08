@@ -10,7 +10,7 @@ import {
   getAssistantStatus,
   removeAssistantProvider,
   setAssistantModel,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 
 export function showError(error: unknown) {
   toast.error(error instanceof Error ? error.message : String(error));

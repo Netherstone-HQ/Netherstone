@@ -1,7 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import links from "@/data/links.json";
-import type { AssistantStatus } from "@/lib/commands";
+import type { AssistantStatus } from "@/lib/commands/assistant";
 import { CustomRow } from "./CustomRow";
 import { KeyRow } from "./KeyRow";
 import { LocalRow } from "./LocalRow";

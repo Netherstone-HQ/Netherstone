@@ -11,7 +11,7 @@ import {
   type AssistantProvider,
   type ProviderError,
   saveAssistantKey,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import {
   ErrorLine,
   ProviderRow,

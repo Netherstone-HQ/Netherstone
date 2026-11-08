@@ -4,7 +4,7 @@ import { LoaderCircleIcon } from "lucide-react";
 import type { Models } from "@/components/assistant/models";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import type { KeyStorage, ProviderError } from "@/lib/commands";
+import type { KeyStorage, ProviderError } from "@/lib/commands/assistant";
 
 export function hostOf(address: string): string {
   return address.replace(/^https?:\/\//, "").replace(/\/.*$/, "");

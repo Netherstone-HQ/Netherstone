@@ -18,7 +18,7 @@ import {
   type AssistantProvider,
   type ProviderError,
   saveCustomProvider,
-} from "@/lib/commands";
+} from "@/lib/commands/assistant";
 import { cn } from "@/lib/utils";
 import {
   ErrorLine,

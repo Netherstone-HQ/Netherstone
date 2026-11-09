@@ -153,6 +153,29 @@ function editorScroller(page: Page) {
   });
 }
 
+/**
+ * The innermost editor chunk at the top of the scroller: its first line, and
+ * how far its top sits from the scroller's. The browser shifts scrollTop to
+ * keep what's shown in place as chunks above get their real heights, so
+ * this, not scrollTop, is what must not move. A chunk is placed even before
+ * the browser draws its contents, which a paragraph inside it isn't.
+ */
+function topChunk(scroller: Awaited<ReturnType<typeof editorScroller>>) {
+  return scroller.evaluate((element: Element) => {
+    const { top } = element.getBoundingClientRect();
+    const atTop = Array.from(element.querySelectorAll("[data-slate-chunk]")).filter((chunk) => {
+      const box = chunk.getBoundingClientRect();
+      return box.top <= top && box.bottom > top;
+    });
+    // Chunks nest, and an inner one comes after its parent.
+    const chunk = atTop.at(-1);
+    return {
+      text: chunk?.querySelector("[data-slate-node='element']")?.textContent,
+      offset: chunk && chunk.getBoundingClientRect().top - top,
+    };
+  });
+}
+
 const PARAGRAPHS = 3000;
 
 function longShard(last: string) {
@@ -183,7 +206,8 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
   await scroller.evaluate((element: Element) => {
     element.scrollTop = 5000;
   });
-  const scrollTop = await scroller.evaluate((element: Element) => element.scrollTop);
+  const shown = await topChunk(scroller);
+  expect(shown.text).toMatch(/^Paragraph \d+ /);
 
   const reloadStarted = Date.now();
   await changeOutside(page, "Long.md", longShard("The end, from elsewhere."));
@@ -191,7 +215,10 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
   const reloadMs = Date.now() - reloadStarted;
 
   console.log(`[outside-changes] open ${openMs} ms, outside change ${reloadMs} ms`);
-  expect(await scroller.evaluate((element: Element) => element.scrollTop)).toBe(scrollTop);
+  const after = await topChunk(scroller);
+  expect(after.text).toBe(shown.text);
+  // Within a pixel: the browser lays out and scrolls in fractions of one.
+  expect(Math.abs(after.offset! - shown.offset!)).toBeLessThan(1);
   expect(reloadMs).toBeLessThan(openMs);
   expect(await savesFor(page, "Long.md")).toEqual([]);
 });

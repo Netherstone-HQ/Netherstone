@@ -234,8 +234,8 @@ async function convertMarkdown(source: string, context: ImportContext): Promise<
   if (missingLinks > 0) {
     context.warn(
       missingLinks === 1
-        ? "1 link points to a note that wasn't imported; it's plain text now."
-        : `${missingLinks} links point to notes that weren't imported; they're plain text now.`,
+        ? "1 link points to a shard that wasn't imported; it's plain text now."
+        : `${missingLinks} links point to shards that weren't imported; they're plain text now.`,
     );
   }
 

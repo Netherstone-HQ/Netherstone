@@ -83,7 +83,7 @@ export function MentionElement(
           if (!path) return;
 
           void openEditorFile(path).catch((error) => {
-            console.error('Failed to open mentioned note:', path, error);
+            console.error('Failed to open mentioned shard:', path, error);
           });
         },
       }}

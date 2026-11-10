@@ -303,7 +303,7 @@ function deserializeMarkdownBody(editor: SlateEditor, markdown: string) {
   if (!mdxError) return stripDeviceMediaProps(unmask(value));
 
   console.warn(
-    "[Netherstone] MDX parse failed; loading the note as plain markdown.",
+    "[Netherstone] MDX parse failed; loading the shard as plain markdown.",
     mdxError,
   );
 

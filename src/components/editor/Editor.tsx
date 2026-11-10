@@ -122,7 +122,7 @@ class EditorErrorBoundary extends Component<
       <div className="mx-auto max-w-xl px-8 py-16 text-ui">
         <p className="font-medium">The editor ran into an error.</p>
         <p className="mt-1 text-muted-foreground">
-          The note on disk is unaffected. Reloading it restores the last saved
+          The shard on disk is unaffected. Reloading it restores the last saved
           version.
         </p>
         <pre className="mt-4 overflow-auto rounded-md bg-muted p-3 text-ui-sm whitespace-pre-wrap">
@@ -135,13 +135,13 @@ class EditorErrorBoundary extends Component<
             // nothing left to save before reopening.
             useEditorStore.getState().setIsDirty(false);
             void openEditorFile(this.props.filePath).catch((reloadError) => {
-              console.error("Failed to reload note:", reloadError);
+              console.error("Failed to reload shard:", reloadError);
             });
           }}
           size="sm"
           variant="outline"
         >
-          Reload note
+          Reload shard
         </Button>
       </div>
     );

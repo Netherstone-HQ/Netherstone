@@ -46,11 +46,12 @@ it("shows the error in place of the editor and reloads the note from disk", asyn
 
   expect(await screen.findByText("The editor ran into an error.")).toBeTruthy();
   expect(screen.getByText("Cannot read properties of undefined")).toBeTruthy();
+  expect(screen.getByText(/The shard on disk is unaffected/)).toBeTruthy();
 
   // The crashed editor's edits are gone; reloading must not try to save them.
   act(() => useEditorStore.getState().setIsDirty(true));
   editorState.crash = false;
-  fireEvent.click(screen.getByRole("button", { name: "Reload note" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reload shard" }));
 
   expect(await screen.findByText("Saved on disk")).toBeTruthy();
   expect(openMarkdownFile).toHaveBeenCalledWith(NOTE_PATH);

@@ -250,6 +250,7 @@ pub fn run() {
             shards::drawings::create_drawing_file,
             shards::paths::create_folder,
             attachments::commands::reconcile_attachments,
+            attachments::commands::remove_unused_drawing_pictures,
             attachments::commands::list_attachments,
             attachments::commands::gallery_thumbnail,
             attachments::commands::describe_missing_attachment,

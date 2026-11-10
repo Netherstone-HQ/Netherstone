@@ -82,3 +82,14 @@ export async function staleDrawingPictures(
   assertTauri();
   return invoke<string[]>("stale_drawing_pictures", { vaultPath, drawings });
 }
+
+/**
+ * Moves the drawing pictures no shard uses any more to the Trash, such as
+ * the ones a new export just replaced. Returns their paths in the vault.
+ */
+export async function removeUnusedDrawingPictures(
+  vaultPath: string,
+): Promise<string[]> {
+  assertTauri();
+  return invoke<string[]>("remove_unused_drawing_pictures", { vaultPath });
+}

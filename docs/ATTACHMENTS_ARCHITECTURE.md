@@ -10,7 +10,9 @@ How Netherstone stores the images, files, audio and video that shards link to.
   sync.
 - **Deletes need the user's OK.** Unused files are removed only
   after a grace period, when the user confirms, and they go to the system
-  Trash.
+  Trash. Drawing pictures are the exception: the app made them and makes
+  them again when they're missing, so they go to the Trash as soon as no
+  shard uses them.
 
 ## Storage
 
@@ -27,6 +29,16 @@ How Netherstone stores the images, files, audio and video that shards link to.
   is exported as two PNG attachments, light (`src`) and dark
   (`data-dark-src`), and refreshed when the drawing changes. Dark themes show
   the dark one; other apps show `src`.
+- Every picture a shard shows that way is listed in `drawing_pictures` when
+  the shard is saved or checked. Once no shard uses one, such as the pair a
+  new export replaced or the pair of a deleted drawing, it goes to the Trash
+  (`attachments/drawing_pictures.rs`). That's checked after a new export
+  replaces pictures, after any delete, and when the vault is checked. The
+  index picks the candidates, so nothing is read when there are none; each
+  is then looked for in every shard. One a shard still names, even outside
+  a link, is left to the usual cleanup. Just before removing, under
+  `writes.lock`, the index and any shard changed since it was read are
+  checked again.
 
 ## Lifecycle
 
@@ -62,7 +74,8 @@ that used it.
 The Gallery (`src/components/gallery/`) shows every file in `_attachments/`,
 newest added first, with the shards that use it. `list_attachments`
 (`src-tauri/src/db/gallery.rs`) reads the folder and this vault's
-references. A drawing export and its dark twin are one file. The watcher
+references. A drawing export and its dark twin are one file, and drawing
+pictures no shard uses aren't shown. The watcher
 reports files in `_attachments/`, so the Gallery follows changes made
 outside the app; the file tree and index ignore them.
 

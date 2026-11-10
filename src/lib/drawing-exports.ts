@@ -9,6 +9,7 @@ import { persistAttachmentBytes } from "@/lib/commands/attachments";
 import {
   findShardsContaining,
   readDrawingFile,
+  removeUnusedDrawingPictures,
   staleDrawingPictures,
 } from "@/lib/commands/drawings";
 import {
@@ -166,6 +167,18 @@ export function getDrawingAltText(drawingPath: string) {
   return getVaultFileDisplayName(getFileName(drawingPath));
 }
 
+/**
+ * Moves the pictures a new export replaced to the Trash, once no shard
+ * shows them. A failure only leaves them for the next check.
+ */
+async function removeReplacedPictures(vaultPath: string) {
+  try {
+    await removeUnusedDrawingPictures(vaultPath);
+  } catch (error) {
+    console.error("[Netherstone] Failed to remove replaced pictures:", error);
+  }
+}
+
 function findLinkingShards(vaultPath: string, drawingRef: string) {
   return findShardsContaining(vaultPath, getDrawingLinkNeedles(drawingRef));
 }
@@ -186,9 +199,11 @@ export async function refreshLinkedDrawingImages(
 
   const buildTag = await exportDrawingImages(scene, drawingPath, vaultPath);
 
-  return rewriteShards(shardPaths, (markdown) =>
+  const changed = await rewriteShards(shardPaths, (markdown) =>
     replaceLinkedDrawingImages(markdown, drawingRef, buildTag),
   );
+  if (changed > 0) await removeReplacedPictures(vaultPath);
+  return changed;
 }
 
 let fillChain = Promise.resolve();
@@ -253,7 +268,7 @@ async function fillStalePictures(
   }
   if (builders.size === 0) return;
 
-  await rewriteShards([shardPath], (markdown) => {
+  const changed = await rewriteShards([shardPath], (markdown) => {
     let next: string | null = null;
     for (const [drawingRef, buildTag] of builders) {
       next =
@@ -262,6 +277,7 @@ async function fillStalePictures(
     }
     return next;
   });
+  if (changed > 0) await removeReplacedPictures(vaultPath);
 }
 
 /**
@@ -289,6 +305,7 @@ export async function addDrawingToShard(
   );
   if (replaced !== null) {
     await saveMarkdownFile(shardPath, replaced);
+    await removeReplacedPictures(vaultPath);
   } else {
     await appendMarkdownToFile(shardPath, buildTag(null));
   }

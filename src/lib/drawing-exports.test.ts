@@ -22,6 +22,7 @@ vi.mock("@/lib/open-editor-file", () => ({ openEditorFile: vi.fn() }));
 vi.mock("@/lib/commands/drawings", () => ({
   findShardsContaining: vi.fn(),
   readDrawingFile: async (path: string) => files.get(path) ?? "",
+  removeUnusedDrawingPictures: vi.fn(),
   staleDrawingPictures: vi.fn(),
 }));
 vi.mock("@/lib/commands/attachments", () => ({
@@ -41,7 +42,8 @@ vi.mock("@/lib/commands/shards", () => ({
 
 const { addDrawingToShard, fillDrawingPictures } =
   await import("@/lib/drawing-exports");
-const { staleDrawingPictures } = await import("@/lib/commands/drawings");
+const { removeUnusedDrawingPictures, staleDrawingPictures } =
+  await import("@/lib/commands/drawings");
 const { openEditorFile } = await import("@/lib/open-editor-file");
 const { useEditorStore } = await import("@/store/editor");
 
@@ -64,6 +66,7 @@ describe("addDrawingToShard", () => {
     exportToBlob.mockClear();
     exportToSvg.mockClear();
     vi.mocked(openEditorFile).mockClear();
+    vi.mocked(removeUnusedDrawingPictures).mockClear();
   });
 
   const darkMode = ([options]: unknown[]) =>
@@ -81,6 +84,7 @@ describe("addDrawingToShard", () => {
     expect(files.get(SHARD)).toBe(
       '# Ideas\n\n<img src="_attachments/Plan.png" data-dark-src="_attachments/Plan-dark.png" alt="Plan" width="480" data-excalidraw="Sketches/Plan.excalidraw" />\n',
     );
+    expect(removeUnusedDrawingPictures).not.toHaveBeenCalled();
   });
 
   it("exports the dark picture through SVG where canvas has no filters", async () => {
@@ -111,6 +115,8 @@ describe("addDrawingToShard", () => {
       '<img src="_attachments/Plan.png" data-dark-src="_attachments/Plan-dark.png" alt="Plan" width="300" data-excalidraw="Sketches/Plan.excalidraw" />',
     );
     expect(openEditorFile).toHaveBeenCalledWith(SHARD);
+    // The replaced picture goes once nothing shows it.
+    expect(removeUnusedDrawingPictures).toHaveBeenCalledWith(VAULT);
   });
 });
 

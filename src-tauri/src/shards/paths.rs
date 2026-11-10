@@ -416,6 +416,14 @@ pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
         }
     }
 
+    // A deleted drawing's pictures, or those only the deleted shards showed.
+    if let Err(error) = crate::attachments::commands::remove_unused_drawing_pictures_in(vault) {
+        eprintln!(
+            "[Netherstone] Failed to remove unused drawing pictures after deleting {}: {}",
+            target_path, error
+        );
+    }
+
     Ok(())
 }
 

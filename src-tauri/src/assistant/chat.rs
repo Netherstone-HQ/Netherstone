@@ -671,6 +671,15 @@ fn binaries(files: &[File]) -> Vec<ContentPart> {
         .collect()
 }
 
+/// What goes before the shards with a message, so the model never takes
+/// them for something the user pasted or sent.
+const ATTACHED_SHARDS: &str = "\n\nThe app attached these shards:";
+/// What goes before their images and PDFs.
+const ATTACHED_FILES: &str = "The app attached the images and PDFs in these shards:";
+/// What goes before the images and PDFs of the shards a tool read, which
+/// follow the tool's result as a message of the user's.
+const READ_FILES: &str = "The app attached the images and PDFs of the shards just read:";
+
 fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatRequest {
     let messages = request
         .messages
@@ -683,6 +692,9 @@ fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatReques
                     files,
                 } => {
                     let mut full = text.clone();
+                    if !shards.is_empty() {
+                        full.push_str(ATTACHED_SHARDS);
+                    }
                     for shard in shards {
                         full.push_str(&format!(
                             "\n\n<shard path=\"{}\">\n{}\n</shard>",
@@ -693,7 +705,10 @@ fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatReques
                     if sent.is_empty() {
                         return vec![ChatMessage::user(full)];
                     }
-                    let mut parts = vec![ContentPart::Text(full)];
+                    let mut parts = vec![
+                        ContentPart::Text(full),
+                        ContentPart::Text(ATTACHED_FILES.to_string()),
+                    ];
                     parts.extend(sent);
                     vec![ChatMessage::user(MessageContent::from_parts(parts))]
                 }
@@ -760,9 +775,7 @@ fn to_genai(request: &Request<'_>, family: &str, iden: &ModelIden) -> ChatReques
                     // follow it as the user's.
                     let sent = binaries(files);
                     if !sent.is_empty() {
-                        let mut parts = vec![ContentPart::Text(
-                            "The images and PDFs of the shards just read:".to_string(),
-                        )];
+                        let mut parts = vec![ContentPart::Text(READ_FILES.to_string())];
                         parts.extend(sent);
                         messages.push(ChatMessage::user(MessageContent::from_parts(parts)));
                     }

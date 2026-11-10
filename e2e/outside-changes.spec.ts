@@ -153,6 +153,45 @@ function editorScroller(page: Page) {
   });
 }
 
+/**
+ * The paragraph at the top of the scroller, and how far its top sits from
+ * the scroller's. The browser shifts scrollTop to keep what's shown in place
+ * as chunks above get their real heights, so this, not scrollTop, is what
+ * must not move. It's read once the browser has laid out the chunk there:
+ * until then, that chunk has its placeholder height, and its text none.
+ */
+function topParagraph(scroller: Awaited<ReturnType<typeof editorScroller>>) {
+  return scroller.evaluate(
+    (element: Element) =>
+      new Promise<{ text: string | null; offset: number }>((resolve) => {
+        const read = () => {
+          const { top } = element.getBoundingClientRect();
+          const atTop = (node: Element) => {
+            const box = node.getBoundingClientRect();
+            return box.top <= top && box.bottom > top;
+          };
+          // Chunks nest, and an inner one comes after its parent.
+          const chunk = Array.from(element.querySelectorAll("[data-slate-chunk]"))
+            .filter(atTop)
+            .at(-1);
+          const blocks = Array.from(chunk?.querySelectorAll("[data-slate-node='element']") ?? []);
+          if (!blocks[0]) {
+            resolve({ text: null, offset: NaN });
+            return;
+          }
+          if (!blocks[0].checkVisibility({ contentVisibilityAuto: true })) {
+            requestAnimationFrame(read);
+            return;
+          }
+          // At the top line, or the next one down when the line is between two.
+          const shown = blocks.find((block) => block.getBoundingClientRect().bottom > top)!;
+          resolve({ text: shown.textContent, offset: shown.getBoundingClientRect().top - top });
+        };
+        read();
+      }),
+  );
+}
+
 const PARAGRAPHS = 3000;
 
 function longShard(last: string) {
@@ -183,7 +222,8 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
   await scroller.evaluate((element: Element) => {
     element.scrollTop = 5000;
   });
-  const scrollTop = await scroller.evaluate((element: Element) => element.scrollTop);
+  const shown = await topParagraph(scroller);
+  expect(shown.text).toMatch(/^Paragraph \d+ /);
 
   const reloadStarted = Date.now();
   await changeOutside(page, "Long.md", longShard("The end, from elsewhere."));
@@ -191,7 +231,10 @@ test("an outside change to a long shard updates it in place", async ({ page }) =
   const reloadMs = Date.now() - reloadStarted;
 
   console.log(`[outside-changes] open ${openMs} ms, outside change ${reloadMs} ms`);
-  expect(await scroller.evaluate((element: Element) => element.scrollTop)).toBe(scrollTop);
+  const after = await topParagraph(scroller);
+  expect(after.text).toBe(shown.text);
+  // Within a pixel: the browser lays out and scrolls in fractions of one.
+  expect(Math.abs(after.offset - shown.offset)).toBeLessThan(1);
   expect(reloadMs).toBeLessThan(openMs);
   expect(await savesFor(page, "Long.md")).toEqual([]);
 });

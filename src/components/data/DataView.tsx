@@ -4,6 +4,7 @@ import { LeftSidebarToggle } from "@/components/PanelToggles";
 import { Separator } from "@/components/ui/separator";
 import {
   chartData,
+  columnNames,
   parseChartComment,
   type ChartData,
   type ChartSpec,
@@ -374,7 +375,7 @@ function useDrawnCharts() {
         const spec = parseChartComment(chart.comment);
         if (!spec) return [];
         const data = chartData(spec, {
-          columns: chart.columns,
+          columns: columnNames(chart.columns),
           rows: chart.rows,
         });
         return data.series.length > 0 ? [{ chart, spec, data }] : [];

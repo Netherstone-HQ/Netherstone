@@ -102,6 +102,17 @@ export function isTableNode(node: unknown): node is TElement {
   );
 }
 
+/**
+ * Headers the chart can name: an empty one is named by its place, like
+ * `Column 2`, and a repeated one gets its place added, like `Cost (3)`.
+ */
+export function columnNames(headers: string[]) {
+  const names = headers.map((header, index) => header || `Column ${index + 1}`);
+  return names.map((name, index) =>
+    names.indexOf(name) === index ? name : `${name} (${index + 1})`,
+  );
+}
+
 /** A table's text, cell by cell. Merged cells read as their first cell. */
 export function readTable(table: TElement): TableData {
   const rows = (table.children as TElement[]).map((row) =>
@@ -109,29 +120,51 @@ export function readTable(table: TElement): TableData {
       NodeApi.string(cell).trim(),
     ),
   );
-  const [columns = [], ...body] = rows;
-  return { columns, rows: body };
+  const [headers = [], ...body] = rows;
+  return { columns: columnNames(headers), rows: body };
+}
+
+/** Words before a number that leave it the same number, like `about 5`. */
+const ROUGHLY = String.raw`(?:about|around|approx\.?|approximately|roughly|nearly|almost|over|under|up to|at least|at most|~|≈|<|>|≤|≥)\s*`;
+const AMOUNT = String.raw`([+-]?)\s*[$€£¥₹]?\s*([\d\s,]*\.?\d+)`;
+const CELL_NUMBER = new RegExp(
+  String.raw`^(?:${ROUGHLY})?${AMOUNT}(?:\s*(?:[-–—]|to)\s*${AMOUNT})?\s*\D{0,8}$`,
+  "i",
+);
+/** Cells that say there's no number, drawn as a gap. */
+const NO_NUMBER = /^(?:[-–—]|n\/?a)$/i;
+
+function amount(sign: string, digits: string) {
+  return Number(sign + digits.replace(/[\s,]/g, ""));
 }
 
 /**
- * The number a cell holds, ignoring thousands separators, a currency sign
- * and a short unit after it like `%` or `km`. Null when it holds anything
+ * The number a cell holds, ignoring thousands separators, a currency sign,
+ * a word like `about` before it and a short unit after it like `%` or
+ * `tokens`. A range like `$3–$5` is its middle. Null when it holds anything
  * else, such as `Q1` or `Week 3`.
  */
 export function cellNumber(text: string): number | null {
-  const match = /^([+-]?)\s*[$€£¥₹]?\s*([\d\s,]*\.?\d+)\s*\D{0,8}$/.exec(
-    text.trim(),
-  );
+  const match = CELL_NUMBER.exec(text.trim());
   if (!match) return null;
-  const value = Number(match[1] + match[2].replace(/[\s,]/g, ""));
+  const low = amount(match[1], match[2]);
+  const value =
+    match[4] === undefined ? low : (low + amount(match[3], match[4])) / 2;
   return Number.isFinite(value) ? value : null;
+}
+
+/** Whether a cell holds a number, or says it has none. */
+function isEmptyCell(text: string | undefined) {
+  return !text || NO_NUMBER.test(text);
 }
 
 function isNumericColumn(data: TableData, index: number) {
   return (
     data.rows.length > 0 &&
-    data.rows.some((row) => row[index]) &&
-    data.rows.every((row) => !row[index] || cellNumber(row[index]) !== null)
+    data.rows.some((row) => !isEmptyCell(row[index])) &&
+    data.rows.every(
+      (row) => isEmptyCell(row[index]) || cellNumber(row[index]) !== null,
+    )
   );
 }
 
@@ -140,14 +173,20 @@ export function numericColumns(data: TableData) {
   return data.columns.filter((_, index) => isNumericColumn(data, index));
 }
 
-/** A default chart for a table: its first column against its first numbers. */
+/**
+ * A default chart for a table: its first column of words along the bottom,
+ * or its first column when they all hold numbers, against the numbers.
+ */
 export function defaultChartSpec(data: TableData): ChartSpec {
   const numbers = numericColumns(data);
-  const x = data.columns.find((name) => !numbers.includes(name)) ?? null;
+  const x =
+    data.columns.find((name) => !numbers.includes(name)) ??
+    data.columns[0] ??
+    null;
   return {
     kind: "bar",
     x,
-    y: numbers.filter((name) => name !== x).slice(0, 1),
+    y: numbers.filter((name) => name !== x).slice(0, MAX_SERIES),
     title: "",
   };
 }

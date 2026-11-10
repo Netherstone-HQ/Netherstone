@@ -3,8 +3,10 @@ import {
   type ErrorInfo,
   type MouseEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -45,24 +47,53 @@ type EditorSessions = {
   leaving: EditorSession[];
 };
 
-/** Whether Ctrl (⌘ on a Mac) is held, so links can show they'll open. */
-function useModKeyHeld() {
-  const [held, setHeld] = useState(false);
-
+/**
+ * Marks the link under the pointer while Ctrl (⌘ on a Mac) is held, so it
+ * shows it will open. Only that link changes: marking the whole editor
+ * restyled all of a long shard on every Ctrl press, as for a paste anywhere.
+ */
+function useModKeyLinks(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
-    const update = (event: KeyboardEvent) => setHeld(hasModKey(event));
-    const release = () => setHeld(false);
+    const root = ref.current;
+    if (!root) return;
+    let held = false;
+    let link: Element | null = null;
+    const show = () => {
+      // A link the editor has since replaced is let go.
+      if (link && !link.isConnected) link = null;
+      link?.toggleAttribute("data-mod-held", held);
+    };
+    const update = (event: KeyboardEvent) => {
+      held = hasModKey(event);
+      show();
+    };
+    const release = () => {
+      held = false;
+      show();
+    };
+    const point = (next: Element | null) => {
+      if (next !== link) link?.removeAttribute("data-mod-held");
+      link = next;
+      show();
+    };
+    const hover = (event: globalThis.MouseEvent) => {
+      held = hasModKey(event);
+      point(event.target instanceof Element ? event.target.closest(".editor-link") : null);
+    };
+    const leave = () => point(null);
+    root.addEventListener("mouseover", hover);
+    root.addEventListener("mouseleave", leave);
     window.addEventListener("keydown", update);
     window.addEventListener("keyup", update);
     window.addEventListener("blur", release);
     return () => {
+      root.removeEventListener("mouseover", hover);
+      root.removeEventListener("mouseleave", leave);
       window.removeEventListener("keydown", update);
       window.removeEventListener("keyup", update);
       window.removeEventListener("blur", release);
     };
-  }, []);
-
-  return held;
+  }, [ref]);
 }
 
 /**
@@ -147,7 +178,8 @@ export function Editor() {
     leaving: [],
   });
   const [, startSessionTransition] = useTransition();
-  const isModKeyHeld = useModKeyHeld();
+  const rootRef = useRef<HTMLDivElement>(null);
+  useModKeyLinks(rootRef);
 
   const showSession = useCallback((next: EditorSession | null) => {
     setSessions(({ displayed: previous, leaving: closed }) => ({
@@ -256,7 +288,7 @@ export function Editor() {
         "group/editor relative min-h-full",
         !currentFilePath && "flex flex-col",
       )}
-      data-mod-held={isModKeyHeld || undefined}
+      ref={rootRef}
       onClickCapture={handleEditorClick}
     >
       {/* A shard on its way (say, the last one, reopened at launch) gets the

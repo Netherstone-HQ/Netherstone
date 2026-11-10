@@ -4,8 +4,8 @@ import { create } from "zustand";
  * Where an inline Ask is: the prompt open, the answer on its way, or its
  * preview shown in the shard.
  *
- * Section 9 hook: when Kevin is the assistant, he plays Reading while the
- * phase is "working" and Done when it turns "preview".
+ * When the companion is the assistant, it plays Reading while the phase is
+ * "working" and Done when it turns "preview".
  */
 type InlineAskPhase = "prompt" | "working" | "preview";
 

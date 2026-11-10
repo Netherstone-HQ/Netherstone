@@ -52,9 +52,9 @@ describe("releaseNoteSubjects", () => {
   it("drops a reverted change along with its revert", () => {
     expect(
       releaseNoteSubjects([
-        'Revert "Add Kevin (#22)"',
+        'Revert "Add the companion (#22)"',
         "Fix sync (#23)",
-        "Add Kevin (#22)",
+        "Add the companion (#22)",
       ]),
     ).toEqual(["Fix sync (#23)"]);
   });

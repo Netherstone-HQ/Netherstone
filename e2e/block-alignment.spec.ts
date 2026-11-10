@@ -100,3 +100,34 @@ test("a block with no text of its own puts its handle on its label", async ({ pa
   await expect(handle).toBeVisible();
   expect(Math.abs((await middle(handle)) - (await middle(label)))).toBeLessThan(1.5);
 });
+
+test("a chart puts its handle on its title, not on its toolbar", async ({ page }) => {
+  const table = "| Week | km |\n| ---- | -- |\n| 1    | 12 |\n| 2    | 9  |";
+  await mockVault(page, {
+    files: { "Runs.md": `# Runs\n\n${table}\n\n<!-- netherstone chart: bar; x Week; y km -->\n\nAfter.\n` },
+    open: "Runs.md",
+  });
+  const title = editor(page).getByText("km by Week", { exact: true });
+  await expect(title).toBeVisible();
+
+  const target = block("km by Week", page);
+  await target.hover({ position: { x: 40, y: 40 } });
+  const handle = target.locator(".slate-blockToolbar button");
+  await expect(handle).toBeVisible();
+  expect(Math.abs((await middle(handle)) - (await middle(title)))).toBeLessThan(1.5);
+});
+
+test("a chart with nothing to draw puts its handle on its message", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Words.md": "# Words\n\n| Month | Note |\n| ----- | ---- |\n| July  | easy |\n\n<!-- netherstone chart: bar -->\n" },
+    open: "Words.md",
+  });
+  const message = editor(page).getByText("The table above needs a column of numbers to draw.");
+  await expect(message).toBeVisible();
+
+  const target = block("needs a column of numbers", page);
+  await target.hover({ position: { x: 40, y: 20 } });
+  const handle = target.locator(".slate-blockToolbar button");
+  await expect(handle).toBeVisible();
+  expect(Math.abs((await middle(handle)) - (await middle(message)))).toBeLessThan(1.5);
+});

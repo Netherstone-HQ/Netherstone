@@ -337,11 +337,16 @@ function isEditableText(node: Node) {
   );
 }
 
-/** A label drawn with a block that has no editable text, like a file's name. */
+/**
+ * A label drawn with a block that has no editable text, like a file's name.
+ * A toolbar floating over the block isn't one.
+ */
 function isLabelText(node: Node) {
   return (
     !isEditableText(node) &&
-    !node.parentElement?.closest("[data-slate-spacer], svg, canvas")
+    !node.parentElement?.closest(
+      '[data-slate-spacer], svg, canvas, [role="toolbar"]',
+    )
   );
 }
 

@@ -327,14 +327,14 @@ export function ChartBlock({
         </div>
       ) : null}
 
-      <div className="mb-2.5 flex items-baseline gap-2">
-        <span className="font-medium text-ui-sm">{title}</span>
-        {canDraw ? (
+      {canDraw ? (
+        <div className="mb-2.5 flex items-baseline gap-2">
+          <span className="font-medium text-ui-sm">{title}</span>
           <span className="text-muted-foreground text-ui-sm">
             from the table above
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {canDraw && data ? (
         <>

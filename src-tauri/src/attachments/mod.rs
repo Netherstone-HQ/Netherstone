@@ -3,6 +3,7 @@
 
 pub mod cleanup;
 pub mod commands;
+pub mod drawing_pictures;
 pub mod policy;
 pub mod references;
 pub mod report;

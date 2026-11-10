@@ -11,6 +11,7 @@ use std::path::Path;
 ///   its first appearance
 /// - `attachments`: Managed vault asset metadata for `_attachments` files
 /// - `attachment_references`: Saved markdown references to managed attachments
+/// - `drawing_pictures`: Attachments shards show as a drawing's picture
 /// - `ast_cache_index`: Path-to-content index for the content-addressed AST cache
 /// - `ast_cache_blobs`: Content-addressed AST payload store keyed by hash + version
 /// - `charts`: The charts drawn from tables in each file
@@ -127,6 +128,14 @@ CREATE INDEX IF NOT EXISTS idx_attachment_references_file_path
     ON attachment_references(file_path);
 CREATE INDEX IF NOT EXISTS idx_attachment_references_asset_path
     ON attachment_references(vault_path, asset_path);
+
+-- Attachments a shard shows as a drawing's picture. The app makes them, so
+-- they go as soon as no shard uses them (see `attachments::drawing_pictures`).
+CREATE TABLE IF NOT EXISTS drawing_pictures (
+    vault_path TEXT NOT NULL,
+    asset_path TEXT NOT NULL,
+    PRIMARY KEY (vault_path, asset_path)
+);
 
 -- ── AST Cache ───────────────────────────────────────────────────────────────
 -- The first path-keyed table was never written by a release.

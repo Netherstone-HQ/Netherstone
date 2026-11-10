@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use super::attachments::{shard_path_from_key, vault_key};
+use crate::attachments::drawing_pictures::drawing_pictures;
 use crate::attachments::policy::{
     ATTACHMENTS_DIR_NAME, AttachmentReferenceKind, extension_for_name, is_interrupted_write,
     path_from_asset_path, reference_kind_for_path,
@@ -122,9 +123,13 @@ pub fn list_vault_attachments(
         .filter_map(|(_, dark)| dark.as_deref())
         .collect();
 
+    // A drawing picture no shard uses is on its way to the Trash.
+    let pictures = drawing_pictures(conn, vault_path)?;
     let mut files = Vec::new();
     for (asset_path, size_bytes) in &disk_files {
-        if shown_with_light.contains(asset_path.as_str()) {
+        if shown_with_light.contains(asset_path.as_str())
+            || (pictures.contains(asset_path) && !shards_by_asset.contains_key(asset_path))
+        {
             continue;
         }
         let dark_asset_path = dark_twins

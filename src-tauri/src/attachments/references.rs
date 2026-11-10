@@ -284,6 +284,8 @@ pub fn sync_references_for_saved_markdown(
         .map_err(|e| format!("Failed to insert attachment reference: {}", e))?;
     }
 
+    super::drawing_pictures::record_drawing_pictures(conn, vault_path, content)?;
+
     let mut touched = previous;
     touched.extend(
         current_by_path

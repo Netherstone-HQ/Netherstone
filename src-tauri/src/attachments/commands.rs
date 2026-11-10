@@ -1,7 +1,7 @@
 //! Attachment commands: copying files in, the Gallery, cleanup, and files
 //! shards link to.
 
-use super::{cleanup, policy, report, store};
+use super::{cleanup, drawing_pictures, policy, report, store};
 use crate::vault_access::{self, open_vault_only};
 use crate::{asset_scope, copy_access, db, export, open_access, vault};
 use std::path::Path;
@@ -133,8 +133,37 @@ pub(crate) fn persist_attachment_bytes(
     Ok(attachment)
 }
 
+fn shard_paths(vault: &Path) -> Vec<String> {
+    let mut paths = Vec::new();
+    for node in &vault::scan_dir(vault) {
+        vault::collect_file_paths(node, &mut paths);
+    }
+    paths
+}
+
+/// Moves the drawing pictures no shard in `vault` uses to the Trash.
+pub(crate) fn remove_unused_drawing_pictures_in(vault: &Path) -> Result<Vec<String>, String> {
+    let conn = db::open_connection()?;
+    drawing_pictures::remove_unused_drawing_pictures(
+        &conn,
+        vault,
+        || shard_paths(vault),
+        crate::locks::vault_writes,
+        |paths| trash::delete_all(paths).map_err(|e| e.to_string()),
+    )
+}
+
+/// Moves the drawing pictures no shard uses any more to the Trash, such as
+/// the pictures a new export just replaced.
+#[tauri::command(async)]
+pub(crate) fn remove_unused_drawing_pictures(vault_path: String) -> Result<Vec<String>, String> {
+    open_vault_only(&vault_path)?;
+    remove_unused_drawing_pictures_in(Path::new(&vault_path))
+}
+
 /// Re-checks the vault's attachments against its shards and the attachment
 /// folder, repairs the database, and reports missing and unused files.
+/// Drawing pictures no shard uses go to the Trash first.
 #[tauri::command(async)]
 pub(crate) fn reconcile_attachments(
     vault_path: String,
@@ -145,13 +174,14 @@ pub(crate) fn reconcile_attachments(
         return Err(format!("Vault path is not a directory: {}", vault_path));
     }
 
-    let mut shard_paths = Vec::new();
-    for node in &vault::scan_dir(vault) {
-        vault::collect_file_paths(node, &mut shard_paths);
+    if let Err(error) = remove_unused_drawing_pictures_in(vault) {
+        eprintln!(
+            "[Netherstone] Failed to remove unused drawing pictures: {}",
+            error
+        );
     }
-
     let conn = db::open_connection()?;
-    report::reconcile_vault_attachments(&conn, vault, &shard_paths)
+    report::reconcile_vault_attachments(&conn, vault, &shard_paths(vault))
 }
 
 /// The open vault's attachments for the Gallery, newest added first.
@@ -203,17 +233,13 @@ pub(crate) fn clean_up_attachments(
         return Err(format!("Vault path is not a directory: {}", vault_path));
     }
 
-    let mut shard_paths = Vec::new();
-    for node in &vault::scan_dir(vault) {
-        vault::collect_file_paths(node, &mut shard_paths);
-    }
-
+    let shards = shard_paths(vault);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs() as i64;
     let conn = db::open_connection()?;
-    cleanup::clean_up_vault_attachments(&conn, vault, &shard_paths, &asset_paths, now, |path| {
+    cleanup::clean_up_vault_attachments(&conn, vault, &shards, &asset_paths, now, |path| {
         trash::delete(path).map_err(|e| e.to_string())
     })
 }

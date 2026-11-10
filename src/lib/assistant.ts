@@ -179,15 +179,23 @@ function onEvent(event: ChatEvent, text: string, run: Run): Ending | null {
         },
       });
       return null;
-    case "tool":
+    case "tool": {
+      // The step before a tool ends with it.
+      const step = { text: answering.text, reasoning: answering.reasoning };
+      const ended =
+        step.text || step.reasoning
+          ? { steps: [...answering.steps, step], text: "", reasoning: "" }
+          : {};
       setView(place, {
         answering: {
           ...answering,
+          ...ended,
           tool: { name: event.name, paths: event.paths },
           retrying: null,
         },
       });
       return null;
+    }
     case "done":
       return event.stop === "length" || event.stop === "filtered"
         ? { kind: "stop", stop: event.stop }
@@ -248,7 +256,7 @@ export async function sendMessage(
   const before = view.messages;
   setView(place, {
     messages: [...before, { seq: -1, role: "user", text, shards }],
-    answering: { chat: view.chat?.id ?? null, text: "", reasoning: "", tool: null, retrying: null },
+    answering: { chat: view.chat?.id ?? null, steps: [], text: "", reasoning: "", tool: null, retrying: null },
     ending: null,
   });
   if (place === "panel") {
@@ -310,7 +318,7 @@ export async function retryAnswer() {
   if (!chat || !vault || state.answering) return;
   const run = follow("panel");
   store.setState({
-    answering: { chat: chat.id, text: "", reasoning: "", tool: null, retrying: null },
+    answering: { chat: chat.id, steps: [], text: "", reasoning: "", tool: null, retrying: null },
     ending: null,
   });
   let ending: Ending | null = null;

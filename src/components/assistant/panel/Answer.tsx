@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { CheckIcon, ChevronDownIcon, CopyIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -80,8 +80,22 @@ function AddToShardButton({ text }: { text: string }) {
   );
 }
 
-function Thinking({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
+/**
+ * The thinking shown open now, by its text, so it stays open when an
+ * answer streaming in is saved and shown again.
+ */
+const openThinking = new Set<string>();
+
+export function Thinking({ text }: { text: string }) {
+  const [open, setOpen] = useState(() => openThinking.has(text));
+  // Kept as it grows, so it's found once the answer is saved.
+  useEffect(() => {
+    if (!open) return;
+    openThinking.add(text);
+    return () => {
+      openThinking.delete(text);
+    };
+  }, [open, text]);
   return (
     <div className="flex flex-col gap-1">
       <button
@@ -97,7 +111,8 @@ function Thinking({ text }: { text: string }) {
       </button>
       {open ? (
         <p className="whitespace-pre-wrap border-l-2 pl-3 text-muted-foreground text-ui-sm">
-          {text}
+          {/* Thinking often ends in blank lines. */}
+          {text.trim()}
         </p>
       ) : null}
     </div>
@@ -137,6 +152,7 @@ export const Answer = memo(function Answer({
   changes,
   memories,
   canAdd,
+  copy,
 }: {
   message: ShownMessage;
   /** The changes the answer proposed, under it. */
@@ -145,6 +161,11 @@ export const Answer = memo(function Answer({
   memories: ChatMemory[];
   /** Whether a shard is open to add the answer to. */
   canAdd: boolean;
+  /**
+   * The whole answer, on its last message with text, for its Copy row.
+   * Steps before it have none, so they sit close.
+   */
+  copy?: string;
 }) {
   const answer = useParsedAnswer(message.text);
   const cards = changes.length + memories.length;
@@ -167,12 +188,12 @@ export const Answer = memo(function Answer({
         <MemoryCard key={memory.id} memory={memory} />
       ))}
       <Sources cited={answer.cited} />
-      {message.text && cards === 0 ? (
+      {copy && cards === 0 ? (
         // Shown on the answer the pointer or focus is on, so they don't
         // stack up under every answer.
         <div className="-ml-1.5 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/answer:opacity-100">
-          <CopyButton text={message.text} />
-          {canAdd ? <AddToShardButton text={message.text} /> : null}
+          <CopyButton text={copy} />
+          {canAdd ? <AddToShardButton text={copy} /> : null}
         </div>
       ) : null}
     </div>

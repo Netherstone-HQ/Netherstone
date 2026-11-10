@@ -11,6 +11,12 @@ import type {
 interface Answering {
   /** Known once the first event comes. */
   chat: string | null;
+  /**
+   * The steps before the last tool, each saved as its own message: shown
+   * apart, as they will be once saved.
+   */
+  steps: { text: string; reasoning: string }[];
+  /** The step coming in now. */
   text: string;
   reasoning: string;
   /** The tool running now, if one is. */

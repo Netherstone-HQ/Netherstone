@@ -377,6 +377,10 @@ const InlineComboboxItem = ({
     <ComboboxItem
       className={cn(comboboxItemVariants(), className)}
       onClick={(event) => {
+        // The input holds the page's caret. Removed with it, the caret
+        // falls into the text before the input, and the editor can take
+        // that spot over its own before it gets focus back.
+        window.getSelection()?.removeAllRanges();
         removeInput(focusEditor);
         onClick?.(event);
       }}

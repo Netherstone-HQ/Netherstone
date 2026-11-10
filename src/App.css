@@ -459,10 +459,13 @@
     [data-slate-chunk] {
         contain-intrinsic-size: auto 5000px;
         /* `content-visibility` also clips painting to the chunk's box, which
-           hid the drag handles in the gutter left of each block. The box
-           reaches into the gutter; the blocks stay where they were. */
+           hid the drag handles in the gutter left of each block and a
+           selected block's ring on its right. The box reaches into both
+           gutters; the blocks stay where they were. */
         margin-left: -2rem;
         padding-left: 2rem;
+        margin-right: -1rem;
+        padding-right: 1rem;
     }
 }
 

@@ -85,12 +85,33 @@ fn uses(content: &str, linked: &HashSet<String>, asset_path: &str) -> bool {
         || content.contains(&name.replace(' ', "%20"))
 }
 
+/// When a shard was last changed and how long it is, to tell whether it
+/// changed since it was read.
+fn stamp(shard: &str) -> Option<(std::time::SystemTime, u64)> {
+    let metadata = std::fs::metadata(shard).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+/// Takes the candidates `shard` uses out of `candidates`.
+fn drop_used(shard: &str, candidates: &mut Vec<String>) {
+    let Ok(content) = std::fs::read_to_string(shard) else {
+        return;
+    };
+    let linked: HashSet<String> = parse_attachment_references(&content)
+        .into_iter()
+        .map(|reference| reference.asset_path)
+        .collect();
+    candidates.retain(|asset_path| !uses(&content, &linked, asset_path));
+}
+
 /// Moves the drawing pictures no shard uses to the Trash with `remove`, and
 /// returns them. The index picks the candidates, so no shard is read when
 /// there are none; each candidate is then looked for in every shard of
-/// `shard_paths`, so a link the index missed keeps its picture.
-/// Just before removing, the index is checked again under `hold`, which
-/// keeps saves out, so a link saved meanwhile keeps its picture too.
+/// `shard_paths`, so a link the index missed keeps its picture. A candidate
+/// a shard still names is left to the usual cleanup from then on, so it
+/// isn't looked for again on every check. Just before removing, under
+/// `hold`, which keeps saves out, the index and the shards changed since
+/// they were read are checked again.
 pub fn remove_unused_drawing_pictures<G>(
     conn: &Connection,
     vault_path: &Path,
@@ -114,18 +135,25 @@ pub fn remove_unused_drawing_pictures<G>(
         return Ok(Vec::new());
     }
 
-    for shard in shard_paths() {
-        let Ok(content) = std::fs::read_to_string(&shard) else {
-            continue;
-        };
-        let linked: HashSet<String> = parse_attachment_references(&content)
-            .into_iter()
-            .map(|reference| reference.asset_path)
-            .collect();
-        candidates.retain(|asset_path| !uses(&content, &linked, asset_path));
+    let shards: Vec<(String, Option<(std::time::SystemTime, u64)>)> = shard_paths()
+        .into_iter()
+        .map(|shard| {
+            let read = stamp(&shard);
+            (shard, read)
+        })
+        .collect();
+    let found = candidates.clone();
+    for (shard, _) in &shards {
         if candidates.is_empty() {
-            return Ok(Vec::new());
+            break;
         }
+        drop_used(shard, &mut candidates);
+    }
+    for asset_path in found.iter().filter(|path| !candidates.contains(path)) {
+        forget(conn, &vault, asset_path)?;
+    }
+    if candidates.is_empty() {
+        return Ok(Vec::new());
     }
 
     let _held = hold()?;
@@ -133,6 +161,11 @@ pub fn remove_unused_drawing_pictures<G>(
         .into_iter()
         .collect();
     candidates.retain(|asset_path| still_unlinked.contains(asset_path));
+    for (shard, read) in &shards {
+        if !candidates.is_empty() && stamp(shard) != *read {
+            drop_used(shard, &mut candidates);
+        }
+    }
     if candidates.is_empty() {
         return Ok(Vec::new());
     }
@@ -269,9 +302,18 @@ mod tests {
         );
         assert_eq!(sweep(&conn, &vault, &shards), ["_attachments/Plan.png"]);
         assert!(exists(&vault, "Plan-dark.png"));
+        // Indexed, the synced shard lists its picture again.
+        save(
+            &conn,
+            &vault,
+            "Synced.md",
+            &std::fs::read_to_string(&synced).unwrap(),
+        );
 
         // The drawing is deleted and taken out of the shards.
         std::fs::remove_file(&synced).unwrap();
+        crate::db::attachments::remove_references_for_markdown_file(&conn, &vault, &synced)
+            .unwrap();
         save(&conn, &vault, "Notes.md", "No drawing now.\n");
         assert_eq!(gallery_names(&conn, &vault), ["Map.png", "Photo.png"]);
         assert_eq!(
@@ -327,6 +369,41 @@ mod tests {
         )
         .unwrap();
         assert!(removed.is_empty());
+
+        // Written outside the app, so the index doesn't know yet.
+        save(&conn, &vault, "Notes.md", "Taken out again.\n");
+        let removed = remove_unused_drawing_pictures(
+            &conn,
+            &vault,
+            || vec![notes.clone()],
+            || {
+                std::fs::write(&notes, tag("Plan.png", "Plan-dark.png")).unwrap();
+                Ok(())
+            },
+            |_| panic!("nothing should be removed"),
+        )
+        .unwrap();
+        assert!(removed.is_empty());
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn a_picture_a_shard_only_names_is_left_to_the_usual_cleanup() {
+        let vault = temp_vault("named");
+        let conn = connection();
+        picture(&vault, "Plan.png");
+        picture(&vault, "Plan-dark.png");
+        save(&conn, &vault, "Notes.md", &tag("Plan.png", "Plan-dark.png"));
+        let notes = save(
+            &conn,
+            &vault,
+            "Notes.md",
+            "`Plan.png` and `Plan-dark.png`\n",
+        );
+
+        assert!(sweep(&conn, &vault, std::slice::from_ref(&notes)).is_empty());
+        assert!(drawing_pictures(&conn, &vault).unwrap().is_empty());
+        assert_eq!(gallery_names(&conn, &vault), ["Plan-dark.png", "Plan.png"]);
         std::fs::remove_dir_all(&vault).unwrap();
     }
 }

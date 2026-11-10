@@ -35,8 +35,10 @@ How Netherstone stores the images, files, audio and video that shards link to.
   (`attachments/drawing_pictures.rs`). That's checked after a new export
   replaces pictures, after any delete, and when the vault is checked. The
   index picks the candidates, so nothing is read when there are none; each
-  is then looked for in every shard, and the index is checked again under
-  `writes.lock` just before removing.
+  is then looked for in every shard. One a shard still names, even outside
+  a link, is left to the usual cleanup. Just before removing, under
+  `writes.lock`, the index and any shard changed since it was read are
+  checked again.
 
 ## Lifecycle
 

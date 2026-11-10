@@ -24,7 +24,7 @@ describe("import engine", () => {
     expect(vault.shards.get("/vault/Notes/Sub/Plans.md")).toContain("[home](../Home.md)");
     expect([...vault.attachments.keys()]).toEqual(["_attachments/cat.png"]);
     expect(vault.copied).toEqual(["/in/Notes/cat.png"]);
-    expect(report.created[0].warnings).toEqual(["1 link points to a note that wasn't imported; it's plain text now."]);
+    expect(report.created[0].warnings).toEqual(["1 link points to a shard that wasn't imported; it's plain text now."]);
   });
 
   it("moves a shard whose name was taken since it was reserved, and fixes links to it", async () => {
@@ -92,7 +92,7 @@ describe("import engine", () => {
     ]);
     expect(report.attachments.sort()).toEqual([...vault.attachments.keys()].sort());
     expect(report.created[0].warnings).toEqual([
-      "1 link points to a note that wasn't imported; it's plain text now.",
+      "1 link points to a shard that wasn't imported; it's plain text now.",
       "1 file it uses wasn't found.",
     ]);
   });

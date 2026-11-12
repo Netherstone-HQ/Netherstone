@@ -14,7 +14,7 @@ function longShard() {
   for (let i = 0; i < SECTIONS; i += 1) {
     markdown += `## Section ${i}\n\n| a | b |\n| - | - |\n| ${i} | row ${i} |\n\n`;
   }
-  return `${markdown}The end.\n`;
+  return markdown;
 }
 
 const heading = (page: Page, i: number) =>
@@ -112,17 +112,28 @@ test("the whole shard is drawn after opening", async ({ page }) => {
   await expect(editor(page).locator("[data-undrawn-chunk]")).toHaveCount(0);
 });
 
+// The shard ends with a table, where the browser's own Ctrl+End left no caret.
 test("Ctrl+End right after opening goes to the very end", async ({ page }) => {
   await caretAfter(page, "Section 0");
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type("!");
-  await expect(editor(page).getByText("The end.!")).toBeInViewport();
+  await expect(editor(page).getByText(`row ${SECTIONS - 1}!`)).toBeInViewport();
+});
+
+test("Ctrl+End in a drawn shard that ends with a table goes into its last cell", async ({
+  page,
+}) => {
+  await expect(editor(page).locator("[data-undrawn-chunk]")).toHaveCount(0, { timeout: 30_000 });
+  await caretAfter(page, "Section 0");
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("!");
+  await expect(editor(page).getByText(`row ${SECTIONS - 1}!`)).toBeInViewport();
 });
 
 test("Select all right after opening takes the whole shard", async ({ page }) => {
   await caretAfter(page, "Section 0");
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Backspace");
-  await expect(editor(page)).not.toContainText("The end.");
+  await expect(editor(page)).not.toContainText(`row ${SECTIONS - 1}`);
   await expect(editor(page)).not.toContainText("Long");
 });

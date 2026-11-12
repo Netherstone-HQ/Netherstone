@@ -138,17 +138,21 @@ export const MountedEditor = memo(function MountedEditor({
     }
   };
 
-  // Select all and jumps to the end act on what's drawn. While parts are
-  // still undrawn, draw them all and make the move through the editor: the
-  // browser's own move was undone by the editor putting back its selection
-  // while redrawing.
+  // Select all and jumps to the end act on what's drawn, so undrawn parts
+  // are drawn first. The editor then makes the move itself: the browser's
+  // own move was undone by the editor putting back its selection while
+  // redrawing, and Ctrl+End left no caret when the shard ends with a table.
   const handleKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!event.ctrlKey && !event.metaKey) return;
     const selectAll = event.key === "a" || event.key === "A";
     if (!selectAll && event.key !== "End") return;
-    if (drawer.isDrawn(editor.children.length - 1)) return;
 
-    flushSync(() => drawer.drawAll());
+    const allDrawn = drawer.isDrawn(editor.children.length - 1);
+    if (selectAll && allDrawn) return;
+    const end = editor.api.end([]);
+    if (!end) return;
+
+    if (!allDrawn) flushSync(() => drawer.drawAll());
     event.preventDefault();
     event.stopPropagation();
 
@@ -157,8 +161,6 @@ export const MountedEditor = memo(function MountedEditor({
       if (!editor.tf.selectAll()) editor.tf.select([]);
       return;
     }
-    const end = editor.api.end([]);
-    if (!end) return;
     editor.tf.select(
       event.shiftKey && editor.selection
         ? { anchor: editor.selection.anchor, focus: end }

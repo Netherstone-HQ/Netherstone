@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Plate, usePlateEditor } from "platejs/react";
 import { toast } from "sonner";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
@@ -137,14 +138,34 @@ export const MountedEditor = memo(function MountedEditor({
     }
   };
 
-  // Select all and jumps to the end act on what's drawn, so draw it all.
+  // Select all and jumps to the end act on what's drawn, so undrawn parts
+  // are drawn first. The editor then makes the move itself: the browser's
+  // own move was undone by the editor putting back its selection while
+  // redrawing, and Ctrl+End left no caret when the shard ends with a table.
   const handleKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (
-      (event.ctrlKey || event.metaKey) &&
-      (event.key === "a" || event.key === "A" || event.key === "End")
-    ) {
-      drawer.drawAll();
+    if (!event.ctrlKey && !event.metaKey) return;
+    const selectAll = event.key === "a" || event.key === "A";
+    if (!selectAll && event.key !== "End") return;
+
+    const allDrawn = drawer.isDrawn(editor.children.length - 1);
+    if (selectAll && allDrawn) return;
+    const end = editor.api.end([]);
+    if (!end) return;
+
+    if (!allDrawn) flushSync(() => drawer.drawAll());
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (selectAll) {
+      // As Plate does: a code block or table may take it first.
+      if (!editor.tf.selectAll()) editor.tf.select([]);
+      return;
     }
+    editor.tf.select(
+      event.shiftKey && editor.selection
+        ? { anchor: editor.selection.anchor, focus: end }
+        : end,
+    );
   };
 
   const handleDropCapture = (event: React.DragEvent<HTMLDivElement>) => {

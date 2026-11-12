@@ -45,6 +45,12 @@ test("a narrow toolbar moves buttons into the ⋯ menu", async ({ page }) => {
   await expect(editor(page).locator("h2")).toHaveText("Use 350 g water.");
 });
 
+test("a toolbar opened narrow starts with buttons in the ⋯ menu", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  const toolbar = await openShard(page);
+  await expect(toolbar.locator("div[inert]:has(svg.lucide-bold)")).toHaveCount(1);
+});
+
 test("the History header is as tall as the toolbar", async ({ page }) => {
   const toolbar = await openShard(page);
   await page.getByRole("button", { name: "Show history" }).click();

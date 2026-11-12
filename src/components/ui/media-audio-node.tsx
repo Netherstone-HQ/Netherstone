@@ -196,7 +196,6 @@ export const AudioElement = withHOC(
 
             <Caption style={{ width: "100%" }} align={align}>
               <CaptionTextarea
-                className="h-20"
                 readOnly={readOnly}
                 placeholder="Write a caption..."
               />
@@ -234,7 +233,6 @@ export const AudioElement = withHOC(
 
           <Caption style={{ width: "100%" }} align={align}>
             <CaptionTextarea
-              className="h-20"
               readOnly={readOnly}
               placeholder="Write a caption..."
             />

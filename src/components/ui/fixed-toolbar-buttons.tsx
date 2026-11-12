@@ -436,7 +436,8 @@ export function FixedToolbarButtons() {
   const [shownCount, setShownCount] = React.useState(GROUPS.length);
 
   // The row wraps instead of scrolling; groups pushed onto a second line are
-  // clipped and go into the ⋯ menu.
+  // clipped and go into the ⋯ menu. Measured only when the observer first
+  // fires, after layout, so a shard switch doesn't force a layout here.
   React.useLayoutEffect(() => {
     const row = rowRef.current;
     if (!row) return;
@@ -448,7 +449,6 @@ export function FixedToolbarButtons() {
       setShownCount(firstWrapped === -1 ? groups.length : firstWrapped);
     };
 
-    measure();
     const observer = new ResizeObserver(measure);
     observer.observe(row);
     for (const group of Array.from(row.children)) observer.observe(group);

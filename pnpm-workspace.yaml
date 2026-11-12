@@ -6,6 +6,11 @@ allowBuilds:
 
 patchedDependencies:
   '@excalidraw/excalidraw': patches/@excalidraw__excalidraw.patch
+  # Stops a change in one table cell re-rendering every other cell. Plate
+  # 53.5 does the same upstream, but needs a Slate upgrade first. Read an
+  # ancestor element with useElementSelector, not useElement(key), which
+  # can now return the ancestor as it was when the child last rendered.
+  '@platejs/core': patches/@platejs__core.patch
   '@platejs/selection': patches/@platejs__selection.patch
 
 overrides:

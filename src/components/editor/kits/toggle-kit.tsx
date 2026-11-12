@@ -6,6 +6,8 @@ import {
   KEYS,
   NodeApi,
   PathApi,
+  type Descendant,
+  type Operation,
   type Path,
   type SlateEditor,
   type TElement,
@@ -47,10 +49,60 @@ function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>) {
   return true;
 }
 
+/**
+ * How many toggles each editor holds, counted once on first use and then
+ * kept in step by `apply`, so a shard without toggles skips the index.
+ */
+const toggleCounts = new WeakMap<SlateEditor, number>();
+
+function isToggle(node: { type?: unknown }) {
+  return node.type === KEYS.toggle;
+}
+
+function togglesIn(node: Descendant) {
+  if (!ElementApi.isElement(node)) return 0;
+  // `elements` starts with the node itself.
+  let count = 0;
+  for (const [element] of NodeApi.elements(node)) if (isToggle(element)) count++;
+  return count;
+}
+
+function toggleChange(operation: Operation) {
+  switch (operation.type) {
+    case "insert_node":
+      return togglesIn(operation.node);
+    case "remove_node":
+      return -togglesIn(operation.node);
+    case "split_node":
+      return isToggle(operation.properties) ? 1 : 0;
+    case "merge_node":
+      return isToggle(operation.properties) ? -1 : 0;
+    case "set_node":
+      return (
+        Number(isToggle(operation.newProperties)) -
+        Number(isToggle(operation.properties))
+      );
+    default:
+      return 0;
+  }
+}
+
+export function hasToggles(editor: SlateEditor) {
+  let count = toggleCounts.get(editor);
+  if (count === undefined) {
+    count = editor.children.reduce((sum, node) => sum + togglesIn(node), 0);
+    toggleCounts.set(editor, count);
+  }
+  return count > 0;
+}
+
 function HiddenBlocksProvider({ children }: { children: React.ReactNode }) {
   const openIds = usePluginOption(TogglePlugin, "openIds") ?? NO_IDS;
   const hidden = useEditorSelector(
-    (editor) => findHiddenBlockIds(editor.children as TElement[], openIds),
+    (editor) =>
+      hasToggles(editor)
+        ? findHiddenBlockIds(editor.children as TElement[], openIds)
+        : NO_IDS,
     [openIds],
     { equalityFn: sameIds },
   );
@@ -108,6 +160,11 @@ export const ToggleKit = [
          */
         apply(operation) {
           apply(operation);
+
+          const count = toggleCounts.get(editor);
+          if (count !== undefined) {
+            toggleCounts.set(editor, count + toggleChange(operation));
+          }
 
           let path: Path | undefined;
           if (operation.type === "insert_node") path = operation.path;

@@ -209,9 +209,13 @@ function DeferredChunk({ attributes, children, lowest }: RenderChunkProps) {
 
   if (!lowest) return children;
 
+  // Distinct keys, so the drawn chunk mounts as a new element: reusing the
+  // placeholder's made React remove `contenteditable` from it, which cost
+  // more than drawing the chunk.
   if (!isDrawn && range) {
     return (
       <div
+        key="undrawn"
         ref={placeholderRef}
         contentEditable={false}
         data-undrawn-chunk=""
@@ -230,6 +234,7 @@ function DeferredChunk({ attributes, children, lowest }: RenderChunkProps) {
 
   return (
     <div
+      key="drawn"
       {...attributes}
       style={{ contentVisibility: "auto", containIntrinsicSize: estimate }}
     >

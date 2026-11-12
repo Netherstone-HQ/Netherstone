@@ -86,7 +86,12 @@ test("text pasted from a web page drops the page's colour, font and size", async
 });
 
 const selectAllBlocks = async (page: import("@playwright/test").Page) => {
-  await caretAfter(page, "Paste below:");
+  await caretAfter(page, "Note");
+  // The editor takes a click's caret a moment later, and Ctrl+A only
+  // selects blocks once it has it. The toolbar shows the caret's heading.
+  await expect(
+    page.getByRole("toolbar").first().getByRole("radio", { name: "Heading 1", exact: true }),
+  ).toBeVisible();
   await page.keyboard.press("ControlOrMeta+a");
   await expect(page.locator(".slate-shadow-input")).toBeFocused();
 };

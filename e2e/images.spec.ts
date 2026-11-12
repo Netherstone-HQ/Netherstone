@@ -99,8 +99,9 @@ test.describe("a picture's caption", () => {
     await expect(textarea).toHaveValue("Older stone");
     expect(await lastSave(page, "Media.md")).toContain("Older stone");
 
-    // Tab leaves it, and it shows as text again.
+    // Tab leaves it, and once the pointer is away it shows as text again.
     await page.keyboard.press("Tab");
+    await page.mouse.move(0, 0);
     await expect(textarea).toHaveCount(0);
     await expect(caption).toHaveText("Older stone");
 
@@ -108,6 +109,43 @@ test.describe("a picture's caption", () => {
     // Each typed letter is its own step back.
     await page.keyboard.press("ControlOrMeta+z");
     await expect(caption).toHaveText("Olde stone");
+  });
+
+  test("selects a word on double click and text by dragging, and keeps its height", async ({
+    page,
+  }) => {
+    const caption = editor(page).locator("figcaption");
+    await caption.scrollIntoViewIfNeeded();
+    const asText = (await caption.boundingBox())!;
+
+    // "stone" in "Old stone".
+    const word = await caption.evaluate((figcaption) => {
+      const text = figcaption.querySelector("div")!.firstChild!;
+      const range = document.createRange();
+      range.setStart(text, 4);
+      range.setEnd(text, 9);
+      const rect = range.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, y: rect.y + rect.height / 2 };
+    });
+    await page.mouse.dblclick((word.left + word.right) / 2, word.y);
+    const textarea = caption.locator("textarea");
+    await expect(textarea).toBeFocused();
+    const selected = () =>
+      textarea.evaluate((box: HTMLTextAreaElement) => [box.selectionStart, box.selectionEnd]);
+    expect(await selected()).toEqual([4, 9]);
+
+    // As a textarea, the caption sits where the text did.
+    const asTextarea = (await caption.boundingBox())!;
+    expect(Math.abs(asTextarea.y - asText.y)).toBeLessThan(1);
+    expect(Math.abs(asTextarea.height - asText.height)).toBeLessThan(1);
+
+    await page.keyboard.press("Tab");
+    await page.mouse.move(word.left + 1, word.y);
+    await page.mouse.down();
+    await page.mouse.move(word.right - 1, word.y, { steps: 5 });
+    await page.mouse.up();
+    await expect(textarea).toBeFocused();
+    expect(await selected()).toEqual([4, 9]);
   });
 
   test("takes focus from Tab, and Down goes on to the next block", async ({ page }) => {
@@ -127,11 +165,17 @@ test.describe("a picture's caption", () => {
     page,
   }) => {
     const caption = editor(page).locator("figcaption");
-    await caretAfter(page, "After.");
-    await page.keyboard.press("Home");
-    await page.keyboard.press("ArrowUp");
+    // Into the caption and Down out of it, which leaves the caret at the
+    // start of the next block by the editor's own selection.
+    await caption.locator("div").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(editor(page)).toBeFocused();
+    // Held as a person holds it: Plate checks for Up while the caret moves,
+    // which can be after an instant release.
+    await page.keyboard.down("ArrowUp");
     const textarea = caption.locator("textarea");
     await expect(textarea).toBeFocused();
+    await page.keyboard.up("ArrowUp");
 
     await page.keyboard.press("ArrowUp");
     await expect(textarea).toHaveCount(0);

@@ -68,9 +68,11 @@ function textOffsetAt(element: HTMLElement, x: number, y: number) {
 }
 
 /**
- * A caption with text shows as plain text until it's clicked or focused:
- * every auto-sizing textarea reads its computed style when it mounts, which
- * made opening a shard with many pictures slow.
+ * A caption with text shows as plain text until the pointer is over it or it
+ * takes focus: every auto-sizing textarea reads its computed style when it
+ * mounts, which made opening a shard with many pictures slow. Mounting on
+ * hover means a press already lands in the textarea, so dragging and double
+ * clicks select as they do there.
  */
 export function CaptionTextarea(
   props: React.ComponentProps<typeof CaptionTextareaPrimitive>
@@ -82,6 +84,7 @@ export function CaptionTextarea(
   const captionString = useCaptionString();
   const focusEndPath = usePluginOption(CaptionPlugin, 'focusEndPath');
   const [editing, setEditing] = React.useState(false);
+  const [hovered, setHovered] = React.useState(false);
   const caretRef = React.useRef<number | null>(null);
 
   // The keyboard and the Caption button move into a caption by asking its
@@ -107,7 +110,7 @@ export function CaptionTextarea(
     if (focusAsked) editor.setOption(CaptionPlugin, 'focusEndPath', null);
   }, [editor, focusAsked, textarea]);
 
-  if (captionString && !editing && !focusAsked) {
+  if (captionString && !editing && !hovered && !focusAsked) {
     const startEditing = (caret: number) => {
       caretRef.current = caret;
       setEditing(true);
@@ -117,13 +120,18 @@ export function CaptionTextarea(
       <div
         className={cn(
           captionTextClassName,
-          'cursor-text break-words whitespace-pre-wrap',
+          // Sits like the textarea: inline-block, with its baseline at the
+          // bottom edge, so the caption keeps its height when it swaps.
+          'inline-block overflow-hidden break-words whitespace-pre-wrap',
+          !readOnly && 'cursor-text',
           props.className
         )}
         tabIndex={readOnly ? undefined : 0}
+        onPointerEnter={readOnly ? undefined : () => setHovered(true)}
         onFocus={
           readOnly ? undefined : () => startEditing(captionString.length)
         }
+        // Where a press comes without hovering first, as with touch.
         onMouseDown={
           readOnly
             ? undefined
@@ -151,22 +159,23 @@ export function CaptionTextarea(
         'print:placeholder:text-transparent',
         props.className
       )}
-      // Up selects the picture and Down goes to the start of the next block.
-      // Plate's own keys select while the editor has no selection, and the
-      // editor's focus then puts the caret at the top of the shard instead.
+      // Up selects the picture and Down goes on to what follows it, as in
+      // Plate. Plate's own keys select while the editor has no selection, and
+      // the editor's focus then puts the caret at the top of the shard.
       onKeyDownCapture={(event) => {
         const down = isHotkey('down', event);
         if (!down && !isHotkey('up', event)) return;
 
         const path = editor.api.findPath(element);
-        const target = path && (down ? PathApi.next(path) : path);
-        if (!target || !editor.api.node(target)) return;
+        const target = path && (down ? editor.api.after(path) : path);
+        if (!target) return;
 
         event.preventDefault();
         event.stopPropagation();
         editor.tf.focus();
-        editor.tf.select(down ? editor.api.start(target) : target);
+        editor.tf.select(target);
       }}
+      onPointerLeave={() => setHovered(false)}
       onFocusCapture={() => setEditing(true)}
       // Leaving the window keeps it, so focus comes back to it.
       onBlurCapture={() => {

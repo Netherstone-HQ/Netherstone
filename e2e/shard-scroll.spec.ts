@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { editor, expect, mockVault, openShard, test, VAULT_PATH } from "./vault";
+import { caretAfter, editor, expect, mockVault, openShard, test, VAULT_PATH } from "./vault";
 
 /**
  * Each shard keeps its own place: switching away and back, and restarting
@@ -14,7 +14,7 @@ function longShard() {
   for (let i = 0; i < SECTIONS; i += 1) {
     markdown += `## Section ${i}\n\n| a | b |\n| - | - |\n| ${i} | row ${i} |\n\n`;
   }
-  return markdown;
+  return `${markdown}The end.\n`;
 }
 
 const heading = (page: Page, i: number) =>
@@ -110,4 +110,19 @@ test("the place comes back when the window is restored", async ({ page }) => {
 test("the whole shard is drawn after opening", async ({ page }) => {
   await expect(heading(page, SECTIONS - 1)).toBeAttached({ timeout: 30_000 });
   await expect(editor(page).locator("[data-undrawn-chunk]")).toHaveCount(0);
+});
+
+test("Ctrl+End right after opening goes to the very end", async ({ page }) => {
+  await caretAfter(page, "Section 0");
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("!");
+  await expect(editor(page).getByText("The end.!")).toBeInViewport();
+});
+
+test("Select all right after opening takes the whole shard", async ({ page }) => {
+  await caretAfter(page, "Section 0");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await expect(editor(page)).not.toContainText("The end.");
+  await expect(editor(page)).not.toContainText("Long");
 });

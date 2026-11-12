@@ -25,6 +25,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
+import { canSplitCellAt } from '@/components/editor/lib/table-split';
 import { cn } from '@/lib/utils';
 
 import { ToolbarButton, ToolbarDropdown } from './toolbar';
@@ -85,17 +86,7 @@ export function TableToolbarButton({ submenu }: { submenu?: boolean }) {
               <Combine />
               Merge cells
             </DropdownMenuItem>
-            <DropdownMenuItem
-              className="min-w-[180px]"
-              disabled={!mergeState.canSplit}
-              onSelect={() => {
-                tf.table.split();
-                editor.tf.focus();
-              }}
-            >
-              <Ungroup />
-              Split cell
-            </DropdownMenuItem>
+            <SplitCellItem />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
@@ -202,6 +193,26 @@ export function TableToolbarButton({ submenu }: { submenu?: boolean }) {
         </DropdownMenuItem>
       </DropdownMenuGroup>
     </ToolbarDropdown>
+  );
+}
+
+/** Mounted only while the menu is open, so typing doesn't run its check. */
+function SplitCellItem() {
+  const { editor, tf } = useEditorPlugin(TablePlugin);
+  const canSplit = useEditorSelector(canSplitCellAt, []);
+
+  return (
+    <DropdownMenuItem
+      className="min-w-[180px]"
+      disabled={!canSplit}
+      onSelect={() => {
+        tf.table.split();
+        editor.tf.focus();
+      }}
+    >
+      <Ungroup />
+      Split cell
+    </DropdownMenuItem>
   );
 }
 

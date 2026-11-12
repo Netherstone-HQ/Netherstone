@@ -2,6 +2,7 @@
 // context the cells read their handles from, and the width helpers.
 
 import * as React from "react";
+import { flushSync } from "react-dom";
 
 import { resizeLengthClampStatic } from "@platejs/resizable";
 import { setTableColSize, setTableRowSize } from "@platejs/table";
@@ -87,7 +88,40 @@ export function fitColSizes(colSizes: number[], fitWidth: number) {
   return colSizes.map((colSize) => Math.floor((colSize * fitWidth) / total));
 }
 
-/** The element's width, kept current as the window or panels resize. */
+const widthListeners = new WeakMap<Element, (width: number) => void>();
+let widthObserver: ResizeObserver | null = null;
+
+/**
+ * One observer for every table. Its sizes come with the observation, so no
+ * table forces a layout of the page to read its width, and the updates are
+ * applied together before the frame is painted, so a table with saved
+ * widths never shows unfitted.
+ */
+function observeWidth(element: Element, onWidth: (width: number) => void) {
+  widthObserver ??= new ResizeObserver((entries) => {
+    flushSync(() => {
+      for (const entry of entries) {
+        // Rounded, as `clientWidth` is.
+        widthListeners
+          .get(entry.target)
+          ?.(Math.round(entry.borderBoxSize[0].inlineSize));
+      }
+    });
+  });
+  widthListeners.set(element, onWidth);
+  widthObserver.observe(element);
+
+  return () => {
+    widthListeners.delete(element);
+    widthObserver?.unobserve(element);
+  };
+}
+
+/**
+ * The element's border-box width, kept current as the window or panels
+ * resize. Use it on elements without borders or their own scrollbar, where
+ * that equals `clientWidth`.
+ */
 export function useElementWidth(ref: React.RefObject<HTMLElement | null>) {
   const [width, setWidth] = React.useState(0);
 
@@ -96,11 +130,7 @@ export function useElementWidth(ref: React.RefObject<HTMLElement | null>) {
 
     if (!element) return;
 
-    setWidth(element.clientWidth);
-    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
-    observer.observe(element);
-
-    return () => observer.disconnect();
+    return observeWidth(element, setWidth);
   }, [ref]);
 
   return width;

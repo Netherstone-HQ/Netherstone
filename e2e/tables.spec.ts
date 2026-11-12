@@ -418,3 +418,34 @@ test("a row dragged by its grip moves, with a drop line on the way", async ({ pa
   const saved = await lastSave(page, "Tables.md");
   expect(saved.indexOf("| Beta")).toBeLessThan(saved.indexOf("| Alpha"));
 });
+
+test("merged cells split back from the table toolbar, and the file follows", async ({
+  page,
+}) => {
+  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+  const table = editor(page).locator("table");
+  const betaRow = table.locator("tr").nth(2);
+
+  // Drag from "Beta" to "Short" to select both cells, then merge them.
+  const from = await betaRow.getByText("Beta", { exact: true }).boundingBox();
+  const to = await betaRow.getByText("Short", { exact: true }).boundingBox();
+  await page.mouse.move(from!.x + 2, from!.y + from!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to!.x + to!.width - 2, to!.y + to!.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Merge cells" }).click();
+
+  await expect(cellsOf(betaRow)).toHaveCount(2);
+  expect(await lastSave(page, "Tables.md")).toContain("merge A3:B3");
+
+  // The caret in the merged cell offers Split.
+  await caretAfter(page, "Short");
+  await page.getByRole("button", { name: "Split cell" }).click();
+
+  await expect(cellsOf(betaRow)).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Split cell" })).toHaveCount(0);
+  const saved = await lastSave(page, "Tables.md");
+  expect(saved).not.toContain("merge");
+  // Split keeps the merged text in the first cell and frees the one it covered.
+  expect(saved).toMatch(/\| Beta<br\/>Short +\| +\| In progress +\|/);
+});

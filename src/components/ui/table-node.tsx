@@ -71,6 +71,7 @@ import {
   columnAlignAt,
   setColumnAlign,
 } from "@/components/editor/lib/table-align";
+import { canSplitCellAt } from "@/components/editor/lib/table-split";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -494,7 +495,7 @@ function CollapsedTableFloatingToolbarContent(
   const { editor, tf } = useEditorPlugin(TablePlugin);
   const element = useElement<TTableElement>();
   const { props: buttonProps } = useRemoveNodeButton({ element });
-  const { canSplit } = useTableMergeState();
+  const canSplit = useEditorSelector(canSplitCellAt, []);
 
   return (
     <TableFloatingToolbarContent
@@ -585,6 +586,7 @@ function TableFloatingToolbarContent({
               onClick={onMerge}
               onMouseDown={(e) => e.preventDefault()}
               tooltip="Merge cells"
+              aria-label="Merge cells"
             >
               <CombineIcon />
             </ToolbarButton>
@@ -594,6 +596,7 @@ function TableFloatingToolbarContent({
               onClick={onSplit}
               onMouseDown={(e) => e.preventDefault()}
               tooltip="Split cell"
+              aria-label="Split cell"
             >
               <SquareSplitHorizontalIcon />
             </ToolbarButton>

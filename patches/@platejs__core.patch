@@ -1,0 +1,28 @@
+diff --git a/dist/react/index.js b/dist/react/index.js
+index fa77133811325c3e6c83ad9a6d81df8feb1c8ef8..e8e05ed2f8fa95969e32d824f3902b198feb8e50 100644
+--- a/dist/react/index.js
++++ b/dist/react/index.js
+@@ -1639,18 +1639,21 @@ function ElementProvider({ children, path, scope, ...props }) {
+ 		path: elementPath
+ 	}));
+ 	const parent = React.useContext(ElementContext);
++	const parentRef = React.useRef(parent);
++	parentRef.current = parent;
+ 	const parentStore = React.useContext(ElementStoreContext);
+ 	const contextValue = React.useMemo(() => ({
+ 		element,
+ 		entry,
+-		parent,
++		get parent() {
++			return parentRef.current;
++		},
+ 		path: elementPath,
+ 		scope
+ 	}), [
+ 		element,
+ 		elementPath,
+ 		entry,
+-		parent,
+ 		scope
+ 	]);
+ 	const storeContextValue = React.useMemo(() => ({

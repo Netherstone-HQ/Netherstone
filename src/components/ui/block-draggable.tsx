@@ -64,37 +64,43 @@ export const BlockDraggable: RenderNodeWrapper = (props) => {
   return (props) => <Draggable {...props} />;
 };
 
+type DragControls = {
+  /** The pointer or a drag is over the element: mount its drag controls. */
+  isActive: boolean;
+  /** A drag is over the element, or it is being dragged. */
+  isDragOver: boolean;
+  isDragging: boolean;
+  /** For the controls to report a drag starting and ending. */
+  onDraggingChange: (dragging: boolean) => void;
+  /** Spread onto the element the controls belong to. */
+  shellProps: Pick<
+    React.HTMLAttributes<HTMLElement>,
+    "onDragEnter" | "onDragStart" | "onMouseEnter" | "onMouseLeave"
+  >;
+};
+
 /**
- * Every draggable block renders this lightweight shell. The drag handle, drag
- * source, drop target and preview (react-dnd hooks plus several store
- * subscriptions) mount only while the pointer or a drag is over the block, so
- * a long note doesn't pay for them on every block at mount. The block's
- * children keep a stable position in the tree, so they never remount when
- * the controls appear.
+ * Drag controls (react-dnd drag source, drop target and drop line) mounted
+ * only while the pointer or a drag is over the element, so a long shard
+ * doesn't set them up for every block or table row at mount.
  */
-function Draggable(props: PlateElementProps) {
-  const { children, editor, element, path } = props;
-  const blockWrapperRef = React.useRef<HTMLDivElement>(null);
+export function useDragControls(
+  shellRef: React.RefObject<HTMLElement | null>,
+): DragControls {
   const isDraggingRef = React.useRef(false);
   const [activeFor, setActiveFor] = React.useState<"hover" | "drag" | null>(
     null,
   );
   const [isDragging, setIsDragging] = React.useState(false);
 
-  const isActive = activeFor !== null;
-  const isInColumn = path.length === 3;
-  const isInTable = path.length === 4;
+  const isHovered = React.useCallback(
+    () => !!shellRef.current?.matches(":hover"),
+    [shellRef],
+  );
 
-  const isHovered = () =>
-    !!blockWrapperRef.current?.parentElement?.matches(":hover");
-
-  const activateForDrag = () => {
-    if (activeFor !== "drag") setActiveFor("drag");
-  };
-
-  // Blocks a drag passes over (and the dragged block) stay active until the
+  // Elements a drag passes over (and the dragged one) stay active until the
   // drag is over. dragleave can't be used to deactivate them: during native
-  // drags its relatedTarget is null, so entering the block's own text looks
+  // drags its relatedTarget is null, so entering the element's own text looks
   // like leaving it, and a drop target that unmounts mid-drag misses the drop.
   React.useEffect(() => {
     if (activeFor !== "drag") return;
@@ -122,21 +128,65 @@ function Draggable(props: PlateElementProps) {
       window.removeEventListener("dragend", endDrag, true);
       window.removeEventListener("mousemove", endDrag, true);
     };
-  }, [activeFor]);
+  }, [activeFor, isHovered]);
 
-  const handleDraggingChange = React.useCallback((dragging: boolean) => {
-    isDraggingRef.current = dragging;
-    setIsDragging(dragging);
+  const onDraggingChange = React.useCallback(
+    (dragging: boolean) => {
+      isDraggingRef.current = dragging;
+      setIsDragging(dragging);
 
-    // No mouseleave fires after a native drag, and the pointer has usually
-    // moved elsewhere by the time it ends.
-    if (!dragging) {
-      setActiveFor(isHovered() ? "hover" : null);
-    }
-  }, []);
+      // No mouseleave fires after a native drag, and the pointer has usually
+      // moved elsewhere by the time it ends.
+      if (!dragging) {
+        setActiveFor(isHovered() ? "hover" : null);
+      }
+    },
+    [isHovered],
+  );
+
+  const activateForDrag = () => {
+    if (activeFor !== "drag") setActiveFor("drag");
+  };
+
+  return {
+    isActive: activeFor !== null,
+    isDragOver: activeFor === "drag",
+    isDragging,
+    onDraggingChange,
+    shellProps: {
+      onDragEnter: activateForDrag,
+      onDragStart: activateForDrag,
+      onMouseEnter: () => {
+        if (!activeFor) setActiveFor("hover");
+      },
+      onMouseLeave: () => {
+        if (activeFor === "hover" && !isDraggingRef.current) {
+          setActiveFor(null);
+        }
+      },
+    },
+  };
+}
+
+/**
+ * Every draggable block renders this lightweight shell; its drag controls
+ * mount only while needed (see `useDragControls`). The block's children
+ * keep a stable position in the tree, so they never remount when the
+ * controls appear.
+ */
+function Draggable(props: PlateElementProps) {
+  const { children, editor, element, path } = props;
+  const shellRef = React.useRef<HTMLDivElement>(null);
+  const blockWrapperRef = React.useRef<HTMLDivElement>(null);
+  const { isActive, isDragging, onDraggingChange, shellProps } =
+    useDragControls(shellRef);
+
+  const isInColumn = path.length === 3;
+  const isInTable = path.length === 4;
 
   return (
     <div
+      ref={shellRef}
       className={cn(
         "relative",
         isDragging && "opacity-50",
@@ -144,21 +194,14 @@ function Draggable(props: PlateElementProps) {
           ? "group/container"
           : "group",
       )}
-      onDragEnter={activateForDrag}
-      onDragStart={activateForDrag}
-      onMouseEnter={() => {
-        if (!activeFor) setActiveFor("hover");
-      }}
-      onMouseLeave={() => {
-        if (activeFor === "hover" && !isDraggingRef.current) setActiveFor(null);
-      }}
+      {...shellProps}
     >
       {isActive && (
         <DraggableControls
           blockWrapperRef={blockWrapperRef}
           isInColumn={isInColumn}
           isInTable={isInTable}
-          onDraggingChange={handleDraggingChange}
+          onDraggingChange={onDraggingChange}
         />
       )}
 

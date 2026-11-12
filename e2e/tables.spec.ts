@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import {
   caretAfter,
@@ -301,4 +301,120 @@ test("the table toolbar waits while Settings covers the shard", async ({ page })
 
   await settings.click();
   await expect(popover).toHaveCount(1);
+});
+
+test("typing in a cell re-renders only that cell", async ({ page }) => {
+  // Collects the cells React re-rendered. A cell's <td> gets new props only
+  // when the cell's component ran; cells React skipped keep the old ones.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __renderedCells: Set<string> | null };
+    w.__renderedCells = null;
+    type Fiber = {
+      alternate: Fiber | null;
+      child: Fiber | null;
+      memoizedProps: Record<string, unknown> | null;
+      sibling: Fiber | null;
+      type: unknown;
+    };
+    Object.assign(window, {
+      __REACT_DEVTOOLS_GLOBAL_HOOK__: {
+        supportsFiber: true,
+        renderers: new Map(),
+        inject: () => 1,
+        checkDCE() {},
+        onCommitFiberUnmount() {},
+        onPostCommitFiberRoot() {},
+        onCommitFiberRoot(_id: number, root: { current: Fiber }) {
+          const rendered = w.__renderedCells;
+          if (!rendered) return;
+          const stack = [root.current];
+          while (stack.length > 0) {
+            const fiber = stack.pop()!;
+            const id = fiber.memoizedProps?.["data-table-cell-id"];
+            if (
+              typeof fiber.type === "string" &&
+              typeof id === "string" &&
+              fiber.alternate &&
+              fiber.memoizedProps !== fiber.alternate.memoizedProps
+            ) {
+              rendered.add(id);
+            }
+            // Only where something below changed.
+            if (fiber.child && fiber.child !== fiber.alternate?.child) {
+              for (let child: Fiber | null = fiber.child; child; child = child.sibling) {
+                stack.push(child);
+              }
+            }
+          }
+        },
+      },
+    });
+  });
+  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+
+  await caretAfter(page, "Short");
+  const cell = editor(page).locator("td", { hasText: "Short" });
+  const cellId = await cell.getAttribute("data-table-cell-id");
+  await page.evaluate(() => {
+    (window as unknown as { __renderedCells: Set<string> }).__renderedCells = new Set();
+  });
+  await page.keyboard.type("abc");
+  await expect(cell).toContainText("Shortabc");
+
+  const rendered = await page.evaluate(() => [
+    ...(window as unknown as { __renderedCells: Set<string> }).__renderedCells,
+  ]);
+  expect(rendered).toEqual([cellId]);
+});
+
+/**
+ * Fires one drag event on the element, near the top of its box. Mouse drags
+ * from Playwright don't drop through react-dnd here, so the test sends the
+ * events the browser would.
+ */
+async function fireDrag(target: Locator, type: string) {
+  await target.evaluate((element, type) => {
+    const w = window as unknown as { __dragData?: DataTransfer };
+    w.__dragData ??= new DataTransfer();
+    const box = element.getBoundingClientRect();
+    element.dispatchEvent(
+      new DragEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + 2,
+        dataTransfer: w.__dragData,
+      }),
+    );
+  }, type);
+}
+
+test("a row dragged by its grip moves, with a drop line on the way", async ({ page }) => {
+  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+
+  const rows = editor(page).locator("tr");
+  const [header, alpha, beta] = [rows.nth(0), rows.nth(1), rows.nth(2)];
+  const controls = (row: Locator) => row.locator("> td[contenteditable='false']");
+  // Grips are set up only for the row under the pointer.
+  await expect(rows.locator("> td[contenteditable='false'] button")).toHaveCount(0);
+  await beta.hover();
+  await expect(rows.locator("> td[contenteditable='false'] button")).toHaveCount(1);
+
+  await fireDrag(controls(beta).locator("button"), "dragstart");
+  const cell = alpha.locator("td[data-table-cell-id]").first();
+  await fireDrag(cell, "dragenter");
+  // Over the top of Alpha, the line shows under the row above it.
+  await expect
+    .poll(async () => {
+      await fireDrag(cell, "dragover");
+      return controls(header).locator("> div").count();
+    })
+    .toBe(1);
+  await fireDrag(cell, "drop");
+  await fireDrag(rows.filter({ hasText: "Beta" }), "dragend");
+
+  await expect(rows.nth(1)).toContainText("Beta");
+  await expect(rows.nth(2)).toContainText("Alpha");
+  const saved = await lastSave(page, "Tables.md");
+  expect(saved.indexOf("| Beta")).toBeLessThan(saved.indexOf("| Alpha"));
 });

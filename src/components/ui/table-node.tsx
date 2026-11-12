@@ -92,6 +92,7 @@ import { createChartNode, defaultChartSpec, readTable } from "@/lib/chart";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
 
+import { useDragControls } from "./block-draggable";
 import { blockSelectionVariants } from "./block-selection";
 import {
   ColorDropdownMenuItems,
@@ -129,6 +130,11 @@ const TABLE_MULTI_SELECTION_TOOLBAR_DELAY_MS = 150;
 const TableRowContext = React.createContext<{ isSelectingRow: boolean }>({
   isSelectingRow: false,
 });
+/**
+ * A drag is over the table: every row mounts its drop target, since the
+ * drop line can show on a row next to the one under the pointer.
+ */
+const TableDragOverContext = React.createContext(false);
 
 export const TableElement = withHOC(
   TableProvider,
@@ -164,7 +170,10 @@ export const TableElement = withHOC(
     const deferColumnResize =
       colSizes.length * props.element.children.length >
       TABLE_DEFERRED_COLUMN_RESIZE_CELL_COUNT;
+    // Compared by value: a new path array on every change would rebuild the
+    // resize handlers and re-render every cell.
     const tablePath = useElementSelector(([, path]) => path, [], {
+      equalityFn: PathApi.equals,
       key: KEYS.table,
     });
     const tableRef = React.useRef<HTMLTableElement>(null);
@@ -228,6 +237,8 @@ export const TableElement = withHOC(
       };
     }, [autoLayout, controlColumnWidth, percentTotal, percentWidths, resolvedColSizes]);
 
+    const { isDragOver, shellProps: dragShellProps } =
+      useDragControls(wrapperRef);
     const isSelectingTable = useBlockSelected(props.element.id as string);
     const selected = useSelected();
     const [hovered, setHovered] = React.useState(false);
@@ -263,6 +274,7 @@ export const TableElement = withHOC(
             ref={wrapperRef}
             className="group/table relative w-full"
             style={tableVariableStyle}
+            {...dragShellProps}
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
           >
@@ -319,7 +331,11 @@ export const TableElement = withHOC(
                   ))}
                 </colgroup>
               )}
-              <tbody className="min-w-full">{children}</tbody>
+              <tbody className="min-w-full">
+                <TableDragOverContext.Provider value={isDragOver}>
+                  {children}
+                </TableDragOverContext.Provider>
+              </tbody>
             </table>
 
             {isSelectingTable && (
@@ -853,8 +869,6 @@ export function TableRowElement({
   children,
   ...props
 }: PlateElementProps<TTableRowElement>) {
-  const { element } = props;
-  const editor = useEditorRef();
   const { hasControls, isSelectingTable } = useTableResizeContext();
   const isSelectingRow = useBlockSelected() || isSelectingTable;
   const rowContext = React.useMemo(() => ({ isSelectingRow }), [isSelectingRow]);
@@ -870,7 +884,55 @@ export function TableRowElement({
   );
   const rowSizeOverrides = useTableValue("rowSizeOverrides");
   const rowMinHeight = rowSizeOverrides.get?.(rowIndex) ?? rowSize;
+  const rowRef = React.useRef<HTMLTableRowElement>(null);
+  const { isActive, isDragging, onDraggingChange, shellProps } =
+    useDragControls(rowRef);
+  const isTableDragOver = React.useContext(TableDragOverContext);
 
+  return (
+    <PlateElement
+      {...props}
+      ref={useComposedRef(props.ref, rowRef)}
+      as="tr"
+      className={cn("group/row", isDragging && "opacity-50")}
+      style={
+        {
+          ...props.style,
+          "--tableRowMinHeight": rowMinHeight ? `${rowMinHeight}px` : undefined,
+        } as React.CSSProperties
+      }
+      // Plate passes only `attributes` on to the row's <tr>.
+      attributes={{ ...props.attributes, ...(hasControls ? shellProps : {}) }}
+    >
+      {hasControls && (
+        <td
+          className="w-2 min-w-2 max-w-2 select-none p-0"
+          contentEditable={false}
+        >
+          {(isActive || isTableDragOver) && (
+            <RowDragControls
+              onDraggingChange={onDraggingChange}
+              rowRef={rowRef}
+            />
+          )}
+        </td>
+      )}
+
+      <TableRowContext.Provider value={rowContext}>{children}</TableRowContext.Provider>
+    </PlateElement>
+  );
+}
+
+/** The row's grip, drag source and drop target; mounted only while needed. */
+function RowDragControls({
+  onDraggingChange,
+  rowRef,
+}: {
+  onDraggingChange: (dragging: boolean) => void;
+  rowRef: React.RefObject<HTMLTableRowElement | null>;
+}) {
+  const editor = useEditorRef();
+  const element = useElement<TTableRowElement>();
   const { isDragging, nodeRef, previewRef, handleRef } = useDraggable({
     element,
     type: element.type,
@@ -889,31 +951,26 @@ export function TableRowElement({
     },
   });
 
-  return (
-    <PlateElement
-      {...props}
-      ref={useComposedRef(props.ref, previewRef, nodeRef)}
-      as="tr"
-      className={cn("group/row", isDragging && "opacity-50")}
-      style={
-        {
-          ...props.style,
-          "--tableRowMinHeight": rowMinHeight ? `${rowMinHeight}px` : undefined,
-        } as React.CSSProperties
-      }
-    >
-      {hasControls && (
-        <td
-          className="w-2 min-w-2 max-w-2 select-none p-0"
-          contentEditable={false}
-        >
-          <RowDragHandle dragRef={handleRef} />
-          <RowDropLine />
-        </td>
-      )}
+  // The row the shell already rendered is the drop target and drag preview.
+  if (nodeRef) nodeRef.current = rowRef.current;
+  if (previewRef) previewRef.current = rowRef.current;
 
-      <TableRowContext.Provider value={rowContext}>{children}</TableRowContext.Provider>
-    </PlateElement>
+  const wasDraggingRef = React.useRef(false);
+
+  React.useEffect(() => {
+    // Only report real changes: these controls also mount mid-drag on rows
+    // being dragged over.
+    if (!!isDragging !== wasDraggingRef.current) {
+      wasDraggingRef.current = !!isDragging;
+      onDraggingChange(!!isDragging);
+    }
+  }, [isDragging, onDraggingChange]);
+
+  return (
+    <>
+      <RowDragHandle dragRef={handleRef} />
+      <RowDropLine />
+    </>
   );
 }
 

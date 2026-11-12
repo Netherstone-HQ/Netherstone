@@ -14,7 +14,7 @@ import {
 } from '@platejs/caption/react';
 import { createPrimitiveComponent } from '@udecode/cn';
 import { cva } from 'class-variance-authority';
-import { PathApi } from 'platejs';
+import { isHotkey, PathApi } from 'platejs';
 import {
   useEditorRef,
   useElement,
@@ -84,19 +84,28 @@ export function CaptionTextarea(
   const [editing, setEditing] = React.useState(false);
   const caretRef = React.useRef<number | null>(null);
 
-  // Keyboard moves into a caption by asking its textarea to take focus.
+  // The keyboard and the Caption button move into a caption by asking its
+  // textarea to take focus.
   const focusAsked =
     !!focusEndPath &&
     PathApi.equals(editor.api.findPath(element) ?? [], focusEndPath);
 
-  const textareaRef = React.useCallback((textarea: HTMLTextAreaElement | null) => {
-    const caret = caretRef.current;
-    if (!textarea || caret === null) return;
+  // Plate's textarea is there only from its second render, after Plate's
+  // own focus effect has run, so the focus is given here once it's there.
+  const [textarea, setTextarea] = React.useState<HTMLTextAreaElement | null>(
+    null
+  );
+  React.useEffect(() => {
+    if (!textarea) return;
+    const caret =
+      caretRef.current ?? (focusAsked ? textarea.value.length : null);
+    if (caret === null) return;
 
     caretRef.current = null;
     textarea.focus();
     textarea.setSelectionRange(caret, caret);
-  }, []);
+    if (focusAsked) editor.setOption(CaptionPlugin, 'focusEndPath', null);
+  }, [editor, focusAsked, textarea]);
 
   if (captionString && !editing && !focusAsked) {
     const startEditing = (caret: number) => {
@@ -135,13 +144,29 @@ export function CaptionTextarea(
   return (
     <CaptionTextareaPrimitive
       {...props}
-      ref={textareaRef}
+      ref={setTextarea}
       className={cn(
         captionTextClassName,
         'resize-none focus:outline-none focus:[&::placeholder]:opacity-0',
         'print:placeholder:text-transparent',
         props.className
       )}
+      // Up selects the picture and Down goes to the start of the next block.
+      // Plate's own keys select while the editor has no selection, and the
+      // editor's focus then puts the caret at the top of the shard instead.
+      onKeyDownCapture={(event) => {
+        const down = isHotkey('down', event);
+        if (!down && !isHotkey('up', event)) return;
+
+        const path = editor.api.findPath(element);
+        const target = path && (down ? PathApi.next(path) : path);
+        if (!target || !editor.api.node(target)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        editor.tf.focus();
+        editor.tf.select(down ? editor.api.start(target) : target);
+      }}
       onFocusCapture={() => setEditing(true)}
       // Leaving the window keeps it, so focus comes back to it.
       onBlurCapture={() => {

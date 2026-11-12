@@ -60,7 +60,10 @@ test.describe("a picture's caption", () => {
       (window as unknown as { isTauri: boolean }).isTauri = true;
     });
     await mockVault(page, {
-      files: { "Media.md": "![Old stone](_attachments/stone.png)\n\nAfter.\n" },
+      files: {
+        "Media.md":
+          "Before.\n\n![Old stone](_attachments/stone.png)\n\nAfter.\n\n![](_attachments/stone.png)\n\nEnd.\n",
+      },
       assets: { "_attachments/stone.png": PNG },
       open: "Media.md",
       versions: {
@@ -80,6 +83,7 @@ test.describe("a picture's caption", () => {
     await expect(caption).toHaveText("Old stone");
     await expect(caption.locator("textarea")).toHaveCount(0);
 
+    await caption.scrollIntoViewIfNeeded();
     const afterOld = await caption.evaluate((figcaption) => {
       const text = figcaption.querySelector("div")!.firstChild!;
       const range = document.createRange();
@@ -106,12 +110,75 @@ test.describe("a picture's caption", () => {
     await expect(caption).toHaveText("Olde stone");
   });
 
-  test("takes focus from Tab and keeps the text", async ({ page }) => {
+  test("takes focus from Tab, and Down goes on to the next block", async ({ page }) => {
     const caption = editor(page).locator("figcaption");
     await caption.locator("div").focus();
     const textarea = caption.locator("textarea");
     await expect(textarea).toBeFocused();
     await expect(textarea).toHaveValue("Old stone");
+
+    await page.keyboard.press("ArrowDown");
+    await expect(textarea).toHaveCount(0);
+    await page.keyboard.type("Then ");
+    await expect(editor(page)).toContainText("Then After.");
+  });
+
+  test("Up goes into it from the next block, and Up again selects the picture", async ({
+    page,
+  }) => {
+    const caption = editor(page).locator("figcaption");
+    await caretAfter(page, "After.");
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowUp");
+    const textarea = caption.locator("textarea");
+    await expect(textarea).toBeFocused();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(textarea).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Caption" })).toBeVisible();
+  });
+
+  test("Down from a selected picture goes into its caption", async ({ page }) => {
+    const figure = editor(page).locator("figure").first();
+    await figure.locator("img").click();
+    await expect(page.getByRole("button", { name: "Caption" })).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await expect(figure.locator("textarea")).toBeFocused();
+    await expect(figure.locator("textarea")).toHaveValue("Old stone");
+  });
+
+  test("the Caption button puts the caret in it, with text or without", async ({ page }) => {
+    const [first, last] = [
+      editor(page).locator("figure").first(),
+      editor(page).locator("figure").last(),
+    ];
+    await first.locator("img").click();
+    await page.getByRole("button", { name: "Caption" }).click();
+    await expect(first.locator("textarea")).toBeFocused();
+    await expect(first.locator("textarea")).toHaveValue("Old stone");
+
+    await expect(last.locator("figcaption")).toHaveCount(0);
+    await caretAfter(page, "End.");
+    await last.locator("img").click();
+    // The first picture's toolbar fades out first.
+    await expect(page.getByRole("button", { name: "Caption" })).toHaveCount(1);
+    await page.getByRole("button", { name: "Caption" }).click();
+    const empty = last.locator("textarea");
+    await expect(empty).toBeFocused();
+    await expect(empty).toHaveAttribute("placeholder", "Write a caption...");
+    await page.keyboard.type("New stone");
+    await page.keyboard.press("Tab");
+    await expect(last.locator("figcaption")).toHaveText("New stone");
+  });
+
+  test("an emptied caption goes away when it's left", async ({ page }) => {
+    const figure = editor(page).locator("figure").first();
+    await figure.locator("figcaption div").focus();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("Tab");
+    await expect(figure.locator("figcaption")).toHaveCount(0);
+    expect(await lastSave(page, "Media.md")).not.toContain("Old stone");
   });
 
   test("shows as text in a read-only view and stays text when clicked", async ({ page }) => {

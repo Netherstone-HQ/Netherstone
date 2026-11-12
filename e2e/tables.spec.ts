@@ -303,6 +303,28 @@ test("the table toolbar waits while Settings covers the shard", async ({ page })
   await expect(popover).toHaveCount(1);
 });
 
+test("clicking a row grip selects the row, and the grip stays put while pressed", async ({
+  page,
+}) => {
+  await mockVault(page, { files: { "Tables.md": TABLE_NOTE }, open: "Tables.md" });
+
+  const row = editor(page).locator("tr").nth(2);
+  await row.hover();
+  const grip = row.locator("button.cursor-grab");
+  await expect(grip).toBeVisible();
+
+  const before = await grip.boundingBox();
+  if (!before) throw new Error("the row grip has no box");
+  await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await page.mouse.down();
+  const pressed = await grip.boundingBox();
+  await page.mouse.up();
+
+  // The press may nudge the grip, but never off the pointer.
+  expect(Math.abs((pressed?.y ?? 0) - before.y)).toBeLessThanOrEqual(1);
+  await expect(row.locator("[data-table-cell-selected]")).toHaveCount(3);
+});
+
 test("typing in a cell re-renders only that cell", async ({ page }) => {
   // Collects the cells React re-rendered. A cell's <td> gets new props only
   // when the cell's component ran; cells React skipped keep the old ones.

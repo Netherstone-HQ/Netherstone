@@ -956,14 +956,16 @@ const WALK_SHARE = 0.1;
 test("typing in a long shard doesn't walk the editor's text", async ({ page }) => {
   // React's selection save before each commit reads every text node's value
   // in the focused editor; the react-dom patch skips it for the editor.
+  // Only the app's own reads count: a test trace reads every node too.
   await page.addInitScript(() => {
     const value = Object.getOwnPropertyDescriptor(Node.prototype, "nodeValue")!;
     const counted = window as unknown as { __nodeValueReads: number };
+    const appCode = `${location.origin}/assets/`;
     counted.__nodeValueReads = 0;
     Object.defineProperty(Node.prototype, "nodeValue", {
       ...value,
       get() {
-        counted.__nodeValueReads += 1;
+        if (new Error().stack?.includes(appCode)) counted.__nodeValueReads += 1;
         return value.get!.call(this);
       },
     });

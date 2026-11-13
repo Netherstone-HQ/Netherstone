@@ -173,10 +173,11 @@ async function typeAtCaret(page: Page) {
   const withoutEmptyEnd = (view: string) => view.replace(/(\np: )+$/, "");
   const before = await caretView(page);
   expect(before, "a single caret to type at").toMatch(/^[^|]*\|[^|^]*$/);
+  const [left, right] = withoutEmptyEnd(before).split("|");
   await page.keyboard.type("X");
   await expect
     .poll(async () => withoutEmptyEnd(await caretView(page)))
-    .toBe(withoutEmptyEnd(before).replace("|", "X|"));
+    .toBe(`${left}X|${right}`);
 }
 
 /**

@@ -21,7 +21,7 @@ import {
  * that runs after Plate's own rules, so a heading or list at a cell's
  * start still resets first.
  */
-export const TableCellEdgesPlugin = createSlatePlugin({
+const TableCellEdgesPlugin = createSlatePlugin({
   key: 'tableCellEdges',
 }).overrideEditor(({ editor, tf: { delete: deleteText } }) => ({
   transforms: {

@@ -12,6 +12,10 @@ patchedDependencies:
   # can now return the ancestor as it was when the child last rendered.
   '@platejs/core': patches/@platejs__core.patch
   '@platejs/selection': patches/@platejs__selection.patch
+  # React saves the caret of a focused contenteditable before each commit by
+  # walking all of its DOM, and uses it only when focus moved. Skipped for the
+  # Slate editor, which sets its own caret. Recheck on every React upgrade.
+  react-dom: patches/react-dom.patch
 
 overrides:
   # @platejs/math pins katex 0.16.22 while everything else uses 0.16.45, which

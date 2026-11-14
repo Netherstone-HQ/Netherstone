@@ -11,6 +11,8 @@ patchedDependencies:
   # ancestor element with useElementSelector, not useElement(key), which
   # can now return the ancestor as it was when the child last rendered.
   '@platejs/core': patches/@platejs__core.patch
+  # Fixes copying an empty last block, pasting over selected blocks, and
+  # Enter on selected blocks, whose caret Plate dropped on the way to focus.
   '@platejs/selection': patches/@platejs__selection.patch
   # React saves the caret of a focused contenteditable before each commit by
   # walking all of its DOM, and uses it only when focus moved. Skipped for the

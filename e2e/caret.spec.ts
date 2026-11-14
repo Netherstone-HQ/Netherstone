@@ -392,14 +392,14 @@ const AFTER: Record<string, Record<string, string[][]>> = {
       ["p: Top", "table > tr > th > p: YXalpha", "table > tr > th > p: brYXavo", "table > tr > th > p: deltaY|", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
     ],
     Backspace: [
-      ["p: Top|alpha", "table > tr > th > p: ", "table > tr > th > p: bravo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
-      ["p: TopXalpha", "table > tr > th > p: ", "table > tr > th > p: b|avo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
-      ["p: TopXalpha", "table > tr > th > p: ", "table > tr > th > p: bXavo", "table > tr > th > p: delt|", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
+      ["p: Top", "table > tr > th > p: |alpha", "table > tr > th > p: bravo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
+      ["p: Top", "table > tr > th > p: Xalpha", "table > tr > th > p: b|avo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
+      ["p: Top", "table > tr > th > p: Xalpha", "table > tr > th > p: bXavo", "table > tr > th > p: delt|", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
     ],
     Delete: [
       ["p: Top", "table > tr > th > p: |lpha", "table > tr > th > p: bravo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
       ["p: Top", "table > tr > th > p: Xlpha", "table > tr > th > p: br|vo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
-      ["p: Top", "table > tr > th > p: Xlpha", "table > tr > th > p: brXvo", "table > tr > th > p: delta|a", "table > tr > td > p: ", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
+      ["p: Top", "table > tr > th > p: Xlpha", "table > tr > th > p: brXvo", "table > tr > th > p: delta|", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],
     ],
     Enter: [
       ["p: Top", "table > tr > th > p: ", "table > tr > th > p: |alpha", "table > tr > th > p: bravo", "table > tr > th > p: delta", "table > tr > td > p: a", "table > tr > td > p: b", "table > tr > td > p: c", "p: End", "p: "],

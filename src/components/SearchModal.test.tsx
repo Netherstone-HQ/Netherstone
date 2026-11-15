@@ -68,6 +68,21 @@ describe("SearchModal", () => {
     expect(openVaultFile).toHaveBeenCalledWith(`${VAULT}/Projects/Kitchen quote.md`);
   });
 
+  it("closes as soon as a shard is picked, before it finishes opening", () => {
+    useUIStore.setState({
+      recentFiles: [{ path: `${VAULT}/Big.md`, name: "Big.md" }],
+    });
+    vi.mocked(openVaultFile).mockReturnValueOnce(new Promise(() => {}));
+    const onOpenChange = vi.fn();
+    renderSearch(onOpenChange);
+
+    fireEvent.keyDown(screen.getByPlaceholderText("Search your vault"), {
+      key: "Enter",
+    });
+    expect(openVaultFile).toHaveBeenCalledWith(`${VAULT}/Big.md`);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("shows a result's name and snippet with the searched words highlighted, and its section", async () => {
     vi.mocked(invoke).mockResolvedValue([
       {

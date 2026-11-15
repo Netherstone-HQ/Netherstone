@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PREFERENCES, useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { openVaultDialog } from "@/lib/commands/vault";
+import { openVault } from "@/lib/open-vault";
 import { SETTINGS_CATEGORIES, SettingsPage } from "./SettingsPage";
 
 const AI_APP = {
@@ -41,8 +43,21 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: vi.fn(async () => {}),
 }));
 
+vi.mock("@/lib/commands/vault", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/commands/vault")>()),
+  openVaultDialog: vi.fn(async () => null),
+}));
+vi.mock("@/lib/nested-vault", () => ({
+  chooseVaultFolder: vi.fn(async (folder: string) => folder),
+}));
+vi.mock("@/lib/open-vault", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/open-vault")>()),
+  openVault: vi.fn(async () => {}),
+}));
+
 describe("SettingsPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useSettingsStore.setState({ ...DEFAULT_PREFERENCES });
     useVaultStore.setState({ currentVaultPath: null });
     useUIStore.setState({
@@ -114,5 +129,26 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(useUIStore.getState().activeNavItem).toBeNull();
+  });
+
+  it("goes back to the editor after opening another vault", async () => {
+    vi.mocked(openVaultDialog).mockResolvedValueOnce("/v/Other");
+    useUIStore.setState({ settingsCategory: "vault", appMode: "canvas" });
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() =>
+      expect(useUIStore.getState().activeNavItem).toBeNull(),
+    );
+    expect(openVault).toHaveBeenCalledWith("/v/Other");
+    expect(useUIStore.getState().appMode).toBe("notes");
+  });
+
+  it("stays open when no folder is picked", async () => {
+    useUIStore.setState({ settingsCategory: "vault" });
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(openVaultDialog).toHaveResolved());
+    expect(openVault).not.toHaveBeenCalled();
+    expect(useUIStore.getState().activeNavItem).toBe("settings");
   });
 });

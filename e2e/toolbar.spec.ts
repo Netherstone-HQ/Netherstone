@@ -21,7 +21,7 @@ test("a narrow toolbar moves buttons into the ⋯ menu", async ({ page }) => {
   const boldMoved = toolbar.locator("div[inert]:has(svg.lucide-bold)");
   await expect(boldMoved).toHaveCount(0);
 
-  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.setViewportSize({ width: 800, height: 800 });
   await expect(boldMoved).toHaveCount(1);
   expect(await toolbar.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
     true,
@@ -46,9 +46,27 @@ test("a narrow toolbar moves buttons into the ⋯ menu", async ({ page }) => {
 });
 
 test("a toolbar opened narrow starts with buttons in the ⋯ menu", async ({ page }) => {
-  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.setViewportSize({ width: 800, height: 800 });
   const toolbar = await openShard(page);
   await expect(toolbar.locator("div[inert]:has(svg.lucide-bold)")).toHaveCount(1);
+});
+
+test("a narrow toolbar keeps every button that fits", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  const toolbar = await openShard(page);
+  // Buttons move one at a time, not a whole group at once.
+  const moved = (icon: string) =>
+    toolbar.locator(`div[inert]:has(svg.lucide-${icon})`);
+  await expect(moved("highlighter")).toHaveCount(1);
+  await expect(moved("bold")).toHaveCount(0);
+
+  // The ⋯ menu stops short of the window's edge.
+  await page.setViewportSize({ width: 700, height: 400 });
+  await toolbar.locator("button:has(svg.lucide-ellipsis)").click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  expect(box!.y + box!.height).toBeLessThan(400);
 });
 
 test("the History header is as tall as the toolbar", async ({ page }) => {

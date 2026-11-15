@@ -218,31 +218,110 @@ function IndentMenuRow() {
   return <MenuRow {...props} icon={<IndentIcon />} label="Indent" />;
 }
 
+/** A toolbar button and the ⋯ menu row that stands in for it. */
+type Item = { key: string; content: React.ReactNode; menu: React.ReactNode };
+
+/** A run of items with a separator after it. */
+type Group = { key: string; items: Item[] };
+
+function markItem(
+  key: string,
+  nodeType: string,
+  label: string,
+  icon: React.ReactNode,
+  shortcut: ShortcutId,
+): Item {
+  return {
+    key,
+    content: (
+      <MarkToolbarButton
+        nodeType={nodeType}
+        tooltip={label}
+        shortcut={shortcut}
+      >
+        {icon}
+      </MarkToolbarButton>
+    ),
+    menu: (
+      <MarkMenuRow
+        nodeType={nodeType}
+        icon={icon}
+        label={label}
+        shortcut={shortcut}
+      />
+    ),
+  };
+}
+
+function colorItem(
+  key: string,
+  nodeType: string,
+  label: string,
+  icon: React.ReactNode,
+): Item {
+  return {
+    key,
+    content: (
+      <FontColorToolbarButton nodeType={nodeType} tooltip={label}>
+        {icon}
+      </FontColorToolbarButton>
+    ),
+    menu: (
+      <FontColorToolbarButton nodeType={nodeType} tooltip={label} submenu>
+        {icon}
+      </FontColorToolbarButton>
+    ),
+  };
+}
+
+/** The item whose menu row the marks without a button of their own follow. */
+const EXTRA_MARKS_AFTER = "code";
+
+function withExtraMarks(item: Item): Item {
+  return {
+    ...item,
+    menu: (
+      <>
+        {item.menu}
+        <ExtraMarkRows />
+      </>
+    ),
+  };
+}
+
 /**
- * The groups that make room when the toolbar is narrow, in order. The last
- * ones move into the ⋯ menu first, where `menu` stands in for `content`.
+ * The buttons that make room when the toolbar is narrow, in order. The last
+ * ones move into the ⋯ menu first, one at a time.
  */
-const GROUPS: { key: string; content: React.ReactNode; menu: React.ReactNode }[] =
-  [
-    {
-      key: "media",
-      content: <MediaToolbarMenu />,
-      menu: <MediaToolbarMenu submenu />,
-    },
-    {
-      key: "blocks",
-      content: (
-        <>
-          <InsertToolbarButton />
-          <TurnIntoToolbarButton />
-          <FontSizeToolbarButton />
-        </>
-      ),
-      menu: (
-        <>
-          <InsertToolbarButton submenu />
-          <TurnIntoToolbarButton submenu />
-          {/* Not a menu item: the size field takes typing. */}
+const GROUPS: Group[] = [
+  {
+    key: "media",
+    items: [
+      {
+        key: "media",
+        content: <MediaToolbarMenu />,
+        menu: <MediaToolbarMenu submenu />,
+      },
+    ],
+  },
+  {
+    key: "blocks",
+    items: [
+      {
+        key: "insert",
+        content: <InsertToolbarButton />,
+        menu: <InsertToolbarButton submenu />,
+      },
+      {
+        key: "turn-into",
+        content: <TurnIntoToolbarButton />,
+        menu: <TurnIntoToolbarButton submenu />,
+      },
+      {
+        key: "font-size",
+        content: <FontSizeToolbarButton />,
+        menu: (
+          // Not a menu item: the size field takes typing.
           <div
             className="flex items-center gap-2 py-0.5 pr-0.5 pl-2 text-ui [&>svg]:size-icon [&>svg]:text-muted-foreground"
             onKeyDown={(e) => e.stopPropagation()}
@@ -251,191 +330,138 @@ const GROUPS: { key: string; content: React.ReactNode; menu: React.ReactNode }[]
             <span className="grow">Text size</span>
             <FontSizeToolbarButton />
           </div>
-        </>
+        ),
+      },
+    ],
+  },
+  {
+    key: "marks",
+    items: [
+      markItem("bold", KEYS.bold, "Bold", <BoldIcon />, "bold"),
+      markItem("italic", KEYS.italic, "Italic", <ItalicIcon />, "italic"),
+      markItem(
+        "underline",
+        KEYS.underline,
+        "Underline",
+        <UnderlineIcon />,
+        "underline",
       ),
-    },
-    {
-      key: "marks",
-      content: (
-        <>
-          <MarkToolbarButton
-            nodeType={KEYS.bold}
-            tooltip="Bold"
-            shortcut="bold"
-          >
-            <BoldIcon />
-          </MarkToolbarButton>
-          <MarkToolbarButton
-            nodeType={KEYS.italic}
-            tooltip="Italic"
-            shortcut="italic"
-          >
-            <ItalicIcon />
-          </MarkToolbarButton>
-          <MarkToolbarButton
-            nodeType={KEYS.underline}
-            tooltip="Underline"
-            shortcut="underline"
-          >
-            <UnderlineIcon />
-          </MarkToolbarButton>
-          <MarkToolbarButton
-            nodeType={KEYS.strikethrough}
-            tooltip="Strikethrough"
-            shortcut="strikethrough"
-          >
-            <StrikethroughIcon />
-          </MarkToolbarButton>
-          <MarkToolbarButton
-            nodeType={KEYS.code}
-            tooltip="Code"
-            shortcut="code"
-          >
-            <Code2Icon />
-          </MarkToolbarButton>
-          <MarkToolbarButton
-            nodeType={KEYS.highlight}
-            tooltip="Highlight"
-            shortcut="highlight"
-          >
-            <HighlighterIcon />
-          </MarkToolbarButton>
-          <FontColorToolbarButton nodeType={KEYS.color} tooltip="Text color">
-            <BaselineIcon />
-          </FontColorToolbarButton>
-          <FontColorToolbarButton
-            nodeType={KEYS.backgroundColor}
-            tooltip="Background color"
-          >
-            <PaintBucketIcon />
-          </FontColorToolbarButton>
-        </>
+      markItem(
+        "strikethrough",
+        KEYS.strikethrough,
+        "Strikethrough",
+        <StrikethroughIcon />,
+        "strikethrough",
       ),
-      menu: (
-        <>
-          <MarkMenuRow
-            nodeType={KEYS.bold}
-            icon={<BoldIcon />}
-            label="Bold"
-            shortcut="bold"
-          />
-          <MarkMenuRow
-            nodeType={KEYS.italic}
-            icon={<ItalicIcon />}
-            label="Italic"
-            shortcut="italic"
-          />
-          <MarkMenuRow
-            nodeType={KEYS.underline}
-            icon={<UnderlineIcon />}
-            label="Underline"
-            shortcut="underline"
-          />
-          <MarkMenuRow
-            nodeType={KEYS.strikethrough}
-            icon={<StrikethroughIcon />}
-            label="Strikethrough"
-            shortcut="strikethrough"
-          />
-          <MarkMenuRow
-            nodeType={KEYS.code}
-            icon={<Code2Icon />}
-            label="Code"
-            shortcut="code"
-          />
-          <ExtraMarkRows />
-          <MarkMenuRow
-            nodeType={KEYS.highlight}
-            icon={<HighlighterIcon />}
-            label="Highlight"
-            shortcut="highlight"
-          />
-          <FontColorToolbarButton
-            nodeType={KEYS.color}
-            tooltip="Text color"
-            submenu
-          >
-            <BaselineIcon />
-          </FontColorToolbarButton>
-          <FontColorToolbarButton
-            nodeType={KEYS.backgroundColor}
-            tooltip="Background color"
-            submenu
-          >
-            <PaintBucketIcon />
-          </FontColorToolbarButton>
-        </>
+      withExtraMarks(
+        markItem(EXTRA_MARKS_AFTER, KEYS.code, "Code", <Code2Icon />, "code"),
       ),
-    },
-    {
-      key: "lists",
-      content: (
-        <>
-          <AlignToolbarButton />
-          <NumberedListToolbarButton />
-          <BulletedListToolbarButton />
-          <TodoListToolbarButton />
-          <ToggleToolbarButton />
-        </>
+      markItem(
+        "highlight",
+        KEYS.highlight,
+        "Highlight",
+        <HighlighterIcon />,
+        "highlight",
       ),
-      menu: (
-        <>
-          <AlignToolbarButton submenu />
+      colorItem("color", KEYS.color, "Text color", <BaselineIcon />),
+      colorItem(
+        "background",
+        KEYS.backgroundColor,
+        "Background color",
+        <PaintBucketIcon />,
+      ),
+    ],
+  },
+  {
+    key: "lists",
+    items: [
+      {
+        key: "align",
+        content: <AlignToolbarButton />,
+        menu: <AlignToolbarButton submenu />,
+      },
+      {
+        key: "numbered",
+        content: <NumberedListToolbarButton />,
+        menu: (
           <ListMenuRow
             styleTypes={NUMBERED_STYLES}
             icon={<ListOrderedIcon />}
             label="Numbered list"
           />
+        ),
+      },
+      {
+        key: "bulleted",
+        content: <BulletedListToolbarButton />,
+        menu: (
           <ListMenuRow
             styleTypes={BULLETED_STYLES}
             icon={<ListIcon />}
             label="Bulleted list"
           />
-          <TodoListMenuRow />
-          <ToggleListMenuRow />
-        </>
-      ),
-    },
-    {
-      key: "insert",
-      content: (
-        <>
-          <LinkToolbarButton />
-          <TableToolbarButton />
-        </>
-      ),
-      menu: (
-        <>
-          <LinkMenuRow />
-          <TableToolbarButton submenu />
-        </>
-      ),
-    },
-    {
-      key: "spacing",
-      content: (
-        <>
-          <LineHeightToolbarButton />
-          <OutdentToolbarButton />
-          <IndentToolbarButton />
-        </>
-      ),
-      menu: (
-        <>
-          <LineHeightToolbarButton submenu />
-          <OutdentMenuRow />
-          <IndentMenuRow />
-        </>
-      ),
-    },
-  ];
+        ),
+      },
+      {
+        key: "todo",
+        content: <TodoListToolbarButton />,
+        menu: <TodoListMenuRow />,
+      },
+      {
+        key: "toggle",
+        content: <ToggleToolbarButton />,
+        menu: <ToggleListMenuRow />,
+      },
+    ],
+  },
+  {
+    key: "insert",
+    items: [
+      { key: "link", content: <LinkToolbarButton />, menu: <LinkMenuRow /> },
+      {
+        key: "table",
+        content: <TableToolbarButton />,
+        menu: <TableToolbarButton submenu />,
+      },
+    ],
+  },
+  {
+    key: "spacing",
+    items: [
+      {
+        key: "line-height",
+        content: <LineHeightToolbarButton />,
+        menu: <LineHeightToolbarButton submenu />,
+      },
+      {
+        key: "outdent",
+        content: <OutdentToolbarButton />,
+        menu: <OutdentMenuRow />,
+      },
+      {
+        key: "indent",
+        content: <IndentToolbarButton />,
+        menu: <IndentMenuRow />,
+      },
+    ],
+  },
+];
+
+/** Every item in toolbar order, with whether it ends its group. */
+const ITEMS = GROUPS.flatMap((group) =>
+  group.items.map((item, index) => ({
+    ...item,
+    group: group.key,
+    endsGroup: index === group.items.length - 1,
+  })),
+);
 
 export function FixedToolbarButtons() {
   const readOnly = useEditorReadOnly();
   const rowRef = React.useRef<HTMLDivElement>(null);
-  const [shownCount, setShownCount] = React.useState(GROUPS.length);
+  const [shownCount, setShownCount] = React.useState(ITEMS.length);
 
-  // The row wraps instead of scrolling; groups pushed onto a second line are
+  // The row wraps instead of scrolling; buttons pushed onto a second line are
   // clipped and go into the ⋯ menu. Measured only when the observer first
   // fires, after layout, so a shard switch doesn't force a layout here.
   React.useLayoutEffect(() => {
@@ -443,19 +469,17 @@ export function FixedToolbarButtons() {
     if (!row) return;
 
     const measure = () => {
-      const groups = Array.from(row.children) as HTMLElement[];
-      const top = groups[0]?.offsetTop ?? 0;
-      const firstWrapped = groups.findIndex((group) => group.offsetTop > top);
-      setShownCount(firstWrapped === -1 ? groups.length : firstWrapped);
+      const items = Array.from(row.children) as HTMLElement[];
+      const top = items[0]?.offsetTop ?? 0;
+      const firstWrapped = items.findIndex((item) => item.offsetTop > top);
+      setShownCount(firstWrapped === -1 ? items.length : firstWrapped);
     };
 
     const observer = new ResizeObserver(measure);
     observer.observe(row);
-    for (const group of Array.from(row.children)) observer.observe(group);
+    for (const item of Array.from(row.children)) observer.observe(item);
     return () => observer.disconnect();
   }, [readOnly]);
-
-  const hiddenGroups = GROUPS.slice(shownCount);
 
   return (
     <div className="flex h-full w-full min-w-0 items-center">
@@ -467,23 +491,25 @@ export function FixedToolbarButtons() {
           </ToolbarGroup>
 
           <div ref={rowRef} className="flex h-9 min-w-0 flex-wrap overflow-hidden">
-            {GROUPS.map((group, index) => (
+            {ITEMS.map((item, index) => (
               <div
-                key={group.key}
-                className="flex shrink-0"
+                key={item.key}
+                className="flex shrink-0 items-center"
                 inert={index >= shownCount}
               >
-                <div className="flex items-center">{group.content}</div>
-                {/* Kept in place on the last shown group, so its width
+                {item.content}
+                {/* Kept in place on the last shown button, so its width
                     doesn't change what fits. */}
-                <div
-                  className={cn(
-                    "mx-1.5 py-0.5",
-                    index >= shownCount - 1 && "invisible",
-                  )}
-                >
-                  <Separator orientation="vertical" />
-                </div>
+                {item.endsGroup && (
+                  <div
+                    className={cn(
+                      "mx-1.5 py-0.5",
+                      index >= shownCount - 1 && "invisible",
+                    )}
+                  >
+                    <Separator orientation="vertical" />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -494,7 +520,7 @@ export function FixedToolbarButtons() {
 
       {!readOnly && (
         <ToolbarGroup>
-          <OverflowMenu groups={hiddenGroups} />
+          <OverflowMenu items={ITEMS.slice(shownCount)} />
         </ToolbarGroup>
       )}
 
@@ -506,19 +532,31 @@ export function FixedToolbarButtons() {
 }
 
 /**
- * The groups that don't fit, in toolbar order. The marks without a button of
- * their own sit with the other marks, or first while those are on the toolbar.
+ * The buttons that don't fit, in toolbar order, a section per group. The marks
+ * without a button of their own follow Code, or come first while it's on the
+ * toolbar.
  */
 function OverflowMenu({
-  groups,
+  items,
 }: {
-  groups: { key: string; menu: React.ReactNode }[];
+  items: { key: string; group: string; menu: React.ReactNode }[];
 }) {
   const [open, setOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const sections = groups.some((group) => group.key === "marks")
-    ? groups
-    : [{ key: "extra-marks", menu: <ExtraMarkRows /> }, ...groups];
+
+  const sections: { key: string; rows: React.ReactNode[] }[] = [];
+  if (!items.some((item) => item.key === EXTRA_MARKS_AFTER)) {
+    sections.push({
+      key: "extra-marks",
+      rows: [<ExtraMarkRows key="extra" />],
+    });
+  }
+  for (const item of items) {
+    const row = <React.Fragment key={item.key}>{item.menu}</React.Fragment>;
+    const last = sections.at(-1);
+    if (last?.key === item.group) last.rows.push(row);
+    else sections.push({ key: item.group, rows: [row] });
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
@@ -531,6 +569,7 @@ function OverflowMenu({
       <DropdownMenuContent
         align="end"
         className="ignore-click-outside/toolbar min-w-56"
+        collisionPadding={8}
         onCloseAutoFocus={(e) => e.preventDefault()}
         // ⋯ itself opens and closes the menu, also while it fades out.
         onPointerDownOutside={(e) => {
@@ -542,7 +581,7 @@ function OverflowMenu({
         {sections.map((section, index) => (
           <React.Fragment key={section.key}>
             {index > 0 && <DropdownMenuSeparator />}
-            {section.menu}
+            {section.rows}
           </React.Fragment>
         ))}
       </DropdownMenuContent>

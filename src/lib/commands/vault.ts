@@ -69,6 +69,22 @@ export type VaultFolderError =
   | "vault-folder-not-empty"
   | "vault-location-missing";
 
+/**
+ * Renames the open vault's folder to `name` and keeps it open there.
+ * Resolves to its new path. Fails with one of the codes in
+ * `RenameVaultError` instead of a sentence.
+ */
+export async function renameVaultFolder(vaultPath: string, name: string): Promise<string> {
+  assertTauri();
+  return invoke<string>("rename_vault", { vaultPath, name });
+}
+
+export type RenameVaultError =
+  | "vault-name-empty"
+  | "vault-name-invalid"
+  | "vault-name-taken"
+  | "vault-in-use";
+
 /** Free space, in bytes, on the disk the open vault is on. */
 export async function vaultFreeSpace(vaultPath: string): Promise<number> {
   assertTauri();

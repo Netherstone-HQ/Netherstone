@@ -28,6 +28,19 @@ pub use memory::{
     Memory, delete_all_memory, delete_memory, discard_offer, edit_memory, forget, memory, remember,
 };
 pub use models::{Model, ProviderError};
+
+/// Moves the saved chats about the vault at `old` to `new`, after a rename.
+/// Without saved chats there's nothing to move.
+pub fn follow_vault_rename(old: &std::path::Path, new: &std::path::Path) -> Result<(), String> {
+    if !sessions::path()?.exists() {
+        return Ok(());
+    }
+    let store = views::store().map_err(|_| "Couldn't open saved chats".to_string())?;
+    let store = store
+        .lock()
+        .map_err(|_| "Saved chats are locked".to_string())?;
+    store.rename_vault(old, new)
+}
 pub use providers::Api;
 pub use runs::{ask_inline, send, stop, stop_window};
 pub use sessions::ChatInfo;

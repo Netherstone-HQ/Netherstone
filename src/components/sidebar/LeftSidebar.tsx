@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
+  ArrowLeftRightIcon,
   ChevronsUpDownIcon,
   FolderIcon,
   FolderInputIcon,
@@ -19,6 +20,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Hint } from "@/components/ui/tooltip";
@@ -183,22 +187,25 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
               ) : null}
 
               {otherVaults.length > 0 ? (
-                <>
-                  <VaultMenuLabel>Other vaults</VaultMenuLabel>
-                  {otherVaults.map((path) => (
-                    <DropdownMenuItem
-                      key={path}
-                      title={path}
-                      onSelect={() => void switchToRecent(path)}
-                    >
-                      <FolderIcon />
-                      <span className="truncate">{folderName(path)}</span>
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                </>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <ArrowLeftRightIcon />
+                    Switch vault
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56">
+                    {otherVaults.map((path) => (
+                      <DropdownMenuItem
+                        key={path}
+                        title={path}
+                        onSelect={() => void switchToRecent(path)}
+                      >
+                        <FolderIcon />
+                        <span className="truncate">{folderName(path)}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               ) : null}
-
               <DropdownMenuItem onSelect={() => void handleOpenVault()}>
                 <FolderInputIcon />
                 Open vault

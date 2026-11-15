@@ -288,6 +288,17 @@ impl Store {
         Ok(Self { conn })
     }
 
+    /// Moves the chats about the vault at `old` to `new`, after a rename.
+    pub fn rename_vault(&self, old: &Path, new: &Path) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE chats SET vault = ?2 WHERE vault = ?1",
+                params![old.to_string_lossy(), new.to_string_lossy()],
+            )
+            .map(|_| ())
+            .map_err(sql)
+    }
+
     /// Starts a chat about `vault` with its first message's text as title.
     pub fn create(&self, vault: &Path, first: &str) -> Result<String, String> {
         let id = new_id();

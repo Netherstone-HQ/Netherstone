@@ -149,6 +149,21 @@ pub fn forget_vault(conn: &Connection, vault_path: &Path) -> rusqlite::Result<()
     .map(|_| ())
 }
 
+/// Keeps what's kept for the vault at `old` under `new`, after a rename.
+pub fn rename_vault(conn: &Connection, old: &Path, new: &Path) -> rusqlite::Result<()> {
+    let (old, new) = (old.to_string_lossy(), new.to_string_lossy());
+    // A vault once kept at `new` is gone, or the folder couldn't be renamed.
+    conn.execute(
+        "DELETE FROM vaults WHERE path = ?2 AND path <> ?1",
+        params![old, new],
+    )?;
+    conn.execute(
+        "UPDATE vaults SET path = ?2 WHERE path = ?1",
+        params![old, new],
+    )
+    .map(|_| ())
+}
+
 /// Lets AI apps use the vault at `vault_path`, or stops them. False when
 /// the app has never opened it.
 pub fn set_vault_ai_allowed(

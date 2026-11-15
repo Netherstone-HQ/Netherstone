@@ -1,7 +1,7 @@
 //! Opening, making, scanning, watching and indexing the vault.
 
 use crate::vault_access::{self, open_vault_only};
-use crate::{asset_scope, db, gone_vaults, sync, vault, watcher};
+use crate::{asset_scope, assistant, db, gone_vaults, locks, sync, vault, watcher};
 use std::path::Path;
 use tauri_plugin_dialog::DialogExt;
 
@@ -63,6 +63,52 @@ pub(crate) fn create_vault(
     let folder = vault::create_vault_folder(parent, &name)?;
     vault_access::get().allow(&folder);
     Ok(folder.to_string_lossy().into_owned())
+}
+
+/// Renames the open vault's folder to `name` and keeps it open there.
+/// Returns its new path. Fails with a code for the app to word when the name
+/// can't be used or the folder is in use.
+#[tauri::command(async)]
+pub(crate) fn rename_vault(
+    app: tauri::AppHandle,
+    vault_path: String,
+    name: String,
+) -> Result<String, String> {
+    open_vault_only(&vault_path)?;
+    let old = Path::new(&vault_path);
+    let new = vault::rename::renamed_path(old, &name)?;
+    if new.as_os_str() == old.as_os_str() {
+        return Ok(vault_path);
+    }
+    let sync_root = sync::sync_root()?;
+    // Nothing syncs, saves a version or writes into the vault meanwhile.
+    let _sync = locks::sync(&sync_root)?;
+    let _history = locks::history(&sync_root)?;
+    let _writes = locks::vault_writes()?;
+
+    watcher::unwatch_vault(&app);
+    if let Err(error) = vault::rename::rename_folder(old, &new) {
+        if let Err(watch_error) = watcher::watch_vault(&app, &vault_path) {
+            eprintln!(
+                "[Netherstone] Couldn't watch the vault again: {}",
+                watch_error
+            );
+        }
+        return Err(error);
+    }
+    // Moves its sync record along, as for a vault moved outside the app.
+    vault_access::get().open(&sync_root, &new)?;
+
+    let followed = db::open_connection()
+        .and_then(|conn| vault::rename::follow_in_database(&conn, old, &new))
+        .and_then(|()| assistant::follow_vault_rename(old, &new));
+    if let Err(error) = followed {
+        eprintln!(
+            "[Netherstone] Couldn't follow the rename of {}: {}",
+            vault_path, error
+        );
+    }
+    Ok(new.to_string_lossy().into_owned())
 }
 
 /// Free space, in bytes, on the disk the open vault is on.

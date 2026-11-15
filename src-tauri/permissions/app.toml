@@ -63,6 +63,7 @@ commands.allow = [
   "mcp_setup",
   "default_vault_location",
   "create_vault",
+  "rename_vault",
   "open_media_files_dialog",
   "open_import_dialog",
   "take_launch",

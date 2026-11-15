@@ -21,6 +21,8 @@ interface VaultState {
   recentVaults: string[];
   /** Drops a vault from the recent list, once its folder is gone. */
   forgetRecentVault: (path: string) => void;
+  /** Keeps the vault at `previousPath` open, and in its place, at `nextPath`. */
+  renameVault: (previousPath: string, nextPath: string) => void;
 
   // ── File Tree ──────────────────────────────────────────────────────────────
   fileTree: FileTreeNode[];
@@ -56,6 +58,16 @@ export const useVaultStore = create<VaultState>()(
       forgetRecentVault: (path) =>
         set((state) => ({
           recentVaults: state.recentVaults.filter((v) => !isSamePath(v, path)),
+        })),
+      renameVault: (previousPath, nextPath) =>
+        set((state) => ({
+          currentVaultPath:
+            state.currentVaultPath && isSamePath(state.currentVaultPath, previousPath)
+              ? nextPath
+              : state.currentVaultPath,
+          recentVaults: state.recentVaults.map((v) =>
+            isSamePath(v, previousPath) ? nextPath : v,
+          ),
         })),
 
       // ── File Tree ──────────────────────────────────────────────────────────────

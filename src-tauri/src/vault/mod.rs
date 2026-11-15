@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod rename;
 
 use serde::Serialize;
 use std::path::Path;

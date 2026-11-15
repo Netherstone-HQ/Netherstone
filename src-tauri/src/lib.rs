@@ -185,6 +185,7 @@ pub fn run() {
             mcp::commands::mcp_setup,
             vault::commands::default_vault_location,
             vault::commands::create_vault,
+            vault::commands::rename_vault,
             attachments::commands::open_media_files_dialog,
             import::commands::open_import_dialog,
             launch::take_launch,

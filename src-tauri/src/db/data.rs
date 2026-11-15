@@ -153,6 +153,26 @@ pub fn rename_writing_path(conn: &Connection, previous: &str, next: &str) -> rus
     Ok(())
 }
 
+/// Moves the writing logged in the vault at `old` to `new`, after the vault
+/// is renamed. Run it in a transaction.
+pub fn rename_writing_vault(conn: &Connection, old: &Path, new: &Path) -> rusqlite::Result<()> {
+    let paths: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT DISTINCT file_path FROM writing_log")?;
+        stmt.query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    for path in paths {
+        if let Ok(inside) = Path::new(&path).strip_prefix(old) {
+            rename_writing_path(conn, &path, &new.join(inside).to_string_lossy())?;
+        }
+    }
+    conn.execute(
+        "UPDATE OR IGNORE writing_log_start SET vault_path = ?2 WHERE vault_path = ?1",
+        params![old.to_string_lossy(), new.to_string_lossy()],
+    )?;
+    Ok(())
+}
+
 /// Starts counting for `vault_path` on `day`, unless it already started.
 pub fn start_writing_log(conn: &Connection, vault_path: &str, day: &str) -> rusqlite::Result<()> {
     conn.execute(

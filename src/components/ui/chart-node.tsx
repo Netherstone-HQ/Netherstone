@@ -8,7 +8,6 @@ import {
   useEditorSelector,
   useFocused,
   useReadOnly,
-  useSelected,
 } from "platejs/react";
 import { toast } from "sonner";
 
@@ -47,6 +46,7 @@ import { openDrawingFile } from "@/lib/open-vault-file";
 import type { TRawBlockElement } from "@/lib/markdown-raw-blocks";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useVaultStore } from "@/store";
+import { useElementSelected } from "./use-element-selected";
 
 /** The table right above the block at `path`, or null when there isn't one. */
 function tableAbove(editor: { children: unknown[] }, path: Path) {
@@ -190,7 +190,7 @@ export function ChartBlock({
 }) {
   const editor = useEditorRef();
   const readOnly = useReadOnly();
-  const selected = useSelected();
+  const selected = useElementSelected();
   const focused = useFocused();
   const svgRef = useRef<SVGSVGElement>(null);
   const [isEditing, setIsEditing] = useState(false);

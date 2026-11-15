@@ -1,8 +1,9 @@
 "use client";
 
-import { useFocused, useReadOnly, useSelected } from "platejs/react";
+import { useFocused, useReadOnly } from "platejs/react";
 
 import { cn } from "@/lib/utils";
+import { useElementSelected } from "./use-element-selected";
 
 /**
  * A block kept exactly as it is in the file and not editable here: front
@@ -11,7 +12,7 @@ import { cn } from "@/lib/utils";
  */
 export function VerbatimBlock({ label, lines }: { label: string; lines: string[] }) {
   const readOnly = useReadOnly();
-  const selected = useSelected();
+  const selected = useElementSelected();
   const focused = useFocused();
 
   return (

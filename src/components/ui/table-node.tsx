@@ -61,7 +61,6 @@ import {
   usePluginOption,
   useReadOnly,
   useRemoveNodeButton,
-  useSelected,
   withHOC,
 } from "platejs/react";
 import { useElementSelector } from "platejs/react";
@@ -123,6 +122,7 @@ import {
   ToolbarGroup,
   ToolbarMenuGroup,
 } from "./toolbar";
+import { useElementSelected } from "./use-element-selected";
 
 const TABLE_CONTROL_COLUMN_WIDTH = 8;
 const TABLE_DEFERRED_COLUMN_RESIZE_CELL_COUNT = 1200;
@@ -241,7 +241,7 @@ export const TableElement = withHOC(
     const { isDragOver, shellProps: dragShellProps } =
       useDragControls(wrapperRef);
     const isSelectingTable = useBlockSelected(props.element.id as string);
-    const selected = useSelected();
+    const selected = useElementSelected();
     const [hovered, setHovered] = React.useState(false);
     const showResizeHandles =
       hasControls && (hovered || selected || resizeController.resizing);
@@ -391,7 +391,7 @@ function TableFloatingToolbar({
   children,
   ...props
 }: React.ComponentProps<typeof PopoverContent>) {
-  const selected = useSelected();
+  const selected = useElementSelected();
   const [kind, setKind] = React.useState<TableToolbarKind>("none");
   // The menu is drawn over the whole window, so it waits while Settings or
   // another view covers the shard.

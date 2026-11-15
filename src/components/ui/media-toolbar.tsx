@@ -19,7 +19,6 @@ import {
   useFocusedLast,
   useReadOnly,
   useRemoveNodeButton,
-  useSelected,
 } from 'platejs/react';
 
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -39,6 +38,7 @@ import { useEditorOnScreen } from '@/hooks/useEditorOnScreen';
 import { useVaultStore } from '@/store';
 
 import { CaptionButton } from './caption';
+import { useElementSelected } from './use-element-selected';
 
 const inputVariants = cva(
   'flex h-[28px] w-full rounded-md border-none bg-transparent px-1.5 py-1 text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-transparent md:text-sm'
@@ -53,7 +53,7 @@ export function MediaToolbar({
 }) {
   const editor = useEditorRef();
   const readOnly = useReadOnly();
-  const selected = useSelected();
+  const selected = useElementSelected();
   const isFocusedLast = useFocusedLast();
   const selectionCollapsed = useEditorSelector(
     (editor) => !editor.api.isExpanded(),

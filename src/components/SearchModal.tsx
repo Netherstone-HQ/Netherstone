@@ -303,10 +303,11 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
           ],
         }));
 
+  // Search closes at once; a large shard can take a moment to open.
   const handleSelect = async (row: Row) => {
+    onOpenChange(false);
     try {
       await (row.isHistory ? openFileHistory : openVaultFile)(row.path);
-      onOpenChange(false);
     } catch (error) {
       console.error("Failed to open file:", error);
     }

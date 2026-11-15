@@ -15,7 +15,7 @@ function menuEntries(menu: ReturnType<Page["getByRole"]>) {
     .allInnerTexts();
 }
 
-test("the vault menu lists this vault, then the other vaults, then open and new", async ({
+test("the vault menu lists this vault, then switch, open and new", async ({
   page,
 }) => {
   await mockVault(page, {
@@ -30,20 +30,25 @@ test("the vault menu lists this vault, then the other vaults, then open and new"
     "Import",
     "Show in file manager",
     "Vault settings",
-    "Other vaults",
-    "Work notes",
-    "Recipes",
+    "Switch vault",
     "Open vault",
     "New vault",
   ]);
-  await expect(menu.getByRole("menuitem", { name: "Recipes" })).toHaveAttribute(
+  await expect(menu.getByRole("separator")).toHaveCount(1);
+
+  await menu.getByRole("menuitem", { name: "Switch vault" }).click();
+  const vaults = page.getByRole("menu").last();
+  expect(await vaults.getByRole("menuitem").allInnerTexts()).toEqual([
+    "Work notes",
+    "Recipes",
+  ]);
+  await expect(vaults.getByRole("menuitem", { name: "Recipes" })).toHaveAttribute(
     "title",
     "/home/me/Recipes",
   );
-  await expect(menu.getByRole("separator")).toHaveCount(2);
 });
 
-test("with only one vault, the menu has no other vaults", async ({ page }) => {
+test("with only one vault, the menu has no Switch vault", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
 
   const menu = await openVaultMenu(page);

@@ -40,4 +40,17 @@ describe("recent vaults", () => {
 
     expect(useVaultStore.getState().recentVaults).toEqual(["C:/Notes"]);
   });
+
+  it("keeps a renamed vault open and in its place", () => {
+    useVaultStore.setState({
+      currentVaultPath: "C:\\Notes",
+      recentVaults: ["D:/Work", "C:\\Notes", "E:/Recipes"],
+    });
+    useVaultStore.getState().renameVault("C:/Notes", "C:\\Journal");
+
+    expect(useVaultStore.getState()).toMatchObject({
+      currentVaultPath: "C:\\Journal",
+      recentVaults: ["D:/Work", "C:\\Journal", "E:/Recipes"],
+    });
+  });
 });

@@ -7,9 +7,9 @@ import { useUpdatesStore } from "@/store/updates";
 
 const TOAST_ID = "app-update";
 
-/** Offers to install the update, if one is available. */
+/** Offers to install the downloaded update. */
 function showUpdateToast(version: string) {
-  toast(`Netherstone ${version} is available`, {
+  toast(`Netherstone ${version} is ready to install`, {
     id: TOAST_ID,
     duration: Infinity,
     action: {
@@ -37,20 +37,26 @@ export async function installUpdateWithToast(version: string) {
 }
 
 /**
- * Checks for an update once per launch, when `enabled` first turns true,
- * and offers to install it. Problems stay quiet here; Settings shows them.
+ * Checks for an update once per launch, when `enabled` first turns true.
+ * The update downloads in the background, then a toast offers to install it.
+ * Problems stay quiet here; Settings shows them.
  */
 export function useUpdateCheck(enabled: boolean) {
   const checked = useRef(false);
 
+  useEffect(
+    () =>
+      useUpdatesStore.subscribe((state, previous) => {
+        if (state.status.kind === "ready" && previous.status.kind !== "ready") {
+          showUpdateToast(state.status.update.version);
+        }
+      }),
+    [],
+  );
+
   useEffect(() => {
     if (!enabled || checked.current || !canUpdate()) return;
     checked.current = true;
-    void useUpdatesStore
-      .getState()
-      .check()
-      .then((update) => {
-        if (update) showUpdateToast(update.version);
-      });
+    void useUpdatesStore.getState().check();
   }, [enabled]);
 }

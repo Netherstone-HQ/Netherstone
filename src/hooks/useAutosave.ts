@@ -88,6 +88,41 @@ export async function flushPendingAutosave(): Promise<void> {
 }
 
 /**
+ * Saves the open shard and drawing, then runs `sync` when given. Problems
+ * are logged, so quitting goes ahead.
+ */
+async function saveForQuit(sync: (() => Promise<void>) | null) {
+  try {
+    await flushPendingAutosave();
+  } catch (error) {
+    console.error("Failed to save on shutdown:", error);
+  }
+  await writeOpenShardCache();
+
+  try {
+    await finishDrawingSession();
+  } catch (error) {
+    console.error("Failed to save drawing on shutdown:", error);
+  }
+
+  try {
+    await sync?.();
+  } catch (error) {
+    console.error("Failed to sync on shutdown:", error);
+  }
+}
+
+/**
+ * Does what closing the window does before the app quits another way, such
+ * as to install an update: saves the open shard and drawing, and syncs while
+ * automatic sync is on.
+ */
+export async function saveBeforeQuit(): Promise<void> {
+  // Asked before saving, since unsaved edits need the sync too.
+  await saveForQuit(syncBeforeQuit());
+}
+
+/**
  * Saves the open shard once typing pauses, and on window close. One save
  * runs at a time, with at most one waiting. It watches the store directly,
  * so `App` doesn't rerender on every edit.
@@ -344,22 +379,7 @@ export function useAutosave() {
       event.preventDefault();
 
       try {
-        await flushNow();
-      } catch (error) {
-        console.error("Failed to save on shutdown:", error);
-      }
-      await writeOpenShardCache();
-
-      try {
-        await finishDrawingSession();
-      } catch (error) {
-        console.error("Failed to save drawing on shutdown:", error);
-      }
-
-      try {
-        await sync?.();
-      } catch (error) {
-        console.error("Failed to sync on shutdown:", error);
+        await saveForQuit(sync);
       } finally {
         try {
           bypassCloseRequestRef.current = true;

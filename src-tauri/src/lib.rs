@@ -164,6 +164,8 @@ pub fn run() {
             #[cfg(feature = "updater")]
             updater::updater_check,
             #[cfg(feature = "updater")]
+            updater::updater_download,
+            #[cfg(feature = "updater")]
             updater::updater_install,
             browser::browser_reset_state,
             browser::browser_get_state,

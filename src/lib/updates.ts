@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 
 export interface AvailableUpdate {
   version: string;
@@ -24,7 +24,18 @@ export function checkForUpdate(beta: boolean): Promise<AvailableUpdate | null> {
   return invoke<AvailableUpdate | null>("updater_check", { beta });
 }
 
-/** Installs the update found by the last check and restarts the app. */
+/**
+ * Downloads the update found by the last check, calling `onProgress` with
+ * each whole percent when the size is known.
+ */
+export function downloadUpdate(
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  const channel = new Channel<number>(onProgress);
+  return invoke("updater_download", { onProgress: channel });
+}
+
+/** Installs the downloaded update and restarts the app. */
 export function installUpdate(): Promise<void> {
   return invoke("updater_install");
 }

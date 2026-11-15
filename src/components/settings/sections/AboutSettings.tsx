@@ -144,6 +144,12 @@ export function AboutSettings() {
   );
 }
 
+const UPDATE_ERRORS = {
+  check: "Couldn't check for updates, check your connection and try again",
+  download: "Couldn't download the update, check your connection and try again",
+  install: "Couldn't install the update, try again",
+} satisfies Record<Extract<UpdateStatus, { kind: "error" }>["failed"], string>;
+
 function updateDescription(status: UpdateStatus): string {
   switch (status.kind) {
     case "idle":
@@ -152,12 +158,14 @@ function updateDescription(status: UpdateStatus): string {
       return "Checking for updates…";
     case "up-to-date":
       return "You have the latest version";
-    case "available":
-      return `Netherstone ${status.update.version} is available.`;
+    case "downloading":
+      return `Downloading Netherstone ${status.update.version}…`;
+    case "ready":
+      return `Netherstone ${status.update.version} is ready to install`;
     case "installing":
       return `Updating to Netherstone ${status.update.version}…`;
     case "error":
-      return "Couldn't check for updates, check your connection and try again";
+      return UPDATE_ERRORS[status.failed];
   }
 }
 
@@ -181,12 +189,15 @@ function UpdateRow() {
 
   return (
     <SettingRow label="Updates" description={updateDescription(status)}>
-      {status.kind === "available" ? (
+      {status.kind === "ready" || status.kind === "downloading" ? (
         <Button
           size="sm"
+          disabled={status.kind === "downloading"}
           onClick={() => void installUpdateWithToast(status.update.version)}
         >
-          Restart to update
+          {status.kind === "downloading"
+            ? `Downloading${status.percent === null ? "…" : ` ${status.percent}%`}`
+            : "Restart to update"}
         </Button>
       ) : (
         <Button

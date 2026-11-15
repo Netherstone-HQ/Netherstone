@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncPlanSummary, VaultSyncRecord } from "@/lib/sync";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
+import { useUIStore } from "@/store/ui";
 import { BackupPanel } from "./BackupPanel";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -56,6 +57,8 @@ function mockCommands(handlers: Record<string, () => Promise<unknown>>) {
   });
 }
 
+const { connect } = useSyncStore.getState();
+
 describe("BackupPanel", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset();
@@ -77,6 +80,7 @@ describe("BackupPanel", () => {
       error: null,
       backups: null,
       openConflict: null,
+      connect,
     });
   });
 
@@ -225,4 +229,34 @@ describe("BackupPanel", () => {
       cloneUrl: "https://github.com/octocat/Notes.git",
     });
   });
+
+  it.each([
+    [true, null],
+    [false, "settings"],
+  ] as const)(
+    "leaves Settings only once a synced vault is downloaded (%s)",
+    async (done, navItem) => {
+      useUIStore.setState({ activeNavItem: "settings" });
+      const connectBackup = vi.fn(async () => done);
+      useSyncStore.setState({ connect: connectBackup });
+      mockCommands({
+        github_get_account: async () => ACCOUNT,
+        github_get_installation: async () => ({ installed: true, installedOn: ["wSoltani"], installUrl: "" }),
+        sync_get_vault_record: async () => null,
+        sync_plan_vault: async () => PLAN,
+        sync_list_backups: async () => [
+          { fullName: "octocat/Notes", name: "Notes", cloneUrl: "", pushedAt: null },
+        ],
+      });
+
+      render(<BackupPanel vaultPath={VAULT} />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: /use a vault you synced/i }),
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Notes" }));
+      await act(async () => {});
+      expect(connectBackup).toHaveBeenCalled();
+      expect(useUIStore.getState().activeNavItem).toBe(navItem);
+    },
+  );
 });

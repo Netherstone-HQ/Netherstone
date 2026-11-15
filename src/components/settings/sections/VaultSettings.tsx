@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { openVaultDialog, type RenameVaultError } from "@/lib/commands/vault";
+import { leaveSettings } from "@/lib/leave-settings";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { openVault } from "@/lib/open-vault";
 import { REVEAL_LABEL } from "@/lib/platform";
@@ -227,7 +228,13 @@ function RefreshIndexRow({ vaultPath }: { vaultPath: string }) {
 async function openOther() {
   const picked = await openVaultDialog();
   const path = picked && (await chooseVaultFolder(picked, "open"));
-  if (path) await openVault(path).catch(showError);
+  if (!path) return;
+  try {
+    await openVault(path);
+    leaveSettings();
+  } catch (error) {
+    showError(error);
+  }
 }
 
 function vaultName(path: string) {

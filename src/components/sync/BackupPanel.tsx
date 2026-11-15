@@ -25,6 +25,7 @@ import {
   type SyncPlanSummary,
   type VaultSyncRecord,
 } from "@/lib/sync";
+import { leaveSettings } from "@/lib/leave-settings";
 import { cn } from "@/lib/utils";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
@@ -312,7 +313,9 @@ function BackupPicker({
 
   function use(backup: BackupSummary) {
     setChosen(backup.fullName);
-    void connect(vaultPath, backup);
+    void connect(vaultPath, backup).then((done) => {
+      if (done) leaveSettings();
+    });
   }
 
   return (

@@ -96,3 +96,21 @@ test("a link shows it opens while Ctrl is held over it, and only that link chang
   await page.keyboard.up("ControlOrMeta");
   await expect.poll(cursor).toBe("text");
 });
+
+test("the arrow keys step over a just-picked @ link in one press", async ({
+  page,
+}) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await caretAfter(page, "Start");
+  await page.keyboard.type(" see @Oth");
+  await pickOption(page, page.getByRole("option", { name: "Other Note" }));
+  await page.keyboard.type(" now");
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("X");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.type("Y");
+
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toContain("# Note\n");
+  expect(saved).toContain("Start see X[Other Note](Other%20Note.md)Y now");
+});

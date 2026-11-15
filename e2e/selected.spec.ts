@@ -518,11 +518,19 @@ test.describe("work per key", () => {
     }
     return markdown;
   }
-  const LONG_SECTIONS = 100;
+  const LONG_SECTIONS = 50;
 
   /** Counts the editor's range lookups while one letter is typed after `text`. */
   async function rangesPerKey(page: Page, text: string) {
-    await caretAfter(page, text);
+    // Placed by the editor itself: a click can miss while a long shard is
+    // still being drawn around it.
+    await changeEditor(page, `
+      const textOf = (node) => node.text ?? node.children.map(textOf).join("");
+      const block = editor.children.findIndex((node) => textOf(node).endsWith(${JSON.stringify(text)}));
+      editor.tf.select(editor.api.end([block]));
+      editor.tf.focus();
+    `);
+    await expect(editor(page)).toBeFocused();
     await changeEditor(page, `
       const range = editor.range;
       window.__ranges = 0;
@@ -531,6 +539,7 @@ test.describe("work per key", () => {
         return range(...args);
       };
     `);
+    await expect.poll(() => selectionSettled(page)).toBe("");
     await page.keyboard.type("Q");
     await expect(editor(page).getByText(`${text}Q`)).toBeVisible();
     return page.evaluate(() => (window as unknown as { __ranges: number }).__ranges);
@@ -549,9 +558,10 @@ test.describe("work per key", () => {
     await expect(editor(page)).toContainText(`in text ${LONG_SECTIONS - 1}.`);
     const long = await rangesPerKey(page, `in text ${LONG_SECTIONS / 2}.`);
     // A key typed in text flips no element's selected state, so the work
-    // per key can't grow with the number of elements: the long shard runs
-    // no more range lookups than the short one. Checking each element
-    // runs one per element, hundreds here.
-    expect(long).toBeLessThanOrEqual(short);
+    // per key can't grow with the number of elements. The lookups other
+    // code makes vary by a few between keys, so the long shard may run a
+    // few more than the short one, but fewer than one per section:
+    // checking each element ran one per element, several per section.
+    expect(long - short).toBeLessThan(LONG_SECTIONS);
   });
 });

@@ -31,6 +31,7 @@ import { ToggleKit } from "./kits/toggle-kit";
 import { TrailingLineKit } from "./kits/trailing-line-kit";
 
 import { AutoformatKit } from "./kits/autoformat-kit";
+import { SelectedElementsPlugin } from "@/components/ui/use-element-selected";
 
 export const EditorKit = [
   ...ShortcutsKit, // first, so its keys run before other key handling
@@ -59,6 +60,7 @@ export const EditorKit = [
   ...MediaKit,
   ...MentionKit, // @ links between shards
   ...RawBlockKit, // HTML the editor has no block for, kept as written
+  SelectedElementsPlugin, // which elements the selection touches, for their selected look
   ...ShardLinkKit, // the shard path that @ links are saved relative to
   ...SlashKit,
   ...TableKit,

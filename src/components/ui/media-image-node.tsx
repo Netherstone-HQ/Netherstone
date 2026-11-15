@@ -6,7 +6,7 @@ import type { TImageElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 
 import { useDraggable } from "@platejs/dnd";
-import { ImagePlugin, useMediaState } from "@platejs/media/react";
+import { ImagePlugin } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, withHOC } from "platejs/react";
 
@@ -35,6 +35,7 @@ import {
   Resizable,
   ResizeHandle,
 } from "./resize-handle";
+import { useMediaState } from "./use-media-state";
 
 type PersistedImageElement = WithPersistedMediaMetadata<TImageElement>;
 

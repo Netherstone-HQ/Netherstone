@@ -22,7 +22,6 @@ import {
   usePluginOption,
   useReadOnly,
   useRemoveNodeButton,
-  useSelected,
   withHOC,
 } from 'platejs/react';
 
@@ -41,6 +40,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useEditorOnScreen } from '@/hooks/useEditorOnScreen';
 import { cn } from '@/lib/utils';
+import { useElementSelected } from './use-element-selected';
 
 export const ColumnElement = withHOC(
   ResizableProvider,
@@ -157,7 +157,7 @@ function ColumnFloatingToolbar({ children }: React.PropsWithChildren) {
   const readOnly = useReadOnly();
   const element = useElement<TColumnElement>();
   const { props: buttonProps } = useRemoveNodeButton({ element });
-  const selected = useSelected();
+  const selected = useElementSelected();
   const isCollapsed = useEditorSelector(
     (editor) => editor.api.isCollapsed(),
     []

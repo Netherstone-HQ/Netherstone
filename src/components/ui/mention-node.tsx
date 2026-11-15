@@ -11,7 +11,6 @@ import {
   PlateElement,
   useFocused,
   useReadOnly,
-  useSelected,
 } from 'platejs/react';
 
 import {
@@ -34,6 +33,7 @@ import {
   InlineComboboxInput,
   InlineComboboxItem,
 } from './inline-combobox';
+import { useElementSelected } from './use-element-selected';
 
 export function MentionElement(
   props: PlateElementProps<TMentionElement> & {
@@ -42,7 +42,7 @@ export function MentionElement(
 ) {
   const element = props.element;
 
-  const selected = useSelected();
+  const selected = useElementSelected();
   const focused = useFocused();
   const mounted = useMounted();
   const readOnly = useReadOnly();

@@ -15,7 +15,6 @@ import {
   useEditorRef,
   useElement,
   useReadOnly,
-  useSelected,
 } from "platejs/react";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +39,7 @@ import {
   type DiagramView,
   takeFirstView,
 } from "@/lib/mermaid-diagram";
+import { useElementSelected } from "./use-element-selected";
 
 const DIAGRAM_VIEWS: { view: DiagramView; label: string }[] = [
   { view: "code", label: "Code" },
@@ -58,7 +58,7 @@ function useDiagramView(element: TCodeBlockElement, isDiagram: boolean) {
   const [view, setView] = React.useState<DiagramView>(() =>
     takeFirstView(typeof element.id === "string" ? element.id : undefined),
   );
-  const selected = useSelected();
+  const selected = useElementSelected();
   const wasSelected = React.useRef(selected);
 
   React.useEffect(() => {

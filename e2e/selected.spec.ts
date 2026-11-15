@@ -97,6 +97,9 @@ async function shown(page: Page): Promise<string[]> {
         case "equation":
           if (element.querySelector("[data-selected='true']")) out.push(kind);
           break;
+        case "img":
+          if (hasClass(element, "outline-ring")) out.push(kind);
+          break;
         case "hr":
         case "front_matter":
           if (hasClass(element, "ring-2")) out.push(kind);
@@ -218,7 +221,7 @@ test.describe("selected state per kind of element", () => {
     await walk(page, "ArrowDown", [
       ["diagram:Diagram"],
       ["diagram:Diagram"],
-      ["diagram:Diagram", "toolbar:image"],
+      ["img", "diagram:Diagram", "toolbar:image"],
       ["diagram:Diagram", "toolbar:image"],
       ["table:A", "diagram:Diagram", "toolbar:table"],
       ["table:A", "diagram:Diagram", "toolbar:table"],
@@ -252,7 +255,7 @@ test.describe("selected state per kind of element", () => {
       ["diagram:Diagram"],
       ["table:A", "diagram:Diagram", "toolbar:table"],
       ["table:A", "diagram:Diagram", "toolbar:table"],
-      ["diagram:Diagram", "toolbar:image"],
+      ["img", "diagram:Diagram", "toolbar:image"],
       ["diagram:Diagram"],
       ["diagram:Diagram"],
       ["diagram:Diagram"],
@@ -320,7 +323,7 @@ test.describe("selected state per kind of element", () => {
 
   test("clicking into each element, then on text", async ({ page }) => {
     const clicks: [() => Promise<void>, string[]][] = [
-      [() => elementOf(page, "img").locator("img").click(), ["diagram:Diagram", "toolbar:image"]],
+      [() => elementOf(page, "img").locator("img").click(), ["img", "diagram:Diagram", "toolbar:image"]],
       [() => editor(page).getByText("two", { exact: true }).click(), ["table:A", "diagram:Diagram", "toolbar:table"]],
       [() => editor(page).getByText("const a = 1;").click(), ["diagram:Diagram"]],
       [() => elementOf(page, "equation").click(), ["diagram:Diagram", "equation", "toolbar:y = mxDone"]],
@@ -342,25 +345,29 @@ test.describe("selected state per kind of element", () => {
     await caretAtStart(page, "Before image");
     await walk(page, "Shift+ArrowDown", [
       ["diagram:Diagram"],
-      ["table:A", "diagram:Diagram"],
-      ["table:A", "diagram:Diagram"],
-      ["table:A", "diagram:Both", "equation"],
-      ["table:A", "diagram:Both", "equation", "hr"],
-      ["table:A", "diagram:Both", "equation", "hr"],
-      ["table:A", "diagram:Both", "equation", "hr"],
-      ["table:A", "diagram:Both", "equation", "hr", "table:Week"],
-      ["table:A", "diagram:Both", "equation", "hr", "table:Week", "chart"],
-      ["table:A", "diagram:Both", "equation", "hr", "table:Week", "chart", "verbatim"],
-      ["table:A", "diagram:Both", "equation", "hr", "table:Week", "chart", "verbatim"],
-      ["table:A", "diagram:Both", "equation", "hr", "table:Week", "chart", "verbatim"],
+      ["img", "table:A", "diagram:Diagram"],
+      ["img", "table:A", "diagram:Diagram"],
+      ["img", "table:A", "diagram:Both", "equation"],
+      ["img", "table:A", "diagram:Both", "equation", "hr"],
+      ["img", "table:A", "diagram:Both", "equation", "hr"],
+      ["img", "table:A", "diagram:Both", "equation", "hr"],
+      ["img", "table:A", "diagram:Both", "equation", "hr", "table:Week"],
+      ["img", "table:A", "diagram:Both", "equation", "hr", "table:Week", "chart"],
+      ["img", "table:A", "diagram:Both", "equation", "hr", "table:Week", "chart", "verbatim"],
+      ["img", "table:A", "diagram:Both", "equation", "hr", "table:Week", "chart", "verbatim"],
+      ["img", "table:A", "diagram:Both", "equation", "hr", "table:Week", "chart", "verbatim"],
     ]);
-    await caretAtStart(page, "Intro");
+    await editor(page).getByText("Intro").click({ position: { x: 0, y: 5 } });
+    await expectShown(page, ["diagram:Both"]);
     await editor(page).getByText("Right side").click({ modifiers: ["Shift"] });
-    await expectShown(page, ["mention:Other", "inline_equation", "table:A", "diagram:Both", "equation", "hr"]);
+    await expectShown(page, ["mention:Other", "inline_equation", "img", "table:A", "diagram:Both", "equation", "hr"]);
+    // Select all puts the caret on the last line and selects every block.
+    // The inline equation's edit box no longer opens here: it opened when
+    // its old "selected" met the new collapsed caret in one render.
     await press(page, "ControlOrMeta+a");
-    await expectShown(page, ["inline_equation", "diagram:Both", "toolbar:x^2Done"]);
+    await expectShown(page, ["diagram:Both"]);
     await press(page, "ControlOrMeta+a");
-    await expectShown(page, ["inline_equation", "diagram:Both", "toolbar:x^2Done"]);
+    await expectShown(page, ["diagram:Both"]);
     await editor(page).getByText("Outro.").click();
     await expectShown(page, ["diagram:Both"]);
   });
@@ -419,16 +426,16 @@ test.describe("when paths change under the selection", () => {
     await press(page, "Enter");
     await expectShown(page, ["diagram:Diagram"]);
     await press(page, "ArrowDown");
-    await expectShown(page, ["diagram:Diagram", "toolbar:image"]);
+    await expectShown(page, ["img", "diagram:Diagram", "toolbar:image"]);
     await press(page, "ControlOrMeta+z");
     await expectShown(page, ["diagram:Diagram"]);
     await press(page, "ControlOrMeta+Shift+z");
-    await expectShown(page, ["diagram:Diagram", "toolbar:image"]);
+    await expectShown(page, ["img", "diagram:Diagram", "toolbar:image"]);
   });
 
   test("blocks inserted, moved and removed above the selected image in one change", async ({ page }) => {
     await elementOf(page, "img").locator("img").click();
-    await expectShown(page, ["diagram:Diagram", "toolbar:image"]);
+    await expectShown(page, ["img", "diagram:Diagram", "toolbar:image"]);
     await changeEditor(page, `
       editor.tf.withoutNormalizing(() => {
         const image = editor.children.findIndex((node) => node.type === "img");
@@ -439,11 +446,11 @@ test.describe("when paths change under the selection", () => {
       });
     `);
     await expect(editor(page)).toContainText("Inserted");
-    await expectShown(page, ["diagram:Diagram", "toolbar:image"]);
+    await expectShown(page, ["img", "diagram:Diagram", "toolbar:image"]);
     await press(page, "ControlOrMeta+z");
-    await expectShown(page, ["diagram:Diagram", "toolbar:image"]);
+    await expectShown(page, ["img", "diagram:Diagram", "toolbar:image"]);
     await press(page, "ControlOrMeta+Shift+z");
-    await expectShown(page, ["diagram:Diagram", "toolbar:image"]);
+    await expectShown(page, ["img", "diagram:Diagram", "toolbar:image"]);
   });
 
   test("the selected table moved to the top in one change, undone and redone", async ({ page }) => {

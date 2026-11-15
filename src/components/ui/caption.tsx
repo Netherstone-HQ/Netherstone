@@ -5,7 +5,6 @@ import * as React from 'react';
 import type { VariantProps } from 'class-variance-authority';
 
 import {
-  Caption as CaptionPrimitive,
   CaptionPlugin,
   CaptionTextarea as CaptionTextareaPrimitive,
   useCaptionButton,
@@ -14,7 +13,7 @@ import {
 } from '@platejs/caption/react';
 import { createPrimitiveComponent } from '@udecode/cn';
 import { cva } from 'class-variance-authority';
-import { isHotkey, PathApi } from 'platejs';
+import { type TIdElement, isHotkey, PathApi } from 'platejs';
 import {
   useEditorRef,
   useElement,
@@ -38,14 +37,21 @@ const captionVariants = cva('max-w-full', {
   },
 });
 
+/**
+ * Plate's caption, without its per-element "selected?" check: it didn't use
+ * the answer, and with many pictures those checks ran on every key.
+ */
 export function Caption({
   align,
   className,
   ...props
-}: React.ComponentProps<typeof CaptionPrimitive> &
-  VariantProps<typeof captionVariants>) {
+}: React.ComponentProps<'figcaption'> & VariantProps<typeof captionVariants>) {
+  const element = useElement<TIdElement>();
+  const captionString = useCaptionString();
+  const showCaption = usePluginOption(CaptionPlugin, 'isVisible', element.id);
+  if (!showCaption && captionString.length === 0) return null;
   return (
-    <CaptionPrimitive
+    <figcaption
       {...props}
       className={cn(captionVariants({ align }), className)}
     />

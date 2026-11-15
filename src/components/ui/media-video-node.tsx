@@ -8,7 +8,6 @@ import type { PlateElementProps } from "platejs/react";
 
 import { useDraggable } from "@platejs/dnd";
 import { parseTwitterUrl, parseVideoUrl } from "@platejs/media";
-import { useMediaState } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, useEditorMounted, withHOC } from "platejs/react";
 
@@ -34,6 +33,7 @@ import {
   Resizable,
   ResizeHandle,
 } from "./resize-handle";
+import { useMediaState } from "./use-media-state";
 
 type PersistedVideoElement = WithPersistedMediaMetadata<TVideoElement> &
   TResizableProps;

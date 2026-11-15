@@ -18,7 +18,6 @@ import {
   useEditorSelector,
   useElement,
   useReadOnly,
-  useSelected,
 } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
@@ -28,9 +27,10 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { useElementSelected } from './use-element-selected';
 
 export function EquationElement(props: PlateElementProps<TEquationElement>) {
-  const selected = useSelected();
+  const selected = useElementSelected();
   const [open, setOpen] = React.useState(selected);
   const katexRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -96,7 +96,7 @@ export function InlineEquationElement(
 ) {
   const element = props.element;
   const katexRef = React.useRef<HTMLDivElement | null>(null);
-  const selected = useSelected();
+  const selected = useElementSelected();
   const isCollapsed = useEditorSelector(
     (editor) => editor.api.isCollapsed(),
     []

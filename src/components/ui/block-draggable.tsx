@@ -13,12 +13,12 @@ import {
   useEditorRef,
   useElement,
   usePluginOption,
-  useSelected,
 } from "platejs/react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useElementSelected } from "./use-element-selected";
 
 const UNDRAGGABLE_KEYS = [KEYS.column, KEYS.tr, KEYS.td];
 
@@ -427,7 +427,7 @@ function Gutter({
     BlockSelectionPlugin,
     "isSelectionAreaVisible",
   );
-  const selected = useSelected();
+  const selected = useElementSelected();
 
   return (
     <div

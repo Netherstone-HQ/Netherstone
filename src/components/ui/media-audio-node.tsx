@@ -5,7 +5,6 @@ import * as React from "react";
 import type { TAudioElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 
-import { useMediaState } from "@platejs/media/react";
 import { ResizableProvider } from "@platejs/resizable";
 import { PlateElement, withHOC } from "platejs/react";
 
@@ -25,6 +24,7 @@ import {
 } from "./media-file-row";
 import { useMediaNodeActions } from "./media-node-actions";
 import type { WithPersistedMediaMetadata } from "./media-types";
+import { useMediaState } from "./use-media-state";
 
 type PersistedAudioElement = WithPersistedMediaMetadata<TAudioElement>;
 

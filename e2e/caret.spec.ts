@@ -493,7 +493,7 @@ const AFTER: Record<string, Record<string, string[][]>> = {
   },
   moved: {
     drag: [
-      ["focus: body", "p: Top", "p: End", "p: alpha", "p: br|avo", "p disc indent 1: one", "p disc indent 1: two", "p: "],
+      ["p: Top", "p: End|", "p: alpha", "p: bravo", "p disc indent 1: one", "p disc indent 1: two", "p: "],
     ],
     merge: [
       ["p: Top", "p: alpha|bravo", "p disc indent 1: one", "p disc indent 1: two", "p: End", "p: "],
@@ -687,14 +687,11 @@ test.describe("when blocks move under the caret", () => {
     // The top half of a block drops above it.
     await page.mouse.move(target.x + 10, target.y + target.height / 4, { steps: 10 });
     await page.mouse.up();
+    // The dropped block stays selected and takes the keys, as after a click
+    // on its handle: Enter puts the caret at its end.
+    await press(page, "Enter");
     await expectCaret(page, AFTER.moved.drag[0]);
-    // The drop leaves no caret, so typing goes nowhere: a letter typed in
-    // the shard afterwards shows only that one.
-    await page.keyboard.type("X");
-    await caretIn(page, "End", "end");
-    await page.keyboard.type("Z");
-    await expect(editor(page)).toContainText("EndZ");
-    await expect(editor(page)).not.toContainText("X");
+    await typeAtCaret(page);
   });
 
   test("the block above deleted into", async ({ page }) => {

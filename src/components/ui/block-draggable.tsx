@@ -244,6 +244,9 @@ function DraggableControls({
 
         if (blockSelectionApi) {
           blockSelectionApi.add(id);
+          // Pressing the handle moved focus off the editor; hand the keys to
+          // the dropped blocks, as a click on the handle does.
+          blockSelectionApi.focus();
         }
         resetPreview();
       },

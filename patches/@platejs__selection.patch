@@ -1,5 +1,5 @@
 diff --git a/dist/react/index.js b/dist/react/index.js
-index 34768daa495810924ce94318f929307b35b68bd3..2ab3717849731d10a7ea046f0c883fe189947a5f 100644
+index 34768daa495810924ce94318f929307b35b68bd3..4858a00159d12db85530a0568b104fc7789419bf 100644
 --- a/dist/react/index.js
 +++ b/dist/react/index.js
 @@ -1372,7 +1372,7 @@ const writeSelectedBlocksToDataTransfer = (editor, data) => {
@@ -33,3 +33,15 @@ index 34768daa495810924ce94318f929307b35b68bd3..2ab3717849731d10a7ea046f0c883fe1
  		editor.tf.insertData(e.clipboardData);
  		selectInsertedBlocks(editor);
  	}
+@@ -2010,9 +2010,9 @@ const BlockSelectionPlugin = createTPlatePlugin({
+ 				if (apply()) return true;
+ 				return escape();
+ 			},
+-			focus() {
++			focus(options) {
+ 				if (!editor.meta._forceFocus && getOption("isSelectingSome")) return;
+-				focus();
++				focus(options);
+ 			},
+ 			selectAll: () => {
+ 				if (getOptions().disableSelectAll) return selectAll$1();

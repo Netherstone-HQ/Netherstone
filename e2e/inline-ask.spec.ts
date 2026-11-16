@@ -205,3 +205,32 @@ test("turning the assistant off leaves nothing behind", async ({ page }) => {
   await expect(textToolbar(page)).toBeVisible();
   await expect(page.getByRole("button", { name: "Ask", exact: true })).toHaveCount(0);
 });
+
+test("asking about a table row hides the table toolbar while the prompt is open", async ({
+  page,
+}) => {
+  await mockVault(page, {
+    files: { "Table.md": "| Name | Status |\n| - | - |\n| Alpha | Done |\n\nAfter the table.\n" },
+    open: "Table.md",
+    assistant: READY,
+  });
+  const tableToolbar = page.locator("[data-slot='popover-content']");
+
+  // A drag from the row's first cell to its last selects the row.
+  const from = await editor(page).getByText("Alpha", { exact: true }).boundingBox();
+  const to = await editor(page).getByText("Done", { exact: true }).boundingBox();
+  if (!from || !to) throw new Error("the row's cells have no box");
+  await page.mouse.move(from.x + 1, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width - 1, to.y + to.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(tableToolbar).toBeVisible();
+
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(prompt(page)).toBeFocused();
+  await expect(tableToolbar).toHaveCount(0);
+
+  await prompt(page).press("Escape");
+  await expect(prompt(page)).toHaveCount(0);
+  await expect(tableToolbar).toBeVisible();
+});

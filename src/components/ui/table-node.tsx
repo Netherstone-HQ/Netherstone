@@ -91,6 +91,7 @@ import {
 import { createChartNode, defaultChartSpec, readTable } from "@/lib/chart";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
+import { useInlineAskStore } from "@/store/inline-ask";
 
 import { useDragControls } from "./block-draggable";
 import { blockSelectionVariants } from "./block-selection";
@@ -434,6 +435,8 @@ function TableFloatingToolbarState({
     [],
   );
   const isFocusedLast = useFocusedLast();
+  // Inline Ask's prompt sits under the table, where the toolbar would cover it.
+  const isAskOpen = useInlineAskStore((s) => s.phase !== null);
   const [isExpandedSelectionToolbarReady, setIsExpandedSelectionToolbarReady] =
     React.useState(false);
   const isCollapsedToolbarOpen = isFocusedLast && collapsedInside;
@@ -456,11 +459,13 @@ function TableFloatingToolbarState({
     };
   }, [isExpandedSelectionPending]);
 
-  const kind: TableToolbarKind = isCollapsedToolbarOpen
-    ? "collapsed"
-    : isExpandedSelectionToolbarReady && isExpandedSelectionPending
-      ? "expanded"
-      : "none";
+  const kind: TableToolbarKind = isAskOpen
+    ? "none"
+    : isCollapsedToolbarOpen
+      ? "collapsed"
+      : isExpandedSelectionToolbarReady && isExpandedSelectionPending
+        ? "expanded"
+        : "none";
 
   React.useEffect(() => {
     onChange(kind);

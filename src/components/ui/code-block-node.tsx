@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { formatCodeBlock, isLangSupported } from "@platejs/code-block";
 import { BracesIcon, Check, CheckIcon, CopyIcon } from "lucide-react";
-import { type TCodeBlockElement, type TCodeSyntaxLeaf, NodeApi } from "platejs";
+import { type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
 import {
   type PlateElementProps,
   type PlateLeafProps,
@@ -17,6 +17,7 @@ import {
   useReadOnly,
 } from "platejs/react";
 
+import { codeBlockText } from "@/components/editor/lib/code-block-text";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -80,9 +81,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
   const { editor, element } = props;
   const isDiagram = element.lang === DIAGRAM_LANG;
   const [view, chooseView] = useDiagramView(element, isDiagram);
-  const code = isDiagram
-    ? element.children.map((line) => NodeApi.string(line)).join("\n")
-    : "";
+  const code = isDiagram ? codeBlockText(element) : "";
   // An empty diagram has nothing to show but its code.
   const showsCode = !isDiagram || view !== "diagram" || !code.trim();
   const showsDiagram = isDiagram && view !== "code";
@@ -146,7 +145,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
             size="icon"
             variant="ghost"
             className="size-6 gap-1 text-muted-foreground text-xs"
-            value={() => NodeApi.string(element)}
+            value={() => codeBlockText(element)}
           />
         </div>
 

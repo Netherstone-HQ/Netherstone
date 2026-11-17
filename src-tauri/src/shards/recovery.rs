@@ -73,6 +73,36 @@ fn discard(sync_root: &Path, vault_path: &str, file_path: &str) -> Result<(), St
     }
 }
 
+fn follow(sync_root: &Path, vault: &Path, old: &str, new: &str) -> Result<(), String> {
+    let vault_path = vault.to_string_lossy();
+    let (from, to) = (
+        locate(sync_root, &vault_path, old)?,
+        locate(sync_root, &vault_path, new)?,
+    );
+    match std::fs::rename(&from, &to) {
+        // No copy to take along: one left at the new path belongs to an
+        // earlier shard there.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => discard(sync_root, &vault_path, new),
+        Err(e) => Err(format!(
+            "Failed to move {} to {}: {}",
+            from.display(),
+            to.display(),
+            e
+        )),
+        Ok(()) => Ok(()),
+    }
+}
+
+/// Moves the kept edits of a shard renamed or moved from `old` to `new`.
+pub(crate) fn follow_shard(vault: &Path, old: &str, new: &str) -> Result<(), String> {
+    follow(&sync::sync_root()?, vault, old, new)
+}
+
+/// Deletes the kept edits of a deleted shard.
+pub(crate) fn forget_shard(vault: &Path, file_path: &str) -> Result<(), String> {
+    discard(&sync::sync_root()?, &vault.to_string_lossy(), file_path)
+}
+
 /// Keeps `copy` as the shard's unsaved edits, replacing an earlier copy.
 #[tauri::command(async)]
 pub(crate) fn keep_unsaved_edits(
@@ -176,5 +206,32 @@ mod tests {
         discard(&sync_root, vault_path, file_path).unwrap();
         assert_eq!(read(&sync_root, vault_path, file_path).unwrap(), None);
         assert_eq!(std::fs::read_to_string(&shard).unwrap(), "On disk");
+    }
+
+    #[test]
+    fn a_copy_follows_its_shard_to_a_new_path() {
+        let root = temp_dir("recovery-follow");
+        let sync_root = root.join("sync");
+        let vault = root.join("Vault");
+        std::fs::create_dir_all(&vault).unwrap();
+        sync::state::load_or_create_record(&sync_root, &vault).unwrap();
+        let vault_path = vault.to_str().unwrap();
+        let old = vault.join("Note.md");
+        let new = vault.join("Work").join("Plan.md");
+        let (old, new) = (old.to_str().unwrap(), new.to_str().unwrap());
+
+        // A shard without a copy moves without one, even onto a path an
+        // earlier shard's copy was left at.
+        keep(&sync_root, vault_path, new, "earlier shard").unwrap();
+        follow(&sync_root, &vault, old, new).unwrap();
+        assert_eq!(read(&sync_root, vault_path, new).unwrap(), None);
+
+        keep(&sync_root, vault_path, old, "kept").unwrap();
+        follow(&sync_root, &vault, old, new).unwrap();
+        assert_eq!(read(&sync_root, vault_path, old).unwrap(), None);
+        assert_eq!(
+            read(&sync_root, vault_path, new).unwrap().as_deref(),
+            Some("kept")
+        );
     }
 }

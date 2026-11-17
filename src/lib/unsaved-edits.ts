@@ -1,13 +1,16 @@
 import type { Descendant, SlateEditor } from "platejs";
+import { toast } from "sonner";
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
 import {
   discardUnsavedEdits,
   keepUnsavedEdits,
   readUnsavedEdits,
 } from "@/lib/commands/shards";
+import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { fileName } from "@/lib/sync";
 import { useEditorStore } from "@/store/editor";
 import { useVaultStore } from "@/store/vault";
 
@@ -49,7 +52,7 @@ export async function keepCrashedEdits(
  * Reopens the shard with its kept edits, unsaved, so the next save writes
  * them.
  */
-export async function restoreCrashedEdits(filePath: string): Promise<void> {
+async function restoreCrashedEdits(filePath: string): Promise<void> {
   const copy = await readUnsavedEdits(openVault(), filePath);
   if (copy === null) throw new Error("No unsaved edits were kept.");
   const kept = JSON.parse(copy) as KeptEdits;
@@ -60,6 +63,14 @@ export async function restoreCrashedEdits(filePath: string): Promise<void> {
   await openEditorFile(filePath, value);
 }
 
+/** Restores the shard's kept edits, and says so if they couldn't be. */
+export function restoreCrashedEditsOrSay(filePath: string) {
+  restoreCrashedEdits(filePath).catch((error) => {
+    console.error("[Netherstone] Couldn't restore unsaved edits:", error);
+    toast.error("Couldn't restore unsaved edits");
+  });
+}
+
 /** Deletes the shard's kept edits, as reloading its saved version does. */
 export async function discardCrashedEdits(filePath: string): Promise<void> {
   await discardUnsavedEdits(openVault(), filePath);
@@ -68,6 +79,86 @@ export async function discardCrashedEdits(filePath: string): Promise<void> {
 /** Whether the shard has kept edits to restore. */
 export async function hasCrashedEdits(filePath: string): Promise<boolean> {
   return (await readUnsavedEdits(openVault(), filePath)) !== null;
+}
+
+/**
+ * Offers the open shard's kept edits, if it has any: to restore them, as the
+ * crash screen does, or to discard them. Returns a cleanup that withdraws the
+ * offer, for when another shard opens.
+ */
+export function offerCrashedEdits(): () => void {
+  const { currentFilePath, editorSessionTick } = useEditorStore.getState();
+  const vaultPath = useVaultStore.getState().currentVaultPath;
+  // The offer follows the shard through a rename, but not to another shard
+  // or vault.
+  const stillOpen = () => {
+    const state = useEditorStore.getState();
+    return state.editorSessionTick === editorSessionTick &&
+      useVaultStore.getState().currentVaultPath === vaultPath
+      ? state.currentFilePath
+      : null;
+  };
+  // One id per open: dismissing an earlier offer's id just before showing
+  // this one would also take this one away.
+  const toastId = `kept-edits:${editorSessionTick}`;
+  let withdrawn = false;
+  const withdraw = () => {
+    withdrawn = true;
+    toast.dismiss(toastId);
+  };
+  // A dirty shard stays open through a vault switch; the offer doesn't.
+  const stopWatchingVault = useVaultStore.subscribe((state) => {
+    if (state.currentVaultPath !== vaultPath) withdraw();
+  });
+
+  if (currentFilePath && vaultPath) {
+    readUnsavedEdits(vaultPath, currentFilePath).then(
+      (copy) => {
+        if (copy === null || withdrawn) return;
+        toast(
+          `Unsaved edits to ${getVaultFileDisplayName(fileName(currentFilePath))} were kept`,
+          {
+            id: toastId,
+            duration: Infinity,
+            // Text on top, buttons on a row of their own under it.
+            classNames: {
+              toast: "flex-wrap",
+              content: "basis-full",
+              cancelButton: "ml-auto",
+            },
+            action: {
+              label: "Restore unsaved edits",
+              onClick: () => {
+                const filePath = stillOpen();
+                if (filePath) restoreCrashedEditsOrSay(filePath);
+              },
+            },
+            cancel: {
+              label: "Discard",
+              onClick: () => {
+                const filePath = stillOpen();
+                if (!filePath) return;
+                discardCrashedEdits(filePath).catch((error) => {
+                  console.error(
+                    "[Netherstone] Couldn't discard unsaved edits:",
+                    error,
+                  );
+                  toast.error("Couldn't discard unsaved edits");
+                });
+              },
+            },
+          },
+        );
+      },
+      (error) =>
+        console.error("[Netherstone] Couldn't look for unsaved edits:", error),
+    );
+  }
+
+  return () => {
+    stopWatchingVault();
+    withdraw();
+  };
 }
 
 /**

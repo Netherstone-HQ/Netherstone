@@ -13,9 +13,11 @@ import {
   type TElement,
 } from "platejs";
 import { useEditorSelector, usePluginOption } from "platejs/react";
+import { TriangleAlertIcon } from "lucide-react";
 
 import { IndentKit } from "@/components/editor/kits/indent-kit";
 import { ToggleElement } from "@/components/ui/toggle-node";
+import { cn } from "@/lib/utils";
 
 /**
  * Which blocks a closed toggle hides, worked out once per change for the
@@ -119,16 +121,83 @@ const hiddenStyle: React.CSSProperties = {
   visibility: "hidden",
 };
 
-function HiddenInToggle({
-  children,
-  element,
-}: {
+type BlockFrameProps = {
+  /** Slate's attributes for the block's own element. */
+  attributes: React.HTMLAttributes<HTMLElement> & { "data-slate-inline"?: boolean };
   children: React.ReactNode;
   element: TElement;
+};
+
+/**
+ * Every block's wrapper. It hides the blocks of a closed toggle, and shows a
+ * notice in place of a block that fails to draw, so the rest of the shard
+ * keeps working. The block itself stays as it was, so it saves as before.
+ */
+class BlockFrame extends React.Component<BlockFrameProps, { failed: boolean }> {
+  static contextType = HiddenBlocksContext;
+  declare context: React.ContextType<typeof HiddenBlocksContext>;
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(
+      `[Netherstone] A block couldn't be shown (${this.props.element.type}):`,
+      error,
+      info.componentStack,
+    );
+  }
+
+  componentDidUpdate(previous: BlockFrameProps) {
+    // An edit or an undo may have fixed it.
+    if (this.state.failed && previous.element !== this.props.element) {
+      this.setState({ failed: false });
+    }
+  }
+
+  render() {
+    const { attributes, children, element } = this.props;
+    if (this.state.failed) {
+      return <BlockNotice attributes={attributes} inline={!!attributes["data-slate-inline"]} />;
+    }
+    if (!this.context.has(element.id as string)) return children;
+    return <div style={hiddenStyle}>{children}</div>;
+  }
+}
+
+/** Plate calls this for every block, as a function, not a component. */
+function frameBlock({ attributes, children, element }: BlockFrameProps) {
+  return (
+    <BlockFrame attributes={attributes} element={element}>
+      {children}
+    </BlockFrame>
+  );
+}
+
+function BlockNotice({
+  attributes,
+  inline,
+}: {
+  attributes: BlockFrameProps["attributes"];
+  inline: boolean;
 }) {
-  const hidden = React.useContext(HiddenBlocksContext);
-  if (!hidden.has(element.id as string)) return children;
-  return <div style={hiddenStyle}>{children}</div>;
+  const Tag = inline ? "span" : "div";
+  return (
+    <Tag
+      {...attributes}
+      className={cn(
+        "items-center gap-1.5 text-muted-foreground text-ui-sm select-none",
+        inline ? "inline-flex align-middle" : "my-1 flex rounded-md border border-dashed px-3 py-2",
+      )}
+      contentEditable={false}
+      data-block-error=""
+    >
+      <TriangleAlertIcon className="size-4 shrink-0" />
+      This block couldn't be shown
+    </Tag>
+  );
 }
 
 /** The ids of the toggles at `path` and inside it. */
@@ -147,7 +216,7 @@ export const ToggleKit = [
   TogglePlugin.configure({
     render: {
       aboveEditable: HiddenBlocksProvider,
-      aboveNodes: () => HiddenInToggle,
+      aboveNodes: () => frameBlock,
     },
   })
     .overrideEditor(({ api, editor, tf: { apply } }) => ({

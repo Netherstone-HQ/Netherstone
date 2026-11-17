@@ -8,25 +8,33 @@ import {
 import { useEditorStore, type OpenEditorFilePayload } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import type { Descendant } from "platejs";
 
 function toOpenEditorFilePayload(
   result: OpenMarkdownFileResult,
+  unsavedValue?: Descendant[],
 ): OpenEditorFilePayload {
   return {
     path: result.filePath,
     content: result.markdown,
-    plateValue: result.plateValue,
+    plateValue: unsavedValue ?? result.plateValue,
     cacheHit: result.cacheHit,
+    unsaved: unsavedValue !== undefined,
   };
 }
 
+/**
+ * Opens a shard. With `unsavedValue`, the editor shows those blocks instead
+ * of the saved ones, as edits still to save.
+ */
 export async function openEditorFile(
   filePath: string,
+  unsavedValue?: Descendant[],
 ): Promise<OpenMarkdownFileResult> {
   const { setOpeningFilePath } = useEditorStore.getState();
   setOpeningFilePath(filePath);
   try {
-    return await readAndOpenFile(filePath);
+    return await readAndOpenFile(filePath, unsavedValue);
   } finally {
     // Another open may have started since; leave its path in place.
     if (useEditorStore.getState().openingFilePath === filePath) {
@@ -65,6 +73,7 @@ async function saveOpenShard(): Promise<boolean> {
 
 async function readAndOpenFile(
   filePath: string,
+  unsavedValue?: Descendant[],
 ): Promise<OpenMarkdownFileResult> {
   // Opening a file replaces the editor session. If the open shard's edits
   // can't be saved, stay on it rather than discard them.
@@ -76,7 +85,7 @@ async function readAndOpenFile(
 
   const result = await openMarkdownFile(filePath);
 
-  useEditorStore.getState().openFile(toOpenEditorFilePayload(result));
+  useEditorStore.getState().openFile(toOpenEditorFilePayload(result, unsavedValue));
   useUIStore.getState().pushRecentFile({
     path: result.filePath,
     name: result.filePath.split(/[\\/]/).pop() ?? result.filePath,

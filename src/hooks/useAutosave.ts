@@ -18,6 +18,7 @@ import {
   rememberSavedValue,
 } from "@/lib/outside-changes";
 import { syncBeforeQuit } from "@/lib/sync-before-quit";
+import { settleRestoredEdits } from "@/lib/unsaved-edits";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 
 const AUTOSAVE_DELAY_MS = 1800;
@@ -256,6 +257,10 @@ export function useAutosave() {
         });
 
         const vaultPath = useVaultStore.getState().currentVaultPath;
+        // Only a save from the open session's editor writes restored edits.
+        if (vaultPath && editor && editor === useEditorStore.getState().plateEditor) {
+          settleRestoredEdits(vaultPath, filePath);
+        }
         if (savedValue && vaultPath) {
           pendingCacheEntry = {
             vaultPath,

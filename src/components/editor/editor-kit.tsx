@@ -28,6 +28,7 @@ import { SlashKit } from "./kits/slash-kit";
 import { TableKit } from "./kits/table-kit";
 import { TocKit } from "./kits/toc-kit";
 import { ToggleKit } from "./kits/toggle-kit";
+import { crashTestKit } from "./kits/crash-test-kit";
 import { TrailingLineKit } from "./kits/trailing-line-kit";
 
 import { AutoformatKit } from "./kits/autoformat-kit";
@@ -67,4 +68,6 @@ export const EditorKit = [
   ...TocKit,
   ...ToggleKit,
   ...TrailingLineKit, // an empty line always ends the shard
+  // Left out of the app: the minifier drops it outside the e2e mode.
+  ...(import.meta.env.MODE === "e2e" ? crashTestKit() : []),
 ];

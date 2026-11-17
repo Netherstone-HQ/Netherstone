@@ -93,7 +93,7 @@ jobs:
 
       - name: Build
         if: env.TEST == 'true'
-        run: pnpm exec vite build
+        run: pnpm exec vite build --mode e2e
 
       # Editor tests in a real Chromium against the built app, with the
       # desktop bridge mocked (see e2e/vault.ts).

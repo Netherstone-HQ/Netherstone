@@ -21,6 +21,8 @@ export interface OpenEditorFilePayload {
   content: string;
   plateValue?: Descendant[] | null;
   cacheHit?: boolean;
+  /** `plateValue` holds edits that aren't saved yet, so it opens unsaved. */
+  unsaved?: boolean;
 }
 
 interface OutsideChange {
@@ -75,6 +77,8 @@ interface EditorState {
   initialValue: Descendant[] | null;
   /** Whether the current open session came from the AST cache path. */
   cacheHit: boolean;
+  /** Whether the current open session starts with edits that aren't saved. */
+  opensUnsaved: boolean;
   setContent: (content: string) => void;
   setMarkdownContent: (content: string) => void;
 
@@ -140,6 +144,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   markdownContent: "",
   initialValue: null,
   cacheHit: false,
+  opensUnsaved: false,
   setContent: (content) => set({ content }),
   setMarkdownContent: (markdownContent) => set({ markdownContent }),
 
@@ -167,7 +172,13 @@ export const useEditorStore = create<EditorState>((set) => ({
       markdownContent: markdownContent ?? state.markdownContent,
     })),
 
-  openFile: ({ path, content, plateValue = null, cacheHit = false }) =>
+  openFile: ({
+    path,
+    content,
+    plateValue = null,
+    cacheHit = false,
+    unsaved = false,
+  }) =>
     set((state) => {
       const nextEditorSessionTick = state.editorSessionTick + 1;
 
@@ -184,6 +195,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         markdownContent: content,
         initialValue: plateValue,
         cacheHit,
+        opensUnsaved: unsaved,
         isDirty: false,
         isSaving: false,
         outsideChange: null,
@@ -219,6 +231,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         markdownContent: "",
         initialValue: null,
         cacheHit: false,
+        opensUnsaved: false,
         isDirty: false,
         isSaving: false,
         outsideChange: null,

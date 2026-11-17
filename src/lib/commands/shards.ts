@@ -100,3 +100,34 @@ export async function getBacklinks(filePath: string): Promise<Backlink[]> {
   assertTauri();
   return invoke<Backlink[]>("get_backlinks", { filePath });
 }
+
+/**
+ * Keeps `copy` as a shard's unsaved edits, in the app's data, never in the
+ * vault. It replaces an earlier copy.
+ */
+export async function keepUnsavedEdits(
+  vaultPath: string,
+  filePath: string,
+  copy: string,
+): Promise<void> {
+  assertTauri();
+  return invoke("keep_unsaved_edits", { vaultPath, filePath, copy });
+}
+
+/** A shard's kept unsaved edits, if any. */
+export async function readUnsavedEdits(
+  vaultPath: string,
+  filePath: string,
+): Promise<string | null> {
+  assertTauri();
+  return invoke<string | null>("read_unsaved_edits", { vaultPath, filePath });
+}
+
+/** Deletes a shard's kept unsaved edits, if any. */
+export async function discardUnsavedEdits(
+  vaultPath: string,
+  filePath: string,
+): Promise<void> {
+  assertTauri();
+  return invoke("discard_unsaved_edits", { vaultPath, filePath });
+}

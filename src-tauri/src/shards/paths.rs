@@ -1,7 +1,7 @@
 //! New folders, renames, moves and deletes, with the links and caches that
 //! follow them.
 
-use super::write_shard;
+use super::{recovery, write_shard};
 use crate::vault_access::{self, in_open_vault};
 use crate::{db, locks, shard_links, vault};
 use std::path::Path;
@@ -66,9 +66,20 @@ fn moved_markdown_paths(old_path: &str, new_path: &Path) -> Vec<(String, String)
         .collect()
 }
 
-/// Points the AST cache and attachment references at the new paths after a
-/// rename or move, so a folder takes the cached state of its shards along.
+/// Points the AST cache, attachment references and kept unsaved edits at the
+/// new paths after a rename or move, so a folder takes the cached state of
+/// its shards along.
 fn sync_caches_after_path_change(vault: &Path, old_path: &str, new_path: &Path, action: &str) {
+    let moved = moved_markdown_paths(old_path, new_path);
+    for (previous, next) in &moved {
+        if let Err(error) = recovery::follow_shard(vault, previous, next) {
+            eprintln!(
+                "[Netherstone] Failed to move kept unsaved edits {} -> {}: {}",
+                previous, next, error
+            );
+        }
+    }
+
     let conn = match db::open_connection() {
         Ok(conn) => conn,
         Err(error) => {
@@ -83,7 +94,7 @@ fn sync_caches_after_path_change(vault: &Path, old_path: &str, new_path: &Path, 
         }
     };
 
-    for (previous, next) in moved_markdown_paths(old_path, new_path) {
+    for (previous, next) in moved {
         if let Err(error) = db::ast_cache::rename_ast_cache(&conn, &previous, &next) {
             eprintln!(
                 "[Netherstone] Failed to update AST cache {} -> {}: {}",
@@ -376,6 +387,15 @@ pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
     trash::delete(target)
         .map_err(|e| format!("Failed to move {} to the OS trash: {}", target_path, e))?;
     drop(writes);
+
+    for markdown_path in &markdown_paths {
+        if let Err(error) = recovery::forget_shard(vault, markdown_path) {
+            eprintln!(
+                "[Netherstone] Failed to delete kept unsaved edits of {}: {}",
+                markdown_path, error
+            );
+        }
+    }
 
     match db::open_connection() {
         Ok(conn) => {

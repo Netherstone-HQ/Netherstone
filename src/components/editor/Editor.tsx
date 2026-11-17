@@ -10,7 +10,6 @@ import {
   useState,
   useTransition,
 } from "react";
-import { toast } from "sonner";
 import { useShallow } from "zustand/shallow";
 import { Button } from "@/components/ui/button";
 import { cancelIdle, requestIdle } from "@/lib/idle-callback";
@@ -19,7 +18,8 @@ import {
   discardCrashedEdits,
   hasCrashedEdits,
   keepCrashedEdits,
-  restoreCrashedEdits,
+  offerCrashedEdits,
+  restoreCrashedEditsOrSay,
 } from "@/lib/unsaved-edits";
 import { hasModKey } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -141,13 +141,6 @@ class EditorErrorBoundary extends Component<
     );
   }
 
-  private restore = () => {
-    restoreCrashedEdits(this.props.filePath).catch((restoreError) => {
-      console.error("Failed to restore unsaved edits:", restoreError);
-      toast.error("Couldn't restore unsaved edits");
-    });
-  };
-
   private reload = async () => {
     // The crashed editor's edits are kept elsewhere, or gone; reloading
     // shows the saved version, so a kept copy goes.
@@ -176,7 +169,10 @@ class EditorErrorBoundary extends Component<
         </pre>
         <div className="mt-4 flex gap-2">
           {editsKept && (
-            <Button onClick={this.restore} size="sm">
+            <Button
+              onClick={() => restoreCrashedEditsOrSay(this.props.filePath)}
+              size="sm"
+            >
               Restore unsaved edits
             </Button>
           )}
@@ -294,6 +290,13 @@ export function Editor() {
     };
     // Only a new session (open/close) re-resolves; renames keep the tick.
   }, [editorSessionTick, showSession]);
+
+  // Edits kept from a crash are offered each time their shard opens, unless
+  // it opens with them.
+  useEffect(() => {
+    if (useEditorStore.getState().opensUnsaved) return;
+    return offerCrashedEdits();
+  }, [editorSessionTick]);
 
   const handleEditorClick = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {

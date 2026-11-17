@@ -1,4 +1,14 @@
-import { caretAfter, editor, expect, lastSave, mockVault, test, VAULT_PATH } from "./vault";
+import type { Page } from "@playwright/test";
+import {
+  caretAfter,
+  editor,
+  expect,
+  lastSave,
+  mockVault,
+  openShard,
+  test,
+  VAULT_PATH,
+} from "./vault";
 
 // The blocks that fail to draw and the editor crash come from the test kit
 // in builds for these tests (src/components/editor/kits/crash-test-kit.tsx).
@@ -66,7 +76,10 @@ test.describe("an editor crash", () => {
         save_markdown_file: () => Promise.reject(new Error("Saving is held")),
       };
     });
-    await mockVault(page, { files: { "Note.md": "Saved text\n" }, open: "Note.md" });
+    await mockVault(page, {
+      files: { "Note.md": "Saved text\n", "Other.md": "Other text\n" },
+      open: "Note.md",
+    });
     await caretAfter(page, "Saved text");
     await page.keyboard.type(" plus typed");
     await page.waitForFunction(() =>
@@ -98,4 +111,68 @@ test.describe("an editor crash", () => {
     expect(await page.evaluate((path) => path in window.__keptEdits, shard)).toBe(false);
     expect(await page.evaluate(() => window.__vaultFiles["Note.md"])).toBe("Saved text\n");
   });
+
+  test.describe("after switching to another shard", () => {
+    const offer = (page: Page) => page.getByText("Unsaved edits to Note were kept");
+
+    test.beforeEach(async ({ page }) => {
+      await openShard(page, "Other");
+      await expect(editor(page)).toHaveText("Other text");
+      await openShard(page, "Note");
+      await expect(offer(page)).toBeVisible();
+      await expect(editor(page)).toHaveText("Saved text");
+    });
+
+    test("offers the kept edits again to restore and save", async ({ page }) => {
+      await page.evaluate(() => delete window.__overrides);
+      await page.getByRole("button", { name: "Restore unsaved edits" }).click();
+
+      await expect(editor(page)).toContainText("Saved text plus typed");
+      await expect(offer(page)).toHaveCount(0);
+      expect(await lastSave(page, "Note.md")).toBe("Saved text plus typed\n");
+      await page.waitForFunction((path) => !(path in window.__keptEdits), shard);
+    });
+
+    test("discards the kept edits and doesn't offer them again", async ({ page }) => {
+      await page.getByRole("button", { name: "Discard" }).click();
+
+      await expect(offer(page)).toHaveCount(0);
+      await page.waitForFunction((path) => !(path in window.__keptEdits), shard);
+      await expect(editor(page)).toHaveText("Saved text");
+      expect(await page.evaluate(() => window.__vaultFiles["Note.md"])).toBe("Saved text\n");
+
+      const reads = await readsOf(page, shard);
+      await openShard(page, "Other");
+      await openShard(page, "Note");
+      await expect(editor(page)).toHaveText("Saved text");
+      await expectNoOffer(page, shard, reads);
+    });
+  });
+});
+
+/** How many times the app looked for kept edits of `filePath`. */
+function readsOf(page: Page, filePath: string) {
+  return page.evaluate(
+    (filePath) =>
+      window.__commands.filter(
+        ({ command, args }) =>
+          command === "read_unsaved_edits" && (args as { filePath: string }).filePath === filePath,
+      ).length,
+    filePath,
+  );
+}
+
+/** Waits for one more look for kept edits of `filePath`, then checks no offer shows. */
+async function expectNoOffer(page: Page, filePath: string, readsBefore: number) {
+  await expect.poll(() => readsOf(page, filePath)).toBeGreaterThan(readsBefore);
+  // The look and the offer it leads to run as promise callbacks of the task
+  // that logged the look, and the offer draws as it's made, so it's on the
+  // page by the time a test sees the look.
+  await expect(page.getByText(/^Unsaved edits to .* were kept/)).toHaveCount(0);
+}
+
+test("a shard with no kept edits opens without an offer", async ({ page }) => {
+  await mockVault(page, { files: { "Note.md": "Saved text\n" }, open: "Note.md" });
+  await expect(editor(page)).toHaveText("Saved text");
+  await expectNoOffer(page, `${VAULT_PATH}/Note.md`, 0);
 });

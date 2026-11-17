@@ -5,6 +5,7 @@ pub mod drawings;
 pub mod files;
 pub mod paths;
 pub mod queries;
+pub mod recovery;
 
 use crate::{db, locks, vault};
 use std::path::Path;

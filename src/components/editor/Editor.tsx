@@ -10,10 +10,17 @@ import {
   useState,
   useTransition,
 } from "react";
+import { toast } from "sonner";
 import { useShallow } from "zustand/shallow";
 import { Button } from "@/components/ui/button";
 import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 import { openEditorFile } from "@/lib/open-editor-file";
+import {
+  discardCrashedEdits,
+  hasCrashedEdits,
+  keepCrashedEdits,
+  restoreCrashedEdits,
+} from "@/lib/unsaved-edits";
 import { hasModKey } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { isAssistantOn } from "@/lib/assistant";
@@ -34,6 +41,8 @@ type EditorSession = {
   cacheHit: boolean;
   /** Whether the shard has inline Ask: only while the assistant is on. */
   inlineAsk: boolean;
+  /** Whether `value` holds edits that aren't saved yet. */
+  unsaved: boolean;
 };
 
 type EditorSessions = {
@@ -98,13 +107,17 @@ function useModKeyLinks(ref: RefObject<HTMLElement | null>) {
 
 /**
  * Keeps an editor crash from unmounting the whole app (React drops the entire
- * tree on an uncaught render/effect error), and makes the error visible.
+ * tree on an uncaught render/effect error), and makes the error visible. The
+ * crashed editor's unsaved edits are kept, so they can be restored.
  */
 class EditorErrorBoundary extends Component<
-  { filePath: string; children: ReactNode },
-  { error: Error | null }
+  { filePath: string; tick: number; children: ReactNode },
+  { error: Error | null; editsKept: boolean }
 > {
-  state: { error: Error | null } = { error: null };
+  state: { error: Error | null; editsKept: boolean } = {
+    error: null,
+    editsKept: false,
+  };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -112,37 +125,65 @@ class EditorErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[Netherstone] Editor crashed:", error, info.componentStack);
+
+    // The editor is still in the store until its teardown runs after this.
+    const { plateEditor, editorSessionTick, isDirty } =
+      useEditorStore.getState();
+    const keep =
+      plateEditor && isDirty && editorSessionTick === this.props.tick
+        ? keepCrashedEdits(this.props.filePath, plateEditor).then(() => true)
+        : // Nothing new to keep; a copy from an earlier crash still counts.
+          hasCrashedEdits(this.props.filePath);
+    keep.then(
+      (editsKept) => this.setState({ editsKept }),
+      (keepError) =>
+        console.error("[Netherstone] Couldn't keep unsaved edits:", keepError),
+    );
   }
 
+  private restore = () => {
+    restoreCrashedEdits(this.props.filePath).catch((restoreError) => {
+      console.error("Failed to restore unsaved edits:", restoreError);
+      toast.error("Couldn't restore unsaved edits");
+    });
+  };
+
+  private reload = async () => {
+    // The crashed editor's edits are kept elsewhere, or gone; reloading
+    // shows the saved version, so a kept copy goes.
+    useEditorStore.getState().setIsDirty(false);
+    try {
+      if (this.state.editsKept) await discardCrashedEdits(this.props.filePath);
+      await openEditorFile(this.props.filePath);
+    } catch (reloadError) {
+      console.error("Failed to reload shard:", reloadError);
+    }
+  };
+
   render() {
-    const { error } = this.state;
+    const { error, editsKept } = this.state;
     if (!error) return this.props.children;
 
     return (
       <div className="mx-auto max-w-xl px-8 py-16 text-ui">
         <p className="font-medium">The editor ran into an error.</p>
         <p className="mt-1 text-muted-foreground">
-          The shard on disk is unaffected. Reloading it restores the last saved
-          version.
+          The shard on disk is unaffected. Reloading opens the last saved
+          version without your unsaved edits.
         </p>
         <pre className="mt-4 overflow-auto rounded-md bg-muted p-3 text-ui-sm whitespace-pre-wrap">
           {error.message}
         </pre>
-        <Button
-          className="mt-4"
-          onClick={() => {
-            // The crashed editor's unsaved edits went with it; there is
-            // nothing left to save before reopening.
-            useEditorStore.getState().setIsDirty(false);
-            void openEditorFile(this.props.filePath).catch((reloadError) => {
-              console.error("Failed to reload shard:", reloadError);
-            });
-          }}
-          size="sm"
-          variant="outline"
-        >
-          Reload shard
-        </Button>
+        <div className="mt-4 flex gap-2">
+          {editsKept && (
+            <Button onClick={this.restore} size="sm">
+              Restore unsaved edits
+            </Button>
+          )}
+          <Button onClick={() => void this.reload()} size="sm" variant="outline">
+            Reload shard
+          </Button>
+        </div>
       </div>
     );
   }
@@ -214,8 +255,12 @@ export function Editor() {
   }, [currentFilePath, editorSessionTick]);
 
   useEffect(() => {
-    const { currentFilePath: filePath, content, initialValue } =
-      useEditorStore.getState();
+    const {
+      currentFilePath: filePath,
+      content,
+      initialValue,
+      opensUnsaved,
+    } = useEditorStore.getState();
 
     if (!filePath) {
       showSession(null);
@@ -239,6 +284,7 @@ export function Editor() {
           value,
           cacheHit: initialValue !== null,
           inlineAsk,
+          unsaved: opensUnsaved,
         });
       });
     });
@@ -308,13 +354,17 @@ export function Editor() {
             hidden={isLeaving}
             inert={isLeaving || isStale}
           >
-            <EditorErrorBoundary filePath={session.filePath}>
+            <EditorErrorBoundary
+              filePath={session.filePath}
+              tick={session.tick}
+            >
               <MountedEditor
                 content={session.content}
                 currentFilePath={session.filePath}
                 initialValue={session.value}
                 cacheHit={session.cacheHit}
                 inlineAsk={session.inlineAsk}
+                unsaved={session.unsaved}
               />
             </EditorErrorBoundary>
           </div>

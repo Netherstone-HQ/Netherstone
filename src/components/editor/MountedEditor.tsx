@@ -49,6 +49,8 @@ type MountedEditorProps = {
    * has, so with it off the editor carries nothing of it.
    */
   inlineAsk: boolean;
+  /** Whether `initialValue` holds edits that aren't saved yet. */
+  unsaved: boolean;
 };
 
 export const MountedEditor = memo(function MountedEditor({
@@ -57,6 +59,7 @@ export const MountedEditor = memo(function MountedEditor({
   initialValue,
   cacheHit,
   inlineAsk,
+  unsaved,
 }: MountedEditorProps) {
   const didWriteColdOpenCacheRef = useRef(false);
   const suppressInitialChangeRef = useRef(true);
@@ -203,8 +206,10 @@ export const MountedEditor = memo(function MountedEditor({
   );
 
   useEffect(() => {
-    rememberSavedValue(editor, editor.children);
+    // Unsaved blocks aren't what's on disk; the first save notes them.
+    if (!unsaved) rememberSavedValue(editor, editor.children);
     setPlateEditor(editor);
+    if (unsaved) setIsDirty(true);
 
     setTocHeadings(getPlateHeadingList(editor));
 
@@ -220,8 +225,10 @@ export const MountedEditor = memo(function MountedEditor({
     cacheHit,
     currentFilePath,
     editor,
+    setIsDirty,
     setPlateEditor,
     setTocHeadings,
+    unsaved,
   ]);
 
   // A link, missing file or chart asked for when this shard was opened (from

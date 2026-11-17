@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 /**
- * Real-browser editor tests against the built app (`pnpm exec vite build`
+ * Real-browser editor tests against the built app (`pnpm exec vite build --mode e2e`
  * first). They mock the Tauri bridge, so no desktop build is needed.
  *
  * Set E2E_CHROMIUM to a Chromium binary to run without downloading one.

@@ -100,6 +100,8 @@ declare global {
     /** What the asset protocol may serve, as the desktop app's scope does. */
     __assetScope: { folders: string[]; files: string[] };
     __vaultFiles: VaultFiles;
+    /** Unsaved edits the app kept after an editor crash, by shard path. */
+    __keptEdits: Record<string, string>;
     __emit: (event: string, payload: unknown) => void;
     /** Runs the animation frames a test held back, and stops holding them. */
     __releaseFrames: () => void;
@@ -259,6 +261,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         if (!window.__assetScope.folders.includes(folder)) window.__assetScope.folders.push(folder);
       };
       window.__vaultFiles = files;
+      window.__keptEdits = {};
 
       localStorage.setItem(
         "netherstone-vault",
@@ -352,6 +355,15 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           }
           files[relative(filePath)] = content;
           window.__saves.push({ filePath, content });
+          return null;
+        },
+        keep_unsaved_edits: ({ filePath, copy }) => {
+          window.__keptEdits[filePath] = copy;
+          return null;
+        },
+        read_unsaved_edits: ({ filePath }) => window.__keptEdits[filePath] ?? null,
+        discard_unsaved_edits: ({ filePath }) => {
+          delete window.__keptEdits[filePath];
           return null;
         },
         file_exists: ({ path, filePath }) => {

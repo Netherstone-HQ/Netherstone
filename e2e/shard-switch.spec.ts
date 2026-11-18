@@ -1,7 +1,9 @@
 import type { Page } from "@playwright/test";
 import { caretAfter, editor, expect, mockVault, savesFor, test } from "./vault";
 
-const FIRST = "# First\n\nFirst body text\n\nGo to [Second](Second.md)\n";
+const FIRST =
+  "# First\n\nFirst body text\n\nGo to [Second](Second.md) or [Third](Third.md)\n\n- [ ] Task item\n";
+const THIRD = "# Third\n\nThird body text\n";
 const SECOND = "# Second\n\nSecond body text\n";
 
 declare global {
@@ -36,7 +38,7 @@ async function holdSecond(page: Page) {
 const firstText = (page: Page) => page.getByText("First body text", { exact: true });
 
 test("the previous shard can't be edited while the next one opens", async ({ page }) => {
-  await mockVault(page, { files: { "First.md": FIRST, "Second.md": SECOND }, open: "First.md" });
+  await mockVault(page, { files: { "First.md": FIRST, "Second.md": SECOND, "Third.md": THIRD }, open: "First.md" });
   await caretAfter(page, "First body text");
   await holdSecond(page);
 
@@ -49,14 +51,21 @@ test("the previous shard can't be edited while the next one opens", async ({ pag
   await page.keyboard.type("lost");
   await expect(firstText(page)).toBeVisible();
 
+  // Nor do links, or a task's check box.
+  await editor(page).getByText("Third").click({ modifiers: ["ControlOrMeta"] });
+  const task = editor(page).getByRole("checkbox", { includeHidden: true });
+  await task.click();
+  await expect(task).not.toBeChecked();
+
   await page.evaluate(() => window.__openSecond?.());
   await expect(page.getByText("Second body text")).toBeVisible();
   await expect(firstText(page)).toBeHidden();
+  await expect(page.getByText("Third body text")).toHaveCount(0);
   expect(await savesFor(page, "First.md")).toEqual([]);
 });
 
 test("a link that opens another shard takes the caret out of this one", async ({ page }) => {
-  await mockVault(page, { files: { "First.md": FIRST, "Second.md": SECOND }, open: "First.md" });
+  await mockVault(page, { files: { "First.md": FIRST, "Second.md": SECOND, "Third.md": THIRD }, open: "First.md" });
   await caretAfter(page, "First body text");
   await holdSecond(page);
 

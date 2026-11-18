@@ -35,8 +35,23 @@ import { resolveSessionValue } from "./lib/session-value";
 /** Longest wait for a quiet moment to remove a closed shard. */
 const REMOVE_IDLE_TIMEOUT_MS = 1000;
 
-const preventDefault = (event: SyntheticEvent) => event.preventDefault();
+// Input to a shard that is closing or about to be replaced: its edits
+// couldn't be saved, so nothing reaches it.
+const stopEvent = (event: SyntheticEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+};
 const blurTarget = (event: FocusEvent<HTMLElement>) => event.target.blur();
+const INACTIVE_EVENTS = {
+  onPointerDownCapture: stopEvent,
+  onMouseDownCapture: stopEvent,
+  onClickCapture: stopEvent,
+  onDoubleClickCapture: stopEvent,
+  onContextMenuCapture: stopEvent,
+  onDragStartCapture: stopEvent,
+  onDropCapture: stopEvent,
+  onFocusCapture: blurTarget,
+};
 
 type EditorSession = {
   tick: number;
@@ -309,6 +324,7 @@ export function Editor() {
 
       const target = event.target;
       if (!(target instanceof Element)) return;
+      if (target.closest("[data-inactive-session]")) return;
 
       const link = target.closest("a");
       if (!link) return;
@@ -339,17 +355,17 @@ export function Editor() {
   // `:last-child` on every element), but not before it.
   const sessions = displayed ? [displayed, ...leaving] : leaving;
 
-  // A shard switched to from the keyboard leaves focus in the previous one.
+  // A shard switched to or closed from the keyboard leaves focus in it.
   useEffect(() => {
     const active = document.activeElement;
     if (
-      isStale &&
       active instanceof HTMLElement &&
+      active.closest("[data-inactive-session]") &&
       rootRef.current?.contains(active)
     ) {
       active.blur();
     }
-  }, [isStale]);
+  }, [isStale, leaving]);
 
   return (
     <div
@@ -369,10 +385,10 @@ export function Editor() {
         const isLeaving = session !== displayed;
         return (
           // While the next note prepares, the previous one stays visible but
-          // can't take focus: it's no longer the store's editor, so edits
-          // couldn't be saved. `inert` and `hidden` restyle every node of a
-          // long shard (about a second each in WebKit); content-visibility
-          // and focus guards don't.
+          // takes no input: it's no longer the store's editor, so edits
+          // couldn't be saved. `inert`, `hidden` and `pointer-events` restyle
+          // every node of a long shard (about a second each in WebKit);
+          // content-visibility and event guards don't.
           <div
             key={session.tick}
             className={cn(
@@ -380,8 +396,9 @@ export function Editor() {
                 "absolute inset-x-0 top-0 h-0 [content-visibility:hidden]",
               isStale && !isLeaving && "opacity-60",
             )}
-            onMouseDownCapture={isStale ? preventDefault : undefined}
-            onFocusCapture={isStale ? blurTarget : undefined}
+            data-inactive-session={isLeaving || isStale || undefined}
+            aria-hidden={isLeaving || isStale || undefined}
+            {...(isLeaving || isStale ? INACTIVE_EVENTS : {})}
           >
             <EditorErrorBoundary
               filePath={session.filePath}

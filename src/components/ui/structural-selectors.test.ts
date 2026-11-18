@@ -16,7 +16,7 @@ function* sourceFiles(directory: string): Generator<string> {
 // element of the page. Then adding or removing any element restyles its
 // siblings in full: about a second per shard switch with a long shard open.
 // `[&>span:first-child]:` (a tag or class before the pseudo-class) doesn't.
-const UNKEYED_STRUCTURAL = /\*:(first|last|only|odd|even|nth-)/;
+const UNKEYED_STRUCTURAL = /\*:(\[[^\]]*\]:)*(first|last|only|odd|even|nth-)/;
 
 it("has no Tailwind child variant with a position pseudo-class", () => {
   const found: string[] = [];

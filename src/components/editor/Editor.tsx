@@ -1,9 +1,11 @@
 import {
   Component,
   type ErrorInfo,
+  type FocusEvent,
   type MouseEvent,
   type ReactNode,
   type RefObject,
+  type SyntheticEvent,
   useCallback,
   useEffect,
   useRef,
@@ -32,6 +34,9 @@ import { resolveSessionValue } from "./lib/session-value";
 
 /** Longest wait for a quiet moment to remove a closed shard. */
 const REMOVE_IDLE_TIMEOUT_MS = 1000;
+
+const preventDefault = (event: SyntheticEvent) => event.preventDefault();
+const blurTarget = (event: FocusEvent<HTMLElement>) => event.target.blur();
 
 type EditorSession = {
   tick: number;
@@ -329,7 +334,22 @@ export function Editor() {
   const isLoading = currentFilePath
     ? displayed === null || isStale
     : isOpeningFile;
-  const sessions = displayed ? [...leaving, displayed] : leaving;
+  // The shard on screen comes first: WebKit restyles a whole long shard when
+  // an element is added after it (Tailwind's `space-y-*` rules test
+  // `:last-child` on every element), but not before it.
+  const sessions = displayed ? [displayed, ...leaving] : leaving;
+
+  // A shard switched to from the keyboard leaves focus in the previous one.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (
+      isStale &&
+      active instanceof HTMLElement &&
+      rootRef.current?.contains(active)
+    ) {
+      active.blur();
+    }
+  }, [isStale]);
 
   return (
     <div
@@ -349,13 +369,19 @@ export function Editor() {
         const isLeaving = session !== displayed;
         return (
           // While the next note prepares, the previous one stays visible but
-          // inert: it's no longer the store's editor, so edits couldn't be
-          // saved.
+          // can't take focus: it's no longer the store's editor, so edits
+          // couldn't be saved. `inert` and `hidden` restyle every node of a
+          // long shard (about a second each in WebKit); content-visibility
+          // and focus guards don't.
           <div
             key={session.tick}
-            className={isStale && !isLeaving ? "opacity-60" : undefined}
-            hidden={isLeaving}
-            inert={isLeaving || isStale}
+            className={cn(
+              isLeaving &&
+                "absolute inset-x-0 top-0 h-0 [content-visibility:hidden]",
+              isStale && !isLeaving && "opacity-60",
+            )}
+            onMouseDownCapture={isStale ? preventDefault : undefined}
+            onFocusCapture={isStale ? blurTarget : undefined}
           >
             <EditorErrorBoundary
               filePath={session.filePath}

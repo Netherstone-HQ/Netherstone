@@ -62,7 +62,7 @@ export function LineHeightToolbarButton({
         {values.map((value) => (
           <DropdownMenuRadioItem
             key={value}
-            className="min-w-[180px] pl-2 *:first:[span]:hidden"
+            className="min-w-[180px] pl-2 [&>span:first-child]:hidden"
             value={value}
           >
             <span className="pointer-events-none absolute right-2 flex size-3.5 items-center justify-center">

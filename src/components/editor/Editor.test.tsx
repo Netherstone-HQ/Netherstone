@@ -222,7 +222,9 @@ describe("Editor", () => {
 
       expect(screen.getByText("No shard open")).toBeTruthy();
       const closed = document.querySelector("[data-slate-editor]");
-      expect(closed?.closest("[hidden]")).not.toBeNull();
+      expect(
+        closed?.closest('[class~="[content-visibility:hidden]"]'),
+      ).not.toBeNull();
 
       await waitFor(() =>
         expect(document.querySelector("[data-slate-editor]")).toBeNull(),

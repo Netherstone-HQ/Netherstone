@@ -1,9 +1,11 @@
 import {
   Component,
   type ErrorInfo,
+  type FocusEvent,
   type MouseEvent,
   type ReactNode,
   type RefObject,
+  type SyntheticEvent,
   useCallback,
   useEffect,
   useRef,
@@ -32,6 +34,24 @@ import { resolveSessionValue } from "./lib/session-value";
 
 /** Longest wait for a quiet moment to remove a closed shard. */
 const REMOVE_IDLE_TIMEOUT_MS = 1000;
+
+// Input to a shard that is closing or about to be replaced: its edits
+// couldn't be saved, so nothing reaches it.
+const stopEvent = (event: SyntheticEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+};
+const blurTarget = (event: FocusEvent<HTMLElement>) => event.target.blur();
+const INACTIVE_EVENTS = {
+  onPointerDownCapture: stopEvent,
+  onMouseDownCapture: stopEvent,
+  onClickCapture: stopEvent,
+  onDoubleClickCapture: stopEvent,
+  onContextMenuCapture: stopEvent,
+  onDragStartCapture: stopEvent,
+  onDropCapture: stopEvent,
+  onFocusCapture: blurTarget,
+};
 
 type EditorSession = {
   tick: number;
@@ -304,6 +324,7 @@ export function Editor() {
 
       const target = event.target;
       if (!(target instanceof Element)) return;
+      if (target.closest("[data-inactive-session]")) return;
 
       const link = target.closest("a");
       if (!link) return;
@@ -329,7 +350,22 @@ export function Editor() {
   const isLoading = currentFilePath
     ? displayed === null || isStale
     : isOpeningFile;
-  const sessions = displayed ? [...leaving, displayed] : leaving;
+  // The shard on screen comes first: WebKit restyles a whole long shard when
+  // an element is added after it (Tailwind's `space-y-*` rules test
+  // `:last-child` on every element), but not before it.
+  const sessions = displayed ? [displayed, ...leaving] : leaving;
+
+  // A shard switched to or closed from the keyboard leaves focus in it.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      active.closest("[data-inactive-session]") &&
+      rootRef.current?.contains(active)
+    ) {
+      active.blur();
+    }
+  }, [isStale, leaving]);
 
   return (
     <div
@@ -349,13 +385,20 @@ export function Editor() {
         const isLeaving = session !== displayed;
         return (
           // While the next note prepares, the previous one stays visible but
-          // inert: it's no longer the store's editor, so edits couldn't be
-          // saved.
+          // takes no input: it's no longer the store's editor, so edits
+          // couldn't be saved. `inert`, `hidden` and `pointer-events` restyle
+          // every node of a long shard (about a second each in WebKit);
+          // content-visibility and event guards don't.
           <div
             key={session.tick}
-            className={isStale && !isLeaving ? "opacity-60" : undefined}
-            hidden={isLeaving}
-            inert={isLeaving || isStale}
+            className={cn(
+              isLeaving &&
+                "absolute inset-x-0 top-0 h-0 [content-visibility:hidden]",
+              isStale && !isLeaving && "opacity-60",
+            )}
+            data-inactive-session={isLeaving || isStale || undefined}
+            aria-hidden={isLeaving || isStale || undefined}
+            {...(isLeaving || isStale ? INACTIVE_EVENTS : {})}
           >
             <EditorErrorBoundary
               filePath={session.filePath}

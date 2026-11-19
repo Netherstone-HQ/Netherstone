@@ -429,7 +429,7 @@ describe("formatting the editor has no Markdown for", () => {
     );
     const loaded = loadMarkdown(markdown);
     expect(loaded[0]).toMatchObject({ type: "img", url: "a.png", width: 320 });
-    expect(loaded[1].children[0]).toMatchObject({ url: "https://x.y", title: "The site" });
+    expect(loaded[1].children[1]).toMatchObject({ url: "https://x.y", title: "The site" });
   });
 
   it("writes an image without a width the plain way", () => {

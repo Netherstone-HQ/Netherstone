@@ -7,7 +7,7 @@ import {
   type MdRules,
 } from "@platejs/markdown";
 import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { remarkDollarMath } from "@/lib/remark-dollar-math";
 
 import {
   DARK_SOURCE_ATTRIBUTE,
@@ -84,7 +84,7 @@ export const MarkdownKit = [
         ...tableRules,
       },
       remarkPlugins: [
-        remarkMath,
+        remarkDollarMath,
         remarkGfm,
         remarkMdx,
         remarkLiteralMdxExpressions,

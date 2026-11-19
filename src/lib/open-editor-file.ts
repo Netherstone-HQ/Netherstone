@@ -1,5 +1,9 @@
 import { toast } from "sonner";
-import { flushPendingAutosave, writeOpenShardCache } from "@/hooks/useAutosave";
+import {
+  flushPendingAutosave,
+  holdOpenShardCache,
+  writeLeftShardCaches,
+} from "@/hooks/useAutosave";
 import { fillDrawingPictures } from "@/lib/drawing-exports";
 import {
   openMarkdownFile,
@@ -59,7 +63,7 @@ export async function closeEditorFile() {
  */
 async function saveOpenShard(): Promise<boolean> {
   await flushPendingAutosave();
-  void writeOpenShardCache();
+  holdOpenShardCache();
 
   const { isDirty, currentFilePath } = useEditorStore.getState();
   if (!isDirty || !currentFilePath) return true;
@@ -83,6 +87,8 @@ async function readAndOpenFile(
     );
   }
 
+  // A shard left moments ago may still hold its cache entry.
+  await writeLeftShardCaches(filePath);
   const result = await openMarkdownFile(filePath);
 
   useEditorStore.getState().openFile(toOpenEditorFilePayload(result, unsavedValue));

@@ -15,6 +15,8 @@ import {
 } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "@/components/ui/button";
+import { cancelIdle, requestIdle } from "@/lib/idle-callback";
+import { writeLeftShardCaches } from "@/hooks/useAutosave";
 import { openEditorFile } from "@/lib/open-editor-file";
 import {
   discardCrashedEdits,
@@ -35,6 +37,9 @@ import {
 } from "./lib/closed-session";
 import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
+
+/** Longest wait for a quiet moment to send a closed shard's cache entry. */
+const LEAVE_IDLE_TIMEOUT_MS = 1000;
 
 // Input to a shard that is closing or about to be replaced: its edits
 // couldn't be saved, so nothing reaches it.
@@ -277,6 +282,16 @@ export function Editor() {
       leaving: sessions.leaving.filter((session) => session.tick !== tick),
     }));
   }, []);
+
+  // Once the left shards are gone, their cache entries go to Rust.
+  useEffect(() => {
+    if (leaving.length > 0) return;
+
+    const idleId = requestIdle(() => void writeLeftShardCaches(), {
+      timeout: LEAVE_IDLE_TIMEOUT_MS,
+    });
+    return () => cancelIdle(idleId);
+  }, [leaving]);
 
   // Follow renames of the displayed session. A stale session (another file is
   // being prepared) keeps its last path, so it doesn't re-register itself in

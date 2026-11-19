@@ -1,6 +1,7 @@
 // Renaming or moving a vault item: the open shard is saved first, and
 // everything that remembers a path follows it to the new one after.
 
+import { writeLeftShardCaches } from "@/hooks/useAutosave";
 import { relinkDrawingReferences } from "@/lib/drawing-exports";
 import {
   flushPendingDrawingSave,
@@ -111,6 +112,9 @@ export async function persistOpenFileBeforePathChange(
     typeof captureOpenEditorSessionPathChangeSnapshot
   >;
 } | null> {
+  // A held entry would land at the old path after Rust moves the cache.
+  await writeLeftShardCaches(node.path);
+
   if (!currentFilePath || !isPathWithin(currentFilePath, node.path)) {
     return null;
   }

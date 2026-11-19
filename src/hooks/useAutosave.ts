@@ -11,6 +11,7 @@ import {
 import {
   finishDrawingSession,
   hasPendingDrawingSave,
+  isPathWithin,
 } from "@/lib/drawing-files";
 import {
   isChangedOnDiskError,
@@ -27,55 +28,78 @@ type EditorStoreState = ReturnType<typeof useEditorStore.getState>;
 
 let flushActiveAutosave: (() => Promise<void>) | null = null;
 
-/**
- * The open shard's last saved text and the editor value it was saved from.
- * It goes into the editor cache when the shard is switched or closed, not
- * on every save: the cache only matters the next time the shard opens.
- * It keeps the vault it was saved in, so the write still lands after the
- * app moves on to another vault.
- */
-let pendingCacheEntry: {
+type CacheEntry = {
   vaultPath: string;
   filePath: string;
   markdown: string;
   plateValue: unknown;
   /** The entry ready to send, when the markdown worker made it. */
   cache: ShardCache | null;
-} | null = null;
+};
+
+/**
+ * The open shard's last saved text and the editor value it was saved from.
+ * It goes into the editor cache after the shard is left, not on every save:
+ * the cache only matters the next time the shard opens. It keeps the vault
+ * it was saved in, so the write still lands after the app moves on to
+ * another vault.
+ */
+let pendingCacheEntry: CacheEntry | null = null;
+
+/**
+ * Entries of shards that were left, by path, until the editor is quiet.
+ * Sending a long shard's entry as it closes froze the switch.
+ */
+const leftCacheEntries = new Map<string, CacheEntry>();
 
 /** The cache writes still running, one after another. */
 let cacheWrites: Promise<void> | null = null;
 
+function queueCacheWrite(entry: CacheEntry) {
+  const write: Promise<void> = (cacheWrites ?? Promise.resolve())
+    .then(() =>
+      entry.cache
+        ? writeShardCache(entry.vaultPath, entry.filePath, entry.cache)
+        : upsertAstCache({
+            vaultPath: entry.vaultPath,
+            filePath: entry.filePath,
+            markdown: entry.markdown,
+            plateValue: entry.plateValue,
+          }),
+    )
+    .catch((error) =>
+      console.error(
+        "[Netherstone] AST cache write failed:",
+        entry.filePath,
+        error,
+      ),
+    )
+    .finally(() => {
+      if (cacheWrites === write) cacheWrites = null;
+    });
+  cacheWrites = write;
+}
+
 /**
- * Writes the open shard's last save to the editor cache. Leaving a shard
- * doesn't need to wait for it; quitting does.
+ * Keeps the open shard's last save for the editor cache as it's left. The
+ * editor sends it once the next shard is on screen.
  */
-export function writeOpenShardCache(): Promise<void> {
+export function holdOpenShardCache(): void {
   const entry = pendingCacheEntry;
-  if (entry) {
-    pendingCacheEntry = null;
-    const write: Promise<void> = (cacheWrites ?? Promise.resolve())
-      .then(() =>
-        entry.cache
-          ? writeShardCache(entry.vaultPath, entry.filePath, entry.cache)
-          : upsertAstCache({
-              vaultPath: entry.vaultPath,
-              filePath: entry.filePath,
-              markdown: entry.markdown,
-              plateValue: entry.plateValue,
-            }),
-      )
-      .catch((error) =>
-        console.error(
-          "[Netherstone] AST cache write failed:",
-          entry.filePath,
-          error,
-        ),
-      )
-      .finally(() => {
-        if (cacheWrites === write) cacheWrites = null;
-      });
-    cacheWrites = write;
+  if (!entry) return;
+  pendingCacheEntry = null;
+  leftCacheEntries.set(entry.filePath, entry);
+}
+
+/**
+ * Sends the held cache entries, or only those at or inside `path`, and
+ * resolves once every cache write so far has finished.
+ */
+export function writeLeftShardCaches(path?: string): Promise<void> {
+  for (const [filePath, entry] of leftCacheEntries) {
+    if (path !== undefined && !isPathWithin(filePath, path)) continue;
+    leftCacheEntries.delete(filePath);
+    queueCacheWrite(entry);
   }
   return cacheWrites ?? Promise.resolve();
 }
@@ -98,7 +122,8 @@ async function saveForQuit(sync: (() => Promise<void>) | null) {
   } catch (error) {
     console.error("Failed to save on shutdown:", error);
   }
-  await writeOpenShardCache();
+  holdOpenShardCache();
+  await writeLeftShardCaches();
 
   try {
     await finishDrawingSession();
@@ -371,6 +396,7 @@ export function useAutosave() {
         inFlightRef.current ||
         !!(latestDirtyRef.current && latestFilePathRef.current) ||
         pendingCacheEntry !== null ||
+        leftCacheEntries.size > 0 ||
         cacheWrites !== null ||
         hasPendingDrawingSave();
 

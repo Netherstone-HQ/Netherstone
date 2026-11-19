@@ -17,6 +17,7 @@ import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { openMarkdownFile, upsertAstCache } from "@/lib/editor-ast-cache";
 import { readMarkdownFile } from "@/lib/commands/shards";
+import { writeLeftShardCaches } from "@/hooks/useAutosave";
 import { hasInlineAsk } from "@/lib/inline-ask";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { reloadOpenShardIfChanged } from "@/lib/outside-changes";
@@ -43,6 +44,11 @@ vi.mock("@/lib/editor-ast-cache", () => ({
     plateValue: null,
   })),
 }));
+
+vi.mock("@/hooks/useAutosave", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/hooks/useAutosave")>();
+  return { ...original, writeLeftShardCaches: vi.fn(original.writeLeftShardCaches) };
+});
 
 vi.mock("@/lib/commands/shards", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/commands/shards")>()),
@@ -190,6 +196,30 @@ describe("Editor", () => {
       expect(useEditorStore.getState().openingFilePath).toBeNull();
       expect(screen.getByText("No shard open")).toBeTruthy();
     });
+  });
+
+  it("sends left shards' cache entries only once the next shard is on screen", async () => {
+    await openNote(NOTE);
+    const send = vi.mocked(writeLeftShardCaches);
+    // The first quiet moment after the editor mounts sends what's held.
+    await waitFor(() => expect(send).toHaveBeenCalledWith());
+    const original = send.getMockImplementation();
+    // What was on the page at each send.
+    const pages: { next: boolean; left: boolean }[] = [];
+    send.mockImplementation(async (path) => {
+      if (path !== undefined) return;
+      pages.push({
+        next: screen.queryByText("Linked note") !== null,
+        left: document.querySelector("[data-inactive-session]") !== null,
+      });
+    });
+
+    try {
+      await act(() => openEditorFile("C:/vault/notes/linked.md"));
+      await waitFor(() => expect(pages).toEqual([{ next: true, left: false }]));
+    } finally {
+      send.mockImplementation(original!);
+    }
   });
 
   it("leaves inline Ask out of a shard opened with the assistant off", async () => {

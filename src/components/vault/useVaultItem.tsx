@@ -35,7 +35,7 @@ import { DrawingIcon } from "@/components/icons";
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import type { RowAction } from "@/components/vault/RowActions";
-import { flushPendingAutosave } from "@/hooks/useAutosave";
+import { flushPendingAutosave, writeLeftShardCaches } from "@/hooks/useAutosave";
 import {
   finishPathChange,
   flushDrawingAffectedBy,
@@ -201,6 +201,8 @@ export function useVaultItem(
       // Let a save that is already running finish first, so it can't write
       // the shard back after it has gone to the trash.
       if (deletesOpenFile) await flushPendingAutosave();
+      // So the cache rows go with it, not land after.
+      await writeLeftShardCaches(node.path);
 
       await deleteVaultPath(node.path);
 

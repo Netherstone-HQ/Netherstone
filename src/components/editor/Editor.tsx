@@ -15,6 +15,7 @@ import {
 import { useShallow } from "zustand/shallow";
 import { Button } from "@/components/ui/button";
 import { cancelIdle, requestIdle } from "@/lib/idle-callback";
+import { writeLeftShardCaches } from "@/hooks/useAutosave";
 import { openEditorFile } from "@/lib/open-editor-file";
 import {
   discardCrashedEdits,
@@ -32,8 +33,11 @@ import { MountedEditor } from "./MountedEditor";
 import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
 
-/** Longest wait for a quiet moment to remove a closed shard. */
-const REMOVE_IDLE_TIMEOUT_MS = 1000;
+/**
+ * Longest wait for a quiet moment to remove a closed shard, and then to
+ * send its cache entry.
+ */
+const LEAVE_IDLE_TIMEOUT_MS = 1000;
 
 // Input to a shard that is closing or about to be replaced: its edits
 // couldn't be saved, so nothing reaches it.
@@ -250,8 +254,18 @@ export function Editor() {
 
     const idleId = requestIdle(
       () => setSessions((sessions) => ({ ...sessions, leaving: [] })),
-      { timeout: REMOVE_IDLE_TIMEOUT_MS },
+      { timeout: LEAVE_IDLE_TIMEOUT_MS },
     );
+    return () => cancelIdle(idleId);
+  }, [leaving]);
+
+  // Once the left shards are gone, their cache entries go to Rust.
+  useEffect(() => {
+    if (leaving.length > 0) return;
+
+    const idleId = requestIdle(() => void writeLeftShardCaches(), {
+      timeout: LEAVE_IDLE_TIMEOUT_MS,
+    });
     return () => cancelIdle(idleId);
   }, [leaving]);
 

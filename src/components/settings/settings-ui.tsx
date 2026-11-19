@@ -40,7 +40,7 @@ export function SettingsGroup({
       {bare ? (
         children
       ) : (
-        <div className="rounded-xl border bg-card shadow-xs">
+        <div data-slot="settings-card" className="rounded-xl border bg-card shadow-xs">
           {children}
         </div>
       )}
@@ -48,7 +48,10 @@ export function SettingsGroup({
   );
 }
 
-/** One setting: what it is on the left, the control on the right. */
+/**
+ * One setting: what it is on the left, the control on the right. When both
+ * don't fit, the control wraps under the label and shrinks to the card.
+ */
 export function SettingRow({
   label,
   description,
@@ -64,12 +67,14 @@ export function SettingRow({
 }) {
   return (
     <div
+      data-slot="setting-row"
       className={cn(
-        "flex items-center justify-between gap-6 border-b last:border-b-0 px-4 py-3.5",
+        "flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b last:border-b-0 px-4 py-3.5",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* The label's basis is the room it keeps before the control wraps. */}
+      <div className="flex min-w-0 grow basis-36 flex-col gap-0.5">
         <label htmlFor={htmlFor} className="block font-medium text-ui">
           {label}
         </label>
@@ -79,7 +84,7 @@ export function SettingRow({
           </p>
         ) : null}
       </div>
-      {children ? <div className="shrink-0">{children}</div> : null}
+      {children ? <div className="min-w-0 max-w-full">{children}</div> : null}
     </div>
   );
 }
@@ -154,7 +159,7 @@ export function PreferenceSelect<K extends keyof Preferences>({
           )
         }
       >
-        <SelectTrigger id={id} size="sm" className="min-w-36">
+        <SelectTrigger id={id} size="sm" className="min-w-36 max-w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" align="end">
@@ -189,7 +194,7 @@ function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex rounded-lg border bg-muted/50 p-0.5"
+      className="inline-flex max-w-full flex-wrap rounded-lg border bg-muted/50 p-0.5"
     >
       {options.map((option) => {
         const checked = option.value === value;

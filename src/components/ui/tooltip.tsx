@@ -56,16 +56,18 @@ function TooltipContent({
 function Hint({
   label,
   side,
+  className,
   children,
 }: {
   label: React.ReactNode;
   side?: React.ComponentProps<typeof TooltipPrimitive.Content>["side"];
+  className?: string;
   children: React.ReactElement;
 }) {
   return (
     <Tooltip delayDuration={300}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side={side} sideOffset={6}>
+      <TooltipContent side={side} sideOffset={6} className={className}>
         {label}
       </TooltipContent>
     </Tooltip>

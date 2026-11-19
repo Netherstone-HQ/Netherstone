@@ -9,12 +9,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { DEFAULT_PREFERENCES, useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 import { openVaultDialog } from "@/lib/commands/vault";
 import { openVault } from "@/lib/open-vault";
 import { SETTINGS_CATEGORIES, SettingsPage } from "./SettingsPage";
+
+const renderPage = () => render(<SettingsPage />, { wrapper: TooltipProvider });
 
 const AI_APP = {
   id: "cursor",
@@ -70,7 +73,7 @@ describe("SettingsPage", () => {
   it.each(SETTINGS_CATEGORIES.map((c) => [c.label, c.id] as const))(
     "shows %s when picked",
     (label, id) => {
-      render(<SettingsPage />);
+      renderPage();
       const nav = screen.getByRole("navigation", { name: "Settings" });
       fireEvent.click(
         Array.from(nav.querySelectorAll("button")).find(
@@ -85,13 +88,13 @@ describe("SettingsPage", () => {
   );
 
   it("changes a preference from its switch", () => {
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.click(screen.getByLabelText("Ask before moving to trash"));
     expect(useSettingsStore.getState().confirmBeforeDelete).toBe(false);
   });
 
   it("hides the recent shards count with its switch", () => {
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "More" }));
     expect(useSettingsStore.getState().recentFilesLimit).toBe(4);
     fireEvent.click(screen.getByLabelText("Show recent shards"));
@@ -101,14 +104,14 @@ describe("SettingsPage", () => {
 
   it("changes the theme", () => {
     useUIStore.setState({ settingsCategory: "appearance" });
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.click(screen.getByRole("radio", { name: "Light" }));
     expect(useSettingsStore.getState().theme).toBe("light");
   });
 
   it("connects an AI app and picks vaults once AI apps are on", async () => {
     useUIStore.setState({ settingsCategory: "ai-apps" });
-    render(<SettingsPage />);
+    renderPage();
     const connect = await screen.findByRole("button", { name: "Connect" });
     const toggle = screen.getByLabelText("Connect your AI apps");
     await waitFor(() => expect(toggle).toHaveProperty("disabled", false));
@@ -126,7 +129,7 @@ describe("SettingsPage", () => {
   });
 
   it("closes on Escape", () => {
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(useUIStore.getState().activeNavItem).toBeNull();
   });
@@ -134,7 +137,7 @@ describe("SettingsPage", () => {
   it("goes back to the editor after opening another vault", async () => {
     vi.mocked(openVaultDialog).mockResolvedValueOnce("/v/Other");
     useUIStore.setState({ settingsCategory: "vault", appMode: "canvas" });
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
     await waitFor(() =>
       expect(useUIStore.getState().activeNavItem).toBeNull(),
@@ -145,7 +148,7 @@ describe("SettingsPage", () => {
 
   it("stays open when no folder is picked", async () => {
     useUIStore.setState({ settingsCategory: "vault" });
-    render(<SettingsPage />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
     await waitFor(() => expect(openVaultDialog).toHaveResolved());
     expect(openVault).not.toHaveBeenCalled();

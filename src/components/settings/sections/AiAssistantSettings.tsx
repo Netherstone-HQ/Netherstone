@@ -140,7 +140,7 @@ export function AiAssistantSettings() {
       <MemorySection />
 
       <SettingsGroup title="Providers" description={<FreeWaysToStart />} bare>
-        <div className="space-y-5">
+        <div className="flex flex-col gap-5">
           <ProviderCards setup={setup} status={status} custom />
         </div>
       </SettingsGroup>

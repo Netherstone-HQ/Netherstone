@@ -28,7 +28,7 @@ export function ProviderCards({
 
   return (
     <>
-      <div className="divide-y rounded-xl border bg-card shadow-xs">
+      <div className="rounded-xl border bg-card shadow-xs">
         {keyProviders.map((provider) => (
           <KeyRow
             key={provider.id}
@@ -41,7 +41,7 @@ export function ProviderCards({
           />
         ))}
       </div>
-      <div className="divide-y rounded-xl border bg-card shadow-xs">
+      <div className="rounded-xl border bg-card shadow-xs">
         {otherProviders.map((provider) =>
           provider.setup === "local" ? (
             <LocalRow

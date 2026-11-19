@@ -30,14 +30,14 @@ export function AppearanceStep({
       onBack={onBack}
       action={<Button onClick={onNext}>{copy.common.continue}</Button>}
     >
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <ThemePicker themes={showMore ? undefined : BASIC_THEMES} />
         <Button
           variant="ghost"
           size="sm"
           aria-expanded={showMore}
           onClick={() => setShowMore((open) => !open)}
-          className="-ml-2.5 text-muted-foreground text-ui-sm"
+          className="-ml-2.5 self-start text-muted-foreground text-ui-sm"
         >
           {showMore ? copy.appearance.fewerThemes : copy.appearance.moreThemes}
           <ChevronDownIcon

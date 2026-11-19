@@ -12,20 +12,26 @@ function* sourceFiles(directory: string): Generator<string> {
   }
 }
 
-// `*:first:` builds `:is(.x > *):first-child`, which WebKit tests on every
-// element of the page. Then adding or removing any element restyles its
-// siblings in full: about a second per shard switch with a long shard open.
-// `[&>span:first-child]:` (a tag or class before the pseudo-class) doesn't.
-const UNKEYED_STRUCTURAL = /\*:(\[[^\]]*\]:)*(first|last|only|odd|even|nth-)/;
+// Rules that test a child's position on any element, like `*:first:`
+// (`:is(.x > *):first-child`) or `space-y-*` (`> :not(:last-child)`),
+// make WebKit restyle a whole sibling subtree when an element is added next
+// to it: about a second per shard switch with a long shard open.
+// `[&>span:first-child]:` or `last:` (a tag or class before the pseudo-class)
+// don't. Use `gap-*` for spacing and a border on each row for dividers.
+const UNKEYED_STRUCTURAL = [
+  /\*\]?:([\w-]+:|\[[^\]]*\]:)*(first|last|only|odd|even|nth-)/,
+  /\[&[>_+~]\*?:(not\(:)?(first|last|only|nth-)/,
+  /(?<![\w-])-?(space-[xy]|divide)-/,
+];
 
-it("has no Tailwind child variant with a position pseudo-class", () => {
+it("has no Tailwind rule that tests the position of any child", () => {
   const found: string[] = [];
   for (const path of sourceFiles(SRC)) {
     if (path === __filename) continue;
     readFileSync(path, "utf8")
       .split("\n")
       .forEach((line, index) => {
-        if (UNKEYED_STRUCTURAL.test(line)) {
+        if (UNKEYED_STRUCTURAL.some((pattern) => pattern.test(line))) {
           found.push(`${relative(SRC, path)}:${index + 1}`);
         }
       });

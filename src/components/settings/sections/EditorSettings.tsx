@@ -72,7 +72,7 @@ export function EditorSettings() {
 /** Sample text in the chosen reading font and size. */
 function ReadingPreview() {
   return (
-    <div className="px-4 py-5">
+    <div className="border-b last:border-b-0 px-4 py-5">
       <p className="font-reading text-(length:--reading-size) leading-relaxed">
         <span className="font-semibold">Your knowledge, set in stone.</span>{" "}
         A shard is a Markdown document on your computer, and your vault is

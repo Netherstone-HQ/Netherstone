@@ -110,12 +110,12 @@ export function ProviderRow({
   children?: React.ReactNode;
 }) {
   return (
-    <div>
+    <div className="border-b last:border-b-0">
       <div className="flex items-center justify-between gap-6 px-4 py-3.5">
-        <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="font-medium text-ui">{name}</div>
           {description ? (
-            <div className="space-y-0.5 text-muted-foreground text-ui-sm leading-5">
+            <div className="flex flex-col gap-0.5 text-muted-foreground text-ui-sm leading-5">
               {description}
             </div>
           ) : null}
@@ -124,7 +124,7 @@ export function ProviderRow({
           <div className="flex shrink-0 items-center gap-2">{actions}</div>
         ) : null}
       </div>
-      {children ? <div className="space-y-2 px-4 pb-4">{children}</div> : null}
+      {children ? <div className="flex flex-col gap-2 px-4 pb-4">{children}</div> : null}
     </div>
   );
 }

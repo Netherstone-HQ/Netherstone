@@ -119,8 +119,8 @@ export function NewShardDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
+        <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="shard-name">Shard name</Label>
             <Input
               id="shard-name"

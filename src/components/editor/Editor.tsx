@@ -350,9 +350,9 @@ export function Editor() {
   const isLoading = currentFilePath
     ? displayed === null || isStale
     : isOpeningFile;
-  // The shard on screen comes first: WebKit restyles a whole long shard when
-  // an element is added after it (Tailwind's `space-y-*` rules test
-  // `:last-child` on every element), but not before it.
+  // The shard on screen comes first: with any rule that tests `:last-child`
+  // on every element, WebKit restyles a whole long shard when an element is
+  // added after it, but not before it (see structural-selectors.test.ts).
   const sessions = displayed ? [displayed, ...leaving] : leaving;
 
   // A shard switched to or closed from the keyboard leaves focus in it.

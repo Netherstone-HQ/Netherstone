@@ -173,7 +173,7 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
       }}
       onDrop={(event) => void drop(event)}
     >
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         <DialogTitle className="font-medium text-base">Import</DialogTitle>
         <DialogDescription className="truncate text-muted-foreground text-ui" title={targetDir}>
           Into {folderName(targetDir)}
@@ -268,7 +268,7 @@ function Importing({ progress }: { progress: ImportProgress | null }) {
   const value = total ? (done / total) * 100 : 0;
 
   return (
-    <div className="space-y-2.5">
+    <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2 text-ui">
         <LoaderCircleIcon className="size-4 shrink-0 animate-spin text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate" title={progress?.current ?? undefined}>
@@ -298,7 +298,7 @@ function Summary({ report, onOpen }: { report: ImportReport; onOpen: (path: stri
   }
 
   return (
-    <div className="space-y-3 text-ui">
+    <div className="flex flex-col gap-3 text-ui">
       <p>{headline}</p>
 
       {created.length || failed.length ? (

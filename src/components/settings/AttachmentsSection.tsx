@@ -69,7 +69,7 @@ export function AttachmentsSection() {
       </SettingRow>
 
       {isCurrent && error && !isChecking ? (
-        <p className="px-4 py-3 text-destructive text-ui">
+        <p className="border-b last:border-b-0 px-4 py-3 text-destructive text-ui">
           Couldn't check attachments: {error}
         </p>
       ) : null}
@@ -82,7 +82,7 @@ export function AttachmentsSection() {
           />
         ) : null
       ) : isChecking ? (
-        <p className="px-4 py-3 text-muted-foreground text-ui">
+        <p className="border-b last:border-b-0 px-4 py-3 text-muted-foreground text-ui">
           Checking attachments
         </p>
       ) : null}

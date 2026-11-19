@@ -42,9 +42,9 @@ export function GitHubAppInstallNotice() {
   const elsewhere = installation.installedOn;
 
   return (
-    <div className="space-y-2.5 rounded-lg border bg-background p-3">
+    <div className="flex flex-col gap-2.5 rounded-lg border bg-background p-3">
       <p className="font-medium text-ui">One more step on GitHub</p>
-      <div className="space-y-1 text-muted-foreground text-ui-sm leading-5">
+      <div className="flex flex-col gap-1 text-muted-foreground text-ui-sm leading-5">
         <p>
           {elsewhere.length > 0
             ? `Your vaults sync to your personal account, install it on ${login ? `@${login}` : "your account"} too`
@@ -56,10 +56,14 @@ export function GitHubAppInstallNotice() {
         </p>
         <p>Netherstone only touches the repositories it creates</p>
       </div>
-      <Button size="sm" onClick={() => void openUrl(installation.installUrl)}>
+      <Button
+        size="sm"
+        className="self-start"
+        onClick={() => void openUrl(installation.installUrl)}
+      >
         Install on GitHub
       </Button>
-      <p className="inline-flex items-center gap-1.5 text-muted-foreground text-ui-sm">
+      <p className="inline-flex items-center gap-1.5 self-start text-muted-foreground text-ui-sm">
         <LoaderCircleIcon className="size-3.5 animate-spin" />
         Continues on its own once it's installed
       </p>

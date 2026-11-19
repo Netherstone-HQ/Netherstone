@@ -112,7 +112,7 @@ export function AssistantStep({
       }
     >
       {status ? (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           {on ? (
             <>
               <p className="onboarding-fade flex items-center gap-3 rounded-xl border bg-card p-4 text-ui">

@@ -39,7 +39,7 @@ export function FilesSettings() {
         title="Adding files"
         description="When you add a file from your computer to a shard"
       >
-        <fieldset className="space-y-2 p-2">
+        <fieldset className="flex flex-col gap-2 p-2">
           <legend className="sr-only">Adding files</legend>
           {INSERT_OPTIONS.map((option) => {
             const Icon = option.icon;
@@ -70,7 +70,7 @@ export function FilesSettings() {
                 >
                   <Icon className="size-4" />
                 </span>
-                <span className="min-w-0 flex-1 space-y-0.5">
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="block font-medium text-ui">
                     {option.title}
                   </span>

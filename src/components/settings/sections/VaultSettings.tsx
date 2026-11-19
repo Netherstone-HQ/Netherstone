@@ -136,7 +136,7 @@ function VaultNameRow({ vaultPath }: { vaultPath: string }) {
   const canSave = draft.trim().length > 0 && draft.trim() !== name && !saving;
   return (
     <form
-      className="space-y-2 px-4 py-3"
+      className="flex flex-col gap-2 border-b last:border-b-0 px-4 py-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (!canSave) return;

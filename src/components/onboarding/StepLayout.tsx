@@ -30,7 +30,7 @@ export function Step({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-6">
         <div className="onboarding-step mx-auto w-full max-w-md pt-[12vh] pb-10">
-          <div className="mb-8 space-y-2">
+          <div className="mb-8 flex flex-col gap-2">
             <h1 className="font-semibold text-2xl tracking-tight">{title}</h1>
             {body ? (
               <p className="text-muted-foreground text-ui leading-6">{body}</p>
@@ -133,13 +133,13 @@ export function ChoiceCard({
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground [&_svg]:size-4.5">
           {icon}
         </span>
-        <span className="min-w-0 space-y-0.5">
+        <span className="flex min-w-0 flex-col gap-0.5">
           <span className="block font-medium text-ui">{title}</span>
           <span className="block text-muted-foreground text-ui">{description}</span>
         </span>
       </button>
       {selected && children ? (
-        <div className="onboarding-fade space-y-4 border-t px-4 py-4">{children}</div>
+        <div className="onboarding-fade flex flex-col gap-4 border-t px-4 py-4">{children}</div>
       ) : null}
     </div>
   );

@@ -60,7 +60,7 @@ export function AboutSettings() {
     <>
       <div className="flex items-center gap-4 px-1">
         <NetherstoneMark className="size-14" />
-        <div className="space-y-0.5">
+        <div className="flex flex-col gap-0.5">
           <div className="font-semibold text-lg tracking-tight">
             Netherstone
           </div>

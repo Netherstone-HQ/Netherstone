@@ -77,7 +77,7 @@ export function BackupPanel({
     body = <div className="h-16" />;
   } else if (!account) {
     body = (
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <p className="text-muted-foreground text-ui">
           Connect GitHub to sync this vault across your devices
         </p>
@@ -90,7 +90,7 @@ export function BackupPanel({
   } else if (record?.syncEnabled) {
     const repoName = record.repoName;
     body = (
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <SyncStatus record={record} isWorking={isWorking} offline={offline} />
         {record.conflicts.length > 0 ? (
           <ConflictList conflicts={record.conflicts} onOpen={showConflict} />
@@ -137,7 +137,7 @@ export function BackupPanel({
     );
   } else {
     body = (
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         {plan ? <BackupPreview plan={plan} login={account.login} /> : <div className="h-10" />}
         <GitHubAppInstallNotice />
         <Button
@@ -163,7 +163,7 @@ export function BackupPanel({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {showTitle ? <h2 className="font-medium text-ui">Sync</h2> : null}
       {body}
       {error ? <p className="text-destructive text-ui-sm leading-5">{error}</p> : null}
@@ -176,7 +176,7 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
   const skipped = plan.skipped;
 
   return (
-    <div className="space-y-2 text-ui">
+    <div className="flex flex-col gap-2 text-ui">
       <p>
         {describeBackupContents(plan)}
         {plan.includedCount > 0 ? (
@@ -202,7 +202,7 @@ function BackupPreview({ plan, login }: { plan: SyncPlanSummary; login: string }
               : `${skipped.length} files stay on this device`}
           </button>
           {showSkipped ? (
-            <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+            <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-1">
               {skipped.map((file) => (
                 <li key={file.path} className="text-ui-sm">
                   <div className="truncate" title={file.path}>
@@ -242,7 +242,7 @@ function SyncStatus({
   }
   if (offline) {
     return (
-      <div className="space-y-0.5">
+      <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-2 text-ui">
           <CloudOffIcon className="size-4 text-muted-foreground" />
           Offline
@@ -269,14 +269,14 @@ function ConflictList({
   onOpen: (conflict: SyncConflict) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
+    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
       <div className="flex items-center gap-2 text-ui">
         <CircleAlertIcon className="size-4 text-amber-500" />
         {conflicts.length === 1
           ? "1 file needs a decision"
           : `${conflicts.length} files need a decision`}
       </div>
-      <ul className="max-h-32 space-y-1 overflow-y-auto">
+      <ul className="flex max-h-32 flex-col gap-1 overflow-y-auto">
         {conflicts.map((conflict) => (
           <li key={conflict.path} className="flex items-center gap-2 text-ui-sm">
             <span className="min-w-0 flex-1 truncate" title={conflict.path}>
@@ -319,7 +319,7 @@ function BackupPicker({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <p className="text-muted-foreground text-ui">
         {vaultHasFiles
           ? "Choose a synced vault to combine with this one"
@@ -332,7 +332,7 @@ function BackupPicker({
       ) : backups.length === 0 ? (
         <p className="text-ui">No backups found on your GitHub account</p>
       ) : (
-        <ul className="max-h-48 space-y-1 overflow-y-auto">
+        <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
           {backups.map((backup) => (
             <li key={backup.fullName}>
               <button
@@ -354,7 +354,7 @@ function BackupPicker({
           ))}
         </ul>
       )}
-      <Button variant="ghost" size="sm" disabled={isWorking} onClick={onBack}>
+      <Button variant="ghost" size="sm" className="self-start" disabled={isWorking} onClick={onBack}>
         Back
       </Button>
     </div>

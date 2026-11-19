@@ -128,7 +128,7 @@ export function GoneVaultsRow({
           </AlertDialogHeader>
           <ul
             aria-label="Deleted vaults"
-            className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm"
+            className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm"
           >
             {histories.map((history) => (
               <li key={history.vaultId}>

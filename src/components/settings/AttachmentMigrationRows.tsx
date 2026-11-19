@@ -127,9 +127,9 @@ export function ExternalFilesRow({
   };
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 text-ui">
+    <div className="flex items-start gap-3 border-b last:border-b-0 px-4 py-3 text-ui">
       <FileInputIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1 space-y-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div>
           {plural(files.length, "file")} linked from outside the attachment
           folder
@@ -157,7 +157,7 @@ export function ExternalFilesRow({
               links are updated. The originals stay where they are.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ul className="max-h-56 space-y-1.5 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm">
+          <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-ui-sm">
             {files.map((file) => (
               <li key={file.absolutePath}>
                 <label

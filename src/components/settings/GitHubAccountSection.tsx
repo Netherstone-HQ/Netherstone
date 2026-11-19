@@ -35,7 +35,7 @@ export function GitHubAccountSection() {
         {!loaded ? (
           <div className="h-9" />
         ) : account ? (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
               <GitHubAvatar account={account} />
               <div className="min-w-0 flex-1">

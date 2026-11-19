@@ -117,7 +117,7 @@ function VaultNameRow({ vaultPath }: { vaultPath: string }) {
         label={name}
         description={<span className="break-all font-mono">{vaultPath}</span>}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setDraft(name)}>
             Rename
           </Button>

@@ -47,7 +47,7 @@ export function ModelPicker({
           type="button"
           aria-label="Model"
           disabled={empty && !value}
-          className="flex h-8 w-75 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-ui shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50"
+          className="flex h-8 w-75 max-w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-ui shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50"
         >
           <span className="flex min-w-0 items-center">
             {value ? (

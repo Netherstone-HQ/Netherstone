@@ -67,12 +67,15 @@ function KeysList({ keys }: { keys: readonly Keys[] }) {
   );
 }
 
-/** A shortcut's name on the left, its keys on the right. */
+/** A shortcut's name on the left, its keys on the right, or under it when narrow. */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-6 border-b last:border-b-0 px-4 py-2.5">
+    <div
+      data-slot="setting-row"
+      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1.5 border-b last:border-b-0 px-4 py-2.5"
+    >
       <span className="text-ui">{label}</span>
-      {children}
+      <div className="ml-auto">{children}</div>
     </div>
   );
 }

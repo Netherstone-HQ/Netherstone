@@ -29,6 +29,7 @@ import {
   RowSlot,
   getRowIndent,
 } from "@/components/vault/tree-layout";
+import { Hint } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { type SettingsCategory, useUIStore } from "@/store/ui";
 
@@ -143,14 +144,17 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-full min-h-0">
-      {/* Sized and laid out like the left sidebar, whose place it takes. */}
+      {/*
+        Sized and laid out like the left sidebar, whose place it takes. In a
+        narrow window it keeps only the icons, to leave room for the settings.
+      */}
       <nav
         aria-label="Settings"
-        className="flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
-        style={{ width: sidebarWidth }}
+        className="flex w-(--nav-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground max-md:w-auto"
+        style={{ "--nav-width": `${sidebarWidth}px` } as React.CSSProperties}
       >
         <div className="flex h-header shrink-0 items-center border-b px-4">
-          <h1 className="font-medium text-ui">Settings</h1>
+          <h1 className="font-medium text-ui max-md:sr-only">Settings</h1>
         </div>
         <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
           {SETTINGS_CATEGORIES.map(
@@ -159,20 +163,33 @@ export function SettingsPage() {
               return (
                 <li key={id} className={startsGroup ? "mt-3" : undefined}>
                   <div
-                    className={cn(ROW_CLASS, active && ACTIVE_ROW_CLASS)}
-                    style={{ paddingLeft: `${getRowIndent(0)}px` }}
+                    className={cn(
+                      ROW_CLASS,
+                      "pl-(--indent) max-md:px-2",
+                      active && ACTIVE_ROW_CLASS,
+                    )}
+                    style={
+                      {
+                        "--indent": `${getRowIndent(0)}px`,
+                      } as React.CSSProperties
+                    }
                   >
-                    <button
-                      type="button"
-                      aria-current={active ? "page" : undefined}
-                      onClick={() => openSettings(id)}
-                      className={ROW_BUTTON_CLASS}
-                    >
-                      <RowSlot>
-                        <Icon className="size-4 text-muted-foreground" />
-                      </RowSlot>
-                      <span className="min-w-0 flex-1 truncate">{label}</span>
-                    </button>
+                    {/* The name shows on hover once only the icon is left. */}
+                    <Hint label={label} side="right" className="md:hidden">
+                      <button
+                        type="button"
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => openSettings(id)}
+                        className={ROW_BUTTON_CLASS}
+                      >
+                        <RowSlot>
+                          <Icon className="size-4 text-muted-foreground" />
+                        </RowSlot>
+                        <span className="min-w-0 flex-1 truncate max-md:sr-only">
+                          {label}
+                        </span>
+                      </button>
+                    </Hint>
                   </div>
                 </li>
               );
@@ -184,7 +201,7 @@ export function SettingsPage() {
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div
           key={category.id}
-          className="mx-auto flex w-full max-w-275 flex-col gap-8 px-10 pt-10 pb-16"
+          className="mx-auto flex w-full max-w-275 flex-col gap-8 px-10 pt-10 pb-16 max-md:px-6"
         >
           <h2 className="font-semibold text-xl tracking-tight">
             {category.label}

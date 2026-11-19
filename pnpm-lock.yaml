@@ -168,6 +168,7 @@ overrides:
 patchedDependencies:
   '@excalidraw/excalidraw': 63daa2f5f2caf687f5bad39b38924c737c19a1af3875c01427a44deb970e8aa5
   '@platejs/core': edda10dd66e5fd0e1d45cce80ac272e19f6a8b9646635437a28dd803d3d88b61
+  '@platejs/markdown': 043fa132b61800bf581f2de4c6c314a8073d868835a1d5b43665170ae07e5252
   '@platejs/selection': f651fe5866e5630c932d4bd3475ebb109409e85602283aa7bfcd3f55d0b136da
   react-dom: f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368
 
@@ -243,7 +244,7 @@ importers:
         version: 53.3.13(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
       '@platejs/markdown':
         specifier: ^53.3.17
-        version: 53.3.17(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)
+        version: 53.3.17(patch_hash=043fa132b61800bf581f2de4c6c314a8073d868835a1d5b43665170ae07e5252)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)
       '@platejs/math':
         specifier: ^53.3.12
         version: 53.3.12(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
@@ -6979,7 +6980,7 @@ snapshots:
 
   '@platejs/ai@53.3.12(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)':
     dependencies:
-      '@platejs/markdown': 53.3.17(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)
+      '@platejs/markdown': 53.3.17(patch_hash=043fa132b61800bf581f2de4c6c314a8073d868835a1d5b43665170ae07e5252)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)
       '@platejs/selection': 53.1.6(patch_hash=f651fe5866e5630c932d4bd3475ebb109409e85602283aa7bfcd3f55d0b136da)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
       '@platejs/suggestion': 53.2.3(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
       '@platejs/table': 53.0.9(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
@@ -7147,7 +7148,7 @@ snapshots:
       react-compiler-runtime: 1.0.0(react@19.2.5)
       react-dom: 19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5)
 
-  '@platejs/markdown@53.3.17(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)':
+  '@platejs/markdown@53.3.17(patch_hash=043fa132b61800bf581f2de4c6c314a8073d868835a1d5b43665170ae07e5252)(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(typescript@5.8.3)':
     dependencies:
       '@platejs/date': 53.0.0(platejs@53.3.15(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
       acorn: 8.16.0

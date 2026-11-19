@@ -1,0 +1,38 @@
+diff --git a/dist/index.js b/dist/index.js
+index 93c074a50f13757543d731b73a7ebd48991e1dac..ce90b5186e25feac0e985220757d4491e5ef9850 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -319,8 +319,22 @@ const basicMarkdownMarks = [
+ 	"strikethrough",
+ 	"code"
+ ];
++// Mark node types by the editor's plugins. A key with no plugin builds and
++// resolves a new plugin on every lookup, which made this loop most of a long
++// document's serialize.
++const markTypesByPlugins = new WeakMap();
++const getMarkType = (editor, key) => {
++	let types = markTypesByPlugins.get(editor.plugins);
++	if (!types) {
++		types = new Map();
++		markTypesByPlugins.set(editor.plugins, types);
++	}
++	if (!types.has(key)) types.set(key, getPluginType(editor, key));
++	return types.get(key);
++};
+ const convertTextsSerialize = (slateTexts, options, _key) => {
+ 	const customLeaf = getCustomMark(options);
++	const markKeys = [...basicMarkdownMarks, ...customLeaf.filter((k) => !basicMarkdownMarks.includes(k))];
+ 	const mdastTexts = [];
+ 	const starts = [];
+ 	let ends = [];
+@@ -333,8 +347,8 @@ const convertTextsSerialize = (slateTexts, options, _key) => {
+ 		const prev = slateTexts[j - 1];
+ 		const next = slateTexts[j + 1];
+ 		ends = [];
+-		[...basicMarkdownMarks, ...customLeaf.filter((k) => !basicMarkdownMarks.includes(k))].forEach((key) => {
+-			const nodeType = getPluginType(options.editor, key);
++		markKeys.forEach((key) => {
++			const nodeType = getMarkType(options.editor, key);
+ 			if (cur[nodeType]) {
+ 				if (options.plainMarks?.includes(key)) return;
+ 				if (!prev?.[nodeType]) starts.push(key);

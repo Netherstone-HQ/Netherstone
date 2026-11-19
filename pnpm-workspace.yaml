@@ -11,6 +11,11 @@ patchedDependencies:
   # ancestor element with useElementSelector, not useElement(key), which
   # can now return the ancestor as it was when the child last rendered.
   '@platejs/core': patches/@platejs__core.patch
+  # Saving looked up every mark's plugin for each piece of text, and a mark
+  # with no plugin here (comment, highlight, kbd, ...) built and resolved a
+  # new plugin on each lookup: most of a long shard's save. Looked up once
+  # now, same Markdown. Still in Plate 53.5.
+  '@platejs/markdown': patches/@platejs__markdown.patch
   # Fixes copying an empty last block, pasting over selected blocks, and
   # Enter on selected blocks, whose caret Plate dropped on the way to focus.
   '@platejs/selection': patches/@platejs__selection.patch

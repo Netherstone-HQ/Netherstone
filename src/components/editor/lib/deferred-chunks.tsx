@@ -19,6 +19,9 @@ export const DRAW_AHEAD_MARGIN = "1500px 0px";
 
 const DRAW_IDLE_TIMEOUT_MS = 500;
 
+/** Longest wait for a quiet moment to undraw the next part of a closed shard. */
+const UNDRAW_IDLE_TIMEOUT_MS = 1000;
+
 /**
  * Time each idle moment may spend drawing, at least: one frame. Idle moments
  * between frames are short, and each step changes the page, which asks for a
@@ -43,10 +46,12 @@ const MAX_STEP_GROWTH = 64;
  *
  * The blocks drawn so far are always the first ones: `drawnBlocks` only
  * grows, and a chunk stays drawn once it is, even when edits above it shift
- * its blocks past `drawnBlocks`.
+ * its blocks past `drawnBlocks`. Once the shard is closed, it only shrinks
+ * (see `undrawInBackground`).
  */
 export class ChunkDrawer {
   private drawnBlocks: number;
+  private closed = false;
   private readonly listeners = new Set<() => void>();
 
   constructor(firstBlocks: number) {
@@ -64,12 +69,16 @@ export class ChunkDrawer {
     return blockIndex < this.drawnBlocks;
   }
 
+  /** Whether the shard is closed and being undrawn. */
+  get isClosed() {
+    return this.closed;
+  }
+
   /** Draws every block up to and including `blockIndex`. */
   drawThrough(blockIndex: number) {
-    if (this.isDrawn(blockIndex)) return;
+    if (this.closed || this.isDrawn(blockIndex)) return;
 
-    this.drawnBlocks = blockIndex + 1;
-    this.listeners.forEach((listener) => listener());
+    this.setDrawnBlocks(blockIndex + 1);
   }
 
   drawAll() {
@@ -91,6 +100,8 @@ export class ChunkDrawer {
 
     const drawNext = (deadline: IdleDeadline) => {
       idleId = null;
+      if (this.closed) return;
+
       const idleMs = deadline.didTimeout ? 0 : deadline.timeRemaining();
       const until = performance.now() + Math.max(STEP_BUDGET_MS, idleMs);
       const hasTime = () => performance.now() < until;
@@ -135,12 +146,79 @@ export class ChunkDrawer {
       if (idleId !== null) cancelIdle(idleId);
     };
   }
+
+  /**
+   * For a closed shard: takes its blocks back to placeholders from the end,
+   * `blocksPerStep` at a time in idle moments, then calls `onEmpty`.
+   * Removing a long shard all at once froze a frame. Nothing is drawn again
+   * from then on. Returns a function that stops.
+   */
+  undrawInBackground(
+    blockCount: number,
+    blocksPerStep: number,
+    onEmpty: () => void,
+  ) {
+    this.closed = true;
+    this.drawnBlocks = Math.min(this.drawnBlocks, blockCount);
+    let idleId: number | null = null;
+
+    const undrawNext = (deadline: IdleDeadline) => {
+      idleId = null;
+
+      do {
+        if (this.drawnBlocks === 0) {
+          onEmpty();
+          return;
+        }
+
+        flushSync(() =>
+          this.setDrawnBlocks(Math.max(0, this.drawnBlocks - blocksPerStep)),
+        );
+      } while (deadline.timeRemaining() > 0);
+
+      idleId = requestIdle(undrawNext, { timeout: UNDRAW_IDLE_TIMEOUT_MS });
+    };
+
+    idleId = requestIdle(undrawNext, { timeout: UNDRAW_IDLE_TIMEOUT_MS });
+
+    return () => {
+      if (idleId !== null) cancelIdle(idleId);
+    };
+  }
+
+  private setDrawnBlocks(count: number) {
+    this.drawnBlocks = count;
+    this.listeners.forEach((listener) => listener());
+  }
 }
 
 const drawers = new WeakMap<SlateEditor, ChunkDrawer>();
 
 export function registerChunkDrawer(editor: SlateEditor, drawer: ChunkDrawer) {
   drawers.set(editor, drawer);
+}
+
+/**
+ * Undraws a closed shard's `editor` in steps (see
+ * `ChunkDrawer.undrawInBackground`), then calls `onEmpty`. Returns a
+ * function that stops.
+ */
+export function undrawClosedEditor(
+  editor: SlateEditor,
+  blocksPerStep: number,
+  onEmpty: () => void,
+) {
+  const drawer = drawers.get(editor);
+  if (!drawer) {
+    onEmpty();
+    return undefined;
+  }
+
+  return drawer.undrawInBackground(
+    editor.children.length,
+    blocksPerStep,
+    onEmpty,
+  );
 }
 
 /**
@@ -186,14 +264,15 @@ function DeferredChunk({ attributes, children, lowest }: RenderChunkProps) {
 
   const wasDrawnRef = useRef(false);
   if (isDrawnNow) wasDrawnRef.current = true;
-  const isDrawn = wasDrawnRef.current;
+  const isDrawn = drawer?.isClosed ? isDrawnNow : wasDrawnRef.current;
 
   const placeholderRef = useRef<HTMLDivElement>(null);
   const last = range?.last;
 
   useEffect(() => {
     const placeholder = placeholderRef.current;
-    if (isDrawn || !drawer || last === undefined || !placeholder) return;
+    if (isDrawn || !drawer || drawer.isClosed) return;
+    if (last === undefined || !placeholder) return;
 
     const observer = new IntersectionObserver(
       (entries) => {

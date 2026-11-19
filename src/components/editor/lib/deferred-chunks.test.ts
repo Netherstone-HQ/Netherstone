@@ -75,6 +75,51 @@ describe("ChunkDrawer", () => {
   });
 });
 
+describe("ChunkDrawer, once its shard is closed", () => {
+  it("undraws from the end in steps, then says it's empty", () => {
+    vi.useFakeTimers();
+    const drawer = new ChunkDrawer(10);
+    drawer.drawAll();
+    const drawn: number[] = [];
+    drawer.subscribe(() => {
+      drawn.push([...Array(40).keys()].filter((i) => drawer.isDrawn(i)).length);
+    });
+    const onEmpty = vi.fn();
+
+    drawer.undrawInBackground(35, 10, onEmpty);
+    expect(drawer.isClosed).toBe(true);
+    expect(onEmpty).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(5_000);
+
+    expect(drawn).toEqual([25, 15, 5, 0]);
+    expect(onEmpty).toHaveBeenCalledOnce();
+  });
+
+  it("draws nothing more, on request or in the background", () => {
+    vi.useFakeTimers();
+    const drawer = new ChunkDrawer(10);
+    drawer.drawInBackground(() => 100, 10);
+    drawer.undrawInBackground(100, 10, () => {});
+
+    drawer.drawThrough(50);
+    drawer.drawAll();
+    vi.advanceTimersByTime(5_000);
+
+    expect(drawer.isDrawn(0)).toBe(false);
+  });
+
+  it("stops undrawing when asked", () => {
+    vi.useFakeTimers();
+    const drawer = new ChunkDrawer(30);
+    const onEmpty = vi.fn();
+    drawer.undrawInBackground(30, 10, onEmpty)();
+
+    vi.advanceTimersByTime(5_000);
+    expect(drawer.isDrawn(29)).toBe(true);
+    expect(onEmpty).not.toHaveBeenCalled();
+  });
+});
+
 describe("drawBlocksThrough", () => {
   it("says whether a block was already drawn, and draws it", () => {
     const editor = {} as SlateEditor;

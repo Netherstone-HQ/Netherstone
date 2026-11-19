@@ -11,6 +11,7 @@ import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { InlineAskKit } from "./kits/inline-ask-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
+import { RemoveWhenClosed } from "./lib/closed-session";
 import {
   ChunkDrawer,
   ChunkDrawerContext,
@@ -328,6 +329,7 @@ export const MountedEditor = memo(function MountedEditor({
           />
         </EditorContainer>
       </ChunkDrawerContext.Provider>
+      <RemoveWhenClosed editor={editor} blocksPerStep={EDITOR_CHUNK_SIZE} />
     </Plate>
   );
 });

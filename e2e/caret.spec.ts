@@ -4,6 +4,7 @@ import {
   changeOutside,
   editor,
   expect,
+  lastSave,
   menuClosed,
   mockVault,
   openShard,
@@ -781,6 +782,90 @@ test.describe("menus that put a node at the caret", () => {
     await page.keyboard.type("Title");
     await expectCaret(page, AFTER.menus.slash[0]);
     await typeAtCaret(page);
+  });
+});
+
+test.describe("an inline chip is one step for the arrow keys", () => {
+  /** Each chip as the file has it, and as it saves. */
+  const CHIPS = {
+    "an @ link": "[Other Note](Other%20Note.md)",
+    "an inline equation": "$x^2$",
+    "a date": '<date value="2026-01-05" />',
+  };
+  const FILES = { "Other Note.md": "# Other Note\n" };
+
+  for (const [kind, chip] of Object.entries(CHIPS)) {
+    test(`across ${kind} from both sides, and Shift+arrows select it`, async ({ page }) => {
+      await mockVault(page, {
+        files: { ...FILES, "Note.md": `# Note\n\nStart see ${chip} now\n` },
+        open: "Note.md",
+      });
+      const saved = () => lastSave(page, "Note.md");
+      await caretAfter(page, "now");
+      // " now", then the chip.
+      for (let i = 0; i < 5; i += 1) await press(page, "ArrowLeft");
+      await page.keyboard.type("X");
+      await press(page, "ArrowRight");
+      await page.keyboard.type("Y");
+      await expect.poll(saved).toContain(`# Note\n\nStart see X${chip}Y now`);
+
+      // Over it and back with Shift leaves the caret where it was.
+      await press(page, "ArrowLeft");
+      await press(page, "Shift+ArrowLeft");
+      await press(page, "Shift+ArrowRight");
+      await page.keyboard.type("Q");
+      await expect.poll(saved).toContain(`Start see X${chip}QY now`);
+
+      // Selected with Shift, the chip goes when a letter is typed.
+      await press(page, "ArrowLeft");
+      await press(page, "Shift+ArrowLeft");
+      await page.keyboard.type("Z");
+      await expect.poll(saved).toContain("Start see XZQY now");
+    });
+  }
+
+  test.describe("Enter opens the inline equation's editor", () => {
+    test.beforeEach(async ({ page }) => {
+      await mockVault(page, {
+        files: { "Note.md": "# Note\n\nStart see $x^2$ now\n" },
+        open: "Note.md",
+      });
+      await caretAfter(page, "now");
+      for (let i = 0; i < 4; i += 1) await press(page, "ArrowLeft");
+    });
+
+    const openThenEscape = async (page: Page) => {
+      await press(page, "Enter");
+      await expectCaret(page, ["|x^2^"]);
+      await page.keyboard.press("Escape");
+      await caretSettled(page);
+      await page.keyboard.type("Y");
+      await expect.poll(() => lastSave(page, "Note.md")).toContain("Start see $x^2$Y now");
+    };
+
+    test("with the caret after it, where the arrows didn't open it", async ({ page }) => {
+      await expect.poll(() => caretView(page)).not.toMatch(/^focus:/);
+      await openThenEscape(page);
+    });
+
+    test("with the caret before it", async ({ page }) => {
+      await press(page, "ArrowLeft");
+      await openThenEscape(page);
+    });
+
+    test("selected", async ({ page }) => {
+      await press(page, "Shift+ArrowLeft");
+      await openThenEscape(page);
+    });
+  });
+
+  test("Enter after an inline equation at the end of a line starts a new line", async ({ page }) => {
+    await mockVault(page, { files: { "Note.md": "# Note\n\nArea $r^2$ ok\n" }, open: "Note.md" });
+    await caretAfter(page, "ok");
+    for (let i = 0; i < 3; i += 1) await press(page, "Backspace");
+    await press(page, "Enter");
+    await page.keyboard.type("Next");
+    await expect.poll(() => lastSave(page, "Note.md")).toContain("Area $r^2$\n\nNext");
   });
 });
 

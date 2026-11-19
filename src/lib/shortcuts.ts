@@ -86,6 +86,7 @@ export const SHORTCUTS = [
   { id: "redo", label: "Redo", group: "text", scope: "editor", keys: [REDO], fixed: true },
   { id: "selectAll", label: "Select all", group: "text", scope: "editor", keys: ["mod+a"], fixed: true },
   { id: "openLink", label: "Open a link", group: "text", scope: "editor", keys: ["mod+click"], fixed: true },
+  { id: "editEquation", label: "Edit an inline equation", group: "text", scope: "editor", keys: ["enter"], fixed: true },
 
   // ── Blocks ────────────────────────────────────────────────────────────────
   { id: "heading1", label: "Heading 1", group: "blocks", scope: "editor", keys: ["mod+alt+1"] },

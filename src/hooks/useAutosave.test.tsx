@@ -14,7 +14,11 @@ import { openEditorFile } from "@/lib/open-editor-file";
 import { rememberSavedValue } from "@/lib/outside-changes";
 import { useEditorStore, useVaultStore } from "@/store";
 import { loadMarkdown } from "@/test/markdown";
-import { useAutosave, writeOpenShardCache } from "./useAutosave";
+import {
+  holdOpenShardCache,
+  useAutosave,
+  writeLeftShardCaches,
+} from "./useAutosave";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -111,6 +115,12 @@ function type(editor: SlateEditor, text: string) {
 
 const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
+/** Leaves the open shard and sends its cache entry, as the editor does once quiet. */
+function leaveAndWriteCache() {
+  holdOpenShardCache();
+  return writeLeftShardCaches();
+}
+
 beforeEach(() => {
   workerCache = null;
   vi.useFakeTimers();
@@ -123,7 +133,8 @@ beforeEach(() => {
   renderHook(() => useAutosave());
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await writeLeftShardCaches();
   cleanup();
   act(() => store().closeFile());
   vi.useRealTimers();
@@ -186,7 +197,10 @@ describe("autosave", () => {
     await wait(AUTOSAVE_DELAY_MS);
     expect(upsertAstCache).not.toHaveBeenCalled();
 
-    await writeOpenShardCache();
+    holdOpenShardCache();
+    expect(upsertAstCache).not.toHaveBeenCalled();
+
+    await writeLeftShardCaches();
     expect(upsertAstCache).toHaveBeenCalledWith({
       vaultPath: VAULT,
       filePath: NOTE_A,
@@ -201,7 +215,7 @@ describe("autosave", () => {
 
     type(editor, "!");
     await wait(AUTOSAVE_DELAY_MS);
-    await writeOpenShardCache();
+    await leaveAndWriteCache();
 
     expect(writeShardCache).toHaveBeenCalledWith(VAULT, NOTE_A, workerCache);
     expect(upsertAstCache).not.toHaveBeenCalled();
@@ -321,7 +335,7 @@ describe("autosave", () => {
     const savedValue = editor.children;
     type(editor, " two");
     await act(async () => finishWrite());
-    await writeOpenShardCache();
+    await leaveAndWriteCache();
 
     expect(upsertAstCache).toHaveBeenCalledWith({
       vaultPath: VAULT,
@@ -367,6 +381,25 @@ describe("autosave", () => {
     expect(closeWindow).toHaveBeenCalled();
   });
 
+  it("writes a held cache entry before the window closes", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+    type(editor, "!");
+    await wait(AUTOSAVE_DELAY_MS);
+    holdOpenShardCache();
+    act(() => store().closeFile());
+
+    const preventDefault = vi.fn();
+    await act(() => closeRequestHandler!({ preventDefault }));
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(upsertAstCache).toHaveBeenCalledWith(
+      expect.objectContaining({ filePath: NOTE_A, markdown: "Hello!\n" }),
+    );
+    expect(vi.mocked(upsertAstCache).mock.invocationCallOrder[0]).toBeLessThan(
+      closeWindow.mock.invocationCallOrder[0],
+    );
+  });
+
   it("waits for a cache write started on leaving before the window closes", async () => {
     const editor = openNote(NOTE_A, "Hello\n");
     type(editor, "!");
@@ -376,7 +409,7 @@ describe("autosave", () => {
     vi.mocked(upsertAstCache).mockImplementationOnce(
       () => new Promise<void>((resolve) => (finishCacheWrite = resolve)),
     );
-    void writeOpenShardCache();
+    void leaveAndWriteCache();
     await act(async () => {});
 
     const preventDefault = vi.fn();
@@ -438,6 +471,37 @@ describe("switching notes", () => {
     expect(store().currentFilePath).toBe(NOTE_A);
     expect(store().isDirty).toBe(true);
     expect(store().plateEditor).toBe(editor);
+  });
+
+  it("holds the left note's cache entry while the next one opens", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+    type(editor, " world");
+
+    await act(() => openEditorFile(NOTE_B));
+
+    expect(openMarkdownFile).toHaveBeenCalledWith(NOTE_B);
+    expect(upsertAstCache).not.toHaveBeenCalled();
+
+    await writeLeftShardCaches();
+    expect(upsertAstCache).toHaveBeenCalledWith(
+      expect.objectContaining({ filePath: NOTE_A, markdown: "Hello world\n" }),
+    );
+  });
+
+  it("writes a held cache entry before its note opens again", async () => {
+    const editor = openNote(NOTE_A, "Hello\n");
+    type(editor, " world");
+    await act(() => openEditorFile(NOTE_B));
+
+    await act(() => openEditorFile(NOTE_A));
+
+    expect(upsertAstCache).toHaveBeenCalledTimes(1);
+    expect(upsertAstCache).toHaveBeenCalledWith(
+      expect.objectContaining({ filePath: NOTE_A, markdown: "Hello world\n" }),
+    );
+    expect(vi.mocked(upsertAstCache).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(openMarkdownFile).mock.invocationCallOrder[1],
+    );
   });
 
   it("never saves one note's content under another note's path", async () => {

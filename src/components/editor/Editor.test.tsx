@@ -25,6 +25,7 @@ import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { useAssistantStore } from "@/store/assistant";
 import { useSettingsStore } from "@/store/settings";
 import { Editor } from "./Editor";
+import { drawBlocksThrough } from "./lib/deferred-chunks";
 
 vi.mock("@tauri-apps/plugin-opener", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tauri-apps/plugin-opener")>()),
@@ -229,6 +230,47 @@ describe("Editor", () => {
       await waitFor(() =>
         expect(document.querySelector("[data-slate-editor]")).toBeNull(),
       );
+    });
+
+    it("removes a long shard from its end, a part at a time, taking no input", async () => {
+      const long = Array.from(
+        { length: 120 },
+        (_, index) => `Paragraph ${index}.`,
+      ).join("\n\n");
+      const editor = await openNote(long);
+      await waitFor(() =>
+        expect(document.querySelector("[data-undrawn-chunk]")).toBeNull(),
+      );
+      act(() => useEditorStore.getState().closeFile());
+
+      // Placeholders come back from the end while the start is still there.
+      const closed = document.querySelector<HTMLElement>("[data-slate-editor]")!;
+      await waitFor(() =>
+        expect(closed.querySelector("[data-undrawn-chunk]")).not.toBeNull(),
+      );
+      const first = screen.getByText("Paragraph 0.");
+      expect(
+        closed.lastElementChild?.matches("[data-undrawn-chunk]"),
+      ).toBe(true);
+
+      // Nothing is drawn again, and input never reaches it.
+      const undrawn = closed.querySelectorAll("[data-undrawn-chunk]").length;
+      act(() => {
+        drawBlocksThrough(editor, editor.children.length - 1);
+      });
+      expect(
+        closed.querySelectorAll("[data-undrawn-chunk]").length,
+      ).toBeGreaterThanOrEqual(undrawn);
+      const mouseDown = createEvent.mouseDown(first);
+      fireEvent(first, mouseDown);
+      expect(mouseDown.defaultPrevented).toBe(true);
+      act(() => closed.focus());
+      expect(document.activeElement).not.toBe(closed);
+
+      await waitFor(() =>
+        expect(document.querySelector("[data-slate-editor]")).toBeNull(),
+      );
+      expect(useEditorStore.getState().isDirty).toBe(false);
     });
 
     it("keeps the next shard's editor when the previous one is removed", async () => {

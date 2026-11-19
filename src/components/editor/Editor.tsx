@@ -8,13 +8,13 @@ import {
   type SyntheticEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useTransition,
 } from "react";
 import { useShallow } from "zustand/shallow";
 import { Button } from "@/components/ui/button";
-import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 import { openEditorFile } from "@/lib/open-editor-file";
 import {
   discardCrashedEdits,
@@ -29,11 +29,12 @@ import { isAssistantOn } from "@/lib/assistant";
 import { useEditorStore } from "@/store";
 import { EditorEmptyState } from "./EditorEmptyState";
 import { MountedEditor } from "./MountedEditor";
+import {
+  RemoveClosedSessionContext,
+  RemoveWhenClosed,
+} from "./lib/closed-session";
 import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
-
-/** Longest wait for a quiet moment to remove a closed shard. */
-const REMOVE_IDLE_TIMEOUT_MS = 1000;
 
 // Input to a shard that is closing or about to be replaced: its edits
 // couldn't be saved, so nothing reaches it.
@@ -69,12 +70,36 @@ type EditorSessions = {
   /** The session on screen. */
   displayed: EditorSession | null;
   /**
-   * Closed sessions, hidden and removed in the next quiet moment. Removing a
-   * long shard takes a while, so the next one (or the empty state) is shown
-   * first.
+   * Closed sessions, hidden and removed a part at a time in quiet moments.
+   * Removing a long shard takes a while, so the next one (or the empty
+   * state) is shown first.
    */
   leaving: EditorSession[];
 };
+
+/** Gives a closed session's editor the way to remove the session. */
+function ClosedSessionRemoval({
+  tick,
+  isClosed,
+  removeSession,
+  children,
+}: {
+  tick: number;
+  isClosed: boolean;
+  removeSession: (tick: number) => void;
+  children: ReactNode;
+}) {
+  const remove = useMemo(
+    () => (isClosed ? () => removeSession(tick) : null),
+    [isClosed, removeSession, tick],
+  );
+
+  return (
+    <RemoveClosedSessionContext.Provider value={remove}>
+      {children}
+    </RemoveClosedSessionContext.Provider>
+  );
+}
 
 /**
  * Marks the link under the pointer while Ctrl (⌘ on a Mac) is held, so it
@@ -179,6 +204,7 @@ class EditorErrorBoundary extends Component<
 
     return (
       <div className="mx-auto max-w-xl px-8 py-16 text-ui">
+        <RemoveWhenClosed />
         <p className="font-medium">The editor ran into an error.</p>
         <p className="mt-1 text-muted-foreground">
           The shard on disk is unaffected. Reloading opens the last saved
@@ -245,15 +271,12 @@ export function Editor() {
     }));
   }, []);
 
-  useEffect(() => {
-    if (leaving.length === 0) return;
-
-    const idleId = requestIdle(
-      () => setSessions((sessions) => ({ ...sessions, leaving: [] })),
-      { timeout: REMOVE_IDLE_TIMEOUT_MS },
-    );
-    return () => cancelIdle(idleId);
-  }, [leaving]);
+  const removeSession = useCallback((tick: number) => {
+    setSessions((sessions) => ({
+      ...sessions,
+      leaving: sessions.leaving.filter((session) => session.tick !== tick),
+    }));
+  }, []);
 
   // Follow renames of the displayed session. A stale session (another file is
   // being prepared) keeps its last path, so it doesn't re-register itself in
@@ -400,19 +423,25 @@ export function Editor() {
             aria-hidden={isLeaving || isStale || undefined}
             {...(isLeaving || isStale ? INACTIVE_EVENTS : {})}
           >
-            <EditorErrorBoundary
-              filePath={session.filePath}
+            <ClosedSessionRemoval
               tick={session.tick}
+              isClosed={isLeaving}
+              removeSession={removeSession}
             >
-              <MountedEditor
-                content={session.content}
-                currentFilePath={session.filePath}
-                initialValue={session.value}
-                cacheHit={session.cacheHit}
-                inlineAsk={session.inlineAsk}
-                unsaved={session.unsaved}
-              />
-            </EditorErrorBoundary>
+              <EditorErrorBoundary
+                filePath={session.filePath}
+                tick={session.tick}
+              >
+                <MountedEditor
+                  content={session.content}
+                  currentFilePath={session.filePath}
+                  initialValue={session.value}
+                  cacheHit={session.cacheHit}
+                  inlineAsk={session.inlineAsk}
+                  unsaved={session.unsaved}
+                />
+              </EditorErrorBoundary>
+            </ClosedSessionRemoval>
           </div>
         );
       })}

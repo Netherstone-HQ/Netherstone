@@ -43,7 +43,7 @@ export function HelpDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 text-ui leading-6">{children}</div>
+        <div className="flex flex-col gap-3 text-ui leading-6">{children}</div>
       </DialogContent>
     </Dialog>
   );

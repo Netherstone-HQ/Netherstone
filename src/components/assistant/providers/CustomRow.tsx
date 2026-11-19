@@ -99,7 +99,7 @@ export function CustomRow({
     return (
       <ProviderRow name={provider.name}>
         <form
-          className="space-y-2"
+          className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (address.trim() && !checking) void save();

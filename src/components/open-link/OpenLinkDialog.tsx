@@ -99,7 +99,7 @@ function Opening({
       </DialogHeader>
       {progress ? (
         <>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Progress value={progress.value} />
             <p className="text-muted-foreground">{progress.text}</p>
           </div>
@@ -142,7 +142,7 @@ function progressLine(step: Extract<LinkStep, { kind: "downloading" } | { kind: 
 function FolderContents({ listing }: { listing: LinkListing }) {
   return (
     <>
-      <div className="space-y-2 rounded-lg border px-3.5 py-3">
+      <div className="flex flex-col gap-2 rounded-lg border px-3.5 py-3">
         <div>
           {copy.folder.shards(listing.shards)}
           {listing.drawings ? (

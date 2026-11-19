@@ -34,7 +34,7 @@ export function ThemePicker({
     <div
       role="radiogroup"
       aria-label="Theme"
-      className={cn("space-y-3", className)}
+      className={cn("flex flex-col gap-3", className)}
     >
       {rows.map((row) => (
         <div key={row[0].value} className={cn("grid gap-3", columns)}>
@@ -57,7 +57,7 @@ function ThemeChoice({ option }: { option: ThemeOption }) {
       role="radio"
       aria-checked={checked}
       onClick={() => setTheme(option.value)}
-      className="group space-y-2 text-left outline-none"
+      className="group flex flex-col gap-2 text-left outline-none"
     >
       <ThemeSwatch
         swatch={option.swatch}
@@ -122,7 +122,7 @@ function Window({
 }) {
   return (
     <div className="absolute inset-0 flex" style={{ background }}>
-      <div className="w-1/4 space-y-1.5 p-2" style={{ background: panel }}>
+      <div className="flex w-1/4 flex-col gap-1.5 p-2" style={{ background: panel }}>
         <div
           className="h-1 w-3/4 rounded-full"
           style={{ background: accent }}
@@ -130,7 +130,7 @@ function Window({
         <div className="h-1 w-full rounded-full" style={{ background: line }} />
         <div className="h-1 w-2/3 rounded-full" style={{ background: line }} />
       </div>
-      <div className="flex-1 space-y-1.5 p-3">
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
         <div
           className="h-1.5 w-1/2 rounded-full"
           style={{ background: line }}

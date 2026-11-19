@@ -54,7 +54,7 @@ export function ReadyStep({
       onBack={onBack}
       action={<Button onClick={() => onFinish(offerGuide && addGuide)}>{copy.ready.finish}</Button>}
     >
-      <ul className="space-y-3">
+      <ul className="flex flex-col gap-3">
         {tips.map(({ icon: Icon, text }) => (
           <li key={text} className="flex items-center gap-3 text-ui">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">

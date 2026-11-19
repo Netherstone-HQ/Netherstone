@@ -60,7 +60,7 @@ function Segments<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <div className="text-muted-foreground text-ui-sm">{label}</div>
       <div role="radiogroup" aria-label={label} className="grid auto-cols-fr grid-flow-col rounded-lg bg-muted/60 p-0.5">
         {choices.map((choice) => {
@@ -269,7 +269,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
 
       <aside className="flex min-h-0 flex-col border-l bg-popover">
         <header className="flex items-start gap-3 px-5 pt-5 pb-4">
-          <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             <DialogTitle className="font-medium text-base">Export</DialogTitle>
             <DialogDescription className="truncate text-muted-foreground text-ui" title={shardName}>
               {shardName}
@@ -280,7 +280,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
           </Button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-5">
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5">
           <div role="radiogroup" aria-label="Format" className="grid grid-cols-3 gap-2">
             {FORMATS.map((format) => {
               const Icon = FORMAT_ICONS[format];
@@ -337,7 +337,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
               />
 
               <label className="flex cursor-pointer items-center justify-between gap-3">
-                <span className="space-y-0.5">
+                <span className="flex flex-col gap-0.5">
                   <span className="block text-ui">Page numbers</span>
                   <span className="block text-muted-foreground text-ui-sm">The title and page number at the foot of each page.</span>
                 </span>

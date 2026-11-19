@@ -206,7 +206,7 @@ export function MoveFileDialog({
         </DialogHeader>
 
         <ScrollArea className="max-h-100 pr-4">
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             {currentVaultPath && (
               <FolderRow
                 path={currentVaultPath}

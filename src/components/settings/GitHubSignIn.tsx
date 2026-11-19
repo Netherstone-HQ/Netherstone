@@ -37,7 +37,7 @@ export function GitHubSignIn({ compact = false }: { compact?: boolean }) {
     <Button
       onClick={() => void startSignIn(remember)}
       disabled={signIn.kind === "starting"}
-      className={cn(compact && "w-full")}
+      className={compact ? "w-full" : "self-start"}
     >
       {signIn.kind === "starting" ? (
         <LoaderCircleIcon className="animate-spin" />
@@ -51,7 +51,7 @@ export function GitHubSignIn({ compact = false }: { compact?: boolean }) {
   if (keyringAvailable) return connect;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {connect}
       <RememberChoice remember={remember} onChange={setRemember} />
     </div>
@@ -72,7 +72,7 @@ function RememberChoice({
   const id = useId();
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <Label htmlFor={id} className="font-normal">
         <Checkbox
           id={id}
@@ -112,7 +112,7 @@ function SignInCodePrompt({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <p className="text-ui">
         Enter this code on GitHub to connect your account
       </p>

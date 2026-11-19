@@ -28,9 +28,9 @@ export function SettingsGroup({
   bare?: boolean;
 }) {
   return (
-    <section id={id} className="scroll-mt-8 space-y-3">
+    <section id={id} className="scroll-mt-8 flex flex-col gap-3">
       {title ? (
-        <div className="space-y-1 px-1">
+        <div className="flex flex-col gap-1 px-1">
           <h3 className="font-medium text-ui">{title}</h3>
           {description ? (
             <p className="text-muted-foreground text-ui">{description}</p>
@@ -40,7 +40,7 @@ export function SettingsGroup({
       {bare ? (
         children
       ) : (
-        <div className="divide-y rounded-xl border bg-card shadow-xs">
+        <div className="rounded-xl border bg-card shadow-xs">
           {children}
         </div>
       )}
@@ -65,11 +65,11 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-6 px-4 py-3.5",
+        "flex items-center justify-between gap-6 border-b last:border-b-0 px-4 py-3.5",
         className,
       )}
     >
-      <div className="min-w-0 flex-1 space-y-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <label htmlFor={htmlFor} className="block font-medium text-ui">
           {label}
         </label>

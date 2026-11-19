@@ -74,7 +74,7 @@ export function VaultStep({
 
   return (
     <Step title={copy.vault.title} body={copy.vault.body} onBack={onBack}>
-      <div className="space-y-2.5">
+      <div className="flex flex-col gap-2.5">
         {currentVaultPath ? (
           <ChoiceCard
             icon={<FolderIcon />}
@@ -143,7 +143,7 @@ function LocationRow({
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <FieldLabel>{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <span
@@ -223,13 +223,13 @@ export function CreateVaultForm({
 
   return (
     <form
-      className="space-y-4"
+      className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();
         void create();
       }}
     >
-      <label className={cn("block space-y-1.5", locked && "opacity-50")}>
+      <label className={cn("flex flex-col gap-1.5", locked && "opacity-50")}>
         <FieldLabel>{copy.vault.create.nameLabel}</FieldLabel>
         <Input
           value={name}
@@ -254,7 +254,11 @@ export function CreateVaultForm({
         />
       </div>
       {error ? <Hint tone="error">{error}</Hint> : null}
-      <Button type="submit" disabled={busy || !location}>
+      <Button
+        type="submit"
+        className="self-start"
+        disabled={busy || !location}
+      >
         {busy ? <LoaderCircleIcon className="animate-spin" /> : null}
         {locked ? busyLabel : copy.vault.create.submit}
       </Button>
@@ -347,7 +351,7 @@ function RestoreVault({
 
   if (!account) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <Hint>{copy.vault.restore.signInFirst}</Hint>
         <GitHubSignIn />
         {signInError ? <Hint tone="error">{signInError}</Hint> : null}
@@ -368,9 +372,13 @@ function RestoreVault({
 
   if (listError) {
     return (
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <Hint tone="error">{listError}</Hint>
-        <Button variant="outline" onClick={() => void loadBackups()}>
+        <Button
+          variant="outline"
+          className="self-start"
+          onClick={() => void loadBackups()}
+        >
           {copy.vault.restore.retry}
         </Button>
       </div>
@@ -382,8 +390,8 @@ function RestoreVault({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5" role="radiogroup">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5" role="radiogroup">
         {backups.map((backup) => (
           <button
             key={backup.fullName}
@@ -425,7 +433,11 @@ function RestoreVault({
             }}
           />
           {error ? <Hint tone="error">{error}</Hint> : null}
-          <Button onClick={() => void restore(chosen)} disabled={busy || !location}>
+          <Button
+            className="self-start"
+            onClick={() => void restore(chosen)}
+            disabled={busy || !location}
+          >
             {busy ? <LoaderCircleIcon className="animate-spin" /> : null}
             {busy ? copy.vault.restore.working : copy.vault.restore.submit}
           </Button>

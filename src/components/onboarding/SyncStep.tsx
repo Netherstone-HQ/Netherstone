@@ -55,7 +55,7 @@ export function SyncStep({
     body = <GitHubSignIn />;
   } else {
     body = (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
           <GitHubAvatar account={account} />
           <div className="min-w-0 flex-1">
@@ -98,7 +98,7 @@ export function SyncStep({
       <p className="mb-8 -mt-4 text-muted-foreground text-ui leading-6">
         {copy.sync.note} <SyncHelpDialog asLink />
       </p>
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         {body}
         {error ? <Hint tone="error">{error}</Hint> : null}
         {syncOn ? null : <Hint>{copy.sync.later}</Hint>}

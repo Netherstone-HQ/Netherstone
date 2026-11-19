@@ -173,7 +173,7 @@ export function MemorySection() {
 
   return (
     <SettingsGroup title="Memory" bare>
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <div className="rounded-xl border bg-card shadow-xs">
           <SettingRow
             label="Memory"
@@ -205,10 +205,10 @@ export function MemorySection() {
         {empty ? null : (
           <ul
             aria-label="Memory items"
-            className="divide-y rounded-xl border bg-card shadow-xs"
+            className="rounded-xl border bg-card shadow-xs"
           >
             {memory.items.map((item) => (
-              <li key={item}>
+              <li key={item} className="border-b last:border-b-0">
                 {editing === item ? (
                   <EditItem
                     item={item}

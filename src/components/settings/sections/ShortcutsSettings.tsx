@@ -70,7 +70,7 @@ function KeysList({ keys }: { keys: readonly Keys[] }) {
 /** A shortcut's name on the left, its keys on the right. */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-6 px-4 py-2.5">
+    <div className="flex items-center justify-between gap-6 border-b last:border-b-0 px-4 py-2.5">
       <span className="text-ui">{label}</span>
       {children}
     </div>

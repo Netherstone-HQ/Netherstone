@@ -1075,3 +1075,37 @@ test("typing in a long shard doesn't walk the editor's text", async ({ page }) =
   );
   expect(reads).toBeLessThan(textNodes * WALK_SHARE);
 });
+
+test.describe("a line that starts or ends with an inline from the file", () => {
+  const FILES = {
+    "Note.md": "Top\n\nArea $r^2$\n\n$x^2$ is it\n\nSee [Other](Other.md)\n",
+    "Other.md": "Other\n",
+  };
+
+  /** Clicks in the empty space right of the block holding `text`, then types Z. */
+  async function typeRightOf(page: Page, text: string) {
+    const block = editor(page).locator("[data-slate-node='element']").filter({ hasText: text }).first();
+    const box = (await block.boundingBox())!;
+    await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+    await caretSettled(page);
+    await page.keyboard.type("Z");
+  }
+
+  test("typing after it goes after it", async ({ page }) => {
+    await mockVault(page, { files: FILES, open: "Note.md" });
+    await typeRightOf(page, "Area");
+    await typeRightOf(page, "See");
+    const saved = await lastSave(page, "Note.md");
+    expect(saved).toContain("Area $r^2$Z\n");
+    expect(saved).toContain("See [Other](Other.md)Z\n");
+  });
+
+  test("typing before it goes before it", async ({ page }) => {
+    await mockVault(page, { files: FILES, open: "Note.md" });
+    await caretAfter(page, "is it");
+    await press(page, "Home");
+    await caretSettled(page);
+    await page.keyboard.type("Z");
+    expect(await lastSave(page, "Note.md")).toContain("Z$x^2$ is it\n");
+  });
+});

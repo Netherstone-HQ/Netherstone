@@ -1,6 +1,6 @@
 import { createSlateEditor, normalizeStaticValue } from "platejs";
 import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { remarkDollarMath } from "@/lib/remark-dollar-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { SerializationKit } from "@/components/editor/serialization-kit";
@@ -53,7 +53,7 @@ function decodeTarget(url: string) {
   }
 }
 
-const textParser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+const textParser = unified().use(remarkParse).use(remarkGfm).use(remarkDollarMath);
 
 type MdastNode = {
   type: string;

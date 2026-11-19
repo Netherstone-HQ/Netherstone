@@ -6,7 +6,7 @@ use std::path::Path;
 
 // Bump whenever the persisted Plate value shape changes, so older cached
 // trees are dropped.
-pub(crate) const AST_CACHE_VERSION: i64 = 4;
+pub(crate) const AST_CACHE_VERSION: i64 = 5;
 
 /// Caches a shard's editor tree. A shard's cache is written after the app
 /// leaves it, maybe on another vault by then, so any vault may, not only the

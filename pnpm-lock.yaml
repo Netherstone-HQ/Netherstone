@@ -329,9 +329,15 @@ importers:
       mathml2omml:
         specifier: ^0.5.0
         version: 0.5.0
+      mdast-util-math:
+        specifier: ^3.0.0
+        version: 3.0.0
       mermaid:
         specifier: ^11.14.0
         version: 11.14.0
+      micromark-extension-math:
+        specifier: ^3.1.0
+        version: 3.1.0
       pdfjs-dist:
         specifier: 6.4.299
         version: 6.4.299
@@ -368,9 +374,6 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
-      remark-math:
-        specifier: ^6.0.0
-        version: 6.0.0
       remark-parse:
         specifier: ^11.0.0
         version: 11.0.0
@@ -426,6 +429,9 @@ importers:
       knip:
         specifier: ^6.44.1
         version: 6.44.1
+      micromark-util-types:
+        specifier: ^2.0.2
+        version: 2.0.2
       sass:
         specifier: ^1.107.1
         version: 1.107.1
@@ -5297,9 +5303,6 @@ packages:
 
   remark-gfm@4.0.1:
     resolution: {integrity: sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==}
-
-  remark-math@6.0.0:
-    resolution: {integrity: sha512-MMqgnP74Igy+S3WwnhQ7kqGlEerTETXMvJhrUzDikVZ2/uogJCb+WHUg97hK9/jcfc0dkD73s3LN8zU49cTEtA==}
 
   remark-mdx@3.1.1:
     resolution: {integrity: sha512-Pjj2IYlUY3+D8x00UJsIOg5BEvfMyeI+2uLPn9VO9Wg4MEtN/VTIq2NEJQfde9PnX15KgtHyl9S0BcTnWrIuWg==}
@@ -11208,15 +11211,6 @@ snapshots:
       micromark-extension-gfm: 3.0.0
       remark-parse: 11.0.0
       remark-stringify: 11.0.0
-      unified: 11.0.5
-    transitivePeerDependencies:
-      - supports-color
-
-  remark-math@6.0.0:
-    dependencies:
-      '@types/mdast': 4.0.4
-      mdast-util-math: 3.0.0
-      micromark-extension-math: 3.1.0
       unified: 11.0.5
     transitivePeerDependencies:
       - supports-color

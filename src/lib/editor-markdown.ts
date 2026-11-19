@@ -1,7 +1,7 @@
 import { MarkdownPlugin } from "@platejs/markdown";
 import { KEYS, type Descendant, type SlateEditor, type TElement } from "platejs";
 import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { remarkDollarMath } from "@/lib/remark-dollar-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import {
@@ -22,7 +22,9 @@ import {
   rawBlockPlaceholder,
   restoreRawBlocks,
 } from "@/lib/markdown-raw-blocks";
+import { withTextAroundInlines } from "@/lib/markdown-inline-edges";
 import { inlineReferenceLinks } from "@/lib/markdown-reference-links";
+import { hasDollarPlaceholder, markDollars, restoreDollars } from "@/lib/markdown-dollars";
 import { setShardLinkFilePath } from "@/lib/markdown-shard-links";
 import {
   applyTableMeta,
@@ -62,7 +64,7 @@ const BLOCK_PARENTS = new Set(["root", "blockquote", "listItem", "footnoteDefini
 const FENCED_CODE_START = /^ {0,3}(?:```|~~~)/;
 
 // Plain CommonMark parser (no MDX) used only to locate code, math and HTML.
-const sourceRangeParser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+const sourceRangeParser = unified().use(remarkParse).use(remarkGfm).use(remarkDollarMath);
 
 type SourceRange = {
   start: number;
@@ -266,7 +268,10 @@ export function deserializeEditorMarkdown(
 ) {
   setShardLinkFilePath(editor, options.filePath);
   const { frontMatter, body } = splitFrontMatter(source);
-  const value = deserializeMarkdownBody(editor, inlineReferenceLinks(body));
+  const value = withTextAroundInlines(
+    editor,
+    deserializeMarkdownBody(editor, inlineReferenceLinks(body)),
+  );
   return frontMatter === null
     ? value
     : [createFrontMatterNode(frontMatter), ...value];
@@ -446,10 +451,14 @@ const TABLE_CELL_TYPES = new Set(["td", "th"]);
 
 function prepareSerializableMarkdownValue(
   nodes: unknown,
+  withDollarMarks = true,
 ): SerializableMarkdownPreparation {
+  // A text that already has a placeholder for a `$` means none can be used.
+  let hasPlaceholder = false;
   const walk = (
     value: unknown,
     inCell = false,
+    inMarked = false,
   ): { changed: boolean; value: unknown } => {
     if (!Array.isArray(value)) {
       return { changed: false, value };
@@ -469,6 +478,14 @@ function prepareSerializableMarkdownValue(
 
       const record = node as Record<string, unknown>;
       const type = typeof record.type === "string" ? record.type : null;
+
+      if (
+        !inMarked &&
+        typeof record.text === "string" &&
+        hasDollarPlaceholder(record.text)
+      ) {
+        hasPlaceholder = true;
+      }
 
       if (type && TRANSIENT_TYPES.has(type)) {
         if (!next) {
@@ -517,9 +534,15 @@ function prepareSerializableMarkdownValue(
         continue;
       }
 
+      const dollarChildren =
+        withDollarMarks && Array.isArray(record.children)
+          ? markDollars(record as never)
+          : null;
+      const ownChildren = dollarChildren ?? record.children;
       const childResult = walk(
-        record.children,
+        ownChildren,
         inCell || (type !== null && TABLE_CELL_TYPES.has(type)),
+        dollarChildren !== null,
       );
       // A to-do that was never ticked has no `checked`; without it the save
       // rule writes a plain bullet.
@@ -539,6 +562,7 @@ function prepareSerializableMarkdownValue(
 
       if (
         childResult.changed ||
+        dollarChildren ||
         hasTransientMediaUrl ||
         isMediaWithDeviceProps ||
         isUncheckedTodo ||
@@ -557,7 +581,7 @@ function prepareSerializableMarkdownValue(
           ...(durableMediaSource ? { url: durableMediaSource } : {}),
           ...(isUncheckedTodo ? { checked: false } : {}),
           ...(isBlankLine ? { [BLANK_LINE_PROP]: true } : {}),
-          children: childResult.changed ? childResult.value : record.children,
+          children: childResult.changed ? childResult.value : ownChildren,
         });
         continue;
       }
@@ -575,6 +599,9 @@ function prepareSerializableMarkdownValue(
   };
 
   const result = walk(nodes);
+  if (withDollarMarks && hasPlaceholder) {
+    return prepareSerializableMarkdownValue(nodes, false);
+  }
   const value = Array.isArray(result.value)
     ? (result.value as SerializableEditorValue)
     : [];
@@ -595,7 +622,7 @@ function prepareSerializableMarkdownValue(
 const ZERO_WIDTH_SPACE = /\u200B/g;
 
 function finalizeSerializedMarkdown(markdown: string): string {
-  const clean = markdown.replace(ZERO_WIDTH_SPACE, "");
+  const clean = restoreDollars(markdown.replace(ZERO_WIDTH_SPACE, ""));
   // A note with nothing in it is an empty file.
   return clean.trim() === "" ? "" : clean;
 }

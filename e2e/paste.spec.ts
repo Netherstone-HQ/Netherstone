@@ -123,3 +123,16 @@ test("pasting over selected blocks replaces them, and undo brings them back", as
   await expect(editor(page)).toContainText("Paste below:");
   await expect(editor(page)).not.toContainText("Replacement");
 });
+
+test("pasted prices stay text, and an equation still pastes as one", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await caretAfter(page, "Paste below:");
+  await page.keyboard.press("Enter");
+
+  await paste(page, { text: "It costs $5 or $10, and the area is $r^2$." });
+
+  await expect(editor(page)).toContainText("It costs $5 or $10, and the area is");
+  await expect(editor(page).locator(".slate-inline_equation")).toHaveCount(1);
+  const saved = await lastSave(page, "Note.md");
+  expect(saved).toContain("It costs $5 or $10, and the area is $r^2$.");
+});

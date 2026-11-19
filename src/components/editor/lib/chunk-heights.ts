@@ -3,7 +3,7 @@ import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 const MEASURE_IDLE_TIMEOUT_MS = 1000;
 
 /** Chunks whose height is pinned at their current width. */
-let pinnedChunks = new WeakSet<HTMLElement>();
+const pinnedChunks = new WeakSet<HTMLElement>();
 
 /**
  * Editor chunks render with `content-visibility: auto`, so off-screen chunks
@@ -12,8 +12,9 @@ let pinnedChunks = new WeakSet<HTMLElement>();
  *
  * This measures each chunk's real height during idle time (forcing layout of
  * one chunk at a time) and pins it as the chunk's intrinsic size, so the
- * scroll height is exact shortly after a note opens. Chunks are re-measured
- * when the editor width changes, since that changes how text wraps.
+ * scroll height is exact shortly after a note opens. A chunk is measured
+ * once, and again only when the editor width changes, since that changes
+ * how text wraps.
  *
  * Returns a function that stops measuring.
  */
@@ -45,16 +46,16 @@ export function measureChunkHeightsInBackground(
     idleId = requestIdle(measureNext, { timeout: MEASURE_IDLE_TIMEOUT_MS });
   };
 
-  const measureAll = () => {
-    pinnedChunks = new WeakSet();
+  const measureAll = ({ unpin }: { unpin: boolean }) => {
     queue = Array.from(root.querySelectorAll<HTMLElement>("[data-slate-chunk]"));
+    if (unpin) queue.forEach((chunk) => pinnedChunks.delete(chunk));
 
     if (idleId === null) {
       idleId = requestIdle(measureNext, { timeout: MEASURE_IDLE_TIMEOUT_MS });
     }
   };
 
-  measureAll();
+  measureAll({ unpin: false });
 
   let lastWidth = root.clientWidth;
   const resizeObserver = new ResizeObserver(() => {
@@ -64,7 +65,7 @@ export function measureChunkHeightsInBackground(
     if (Math.abs(width - lastWidth) < 1) return;
 
     lastWidth = width;
-    measureAll();
+    measureAll({ unpin: true });
   });
   resizeObserver.observe(root);
 

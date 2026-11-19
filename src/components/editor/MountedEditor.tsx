@@ -264,7 +264,8 @@ export const MountedEditor = memo(function MountedEditor({
   }, [currentFilePath, editor, isShown]);
 
   // Measured once what's drawn first is on screen, and again once the rest
-  // is: measuring each part as it's drawn slowed drawing a long shard.
+  // is (only chunks not measured yet): measuring each part as it's drawn
+  // slowed drawing a long shard.
   useEffect(() => {
     const root = editor.api.toDOMNode(editor);
     if (!root) return;

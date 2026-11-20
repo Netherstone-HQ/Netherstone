@@ -104,6 +104,54 @@ function getResolvedAttachmentPath(
   return null;
 }
 
+/**
+ * A video file. Some webviews can't play the app's file URLs (Linux); when
+ * the URL fails, the video plays from a copy in memory instead. A file
+ * neither can play keeps its URL.
+ */
+function VaultVideo({ url, canCopy }: { url: string; canCopy: boolean }) {
+  const [copyUrl, setCopyUrl] = React.useState<string | null>(null);
+  const triedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    triedRef.current = false;
+    setCopyUrl(null);
+  }, [url]);
+
+  React.useEffect(
+    () => () => {
+      if (copyUrl) URL.revokeObjectURL(copyUrl);
+    },
+    [copyUrl],
+  );
+
+  const onError = () => {
+    // The copy can't play either: the file itself is the problem.
+    if (copyUrl) {
+      setCopyUrl(null);
+      return;
+    }
+    if (!canCopy || triedRef.current || url.startsWith("blob:")) return;
+    triedRef.current = true;
+    void fetch(url)
+      .then((response) => response.blob())
+      .then((blob) => setCopyUrl(URL.createObjectURL(blob)))
+      .catch((error) =>
+        console.error("[media-video-node] Couldn't load the video", error),
+      );
+  };
+
+  return (
+    <video
+      className="w-full max-w-full rounded-sm object-cover px-0"
+      src={copyUrl ?? url}
+      preload="metadata"
+      controls
+      onError={onError}
+    />
+  );
+}
+
 export const VideoElement = withHOC(
   ResizableProvider,
   function VideoElement(
@@ -336,10 +384,9 @@ export const VideoElement = withHOC(
 
               {shouldRenderNativeVideo && (
                 <div ref={handleRef}>
-                  <video
-                    className="w-full max-w-full rounded-sm object-cover px-0"
-                    src={renderUrl}
-                    controls
+                  <VaultVideo
+                    url={renderUrl}
+                    canCopy={isLocalOrVaultBacked}
                   />
                 </div>
               )}

@@ -15,6 +15,10 @@ const PNG = Buffer.from(
 );
 
 /** A short silent WAV. */
+/** A tenth of a second of black 16×16 video, as WebM. */
+const TINY_WEBM =
+  "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAIQEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggH67AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiEBeAAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYjaXII28sann5yBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAJiWgDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYjaXII28sann2fIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDAuMTIwMDAwMDAwAB9DtnXW54EAo6OBAACAEAIAnQEqEAAQAABHCIWFiIWEiAICAAwNYAD+/6tQgKOVgQAoALEBAAEQEAAYABhYL/QACAAAo5WBAFAAsQEAARAQABgAGFgv9AAIAAAcU7trkbuPs4EAt4r3gQHxggGf8IED";
+
 function wav() {
   const samples = 800;
   const bytes = Buffer.alloc(44 + samples);
@@ -501,4 +505,17 @@ test("dropped sound, video and other files are added and show", async ({ page })
   await expect(editor(page).getByText("Report.pdf").first()).toBeVisible();
   await expect.poll(() => statuses.get("/home/me/Vault/_attachments/tone.wav")).toBe(200);
   await expect.poll(() => statuses.get("/home/me/Vault/_attachments/clip.mp4")).toBe(200);
+});
+
+test("a video the player can't load from its URL plays from a copy", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { isTauri: boolean }).isTauri = true;
+  });
+  await mockVault(page, {
+    mediaRefusesAppUrls: true,
+    files: { "Clip.md": '# Clip\n\n<video src="_attachments/clip.webm" />\n' },
+    assets: { "_attachments/clip.webm": Buffer.from(TINY_WEBM, "base64") },
+    open: "Clip.md",
+  });
+  await expect(editor(page).locator("video[src^='blob:']")).toHaveCount(1);
 });

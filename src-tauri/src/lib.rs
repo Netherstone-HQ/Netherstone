@@ -18,6 +18,8 @@ mod locks;
 mod main_view;
 mod markdown_text;
 mod mcp;
+mod microphone;
+mod mic_spike;
 mod open_access;
 mod open_source;
 mod shard_links;
@@ -116,10 +118,15 @@ pub fn run() {
             tauri::WindowEvent::Destroyed => assistant::stop_window(window.label()),
             _ => {}
         })
+        .on_permission_request(microphone::answer)
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 assistant::stop_window(webview.window().label());
                 main_view::take_over(webview);
+                microphone::enable_capture(webview);
+            }
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                mic_spike::redirect(webview);
             }
         })
         // Commands are marked `async` so Tauri runs them on its async runtime.
@@ -128,6 +135,7 @@ pub fn run() {
         // blocking pickers must not be called.
         .invoke_handler(tauri::generate_handler![
             splash::show_main_window,
+            mic_spike::spike_save,
             assistant::commands::assistant_status,
             assistant::commands::assistant_enabled,
             assistant::commands::assistant_set_enabled,

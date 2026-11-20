@@ -8,6 +8,7 @@ identifier = "app-commands"
 description = "Every command in the app's invoke handler."
 commands.allow = [
   "show_main_window",
+  "spike_save",
   "assistant_status",
   "assistant_enabled",
   "assistant_set_enabled",

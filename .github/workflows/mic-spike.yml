@@ -1,0 +1,32 @@
+name: Mic spike (throwaway)
+on:
+  push:
+    branches: [spike/voice-notes-mic]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  webkit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sw_vers
+      - name: Serve the spike page
+        run: (cd public && python3 -m http.server 8765 > /dev/null 2>&1 &) && sleep 2
+      - name: Run it in WKWebView
+        run: swift spike-mac/run.swift 5 | tee report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.os }}
+          path: report.json
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check the app compiles on macOS
+        run: mkdir -p dist && cargo check --manifest-path src-tauri/Cargo.toml

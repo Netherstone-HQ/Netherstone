@@ -56,11 +56,8 @@ function useClipPlayer(url: string) {
   const decodedRef = React.useRef<Decoded | null>(null);
   const memoryUrlRef = React.useRef<string | null>(null);
 
+  // The parent keys the player by URL, so a new clip starts fresh.
   React.useEffect(() => {
-    setMode("url");
-    setPlaying(false);
-    setTime(0);
-    setDuration(0);
     return () => {
       if (memoryUrlRef.current) URL.revokeObjectURL(memoryUrlRef.current);
       memoryUrlRef.current = null;
@@ -101,6 +98,11 @@ function useClipPlayer(url: string) {
       })
       .catch(() => {});
   }, [mode, url]);
+
+  // The file can fail before the player listens for it.
+  React.useEffect(() => {
+    if (audioRef.current?.error) onUrlError();
+  }, [onUrlError]);
 
   const startDecoded = React.useCallback(
     (from: number) => {

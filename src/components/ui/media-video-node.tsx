@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Loader2, Play } from "lucide-react";
 import LiteYouTubeEmbed from "react-lite-youtube-embed";
 
 import type { TResizableProps, TVideoElement } from "platejs";
@@ -102,6 +103,109 @@ function getResolvedAttachmentPath(
   }
 
   return null;
+}
+
+function fileNameOf(url: string): string {
+  return decodeURIComponent(url.split(/[?#]/)[0]).split(/[\\/]/).pop() ?? "";
+}
+
+/**
+ * A video file. Some webviews can't play the app's file URLs (Linux). When
+ * the URL fails, the video waits behind a Play button and, on Play, plays
+ * from a copy in memory, so opening a shard never reads whole videos. A file
+ * the copy can't play either keeps its URL.
+ */
+function VaultVideo({
+  url,
+  name,
+  canCopy,
+}: {
+  url: string;
+  name?: string;
+  canCopy: boolean;
+}) {
+  const [state, setState] = React.useState<
+    "url" | "waiting" | "loading" | "copy"
+  >("url");
+  const [copyUrl, setCopyUrl] = React.useState<string | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  React.useEffect(
+    () => () => {
+      if (copyUrl) URL.revokeObjectURL(copyUrl);
+    },
+    [copyUrl],
+  );
+
+  const onError = () => {
+    if (state === "copy") {
+      setCopyUrl(null);
+      setState("url");
+      return;
+    }
+    if (state === "url" && canCopy && !url.startsWith("blob:")) {
+      setState("waiting");
+    }
+  };
+
+  // The file can fail before the player listens for it.
+  React.useEffect(() => {
+    if (state === "url" && videoRef.current?.error) onError();
+  }, [state]);
+
+  // Play asked for it, so the copy starts as soon as it's in place.
+  React.useEffect(() => {
+    if (state !== "copy") return;
+    void videoRef.current?.play().catch(() => {});
+  }, [state]);
+
+  const play = () => {
+    setState("loading");
+    void fetch(url)
+      .then((response) => response.blob())
+      .then((blob) => {
+        setCopyUrl(URL.createObjectURL(blob));
+        setState("copy");
+      })
+      .catch((error) => {
+        console.error("[media-video-node] Couldn't load the video", error);
+        setState("waiting");
+      });
+  };
+
+  if (state === "waiting" || state === "loading") {
+    return (
+      <div className="relative flex aspect-video w-full items-center justify-center rounded-sm bg-foreground dark:bg-background">
+        <button
+          type="button"
+          aria-label="Play"
+          disabled={state === "loading"}
+          onClick={play}
+          className="flex size-14 items-center justify-center rounded-full bg-background/90 text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-foreground/90 dark:text-background"
+        >
+          {state === "loading" ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <Play className="size-5 fill-current" />
+          )}
+        </button>
+        <span className="absolute bottom-2.5 left-3 text-ui-sm text-muted-foreground">
+          {name || fileNameOf(url)}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      className="w-full max-w-full rounded-sm object-cover px-0"
+      src={state === "copy" && copyUrl ? copyUrl : url}
+      preload="metadata"
+      controls
+      onError={onError}
+    />
+  );
 }
 
 export const VideoElement = withHOC(
@@ -336,10 +440,11 @@ export const VideoElement = withHOC(
 
               {shouldRenderNativeVideo && (
                 <div ref={handleRef}>
-                  <video
-                    className="w-full max-w-full rounded-sm object-cover px-0"
-                    src={renderUrl}
-                    controls
+                  <VaultVideo
+                    key={renderUrl}
+                    url={renderUrl}
+                    name={props.element.name}
+                    canCopy={isLocalOrVaultBacked}
                   />
                 </div>
               )}

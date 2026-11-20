@@ -228,6 +228,7 @@ export const AudioElement = withHOC(
           contentEditable={false}
         >
           <AudioPlayer
+            key={renderUrl}
             url={renderUrl}
             onOpen={() =>
               void openResolvedSource(resolvedSource, source).catch((error) =>

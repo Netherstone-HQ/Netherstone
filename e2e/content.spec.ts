@@ -15,6 +15,10 @@ const PNG = Buffer.from(
 );
 
 /** A short silent WAV. */
+/** A tenth of a second of black 16×16 video, as WebM. */
+const TINY_WEBM =
+  "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAIQEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggH67AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiEBeAAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYjaXII28sann5yBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAJiWgDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYjaXII28sann2fIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDAuMTIwMDAwMDAwAB9DtnXW54EAo6OBAACAEAIAnQEqEAAQAABHCIWFiIWEiAICAAwNYAD+/6tQgKOVgQAoALEBAAEQEAAYABhYL/QACAAAo5WBAFAAsQEAARAQABgAGFgv9AAIAAAcU7trkbuPs4EAt4r3gQHxggGf8IED";
+
 function wav() {
   const samples = 800;
   const bytes = Buffer.alloc(44 + samples);
@@ -132,7 +136,8 @@ test("pictures, sound, video, embeds and math in a shard load", async ({ page })
   await expect(photo).toHaveJSProperty("naturalWidth", 1);
   await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
   await expect.poll(() => requests.some((url) => url.startsWith("http://asset.localhost/") && url.includes("tone.wav"))).toBe(true);
-  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  // The test's clip isn't a real video, so it waits behind Play.
+  await expect(editor(page).getByText("clip.mp4")).toBeVisible();
   await expect.poll(() => requests.some((url) => url.startsWith("http://asset.localhost/") && url.includes("clip.mp4"))).toBe(true);
 
   // Pictures and videos from the web are asked for (the test answers none).
@@ -433,7 +438,8 @@ test("sound, video and other files outside the vault show and open", async ({ pa
   });
 
   await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
-  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  // The test's clip isn't a real video, so it waits behind Play.
+  await expect(editor(page).getByText("clip.mp4")).toBeVisible();
   await expect.poll(() => statuses.get(SONG)).toBe(200);
   await expect.poll(() => statuses.get(CLIP)).toBe(200);
 
@@ -497,8 +503,26 @@ test("dropped sound, video and other files are added and show", async ({ page })
   }
 
   await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
-  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  // The test's clip isn't a real video, so it waits behind Play.
+  await expect(editor(page).getByText("clip.mp4")).toBeVisible();
   await expect(editor(page).getByText("Report.pdf").first()).toBeVisible();
   await expect.poll(() => statuses.get("/home/me/Vault/_attachments/tone.wav")).toBe(200);
   await expect.poll(() => statuses.get("/home/me/Vault/_attachments/clip.mp4")).toBe(200);
+});
+
+test("a video the player can't load from its URL plays from a copy on Play", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { isTauri: boolean }).isTauri = true;
+  });
+  await mockVault(page, {
+    mediaRefusesAppUrls: true,
+    files: { "Clip.md": '# Clip\n\n<video src="_attachments/clip.webm" />\n' },
+    assets: { "_attachments/clip.webm": Buffer.from(TINY_WEBM, "base64") },
+    open: "Clip.md",
+  });
+  // Nothing is read until Play.
+  await expect(editor(page).getByRole("button", { name: "Play" })).toBeVisible();
+  await expect(editor(page).getByText("clip.webm")).toBeVisible();
+  await editor(page).getByRole("button", { name: "Play" }).click();
+  await expect(editor(page).locator("video[src^='blob:']")).toHaveCount(1);
 });

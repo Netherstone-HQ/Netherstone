@@ -112,6 +112,8 @@ declare global {
 
 export type MockVaultOptions = {
   files: VaultFiles;
+  /** As on Linux: media elements can't load the app's file URLs, though reading them works. */
+  mediaRefusesAppUrls?: boolean;
   /** Attachments and other binary files, relative to the vault. */
   assets?: Record<string, Buffer>;
   /** Empty folders shown in the sidebar. */
@@ -922,6 +924,9 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
   // The asset protocol, which shows the vault's files in shards. Like the
   // desktop app, it refuses files outside what it was allowed to serve.
   await page.route("http://asset.localhost/**", async (route: Route) => {
+    if (options.mediaRefusesAppUrls && route.request().resourceType() === "media") {
+      return route.fulfill({ status: 415 });
+    }
     const path = decodeURIComponent(new URL(route.request().url()).pathname.slice(1));
     const found = await page.evaluate(
       ({ path, vaultPath }) => {
@@ -935,7 +940,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     if (!found.allowed) return route.fulfill({ status: 403 });
     if (!found.data) return route.fulfill({ status: 404 });
     const extension = path.split(".").pop() ?? "";
-    const types: Record<string, string> = { png: "image/png", wav: "audio/wav", mp4: "video/mp4", pdf: "application/pdf" };
+    const types: Record<string, string> = { png: "image/png", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm", pdf: "application/pdf" };
     return route.fulfill({
       body: Buffer.from(found.data, "base64"),
       contentType: types[extension] ?? "application/octet-stream",

@@ -11,7 +11,7 @@ import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { EditorKit } from "./editor-kit";
 import { InlineAskKit } from "./kits/inline-ask-kit";
 import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
-import { RemoveWhenClosed } from "./lib/closed-session";
+import { RemoveWhenClosed, useIsSessionClosed } from "./lib/closed-session";
 import {
   ChunkDrawer,
   ChunkDrawerContext,
@@ -266,13 +266,15 @@ export const MountedEditor = memo(function MountedEditor({
 
   // Measured once what's drawn first is on screen, and again once the rest
   // is (only chunks not measured yet): measuring each part as it's drawn
-  // slowed drawing a long shard.
+  // slowed drawing a long shard. A closed shard stops: measuring it in its
+  // hidden container took seconds from the next shard's drawing.
+  const isClosed = useIsSessionClosed();
   useEffect(() => {
     const root = editor.api.toDOMNode(editor);
-    if (!root) return;
+    if (!root || isClosed) return;
 
     return measureChunkHeightsInBackground(root);
-  }, [editor, isFullyDrawn]);
+  }, [editor, isClosed, isFullyDrawn]);
 
   useEffect(() => {
     if (cacheHit || didWriteColdOpenCacheRef.current) return;

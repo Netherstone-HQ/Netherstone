@@ -319,7 +319,10 @@ export const MountedEditor = memo(function MountedEditor({
       }}
     >
       <ChunkDrawerContext.Provider value={drawer}>
+        {/* The window's main area scrolls, not this box: a scrolling box
+            here would hold the pinned toolbar and carry it away. */}
         <EditorContainer
+          className="overflow-visible"
           onDropCapture={handleDropCapture}
           onKeyDownCapture={handleKeyDownCapture}
           onPasteCapture={handlePasteCapture}

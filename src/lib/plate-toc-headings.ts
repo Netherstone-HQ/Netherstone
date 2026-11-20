@@ -119,8 +119,8 @@ export function getPlateHeadingList(editor: SlateEditor): Heading[] {
 
 /**
  * Nearest scrollable ancestor (the element that actually moves when the user
- * scrolls the document). Plate uses an inner `PlateContainer` with
- * `overflow-y-auto`, not always `<main>`.
+ * scrolls the document): `<main>` for the open shard; an editor elsewhere
+ * may scroll a box of its own.
  */
 function findScrollableAncestor(start: HTMLElement | null): HTMLElement | null {
   let el: HTMLElement | null = start;

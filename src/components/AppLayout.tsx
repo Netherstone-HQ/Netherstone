@@ -5,7 +5,7 @@ import { useLaunches } from "@/lib/launch";
 import { saveEditorFile } from "@/lib/open-editor-file";
 import { useRecentSwitching } from "@/hooks/useRecentSwitching";
 import { cn } from "@/lib/utils";
-import { useEditorStore, useUIStore } from "@/store";
+import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
 import { useHistoryStore, useShownVersion } from "@/store/history";
 
 import { RightSidebar } from "./sidebar/RightSidebar";
@@ -58,6 +58,7 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
   const version = useShownVersion("notes");
   const change = usePreviewedChange();
   const openPath = useEditorStore((s) => s.currentFilePath);
+  const pinToolbar = useSettingsStore((s) => s.pinToolbar);
   const deletedPath = useHistoryStore((s) => s.deletedPath);
   const closeHistory = useHistoryStore((s) => s.closeHistory);
   const filePath = deletedPath ?? openPath;
@@ -82,6 +83,8 @@ function EditorOrVersion({ children }: { children?: React.ReactNode }) {
         className={cn(
           // Isolated, so the editor's sticky toolbar stays under a preview.
           "isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-auto",
+          // The caret, moved by the keyboard, stops below the pinned toolbar.
+          pinToolbar && "scroll-pt-toolbar",
           // A preview covers the editor once it's ready; till then the
           // shard stays in view, so nothing blanks.
           shown && !previewed && "invisible",

@@ -13,7 +13,9 @@ import { useEditorReadOnly, useEditorRef } from 'platejs/react';
 
 import { hasInlineAsk, openInlineAsk } from '@/lib/inline-ask';
 import { useAssistantStore } from '@/store/assistant';
+import { useSettingsStore } from '@/store/settings';
 
+import { FontSizeToolbarButton } from './font-size-toolbar-button';
 import { LinkToolbarButton } from './link-toolbar-button';
 import { MarkToolbarButton } from './mark-toolbar-button';
 import { ToolbarButton, ToolbarGroup } from './toolbar';
@@ -21,6 +23,8 @@ import { TurnIntoToolbarButton } from './turn-into-toolbar-button';
 
 export function FloatingToolbarButtons() {
   const readOnly = useEditorReadOnly();
+  // The pinned toolbar always shows text size; otherwise it's here.
+  const showFontSize = useSettingsStore((s) => !s.pinToolbar);
   const editor = useEditorRef();
   const assistant =
     useAssistantStore((s) => s.enabled === true) && hasInlineAsk(editor);
@@ -49,6 +53,8 @@ export function FloatingToolbarButtons() {
       {!readOnly && (
         <ToolbarGroup>
           <TurnIntoToolbarButton />
+
+          {showFontSize && <FontSizeToolbarButton />}
 
           <MarkToolbarButton nodeType={KEYS.bold} tooltip="Bold" shortcut="bold">
             <BoldIcon />

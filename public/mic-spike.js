@@ -25,6 +25,20 @@
   const playTypes = ["audio/webm;codecs=opus", "audio/mp4;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "audio/mpeg", "audio/wav"];
   await step("canPlayType", async () => ({ types: Object.fromEntries(playTypes.map((t) => [t, document.createElement("audio").canPlayType(t)])) }));
 
+  await step("webcodecs opus", async () => {
+    if (typeof AudioEncoder === "undefined") return { audioEncoder: "missing" };
+    const config = { codec: "opus", sampleRate: 48000, numberOfChannels: 1, bitrate: 32000 };
+    const support = await AudioEncoder.isConfigSupported(config);
+    if (!support.supported) return { supported: false };
+    let bytes = 0, packets = 0, error = null;
+    const enc = new AudioEncoder({ output: (c) => { bytes += c.byteLength; packets++; }, error: (e) => { error = String(e); } });
+    enc.configure(config);
+    const frames = 48000, data = new Float32Array(frames);
+    for (let i = 0; i < frames; i++) data[i] = 0.3 * Math.sin(i / 48000 * 2 * Math.PI * 440) * (Math.random() * 0.5 + 0.5);
+    enc.encode(new AudioData({ format: "f32", sampleRate: 48000, numberOfFrames: frames, numberOfChannels: 1, timestamp: 0, data }));
+    await enc.flush();
+    return { supported: true, packets, bytesPerSecond: bytes, error, worklet: typeof AudioWorkletNode };
+  });
   let stream;
   await step("getUserMedia", async () => {
     stream = await withTimeout(navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false } }), 30000, "getUserMedia");

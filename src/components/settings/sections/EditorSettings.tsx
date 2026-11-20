@@ -48,6 +48,11 @@ export function EditorSettings() {
           label="Show word count"
           description="Shown at the top of the window while a shard is open"
         />
+        <PreferenceSwitch
+          name="pinToolbar"
+          label="Pin toolbar"
+          description="Keep the toolbar at the top while you scroll"
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Reading">

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { caretAfter, editor, expect, mockVault, test } from "./vault";
+import { editor, expect, mockVault, select, test, textToolbar } from "./vault";
 
 /**
  * Inline Ask in the text toolbar: a prompt under the selection, the answer
@@ -17,28 +17,6 @@ const READY = {
   picked: true,
   inline: ["it works ", "offline"],
 };
-
-/** Selects `text` in the shard, as a drag over it would. */
-async function select(page: Page, text: string) {
-  await caretAfter(page, text);
-  await editor(page).evaluate((root, wanted) => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text;
-      const at = node.data.indexOf(wanted);
-      if (at < 0) continue;
-      const range = document.createRange();
-      range.setStart(node, at);
-      range.setEnd(node, at + wanted.length);
-      getSelection()!.removeAllRanges();
-      getSelection()!.addRange(range);
-      return;
-    }
-  }, text);
-}
-
-/** The toolbar that shows over selected text. */
-const textToolbar = (page: Page) => page.locator("[role=toolbar].bg-popover");
 
 const prompt = (page: Page) => page.getByRole("textbox", { name: "Ask about the selection" });
 

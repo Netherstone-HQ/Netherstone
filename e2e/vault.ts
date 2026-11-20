@@ -983,6 +983,29 @@ export async function caretAfter(page: Page, text: string) {
   await page.mouse.click(end.x, end.y);
 }
 
+/** Selects `text` in the shard, as a drag over it would. */
+export async function select(page: Page, text: string) {
+  await caretAfter(page, text);
+  await editor(page).evaluate((root, wanted) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const at = node.data.indexOf(wanted);
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + wanted.length);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(range);
+      return;
+    }
+  }, text);
+}
+
+/** The toolbar that shows over selected text. */
+export const textToolbar = (page: Page) =>
+  page.locator("[role=toolbar].bg-popover");
+
 /** The cells of a table's first row (the row handle column is not a cell). */
 export const cellsOf = (row: Locator) =>
   row.locator("> [data-slate-node='element']");

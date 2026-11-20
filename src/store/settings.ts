@@ -51,6 +51,8 @@ export interface Preferences {
 
   // ── Editor ──────────────────────────────────────────────────────────────────
   spellcheck: boolean;
+  /** Keeps the editor toolbar in view while the shard scrolls. */
+  pinToolbar: boolean;
   newShardLocation: NewShardLocation;
   showWordCount: boolean;
 
@@ -143,6 +145,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   shortcuts: {},
 
   spellcheck: true,
+  pinToolbar: true,
   newShardLocation: "current-folder",
   showWordCount: false,
 

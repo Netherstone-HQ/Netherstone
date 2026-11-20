@@ -438,7 +438,8 @@ test("sound, video and other files outside the vault show and open", async ({ pa
   });
 
   await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
-  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  // The test's clip isn't a real video, so it waits behind Play.
+  await expect(editor(page).getByText("clip.mp4")).toBeVisible();
   await expect.poll(() => statuses.get(SONG)).toBe(200);
   await expect.poll(() => statuses.get(CLIP)).toBe(200);
 

@@ -25,6 +25,10 @@ pub async fn spike_save(app: tauri::AppHandle, name: String, bytes: Vec<u8>, las
     let safe: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || ".-_".contains(*c)).collect();
     let path = dir.join(safe);
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    {
+        use tauri::Manager;
+        let _ = app.asset_protocol_scope().allow_file(&path);
+    }
     if last {
         app.exit(0);
     }

@@ -20,8 +20,9 @@
   };
 
   const types = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4", "audio/mp4;codecs=mp4a.40.2", "audio/mp4;codecs=opus", "audio/aac"];
+  await step("mediaRecorderExists", async () => ({ exists: typeof MediaRecorder }));
   await step("isTypeSupported", async () => ({ types: Object.fromEntries(types.map((t) => [t, typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t)])) }));
-  const playTypes = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "audio/mpeg", "audio/wav"];
+  const playTypes = ["audio/webm;codecs=opus", "audio/mp4;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "audio/mpeg", "audio/wav"];
   await step("canPlayType", async () => ({ types: Object.fromEntries(playTypes.map((t) => [t, document.createElement("audio").canPlayType(t)])) }));
 
   let stream;
@@ -36,7 +37,7 @@
   });
 
   const record = async (mimeType, secs) => {
-    const rec = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32000 });
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 32000 } : {});
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise((res) => { rec.onstop = res; });
@@ -48,18 +49,19 @@
     return { blob, chunks: chunks.length, mime: rec.mimeType, bytes: blob.size, bytesPerMinute: Math.round(blob.size / secs * 60) };
   };
 
-  const ext = (mime) => (mime.includes("webm") ? "webm" : mime.includes("ogg") ? "ogg" : "m4a");
+  const ext = (mime) => (mime.includes("webm") ? "webm" : mime.includes("opus") ? "opus.m4a" : "aac.m4a");
   const os = /Windows/.test(navigator.userAgent) ? "windows" : /Mac/.test(navigator.userAgent) ? "mac" : "linux";
   const clips = [];
   if (stream) {
-    for (const [mime, secs] of [["audio/webm;codecs=opus", seconds], ["audio/mp4", Math.min(seconds, 15)]]) {
-      if (!MediaRecorder.isTypeSupported(mime)) { report.steps["record " + mime] = { ok: false, error: "not supported" }; continue; }
+    for (const [mime, secs] of [["audio/webm;codecs=opus", seconds], ["audio/mp4;codecs=opus", seconds], ["audio/mp4;codecs=mp4a.40.2", Math.min(seconds, 15)]]) {
+      if (mime && !MediaRecorder.isTypeSupported(mime)) { report.steps["record " + mime] = { ok: false, error: "not supported" }; continue; }
       let result;
       await step("record " + mime, async () => { result = await record(mime, secs); const { blob, ...rest } = result; return rest; });
       if (result && result.blob.size) {
         const name = `${os}-${secs}s.${ext(result.mime || mime)}`;
         clips.push({ name, blob: result.blob });
-        await save(name, await result.blob.arrayBuffer());
+        const saved = await save(name, await result.blob.arrayBuffer());
+        if (saved) clips.push({ name: name + " via asset", blob: result.blob, url: window.__TAURI_INTERNALS__.convertFileSrc(saved) });
       }
     }
     stream.getTracks().forEach((t) => t.stop());
@@ -74,6 +76,7 @@
         out.decodedSeconds = Math.round(decoded.duration * 10) / 10;
         ctx.close();
       } catch (e) { out.decodeError = `${e && e.name}: ${e && e.message}`; }
+      try { const r = await fetch(url); out.fetchStatus = r.status; out.fetchType = r.headers.get("content-type"); out.fetchBytes = (await r.arrayBuffer()).byteLength; } catch (e) { out.fetchError = String(e); }
       const audio = new Audio();
       audio.preload = "metadata";
       audio.muted = true;
@@ -91,12 +94,14 @@
     });
   };
   for (const clip of clips) {
-    await playCheck("own " + clip.name, () => clip.blob.arrayBuffer(), URL.createObjectURL(clip.blob));
+    await playCheck("own " + clip.name, () => clip.blob.arrayBuffer(), clip.url || URL.createObjectURL(clip.blob));
   }
   let fixtures = [];
   try { fixtures = await (await fetch("/spike-fixtures/index.json")).json(); } catch {}
   for (const f of fixtures) {
     await playCheck("fixture " + f, async () => (await fetch("/spike-fixtures/" + f)).arrayBuffer(), "/spike-fixtures/" + f);
+    const blob = await (await fetch("/spike-fixtures/" + f)).blob();
+    await playCheck("fixture-blob " + f, () => blob.arrayBuffer(), URL.createObjectURL(blob));
   }
 
   report.finished = new Date().toISOString();

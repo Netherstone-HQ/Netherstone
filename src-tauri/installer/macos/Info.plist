@@ -5,6 +5,8 @@
      Alternate: listed in Open With, never the default app. -->
 <plist version="1.0">
 <dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Netherstone uses the microphone to record voice notes into your shards.</string>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

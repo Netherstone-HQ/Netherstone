@@ -18,6 +18,7 @@ mod locks;
 mod main_view;
 mod markdown_text;
 mod mcp;
+mod microphone;
 mod open_access;
 mod open_source;
 mod shard_links;
@@ -29,6 +30,7 @@ mod tools;
 mod updater;
 mod vault;
 mod vault_access;
+mod voice_notes;
 mod watcher;
 mod window_icon;
 
@@ -116,10 +118,12 @@ pub fn run() {
             tauri::WindowEvent::Destroyed => assistant::stop_window(window.label()),
             _ => {}
         })
+        .on_permission_request(microphone::answer)
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 assistant::stop_window(webview.window().label());
                 main_view::take_over(webview);
+                microphone::enable_capture(webview);
             }
         })
         // Commands are marked `async` so Tauri runs them on its async runtime.
@@ -207,6 +211,10 @@ pub fn run() {
             attachments::commands::persist_attachment_file,
             attachments::commands::confirm_attachment_copies,
             attachments::commands::persist_attachment_bytes,
+            voice_notes::voice_note_begin,
+            voice_notes::voice_note_append,
+            voice_notes::voice_note_save,
+            voice_notes::voice_note_discard,
             import::commands::import_attachment,
             import::commands::fix_imported_links,
             attachments::commands::file_exists,

@@ -128,11 +128,7 @@ function VaultVideo({
     "url" | "waiting" | "loading" | "copy"
   >("url");
   const [copyUrl, setCopyUrl] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    setState("url");
-    setCopyUrl(null);
-  }, [url]);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(
     () => () => {
@@ -151,6 +147,17 @@ function VaultVideo({
       setState("waiting");
     }
   };
+
+  // The file can fail before the player listens for it.
+  React.useEffect(() => {
+    if (state === "url" && videoRef.current?.error) onError();
+  }, [state]);
+
+  // Play asked for it, so the copy starts as soon as it's in place.
+  React.useEffect(() => {
+    if (state !== "copy") return;
+    void videoRef.current?.play().catch(() => {});
+  }, [state]);
 
   const play = () => {
     setState("loading");
@@ -191,10 +198,10 @@ function VaultVideo({
 
   return (
     <video
+      ref={videoRef}
       className="w-full max-w-full rounded-sm object-cover px-0"
       src={state === "copy" && copyUrl ? copyUrl : url}
       preload="metadata"
-      autoPlay={state === "copy"}
       controls
       onError={onError}
     />
@@ -434,6 +441,7 @@ export const VideoElement = withHOC(
               {shouldRenderNativeVideo && (
                 <div ref={handleRef}>
                   <VaultVideo
+                    key={renderUrl}
                     url={renderUrl}
                     name={props.element.name}
                     canCopy={isLocalOrVaultBacked}

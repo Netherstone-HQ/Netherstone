@@ -34,6 +34,7 @@ import { MountedEditor } from "./MountedEditor";
 import {
   RemoveClosedSessionContext,
   RemoveWhenClosed,
+  SessionContent,
 } from "./lib/closed-session";
 import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
@@ -75,9 +76,9 @@ type EditorSessions = {
   /** The session on screen. */
   displayed: EditorSession | null;
   /**
-   * Closed sessions, hidden and removed a part at a time in quiet moments.
-   * Removing a long shard takes a while, so the next one (or the empty
-   * state) is shown first.
+   * Closed sessions, taken off the page and removed a part at a time in
+   * quiet moments. Removing a long shard takes a while, so the next one (or
+   * the empty state) is shown first.
    */
   leaving: EditorSession[];
 };
@@ -140,13 +141,15 @@ function useModKeyLinks(ref: RefObject<HTMLElement | null>) {
       point(event.target instanceof Element ? event.target.closest(".editor-link") : null);
     };
     const leave = () => point(null);
-    root.addEventListener("mouseover", hover);
+    // Captured: a shard renders through a portal, so a handler in it that
+    // stops the event now does so before it bubbles up here.
+    root.addEventListener("mouseover", hover, true);
     root.addEventListener("mouseleave", leave);
     window.addEventListener("keydown", update);
     window.addEventListener("keyup", update);
     window.addEventListener("blur", release);
     return () => {
-      root.removeEventListener("mouseover", hover);
+      root.removeEventListener("mouseover", hover, true);
       root.removeEventListener("mouseleave", leave);
       window.removeEventListener("keydown", update);
       window.removeEventListener("keyup", update);
@@ -426,37 +429,35 @@ export function Editor() {
           // takes no input: it's no longer the store's editor, so edits
           // couldn't be saved. `inert`, `hidden` and `pointer-events` restyle
           // every node of a long shard (about a second each in WebKit);
-          // content-visibility and event guards don't.
+          // event guards don't. A closed one is already off the page.
           <div
             key={session.tick}
-            className={cn(
-              isLeaving &&
-                "absolute inset-x-0 top-0 h-0 [content-visibility:hidden]",
-              isStale && !isLeaving && "opacity-60",
-            )}
+            className={cn(isStale && !isLeaving && "opacity-60")}
             data-inactive-session={isLeaving || isStale || undefined}
             aria-hidden={isLeaving || isStale || undefined}
             {...(isLeaving || isStale ? INACTIVE_EVENTS : {})}
           >
-            <ClosedSessionRemoval
-              tick={session.tick}
-              isClosed={isLeaving}
-              removeSession={removeSession}
-            >
-              <EditorErrorBoundary
-                filePath={session.filePath}
+            <SessionContent isClosed={isLeaving}>
+              <ClosedSessionRemoval
                 tick={session.tick}
+                isClosed={isLeaving}
+                removeSession={removeSession}
               >
-                <MountedEditor
-                  content={session.content}
-                  currentFilePath={session.filePath}
-                  initialValue={session.value}
-                  cacheHit={session.cacheHit}
-                  inlineAsk={session.inlineAsk}
-                  unsaved={session.unsaved}
-                />
-              </EditorErrorBoundary>
-            </ClosedSessionRemoval>
+                <EditorErrorBoundary
+                  filePath={session.filePath}
+                  tick={session.tick}
+                >
+                  <MountedEditor
+                    content={session.content}
+                    currentFilePath={session.filePath}
+                    initialValue={session.value}
+                    cacheHit={session.cacheHit}
+                    inlineAsk={session.inlineAsk}
+                    unsaved={session.unsaved}
+                  />
+                </EditorErrorBoundary>
+              </ClosedSessionRemoval>
+            </SessionContent>
           </div>
         );
       })}

@@ -26,6 +26,7 @@ import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 import { useAssistantStore } from "@/store/assistant";
 import { useSettingsStore } from "@/store/settings";
 import { Editor } from "./Editor";
+import { measureChunkHeightsInBackground } from "./lib/chunk-heights";
 import { drawBlocksThrough } from "./lib/deferred-chunks";
 
 vi.mock("@tauri-apps/plugin-opener", async (importOriginal) => ({
@@ -50,6 +51,15 @@ vi.mock("@/hooks/useAutosave", async (importOriginal) => {
   return { ...original, writeLeftShardCaches: vi.fn(original.writeLeftShardCaches) };
 });
 
+vi.mock("./lib/chunk-heights", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./lib/chunk-heights")>();
+  return {
+    ...original,
+    measureChunkHeightsInBackground: vi.fn(
+      original.measureChunkHeightsInBackground,
+    ),
+  };
+});
 vi.mock("@/lib/commands/shards", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/commands/shards")>()),
   readMarkdownFile: vi.fn(),
@@ -251,18 +261,17 @@ describe("Editor", () => {
       await openNote(NOTE);
       act(() => useEditorStore.getState().closeFile());
 
+      // Off the page at once, and removed in the background.
       expect(screen.getByText("No shard open")).toBeTruthy();
-      const closed = document.querySelector("[data-slate-editor]");
-      expect(
-        closed?.closest('[class~="[content-visibility:hidden]"]'),
-      ).not.toBeNull();
+      expect(document.querySelector("[data-slate-editor]")).toBeNull();
+      expect(document.querySelector("[data-inactive-session]")).not.toBeNull();
 
       await waitFor(() =>
-        expect(document.querySelector("[data-slate-editor]")).toBeNull(),
+        expect(document.querySelector("[data-inactive-session]")).toBeNull(),
       );
     });
 
-    it("removes a long shard from its end, a part at a time, taking no input", async () => {
+    it("takes a long shard off the page and undraws it there", async () => {
       const long = Array.from(
         { length: 120 },
         (_, index) => `Paragraph ${index}.`,
@@ -271,19 +280,14 @@ describe("Editor", () => {
       await waitFor(() =>
         expect(document.querySelector("[data-undrawn-chunk]")).toBeNull(),
       );
+      const closed = editor.api.toDOMNode(editor)!;
       act(() => useEditorStore.getState().closeFile());
+      expect(closed.isConnected).toBe(false);
 
-      // Placeholders come back from the end while the start is still there.
-      const closed = document.querySelector<HTMLElement>("[data-slate-editor]")!;
+      // Its parts go back to placeholders, and nothing is drawn again.
       await waitFor(() =>
         expect(closed.querySelector("[data-undrawn-chunk]")).not.toBeNull(),
       );
-      const first = screen.getByText("Paragraph 0.");
-      expect(
-        closed.lastElementChild?.matches("[data-undrawn-chunk]"),
-      ).toBe(true);
-
-      // Nothing is drawn again, and input never reaches it.
       const undrawn = closed.querySelectorAll("[data-undrawn-chunk]").length;
       act(() => {
         drawBlocksThrough(editor, editor.children.length - 1);
@@ -291,16 +295,39 @@ describe("Editor", () => {
       expect(
         closed.querySelectorAll("[data-undrawn-chunk]").length,
       ).toBeGreaterThanOrEqual(undrawn);
-      const mouseDown = createEvent.mouseDown(first);
-      fireEvent(first, mouseDown);
-      expect(mouseDown.defaultPrevented).toBe(true);
-      act(() => closed.focus());
-      expect(document.activeElement).not.toBe(closed);
 
       await waitFor(() =>
-        expect(document.querySelector("[data-slate-editor]")).toBeNull(),
+        expect(document.querySelector("[data-inactive-session]")).toBeNull(),
       );
       expect(useEditorStore.getState().isDirty).toBe(false);
+    });
+
+    it("stops measuring a shard's chunks once it's closed", async () => {
+      const measure = vi.mocked(measureChunkHeightsInBackground);
+      const { measureChunkHeightsInBackground: original } = await vi.importActual<
+        typeof import("./lib/chunk-heights")
+      >("./lib/chunk-heights");
+      const running = new Set<() => void>();
+      measure.mockImplementation((root, options) => {
+        const stopMeasuring = original(root, options);
+        const stop = () => {
+          running.delete(stop);
+          stopMeasuring();
+        };
+        running.add(stop);
+        return stop;
+      });
+
+      try {
+        await openNote(NOTE);
+        expect(running.size).toBe(1);
+        act(() => useEditorStore.getState().closeFile());
+
+        expect(document.querySelector("[data-inactive-session]")).not.toBeNull();
+        expect(running.size).toBe(0);
+      } finally {
+        measure.mockImplementation(original);
+      }
     });
 
     it("keeps the next shard's editor when the previous one is removed", async () => {

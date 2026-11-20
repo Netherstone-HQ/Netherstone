@@ -4,8 +4,11 @@ import path from "node:path";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 
+import { loadMarkdown } from "@/test/markdown";
+
 import { fixtureDocument, fixtureImages } from "./__fixtures__/fixture";
-import { latexToOmml, renderDocx } from "./docx";
+import { buildExportDocument } from "./build";
+import { latexToOmml, renderDocx, type MeasureText } from "./docx";
 import type { ExportOptions } from "./options";
 
 const OPTIONS: ExportOptions = {
@@ -118,5 +121,72 @@ describe("Word export", () => {
     );
     expect(await zip.file("word/settings.xml")!.async("string")).toContain('<m:mathPr><m:mathFont m:val="Cambria Math"/>');
     expect(await zip.file("word/fontTable.xml")!.async("string")).toContain('<w:font w:name="Cambria Math">');
+  });
+
+  describe("tables wider than the page", () => {
+    const header = ["Setup", "Report", "Accurate", "Specific", "Groups", "Coverage", "Strategies", "Plan", "Materials", "Finish", "Score"];
+    const markdown = [
+      `| ${header.join(" | ")} |`,
+      `|${" --- |".repeat(header.length)}`,
+      `| Packets V5 | 9637 | 43 | 26 | 44 | 65 | 91 | 88 | 92 | 98 | **69** |`,
+      "",
+      "| Name | Value |",
+      "| --- | --- |",
+      "| Small | 1 |",
+    ].join("\n");
+    const doc = buildExportDocument(loadMarkdown(markdown) as unknown[], { fileName: "wide", locale: "en-US" });
+    // Every character as wide as its size; bold a little wider.
+    const measureText: MeasureText = (text, style) => text.length * style.size * (style.bold ? 0.6 : 0.5);
+    const options: ExportOptions = { ...OPTIONS, typeface: "geist", textSize: "large" };
+
+    async function tables(measure?: MeasureText) {
+      const zip = await JSZip.loadAsync(await renderDocx(doc, { images: new Map(), options, toPng: async () => null, measureText: measure }));
+      const xml = await zip.file("word/document.xml")!.async("string");
+      const styles = await zip.file("word/styles.xml")!.async("string");
+      const found = [...xml.matchAll(/<w:tbl>.*?<\/w:tbl>/g)].map(([table]) => ({
+        width: Number(table.match(/<w:tblW w:type="dxa" w:w="(\d+)"/)![1]),
+        grid: [...table.matchAll(/<w:gridCol w:w="(\d+)"\/>/g)].map((match) => Number(match[1])),
+        styles: new Set([...table.matchAll(/<w:pStyle w:val="([^"]+)"\/>/g)].map((match) => match[1])),
+        padding: Number(table.match(/<w:tcMar>.*?<w:left w:type="dxa" w:w="(\d+)"/)![1]),
+      }));
+      return { found, styles };
+    }
+
+    it("shrinks the text just enough that no word breaks, and fills the page width", async () => {
+      const { found, styles } = await tables(measureText);
+      const [wide, narrow] = found;
+      expect(wide.grid.reduce((sum, value) => sum + value, 0)).toBe(wide.width);
+      // Large text is 12 pt, and table headers 10.8 pt; both shrink, to whole half points.
+      const ids = [...wide.styles].sort();
+      expect(ids).toEqual([expect.stringMatching(/^NormalAt\d+$/), expect.stringMatching(/^TableHeaderAt\d+$/)]);
+      const [body, header] = ids.map((id) => Number(id.match(/\d+$/)![0]) / 2);
+      expect(body).toBeLessThan(12);
+      expect(header).toBeLessThan(10.8);
+      expect(styles).toContain(`<w:style w:type="paragraph" w:styleId="${ids[1]}"><w:name w:val="Table Header ${header} pt"/><w:basedOn w:val="TableHeader"/>`);
+      expect(wide.padding).toBeLessThan(140);
+
+      // Each column holds its longest word at the shrunk size, with its padding and rules.
+      const rules = 2 * Math.ceil((5 / 8) * 20);
+      const words = [["Setup", "Packets"], ["Report", "9637"], ["Accurate"], ["Specific"], ["Groups"], ["Coverage"], ["Strategies"], ["Plan"], ["Materials"], ["Finish"], ["Score"]];
+      wide.grid.forEach((column, index) => {
+        const longest = Math.max(
+          header * 0.6 * words[index][0].length,
+          ...words[index].slice(1).map((word) => body * 0.5 * word.length),
+        );
+        expect(column - 2 * wide.padding - rules).toBeGreaterThanOrEqual(Math.round(longest * 20));
+      });
+
+      // A table that fits keeps its size and even columns.
+      expect(narrow.grid).toEqual([narrow.width / 2, narrow.width / 2]);
+      expect(narrow.styles).toEqual(new Set(["TableHeader"]));
+      expect(narrow.padding).toBe(140);
+    });
+
+    it("keeps the writer's columns where text can't be measured", async () => {
+      const { found, styles } = await tables();
+      expect(found[0].styles).toEqual(new Set(["TableHeader"]));
+      expect(new Set(found[0].grid).size).toBeLessThanOrEqual(2);
+      expect(styles).not.toMatch(/styleId="\w+At\d+"/);
+    });
   });
 });

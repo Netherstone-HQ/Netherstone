@@ -26,7 +26,7 @@
     "security": {
       "csp": {
         "default-src": "'self'",
-        "script-src": "'self' 'wasm-unsafe-eval' 'sha256-UBe/P1k6jQKMGqi/8Nhi5IvRzF3HlPzOPe0io8R06Fs='",
+        "script-src": "'self' 'wasm-unsafe-eval' 'sha256-lruQ93kXawxo6Z8KdWgsagp/0Q+pwH0yZNEnmQCAQNI='",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' asset: http://asset.localhost data: blob: https: http:",
         "media-src": "'self' asset: http://asset.localhost data: blob: https: http:",

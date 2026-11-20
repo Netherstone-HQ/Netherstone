@@ -3,12 +3,39 @@
  * so they're plain strings of browser JavaScript.
  */
 
-/** Waits until fonts and images are ready, then tells the app to print. */
+/**
+ * Paper can't scroll sideways, so a table wider than the page is scaled
+ * down until it fits: zoom shrinks its text and padding together, as the
+ * Word export shrinks such a table's text. Called with false where the page
+ * can scroll.
+ */
+export const FIT_TABLES = `function fitTables(onPaper) {
+  Array.prototype.forEach.call(document.querySelectorAll(".table-wrap"), function (wrap) {
+    wrap.style.zoom = "";
+    if (!onPaper) return;
+    // Both widths are in the table's own zoomed pixels. Borders stay whole
+    // pixels when zoomed, so one step can fall a little short; the next
+    // starts from what's left, until it fits or stops getting narrower.
+    var zoom = 1;
+    var over = wrap.scrollWidth / wrap.clientWidth;
+    while (over > 1) {
+      zoom /= over;
+      wrap.style.zoom = String(zoom);
+      var next = wrap.scrollWidth / wrap.clientWidth;
+      if (next >= over) break;
+      over = next;
+    }
+  });
+}`;
+
+/** Waits until fonts and images are ready, fits wide tables, then tells the app to print. */
 export const PRINT_READY_SCRIPT = `(function () {
+  ${FIT_TABLES}
   var images = Array.prototype.map.call(document.images, function (image) {
     return image.decode ? image.decode().catch(function () {}) : null;
   });
   Promise.all([document.fonts ? document.fonts.ready : null].concat(images)).then(function () {
+    fitTables(true);
     setTimeout(function () { fetch("ready").catch(function () {}); }, 50);
   });
 })();`;
@@ -29,6 +56,7 @@ export const PRINT_READY_SCRIPT = `(function () {
  * preview looks like part of the window.
  */
 export const PREVIEW_SCRIPT = `(function () {
+  ${FIT_TABLES}
   var root = document.documentElement;
   var flow = document.getElementById("flow");
   var pages = document.getElementById("pages");
@@ -123,6 +151,7 @@ export const PREVIEW_SCRIPT = `(function () {
     root.setAttribute("data-layout", state.layout);
     root.style.background = state.layout === "pages" && params.bg ? params.bg : "";
     fit();
+    fitTables(state.layout === "pages");
     var result = paginate();
     var range = root.scrollHeight - window.innerHeight;
     window.scrollTo(0, ratio * Math.max(range, 0));

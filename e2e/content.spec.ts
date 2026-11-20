@@ -136,7 +136,8 @@ test("pictures, sound, video, embeds and math in a shard load", async ({ page })
   await expect(photo).toHaveJSProperty("naturalWidth", 1);
   await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
   await expect.poll(() => requests.some((url) => url.startsWith("http://asset.localhost/") && url.includes("tone.wav"))).toBe(true);
-  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  // The test's clip isn't a real video, so it waits behind Play.
+  await expect(editor(page).getByText("clip.mp4")).toBeVisible();
   await expect.poll(() => requests.some((url) => url.startsWith("http://asset.localhost/") && url.includes("clip.mp4"))).toBe(true);
 
   // Pictures and videos from the web are asked for (the test answers none).
@@ -501,13 +502,14 @@ test("dropped sound, video and other files are added and show", async ({ page })
   }
 
   await expect(editor(page).locator("audio[src*='tone.wav']")).toHaveCount(1);
-  await expect(editor(page).locator("video[src*='clip.mp4']")).toHaveCount(1);
+  // The test's clip isn't a real video, so it waits behind Play.
+  await expect(editor(page).getByText("clip.mp4")).toBeVisible();
   await expect(editor(page).getByText("Report.pdf").first()).toBeVisible();
   await expect.poll(() => statuses.get("/home/me/Vault/_attachments/tone.wav")).toBe(200);
   await expect.poll(() => statuses.get("/home/me/Vault/_attachments/clip.mp4")).toBe(200);
 });
 
-test("a video the player can't load from its URL plays from a copy", async ({ page }) => {
+test("a video the player can't load from its URL plays from a copy on Play", async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { isTauri: boolean }).isTauri = true;
   });
@@ -517,5 +519,9 @@ test("a video the player can't load from its URL plays from a copy", async ({ pa
     assets: { "_attachments/clip.webm": Buffer.from(TINY_WEBM, "base64") },
     open: "Clip.md",
   });
+  // Nothing is read until Play.
+  await expect(editor(page).getByRole("button", { name: "Play" })).toBeVisible();
+  await expect(editor(page).getByText("clip.webm")).toBeVisible();
+  await editor(page).getByRole("button", { name: "Play" }).click();
   await expect(editor(page).locator("video[src^='blob:']")).toHaveCount(1);
 });

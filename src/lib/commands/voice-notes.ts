@@ -1,0 +1,69 @@
+import { invoke } from "@tauri-apps/api/core";
+import type { PersistedAttachment } from "./attachments";
+import { assertTauri } from "./tauri";
+
+/** Why a recording couldn't be written or saved. */
+export type VoiceNoteWriteError =
+  | { kind: "diskFull" }
+  | { kind: "failed"; message: string };
+
+export function isVoiceNoteWriteError(
+  error: unknown,
+): error is VoiceNoteWriteError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    ((error as { kind?: unknown }).kind === "diskFull" ||
+      (error as { kind?: unknown }).kind === "failed")
+  );
+}
+
+/** Starts a temporary file for a new recording. */
+export async function beginVoiceNote(): Promise<{ syncLimitBytes: number }> {
+  assertTauri();
+  return invoke("voice_note_begin");
+}
+
+/** Adds bytes to the recording's temporary file. */
+export async function appendVoiceNote(bytes: Uint8Array): Promise<void> {
+  assertTauri();
+  await invoke("voice_note_append", bytes);
+}
+
+/**
+ * Stores the recording in `vaultPath` as `fileName`, with its first
+ * `replaces` bytes swapped for `head`.
+ */
+export async function saveVoiceNote(
+  vaultPath: string,
+  fileName: string,
+  head: Uint8Array,
+  replaces: number,
+): Promise<PersistedAttachment> {
+  assertTauri();
+  return invoke<PersistedAttachment>("voice_note_save", head, {
+    headers: {
+      "x-file-name": encodeURIComponent(fileName),
+      "x-vault-path": encodeURIComponent(vaultPath),
+      "x-head-replaces": String(replaces),
+    },
+  });
+}
+
+/** Drops the recording and its temporary file. */
+export async function discardVoiceNote(): Promise<void> {
+  assertTauri();
+  await invoke("voice_note_discard");
+}
+
+/** Whether this system has a page to turn microphone access on. */
+export async function microphoneSettingsAvailable(): Promise<boolean> {
+  assertTauri();
+  return invoke<boolean>("microphone_settings_available");
+}
+
+/** Opens the system's microphone privacy page. */
+export async function openMicrophoneSettings(): Promise<void> {
+  assertTauri();
+  await invoke("open_microphone_settings");
+}

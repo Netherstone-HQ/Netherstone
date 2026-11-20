@@ -88,6 +88,8 @@ commands.allow = [
   "voice_note_append",
   "voice_note_save",
   "voice_note_discard",
+  "microphone_settings_available",
+  "open_microphone_settings",
   "import_attachment",
   "fix_imported_links",
   "file_exists",

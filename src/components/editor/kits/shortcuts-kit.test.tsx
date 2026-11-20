@@ -67,8 +67,11 @@ describe("editor shortcuts", () => {
       const before = JSON.stringify([editor.children, editor.api.marks()]);
       expect(press(shortcut.keys[0]), shortcut.id).toEqual({ handled: true, prevented: true });
       const after = JSON.stringify([editor.children, editor.api.marks()]);
-      // A paragraph is already a paragraph.
-      if (shortcut.id !== "paragraph") expect(after, shortcut.id).not.toBe(before);
+      // A paragraph is already a paragraph. A voice note needs an open
+      // shard and a microphone; the browser tests record one.
+      if (shortcut.id !== "paragraph" && shortcut.id !== "voiceNote") {
+        expect(after, shortcut.id).not.toBe(before);
+      }
     }
   });
 

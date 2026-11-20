@@ -215,6 +215,8 @@ pub fn run() {
             voice_notes::voice_note_append,
             voice_notes::voice_note_save,
             voice_notes::voice_note_discard,
+            microphone::microphone_settings_available,
+            microphone::open_microphone_settings,
             import::commands::import_attachment,
             import::commands::fix_imported_links,
             attachments::commands::file_exists,

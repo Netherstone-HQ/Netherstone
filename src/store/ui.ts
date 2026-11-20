@@ -13,6 +13,7 @@ export type SettingsCategory =
   | "general"
   | "appearance"
   | "editor"
+  | "microphone"
   | "files"
   | "sync"
   | "vault"

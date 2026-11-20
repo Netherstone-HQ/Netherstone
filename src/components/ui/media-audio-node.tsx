@@ -15,6 +15,7 @@ import {
   type ResolvedMediaSource,
 } from "@/lib/media-source";
 
+import { AudioPlayer } from "./audio-player";
 import { Caption, CaptionTextarea } from "./caption";
 import {
   MediaFileRow,
@@ -22,6 +23,7 @@ import {
   MissingVaultFileRow,
   UnsyncedTag,
 } from "./media-file-row";
+import { openResolvedSource } from "./media-file-node";
 import { useMediaNodeActions } from "./media-node-actions";
 import type { WithPersistedMediaMetadata } from "./media-types";
 import { useMediaState } from "./use-media-state";
@@ -225,9 +227,15 @@ export const AudioElement = withHOC(
           className="group relative cursor-default"
           contentEditable={false}
         >
-          <div className="h-16">
-            <audio className="size-full" src={renderUrl} controls />
-          </div>
+          <AudioPlayer
+            url={renderUrl}
+            onOpen={() =>
+              void openResolvedSource(resolvedSource, source).catch((error) =>
+                console.error("[media-audio-node] Couldn't open", error),
+              )
+            }
+            onRemove={mediaActions.canEdit ? mediaActions.removeNode : undefined}
+          />
 
           <UnsyncedTag className="mt-1.5" metadata={props.element} />
 

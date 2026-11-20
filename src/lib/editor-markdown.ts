@@ -344,6 +344,7 @@ const TRANSIENT_TYPES = new Set([
   "mention_input",
   "slash_input",
   "placeholder",
+  "voice_recording",
 ]);
 
 const MEDIA_TYPES = new Set(["audio", "file", "img", "video"]);

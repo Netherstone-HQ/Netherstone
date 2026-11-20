@@ -38,6 +38,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = window.document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(mode);
+    // Built-in controls, such as scrollbars and media controls, follow too.
+    root.style.colorScheme = mode;
 
     // Named themes recolor the light or dark tokens.
     if (isNamedTheme(theme)) root.dataset.theme = theme;

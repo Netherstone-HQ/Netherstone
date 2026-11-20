@@ -29,5 +29,8 @@
   "claudeCodeDownload": "https://claude.com/product/claude-code",
   "cursorDownload": "https://cursor.com/download",
   "vscodeDownload": "https://code.visualstudio.com/download",
-  "gooseDownload": "https://block.github.io/goose/docs/getting-started/installation"
+  "gooseDownload": "https://block.github.io/goose/docs/getting-started/installation",
+
+  "microphoneSettingsWindows": "ms-settings:privacy-microphone",
+  "microphoneSettingsMacos": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
 }

@@ -64,6 +64,30 @@ pub fn enable_capture<R: Runtime>(view: &Webview<R>) {
 )))]
 pub fn enable_capture<R: Runtime>(_view: &Webview<R>) {}
 
+/// The system's microphone privacy page, where it has one.
+fn settings_page() -> Option<&'static str> {
+    if cfg!(target_os = "windows") {
+        Some(crate::links::MICROPHONE_SETTINGS_WINDOWS)
+    } else if cfg!(target_os = "macos") {
+        Some(crate::links::MICROPHONE_SETTINGS_MACOS)
+    } else {
+        None
+    }
+}
+
+/// Whether this system has a page to turn microphone access on.
+#[tauri::command]
+pub fn microphone_settings_available() -> bool {
+    settings_page().is_some()
+}
+
+/// Opens the system's microphone privacy page.
+#[tauri::command(async)]
+pub fn open_microphone_settings() -> Result<(), String> {
+    let page = settings_page().ok_or("This system has no microphone settings page.")?;
+    tauri_plugin_opener::open_url(page, None::<&str>).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -136,20 +136,27 @@ async function createManagedMediaNode(
     currentVaultPath,
   );
   const type = getLocalMediaNodeTypeForFile(file, options.preferredType);
-  const renderUrl = toRenderableLocalUrl(persisted.absolutePath);
+  const node = managedMediaNode(persisted, type, file.name);
+  return { node, attachment: persisted };
+}
 
-  const node: LocalMediaNode = {
+/** The block for a file just stored in the vault. */
+export function managedMediaNode(
+  persisted: PersistedAttachment,
+  type: LocalMediaNodeType,
+  originalPath: string,
+): LocalMediaNode {
+  return {
     children: [{ text: "" }],
     name: type === KEYS.file ? persisted.originalName : undefined,
     type,
     url: persisted.assetPath,
     netherstoneSourceKind: "vault",
     netherstoneStoredSource: persisted.assetPath,
-    netherstoneOriginalPath: file.name,
+    netherstoneOriginalPath: originalPath,
     netherstoneImportedPath: persisted.absolutePath,
-    netherstoneRenderUrl: renderUrl,
+    netherstoneRenderUrl: toRenderableLocalUrl(persisted.absolutePath),
   };
-  return { node, attachment: persisted };
 }
 
 function insertMediaNodes(

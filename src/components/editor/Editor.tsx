@@ -141,13 +141,15 @@ function useModKeyLinks(ref: RefObject<HTMLElement | null>) {
       point(event.target instanceof Element ? event.target.closest(".editor-link") : null);
     };
     const leave = () => point(null);
-    root.addEventListener("mouseover", hover);
+    // Captured: a shard renders through a portal, so a handler in it that
+    // stops the event now does so before it bubbles up here.
+    root.addEventListener("mouseover", hover, true);
     root.addEventListener("mouseleave", leave);
     window.addEventListener("keydown", update);
     window.addEventListener("keyup", update);
     window.addEventListener("blur", release);
     return () => {
-      root.removeEventListener("mouseover", hover);
+      root.removeEventListener("mouseover", hover, true);
       root.removeEventListener("mouseleave", leave);
       window.removeEventListener("keydown", update);
       window.removeEventListener("keyup", update);

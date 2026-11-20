@@ -41,6 +41,7 @@ import type { AssetIO, ImageMap, LoadedImage } from "./assets";
 import type { Block, ExportDocument, Inline, ListItem, TableCell as ModelCell, TextMarks } from "./model";
 import { mathEngine } from "./math";
 import type { ExportOptions } from "./options";
+import { fitColumns } from "./table-fit";
 import { PALETTE, WORD_FONTS, pageGeometry, printType, type PrintType } from "./theme";
 
 export interface DocxRenderOptions {
@@ -49,14 +50,32 @@ export interface DocxRenderOptions {
   /** Converts images Word can't show (WebP, AVIF, SVG) to PNG. */
   toPng: AssetIO["toPng"];
   lang?: string;
+  /**
+   * Measures text as Word will set it, so tables too wide for the page are
+   * scaled to fit. Without it, columns keep the writer's widths.
+   */
+  measureText?: MeasureText;
 }
+
+/** A run of text as Word sets it. */
+export interface WordTextStyle {
+  font: keyof typeof WORD_FONTS;
+  bold: boolean;
+  italic: boolean;
+  /** In points. */
+  size: number;
+}
+
+/** The width of `text` in `style`, in points. */
+export type MeasureText = (text: string, style: WordTextStyle) => number;
 
 type DocxChild = Paragraph | Table;
 
 const TWIPS_PER_MM = 1440 / 25.4;
 const TWIPS_PER_PX = 15;
 const halfPoints = (points: number) => Math.round(points * 2);
-const twips = (points: number) => Math.round(points * 20);
+const TWIPS_PER_POINT = 20;
+const twips = (points: number) => Math.round(points * TWIPS_PER_POINT);
 const hex = (color: string) => color.replace("#", "").toUpperCase();
 
 const HEADING_STYLE_IDS = ["Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6"] as const;
@@ -65,6 +84,25 @@ const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } as const
 const NO_BORDERS = { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER };
 
 const LIST_INDENT = 360;
+const QUOTE_INDENT = 360;
+const CALLOUT_ICON_WIDTH = 460;
+/** Padding around a callout's text, left and right together. */
+const CALLOUT_TEXT_PADDING = 400;
+/** Padding around a code block's lines, on each side. */
+const CODE_PADDING_X = 240;
+const COLUMN_GUTTER = 360;
+/** The narrowest a boxed block (table, callout, code, card) is drawn. */
+const MIN_BOX_WIDTH = 1000;
+/** Left and right padding of a table cell, in twips. */
+const CELL_PADDING_X = 140;
+const CELL_PADDING_TOP = 100;
+const CELL_PADDING_BOTTOM = 60;
+/** Table rules, in eighths of a point. */
+const TABLE_RULE_EIGHTHS = 5;
+/** Sizes relative to the body text. */
+const TABLE_HEADER_RATIO = 0.9;
+const INLINE_CODE_RATIO = 0.84;
+const CHIP_RATIO = 0.82;
 const LIST_HANGING = 280;
 
 const WORD_IMAGE_TYPES: Partial<Record<LoadedImage["mime"], "png" | "jpg" | "gif" | "bmp">> = {
@@ -213,6 +251,15 @@ export function latexToOmml(tex: string, display = false): string | null {
 
 // ── Writer ──────────────────────────────────────────────────────────────────
 
+/** A paragraph style at a shrunk table's size, based on the style it shrinks. */
+interface ScaledStyle {
+  id: string;
+  name: string;
+  basedOn: string;
+  run: { size: number };
+  paragraph: { spacing?: { before?: number; after?: number } };
+}
+
 interface Context {
   /** Width available to content, in twips. */
   width: number;
@@ -230,18 +277,66 @@ class DocxWriter {
   private readonly type: PrintType;
   /** Fixed sizes (labels, cards) follow the chosen text size. */
   private readonly scale: number;
+  private readonly bodyFont: keyof typeof WORD_FONTS;
+  /** Below 1 inside a table shrunk to fit the page. */
+  private textScale = 1;
+  /** Paragraph styles at the sizes of shrunk tables, by id. */
+  private readonly scaledStyleDefs = new Map<string, ScaledStyle>();
 
   constructor(
     options: ExportOptions,
     private readonly images: Map<string, LoadedImage | null>,
+    private readonly measureText?: MeasureText,
   ) {
     this.fonts = wordFonts(options);
     this.type = printType(options.textSize);
     this.scale = this.type.body / 11;
+    this.bodyFont = options.typeface;
   }
 
   get numbering() {
     return [...this.numberingConfigs.values()];
+  }
+
+  get scaledStyles() {
+    return [...this.scaledStyleDefs.values()];
+  }
+
+  /** A font size in half points, shrunk inside a shrunk table. Rounded down there, so text never outgrows its column. */
+  private size(points: number) {
+    return this.textScale === 1 ? halfPoints(points) : Math.floor(points * this.textScale * 2);
+  }
+
+  /** The paragraph style to use: `id` itself, or its copy at a shrunk table's size. */
+  private styleFor(id: string | undefined): string | undefined {
+    if (this.textScale === 1) return id;
+    const base = id ?? "Normal";
+    const source = this.styleSizes(base);
+    const size = this.size(source.size);
+    const scaledId = `${base}At${size}`;
+    if (!this.scaledStyleDefs.has(scaledId)) {
+      const gap = (points: number | undefined) => (points === undefined ? undefined : twips(points * this.textScale));
+      this.scaledStyleDefs.set(scaledId, {
+        id: scaledId,
+        name: `${source.name} ${size / 2} pt`,
+        basedOn: base,
+        run: { size },
+        paragraph: source.before === undefined && source.after === undefined ? {} : { spacing: { before: gap(source.before), after: gap(source.after) } },
+      });
+    }
+    return scaledId;
+  }
+
+  /** The size and spacing a paragraph style sets, in points. */
+  private styleSizes(id: string): { name: string; size: number; before?: number; after?: number } {
+    const level = HEADING_STYLE_IDS.indexOf(id as (typeof HEADING_STYLE_IDS)[number]);
+    if (level >= 0) {
+      const heading = this.type.headings[(level + 1) as 1 | 2 | 3 | 4 | 5 | 6];
+      return { name: `Heading ${level + 1}`, size: heading.size, before: heading.before, after: heading.after };
+    }
+    if (id === "TableHeader") return { name: "Table Header", size: this.type.body * TABLE_HEADER_RATIO };
+    if (id === "Caption") return { name: "Caption", size: this.type.small };
+    return { name: id, size: this.type.body, after: this.type.paragraphGap };
   }
 
   // ── Inline content ────────────────────────────────────────────────────────
@@ -259,7 +354,7 @@ class DocxWriter {
 
     if (marks.code || marks.kbd) {
       options.font = fonts.mono;
-      options.size = halfPoints(this.type.body * 0.84);
+      options.size = this.size(this.type.body * INLINE_CODE_RATIO);
       options.shading = { type: ShadingType.CLEAR, color: "auto", fill: hex(marks.kbd ? PALETTE.codeSurface : PALETTE.surface) };
       if (marks.kbd) options.border = { style: BorderStyle.SINGLE, size: 4, color: hex(PALETTE.kbdBorder), space: 0 };
     }
@@ -272,7 +367,7 @@ class DocxWriter {
     return new TextRun({
       text: ` ${text} `,
       font: this.fonts.heading,
-      size: halfPoints(this.type.body * 0.82),
+      size: this.size(this.type.body * CHIP_RATIO),
       color: hex(muted ? PALETTE.muted : PALETTE.ink),
       shading: { type: ShadingType.CLEAR, color: "auto", fill: hex(PALETTE.surface) },
     });
@@ -281,7 +376,7 @@ class DocxWriter {
   private math(tex: string, display: boolean): ParagraphChild {
     const omml = latexToOmml(tex, display);
     if (!omml) {
-      return new TextRun({ text: tex, font: this.fonts.mono, size: halfPoints(this.type.body * 0.84), color: hex(PALETTE.muted) });
+      return new TextRun({ text: tex, font: this.fonts.mono, size: this.size(this.type.body * INLINE_CODE_RATIO), color: hex(PALETTE.muted) });
     }
     const xml = display
       ? `<m:oMathPara xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${omml}</m:oMathPara>`
@@ -329,9 +424,10 @@ class DocxWriter {
   }
 
   private paragraph(options: IParagraphOptions, context: Context): Paragraph {
-    const styled = context.style && !options.style ? { ...options, style: context.style } : options;
+    const style = this.styleFor(options.style ?? context.style);
+    const styled = style ? { ...options, style } : options;
     if (context.listLevel > 0 && !styled.numbering && !styled.indent) {
-      return new Paragraph({ ...styled, indent: { left: LIST_INDENT * context.listLevel + (context.style === "Quote" ? 360 : 0) } });
+      return new Paragraph({ ...styled, indent: { left: LIST_INDENT * context.listLevel + (context.style === "Quote" ? QUOTE_INDENT : 0) } });
     }
     return new Paragraph(styled);
   }
@@ -470,6 +566,7 @@ class DocxWriter {
     if (block.kind === "todo") {
       return block.items.flatMap((item) => [
         new Paragraph({
+          style: this.styleFor(undefined),
           indent: { left: LIST_INDENT * (level + 1) + 40, hanging: LIST_HANGING + 40 },
           children: [
             new CheckBox({
@@ -490,14 +587,14 @@ class DocxWriter {
     this.numberingInstance += 1;
     const instance = this.numberingInstance;
     return block.items.flatMap((item: ListItem) => [
-      new Paragraph({ numbering: { reference, level, instance }, children: this.inlines(item.content) }),
+      new Paragraph({ style: this.styleFor(undefined), numbering: { reference, level, instance }, children: this.inlines(item.content) }),
       ...this.blocks(item.children, childContext),
     ]);
   }
 
   /** A one-cell table: Word's way to give a block a background. */
   private panel(children: DocxChild[], context: Context, fill: string, margins = { x: 200, y: 160 }): Table {
-    const width = Math.max(1000, context.width - LIST_INDENT * context.listLevel);
+    const width = Math.max(MIN_BOX_WIDTH, context.width - LIST_INDENT * context.listLevel);
     return new Table({
       width: { size: width, type: WidthType.DXA },
       columnWidths: [width],
@@ -520,9 +617,9 @@ class DocxWriter {
   }
 
   private callout(block: Extract<Block, { type: "callout" }>, context: Context): Table {
-    const width = Math.max(1000, context.width - LIST_INDENT * context.listLevel);
-    const iconWidth = 460;
-    const inner = { width: width - iconWidth - 400, listLevel: 0 };
+    const width = Math.max(MIN_BOX_WIDTH, context.width - LIST_INDENT * context.listLevel);
+    const iconWidth = CALLOUT_ICON_WIDTH;
+    const inner = { width: width - iconWidth - CALLOUT_TEXT_PADDING, listLevel: 0 };
     return new Table({
       width: { size: width, type: WidthType.DXA },
       columnWidths: [iconWidth, width - iconWidth],
@@ -538,7 +635,7 @@ class DocxWriter {
               children: [
                 new Paragraph({
                   spacing: { after: 0 },
-                  children: [new TextRun({ text: block.icon, font: "Segoe UI Emoji", size: halfPoints(12.5 * this.scale) })],
+                  children: [new TextRun({ text: block.icon, font: "Segoe UI Emoji", size: this.size(12.5 * this.scale) })],
                 }),
               ],
             }),
@@ -561,7 +658,7 @@ class DocxWriter {
       children.push(
         new Paragraph({
           spacing: { after: 100 },
-          children: [new TextRun({ text: block.languageLabel, font: fonts.heading, size: halfPoints(7.5 * this.scale), color: hex(PALETTE.muted) })],
+          children: [new TextRun({ text: block.languageLabel, font: fonts.heading, size: this.size(7.5 * this.scale), color: hex(PALETTE.muted) })],
         }),
       );
     }
@@ -575,17 +672,17 @@ class DocxWriter {
                   new TextRun({
                     text: token.text.replace(/\t/g, "  "),
                     font: fonts.mono,
-                    size: halfPoints(this.type.code),
+                    size: this.size(this.type.code),
                     color: hex(token.color ?? PALETTE.ink),
                     bold: token.bold,
                     italics: token.italic,
                   }),
               )
-            : [new TextRun({ text: "", font: fonts.mono, size: halfPoints(this.type.code) })],
+            : [new TextRun({ text: "", font: fonts.mono, size: this.size(this.type.code) })],
         }),
       );
     }
-    return this.panel(children, context, hex(PALETTE.codeSurface), { x: 240, y: 200 });
+    return this.panel(children, context, hex(PALETTE.codeSurface), { x: CODE_PADDING_X, y: 200 });
   }
 
   private image(block: Extract<Block, { type: "image" }>, context: Context): DocxChild[] {
@@ -596,7 +693,7 @@ class DocxWriter {
             alignment: AlignmentType.CENTER,
             spacing: { before: 80, after: 200 },
             children: this.inlines(block.caption, { color: PALETTE.muted }),
-            style: "Caption",
+            style: this.styleFor("Caption"),
           }),
         ]
       : [];
@@ -613,8 +710,8 @@ class DocxWriter {
             right: { style: BorderStyle.DASHED, size: 4, color: hex(PALETTE.rule), space: 8 },
           },
           children: [
-            new TextRun({ text: "Image not available", font: this.fonts.heading, size: halfPoints(8.5 * this.scale), bold: true }),
-            new TextRun({ text: block.source || "No source", break: 1, font: this.fonts.heading, size: halfPoints(8.5 * this.scale), color: hex(PALETTE.muted) }),
+            new TextRun({ text: "Image not available", font: this.fonts.heading, size: this.size(8.5 * this.scale), bold: true }),
+            new TextRun({ text: block.source || "No source", break: 1, font: this.fonts.heading, size: this.size(8.5 * this.scale), color: hex(PALETTE.muted) }),
           ],
         }),
         ...caption,
@@ -653,14 +750,14 @@ class DocxWriter {
   private media(block: Extract<Block, { type: "media" }>, context: Context): Table {
     const { fonts } = this;
     const labels = { video: "Video", audio: "Audio", file: "File", embed: "Embedded page" } as const;
-    const name = new TextRun({ text: block.name, font: fonts.heading, size: halfPoints(9.5 * this.scale), color: hex(PALETTE.ink) });
+    const name = new TextRun({ text: block.name, font: fonts.heading, size: this.size(9.5 * this.scale), color: hex(PALETTE.ink) });
     const meta = new TextRun({
       text: block.isRemote ? `${labels[block.kind]} · ${block.url}` : labels[block.kind],
       font: fonts.heading,
-      size: halfPoints(8 * this.scale),
+      size: this.size(8 * this.scale),
       color: hex(PALETTE.muted),
     });
-    const width = Math.max(1000, context.width - LIST_INDENT * context.listLevel);
+    const width = Math.max(MIN_BOX_WIDTH, context.width - LIST_INDENT * context.listLevel);
     const border = { style: BorderStyle.SINGLE, size: 6, color: hex(PALETTE.rule) };
     return new Table({
       width: { size: width, type: WidthType.DXA },
@@ -688,21 +785,44 @@ class DocxWriter {
   }
 
   private table(block: Extract<Block, { type: "table" }>, context: Context): Table {
-    const width = Math.max(1000, context.width - LIST_INDENT * context.listLevel);
+    const width = Math.max(MIN_BOX_WIDTH, context.width - LIST_INDENT * context.listLevel);
     const columnCount = Math.max(1, ...block.rows.map((row) => row.reduce((sum, cell) => sum + cell.colSpan, 0)));
     const total = block.columnWidths?.reduce((sum, value) => sum + value, 0) ?? 0;
-    const columnWidths =
+    const preferred =
       block.columnWidths && block.columnWidths.length === columnCount && total
-        ? block.columnWidths.map((value) => Math.round((value / total) * width))
-        : Array.from({ length: columnCount }, () => Math.round(width / columnCount));
-    const border = { style: BorderStyle.SINGLE, size: 5, color: hex(PALETTE.rule) };
+        ? block.columnWidths
+        : Array.from({ length: columnCount }, () => 1);
+    // A cell's text loses the width of the rules on both its sides, which
+    // don't shrink with the text.
+    const ruleWidth = 2 * Math.ceil(twips(TABLE_RULE_EIGHTHS / 8));
+    const room = width - ruleWidth * columnCount;
+    const outerScale = this.textScale;
+    const minimums = this.measureText ? this.columnMinimums(block.rows, columnCount) : preferred.map(() => 0);
+    let { widths, scale } = fitColumns(preferred, minimums, room);
+    // Word sizes text in half points, so shrunk text comes out a little
+    // smaller than asked. Measured again at those sizes, the room it leaves
+    // goes back to the columns; if rounding still overflows, shrink again.
+    while (scale < 1) {
+      this.textScale = outerScale * scale;
+      const again = fitColumns(preferred, this.columnMinimums(block.rows, columnCount), room);
+      this.textScale = outerScale;
+      widths = again.widths;
+      if (again.scale === 1) break;
+      scale *= again.scale;
+    }
+    const columnWidths = widths.map((value) => value + ruleWidth);
+    const border = { style: BorderStyle.SINGLE, size: TABLE_RULE_EIGHTHS, color: hex(PALETTE.rule) };
+    const tableScale = outerScale * scale;
+    const padding = this.cellPadding(tableScale);
 
     let headerRows = 0;
     while (headerRows < block.rows.length && block.rows[headerRows].every((cell) => cell.header)) headerRows += 1;
 
     const cell = (model: ModelCell, columnIndex: number) => {
       const cellWidth = columnWidths.slice(columnIndex, columnIndex + model.colSpan).reduce((sum, value) => sum + value, 0);
-      const content = this.blocks(model.blocks, { width: cellWidth - 280, listLevel: 0, style: model.header ? "TableHeader" : undefined });
+      this.textScale = tableScale;
+      const content = this.blocks(model.blocks, { width: cellWidth - 2 * padding, listLevel: 0, style: model.header ? "TableHeader" : undefined });
+      this.textScale = outerScale;
       return new TableCell({
         columnSpan: model.colSpan > 1 ? model.colSpan : undefined,
         rowSpan: model.rowSpan > 1 ? model.rowSpan : undefined,
@@ -711,7 +831,12 @@ class DocxWriter {
         // The header shade comes from the table style, so only a colour the
         // cell was given is written on the cell itself.
         shading: model.background ? { type: ShadingType.CLEAR, color: "auto", fill: hex(model.background) } : undefined,
-        margins: { top: 100, bottom: 60, left: 140, right: 140 },
+        margins: {
+          top: Math.round(CELL_PADDING_TOP * tableScale),
+          bottom: Math.round(CELL_PADDING_BOTTOM * tableScale),
+          left: padding,
+          right: padding,
+        },
         children: content.length ? content : [new Paragraph({ children: [] })],
       });
     };
@@ -739,9 +864,172 @@ class DocxWriter {
     });
   }
 
+  // ── Fitting tables to the page ────────────────────────────────────────────
+
+  /** A table cell's left and right padding, in twips. */
+  private cellPadding(scale: number) {
+    return Math.round(CELL_PADDING_X * scale);
+  }
+
+  /** How narrow each column can be without breaking a word, in twips. */
+  private columnMinimums(rows: ModelCell[][], columnCount: number): number[] {
+    const minimums = Array.from({ length: columnCount }, () => 0);
+    const spanning: { start: number; end: number; width: number }[] = [];
+    const padding = 2 * this.cellPadding(this.textScale);
+    for (const row of rows) {
+      let column = 0;
+      for (const cell of row) {
+        // Whole twips, as Word lays them out, so rounding never takes from a word.
+        const width = Math.ceil(this.blocksMinimum(cell.blocks, cell.header, 0)) + padding;
+        const end = Math.min(column + cell.colSpan, columnCount);
+        if (end - column === 1) minimums[column] = Math.max(minimums[column], width);
+        else spanning.push({ start: column, end, width });
+        column += cell.colSpan;
+      }
+    }
+    // A cell across columns widens the columns it covers, evenly, where
+    // they're too narrow for it together.
+    for (const { start, end, width } of spanning) {
+      const missing = width - minimums.slice(start, end).reduce((sum, value) => sum + value, 0);
+      if (missing <= 0) continue;
+      for (let column = start; column < end; column += 1) minimums[column] += Math.ceil(missing / (end - start));
+    }
+    return minimums;
+  }
+
+  private blocksMinimum(blocks: Block[], header: boolean, indent: number): number {
+    return Math.max(0, ...blocks.map((block) => this.blockMinimum(block, header, indent)));
+  }
+
+  /** How narrow a block can be without breaking a word, in twips, as the writer lays it out. */
+  private blockMinimum(block: Block, header: boolean, indent: number): number {
+    const text: WordTextStyle = header
+      ? { font: "geist", bold: true, italic: false, size: this.type.body * TABLE_HEADER_RATIO }
+      : { font: this.bodyFont, bold: false, italic: false, size: this.type.body };
+    const nested = indent + LIST_INDENT;
+    switch (block.type) {
+      case "paragraph":
+        return indent + LIST_INDENT * (block.indent ?? 0) + this.longestWord(block.content, text);
+      case "heading": {
+        const size = this.type.headings[block.level].size;
+        return indent + this.longestWord(block.content, { font: "geist", bold: true, italic: false, size });
+      }
+      case "list":
+        return Math.max(
+          ...block.items.map((item) =>
+            Math.max(
+              nested + LIST_HANGING + this.longestWord(item.content, text),
+              this.blocksMinimum(item.children, header, nested),
+            ),
+          ),
+        );
+      case "quote":
+        return this.blocksMinimum(block.children, header, indent + QUOTE_INDENT);
+      case "toggle":
+        return Math.max(
+          indent + this.longestWord([{ type: "text", text: "▾ ", marks: {} }, ...block.summary], text),
+          this.blocksMinimum(block.children, header, nested),
+        );
+      case "callout": {
+        const inner = CALLOUT_ICON_WIDTH + CALLOUT_TEXT_PADDING + this.blocksMinimum(block.children, false, 0);
+        return indent + Math.max(MIN_BOX_WIDTH, inner);
+      }
+      case "code": {
+        const longest = Math.max(
+          0,
+          ...block.lines.map((tokens) =>
+            this.longestWord(
+              tokens.map((token) => ({ type: "text", text: token.text, marks: { bold: token.bold, italic: token.italic } })),
+              { font: "mono", bold: false, italic: false, size: this.type.code },
+            ),
+          ),
+        );
+        return indent + Math.max(MIN_BOX_WIDTH, 2 * CODE_PADDING_X + longest);
+      }
+      case "table": {
+        const columnCount = Math.max(1, ...block.rows.map((row) => row.reduce((sum, cell) => sum + cell.colSpan, 0)));
+        const columns = this.columnMinimums(block.rows, columnCount).reduce((sum, value) => sum + value, 0);
+        return indent + Math.max(MIN_BOX_WIDTH, columns);
+      }
+      case "columns":
+        return (
+          indent +
+          block.columns.reduce((sum, column) => sum + this.blocksMinimum(column, header, 0), 0) +
+          COLUMN_GUTTER * (block.columns.length - 1)
+        );
+      case "media":
+        return indent + MIN_BOX_WIDTH;
+      // Images shrink to their column; the rest has no words to keep whole.
+      case "image":
+      case "math":
+      case "rule":
+      case "spacer":
+      case "toc":
+        return indent;
+    }
+  }
+
+  /**
+   * The widest run of text with no space to break at, in twips. Equations
+   * add nothing: Word lays them out itself, and they're rare in tables.
+   */
+  private longestWord(inlines: Inline[], base: WordTextStyle): number {
+    let longest = 0;
+    let current = 0;
+    const add = (text: string, style: WordTextStyle) => {
+      for (const part of text.split(/(\s+)/)) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) {
+          current = 0;
+          continue;
+        }
+        current += this.measured(part, style);
+        longest = Math.max(longest, current);
+      }
+    };
+    const walk = (items: Inline[], style: WordTextStyle) => {
+      for (const inline of items) {
+        switch (inline.type) {
+          case "text": {
+            const { marks } = inline;
+            const mono = marks.code || marks.kbd;
+            add(inline.text, {
+              font: mono ? "mono" : style.font,
+              bold: style.bold || Boolean(marks.bold),
+              italic: style.italic || Boolean(marks.italic),
+              size: mono ? this.type.body * INLINE_CODE_RATIO : style.size,
+            });
+            break;
+          }
+          case "link":
+            walk(inline.children, style);
+            break;
+          case "mention":
+            add(` ${inline.label} `, { font: "geist", bold: false, italic: false, size: this.type.body * CHIP_RATIO });
+            break;
+          case "date":
+            add(` ${inline.text} `, { font: "geist", bold: false, italic: false, size: this.type.body * CHIP_RATIO });
+            break;
+          case "break":
+            current = 0;
+            break;
+          case "math":
+            break;
+        }
+      }
+    };
+    walk(inlines, base);
+    return longest;
+  }
+
+  /** The width of `text` in twips, at the size Word gives it in the table being measured. */
+  private measured(text: string, style: WordTextStyle): number {
+    return Math.ceil(this.measureText!(text, { ...style, size: this.size(style.size) / 2 }) * TWIPS_PER_POINT);
+  }
+
   private columns(block: Extract<Block, { type: "columns" }>, context: Context): Table {
-    const width = Math.max(1000, context.width - LIST_INDENT * context.listLevel);
-    const gutter = 360;
+    const width = Math.max(MIN_BOX_WIDTH, context.width - LIST_INDENT * context.listLevel);
+    const gutter = COLUMN_GUTTER;
     const columnWidths = block.widths.map((share) => Math.round(share * width));
     return new Table({
       width: { size: width, type: WidthType.DXA },
@@ -783,7 +1071,7 @@ class DocxWriter {
             new InternalHyperlink({
               anchor: bookmarkId(entry.id),
               children: [
-                new TextRun({ text: entry.text, font: this.fonts.heading, size: halfPoints(this.type.body * 0.92), color: hex(PALETTE.muted) }),
+                new TextRun({ text: entry.text, font: this.fonts.heading, size: this.size(this.type.body * 0.92), color: hex(PALETTE.muted) }),
               ],
             }),
           ],
@@ -824,7 +1112,7 @@ const TABLE_STYLE =
   `<w:style w:type="table" w:styleId="${TABLE_STYLE_ID}"><w:name w:val="Shard Table"/><w:tblPr/>` +
   `<w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${hex(PALETTE.tableHeader)}"/></w:tcPr></w:tblStylePr></w:style>`;
 
-function documentStyles(fonts: WordFonts, type: PrintType, lang: string) {
+function documentStyles(fonts: WordFonts, type: PrintType, lang: string, scaledStyles: ScaledStyle[]) {
   const ink = hex(PALETTE.ink);
   const paragraphStyles = HEADING_STYLE_IDS.map((id, index) => {
     const level = (index + 1) as 1 | 2 | 3 | 4 | 5 | 6;
@@ -863,7 +1151,7 @@ function documentStyles(fonts: WordFonts, type: PrintType, lang: string) {
         quickFormat: true,
         run: { italics: true },
         paragraph: {
-          indent: { left: 360 },
+          indent: { left: QUOTE_INDENT },
           border: { left: { style: BorderStyle.SINGLE, size: 12, color: hex(PALETTE.rule), space: 12 } },
         },
       },
@@ -871,7 +1159,7 @@ function documentStyles(fonts: WordFonts, type: PrintType, lang: string) {
         id: "TableHeader",
         name: "Table Header",
         basedOn: "Normal",
-        run: { font: fonts.heading, bold: true, size: halfPoints(type.body * 0.9) },
+        run: { font: fonts.heading, bold: true, size: halfPoints(type.body * TABLE_HEADER_RATIO) },
         paragraph: { spacing: { after: 0 } },
       },
       {
@@ -889,6 +1177,7 @@ function documentStyles(fonts: WordFonts, type: PrintType, lang: string) {
         run: { font: fonts.heading, size: halfPoints(type.footer), color: hex(PALETTE.muted) },
         paragraph: { spacing: { after: 0 } },
       },
+      ...scaledStyles,
     ],
   };
 }
@@ -966,7 +1255,7 @@ export async function renderDocx(doc: ExportDocument, options: DocxRenderOptions
   const fonts = wordFonts(options.options);
 
   const images = await wordImages(options.images, options.toPng);
-  const writer = new DocxWriter(options.options, images);
+  const writer = new DocxWriter(options.options, images, options.measureText);
   const body = writer.blocks(doc.blocks, { width: contentWidth, listLevel: 0 });
 
   const footer = new Footer({
@@ -985,7 +1274,7 @@ export async function renderDocx(doc: ExportDocument, options: DocxRenderOptions
   const document = new Document({
     creator: "Netherstone",
     title: doc.title,
-    styles: documentStyles(fonts, type, options.lang ?? "en-US"),
+    styles: documentStyles(fonts, type, options.lang ?? "en-US", writer.scaledStyles),
     numbering: { config: writer.numbering as never },
     features: {},
     sections: [

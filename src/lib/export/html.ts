@@ -407,7 +407,10 @@ body{margin:0;background:#fff;color:var(--ink);font-kerning:normal;-webkit-font-
 .code pre{white-space:pre-wrap}`;
 }
 
-/** The page the PDF is printed from. */
+/**
+ * The page the PDF is printed from. The body is as wide on screen as on
+ * paper, so wide tables are fitted to the paper before printing.
+ */
 function printCss(options: ExportOptions, title: string) {
   const page = pageGeometry(options.pageSize, options.margins);
   const footerText = `font-family:${FONT_STACKS.geist};font-size:7.5pt;color:${PALETTE.muted};vertical-align:middle`;
@@ -416,7 +419,8 @@ function printCss(options: ExportOptions, title: string) {
     : "";
   return `${paperBaseCss(options)}
 @page{size:${page.widthMm}mm ${page.heightMm}mm;margin:${page.marginTopMm}mm ${page.marginRightMm}mm ${page.marginBottomMm}mm ${page.marginLeftMm}mm;${footer}}
-html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}`;
+html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{width:${page.widthMm - page.marginLeftMm - page.marginRightMm}mm}`;
 }
 
 /** Sheets of paper drawn in the export window, one per printed page. */

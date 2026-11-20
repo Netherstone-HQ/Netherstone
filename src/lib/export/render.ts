@@ -14,6 +14,8 @@ import { renderHtmlDocument, renderPreviewDocument } from "./html";
 import { loadMath } from "./math";
 import type { ExportDocument } from "./model";
 import type { ExportOptions } from "./options";
+import { WORD_FONTS } from "./theme";
+import type { MeasureText, WordTextStyle } from "./docx";
 
 export { previewLook } from "./html";
 
@@ -107,6 +109,41 @@ export function renderPrintPage(prepared: PreparedExport, options: ExportOptions
 /** A Word document. The Word writer loads the first time one is made. */
 export async function renderWord(prepared: PreparedExport, options: ExportOptions): Promise<Uint8Array> {
   const { doc, images, io } = prepared;
-  const { renderDocx } = await import("./docx");
-  return renderDocx(doc, { images, options, toPng: io.toPng, lang: lang() });
+  const [{ renderDocx }, measureText] = await Promise.all([import("./docx"), wordTextMeasure()]);
+  return renderDocx(doc, { images, options, toPng: io.toPng, lang: lang(), measureText });
+}
+
+const POINTS_PER_PIXEL = 72 / 96;
+
+/**
+ * Measures text for the Word writer with the fonts the page loaded (the
+ * editor's own) and with the stand-ins Word uses where they aren't
+ * installed, keeping the wider, so a word fits whichever Word shows.
+ */
+async function wordTextMeasure(): Promise<MeasureText | undefined> {
+  const context = document.createElement("canvas").getContext("2d");
+  if (!context) return undefined;
+  const families = (font: WordTextStyle["font"]) => {
+    const { name, fallback } = WORD_FONTS[font];
+    return [`"${name} Variable", "${name}"`, `"${fallback}"`];
+  };
+  const css = (style: WordTextStyle, family: string) =>
+    `${style.italic ? "italic " : ""}${style.bold ? 700 : 400} ${style.size}pt ${family}`;
+
+  // Fonts load when first used; canvas text doesn't wait for them.
+  const looks = [false, true].flatMap((bold) => [false, true].map((italic) => ({ bold, italic, size: 1 })));
+  await Promise.all(
+    (Object.keys(WORD_FONTS) as WordTextStyle["font"][]).flatMap((font) =>
+      looks.map((look) => document.fonts.load(css({ ...look, font }, families(font)[0])).catch(() => [])),
+    ),
+  );
+
+  return (text, style) => {
+    let widest = 0;
+    for (const family of families(style.font)) {
+      context.font = css(style, family);
+      widest = Math.max(widest, context.measureText(text).width);
+    }
+    return widest * POINTS_PER_PIXEL;
+  };
 }

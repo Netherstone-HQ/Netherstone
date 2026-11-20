@@ -25,7 +25,7 @@ export type Zoom = 80 | 90 | 100 | 110 | 125 | 150;
  * The microphone voice notes record from, or null for the system's default.
  * The name is kept so a device that's gone can still be told apart.
  */
-export type MicrophoneChoice = { deviceId: string; label: string } | null;
+type MicrophoneChoice = { deviceId: string; label: string } | null;
 /** The fewest minutes between automatic syncs. */
 type SyncInterval = 5 | 15 | 30 | 60;
 

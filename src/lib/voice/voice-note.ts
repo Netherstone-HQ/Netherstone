@@ -33,7 +33,7 @@ import {
 /** The block that stands for a recording while it runs. Never saved. */
 export const VOICE_RECORDING_TYPE = "voice_recording";
 
-export type VoiceNotePhase =
+type VoiceNotePhase =
   | "waiting"
   | "recording"
   | "paused"
@@ -178,7 +178,7 @@ function shardName(path: string): string {
 const pad = (value: number) => String(value).padStart(2, "0");
 
 /** "<shard> voice note 2026-11-20 14-05.webm" */
-export function voiceNoteFileName(shardPath: string, at: Date): string {
+function voiceNoteFileName(shardPath: string, at: Date): string {
   const date = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
   const time = `${pad(at.getHours())}-${pad(at.getMinutes())}`;
   return `${shardName(shardPath)} voice note ${date} ${time}.webm`;

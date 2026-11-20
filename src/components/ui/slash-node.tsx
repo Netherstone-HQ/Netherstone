@@ -11,6 +11,7 @@ import {
   LightbulbIcon,
   ListIcon,
   ListOrdered,
+  MicIcon,
   PilcrowIcon,
   Quote,
   RadicalIcon,
@@ -30,6 +31,10 @@ import {
   insertBlock,
   insertInlineElement,
 } from "@/components/transforms";
+import { useShortcutKeys } from "@/hooks/useShortcut";
+import { keysText } from "@/lib/platform";
+import type { ShortcutId } from "@/lib/shortcuts";
+import { startVoiceNote, VOICE_RECORDING_TYPE } from "@/lib/voice/voice-note";
 
 import {
   InlineCombobox,
@@ -47,6 +52,7 @@ type Item = {
   onSelect: (editor: PlateEditor, value: string) => void;
   keywords?: string[];
   label?: string;
+  shortcut?: ShortcutId;
 };
 
 type Group = {
@@ -151,10 +157,20 @@ const groups: Group[] = [
         label: "Diagram",
         value: ACTION_DIAGRAM,
       },
-    ].map((item) => ({
-      ...item,
-      onSelect: (editor, value) => insertBlock(editor, value, { upsert: true }),
-    })),
+    ]
+      .map<Item>((item) => ({
+        ...item,
+        onSelect: (editor, value) =>
+          insertBlock(editor, value, { upsert: true }),
+      }))
+      .concat({
+        icon: <MicIcon />,
+        keywords: ["record", "audio", "voice", "mic"],
+        label: "Voice note",
+        value: VOICE_RECORDING_TYPE,
+        shortcut: "voiceNote",
+        onSelect: (editor) => void startVoiceNote(editor),
+      }),
   },
   {
     group: "Inline",
@@ -206,6 +222,15 @@ function rankItems(search: string) {
     .map(({ item }) => item);
 }
 
+function ItemShortcut({ id }: { id: ShortcutId }) {
+  const keys = useShortcutKeys(id);
+  return keys ? (
+    <span className="ml-auto pl-6 text-ui-sm text-muted-foreground">
+      {keysText(keys)}
+    </span>
+  ) : null;
+}
+
 export function SlashInputElement(
   props: PlateElementProps<TComboboxInputElement>,
 ) {
@@ -213,7 +238,7 @@ export function SlashInputElement(
   const [value, setValue] = React.useState("");
   const search = value.trim().toLowerCase();
 
-  const renderItem = ({ icon, label, value, onSelect }: Item) => (
+  const renderItem = ({ icon, label, value, onSelect, shortcut }: Item) => (
     <InlineComboboxItem
       key={value}
       onClick={() => onSelect(editor, value)}
@@ -221,6 +246,7 @@ export function SlashInputElement(
     >
       <div className="mr-2 text-muted-foreground">{icon}</div>
       {label ?? value}
+      {shortcut && <ItemShortcut id={shortcut} />}
     </InlineComboboxItem>
   );
 

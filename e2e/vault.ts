@@ -105,6 +105,8 @@ declare global {
     __emit: (event: string, payload: unknown) => void;
     /** Runs the animation frames a test held back, and stops holding them. */
     __releaseFrames: () => void;
+    /** The bytes of the voice note being recorded, if any. */
+    __voiceNote: number[] | null;
   }
 }
 
@@ -394,6 +396,41 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             syncStatus: "syncable",
           };
         },
+        // A voice note collects its bytes here until it's saved.
+        voice_note_begin: () => {
+          window.__voiceNote = [];
+          return { syncLimitBytes: 20 * 1024 * 1024 };
+        },
+        voice_note_append: (bytes) => {
+          window.__voiceNote?.push(...(bytes as unknown as Uint8Array));
+          return null;
+        },
+        voice_note_save: (head, options) => {
+          const headers = options!.headers!;
+          allowFolder(decodeURIComponent(headers["x-vault-path"]));
+          const name = decodeURIComponent(headers["x-file-name"]);
+          const assetPath = `_attachments/${name}`;
+          const rest = (window.__voiceNote ?? []).slice(Number(headers["x-head-replaces"]));
+          const file = [...(head as unknown as Uint8Array), ...rest];
+          let text = "";
+          for (const byte of file) text += String.fromCharCode(byte);
+          binaries[assetPath] = btoa(text);
+          window.__voiceNote = null;
+          return {
+            assetPath,
+            absolutePath: `${vaultPath}/${assetPath}`,
+            originalName: name,
+            extension: "webm",
+            sizeBytes: file.length,
+            syncStatus: "syncable",
+            syncLimitBytes: 20 * 1024 * 1024,
+          };
+        },
+        voice_note_discard: () => {
+          window.__voiceNote = null;
+          return null;
+        },
+        microphone_settings_available: () => true,
         append_markdown_to_file: ({ filePath, markdown }) => {
           files[relative(filePath)] = `${files[relative(filePath)] ?? ""}\n${markdown}`;
           window.__saves.push({ filePath, content: files[relative(filePath)] });

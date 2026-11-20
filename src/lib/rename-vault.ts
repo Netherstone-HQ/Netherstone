@@ -6,6 +6,7 @@ import {
   captureOpenEditorSessionPathChangeSnapshot,
 } from "@/lib/open-editor-session-path-change";
 import { openVault } from "@/lib/open-vault";
+import { finishVoiceNoteBeforeLeaving } from "@/lib/voice/voice-note";
 import { remapShardLinkKeys } from "@/lib/shard-link-keys";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 
@@ -18,6 +19,8 @@ export async function renameVault(name: string) {
   const previousPath = useVaultStore.getState().currentVaultPath;
   if (!previousPath) return;
 
+  // The recording's file goes in the vault, so it's saved before the move.
+  await finishVoiceNoteBeforeLeaving();
   await flushPendingAutosave();
   await flushPendingDrawingSave();
   if (useEditorStore.getState().isDirty) {

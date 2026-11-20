@@ -85,7 +85,7 @@ function getResolvedAttachmentPath(
   return null;
 }
 
-async function openResolvedSource(
+export async function openResolvedSource(
   resolved: ResolvedMediaSource,
   fallbackSource: string,
 ): Promise<void> {

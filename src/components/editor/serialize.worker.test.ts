@@ -83,6 +83,19 @@ describe("markdown worker", () => {
     });
   });
 
+  it("drops a voice note still recording when saving", () => {
+    const children = [
+      { type: "p", children: [{ text: "Before" }] },
+      { type: "voice_recording", children: [{ text: "" }] },
+      { type: "p", children: [{ text: "After" }] },
+    ];
+
+    expect(send({ type: "serialize", requestId: 5, children })).toMatchObject({
+      type: "success",
+      markdown: "Before\n\nAfter\n",
+    });
+  });
+
   it("writes every mark the same way on every save", () => {
     // Highlight and kbd have no plugin in this editor.
     const children = [

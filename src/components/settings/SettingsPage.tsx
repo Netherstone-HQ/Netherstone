@@ -3,6 +3,7 @@ import {
   FolderIcon,
   InfoIcon,
   KeyboardIcon,
+  MicIcon,
   PaintbrushIcon,
   PaperclipIcon,
   PencilLineIcon,
@@ -19,6 +20,7 @@ import { AppearanceSettings } from "@/components/settings/sections/AppearanceSet
 import { EditorSettings } from "@/components/settings/sections/EditorSettings";
 import { FilesSettings } from "@/components/settings/sections/FilesSettings";
 import { GeneralSettings } from "@/components/settings/sections/GeneralSettings";
+import { MicrophoneSettings } from "@/components/settings/sections/MicrophoneSettings";
 import { ShortcutsSettings } from "@/components/settings/sections/ShortcutsSettings";
 import { SyncSettings } from "@/components/settings/sections/SyncSettings";
 import { VaultSettings } from "@/components/settings/sections/VaultSettings";
@@ -82,6 +84,12 @@ export const SETTINGS_CATEGORIES: Category[] = [
     icon: PencilLineIcon,
     Content: EditorSettings,
     startsGroup: true,
+  },
+  {
+    id: "microphone",
+    label: "Microphone",
+    icon: MicIcon,
+    Content: MicrophoneSettings,
   },
   {
     id: "vault",

@@ -20,6 +20,7 @@ import { ExitBreakPlugin, KEYS } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { findShortcut, type ShortcutIdIn } from '@/lib/shortcuts';
+import { toggleVoiceNote } from '@/lib/voice/voice-note';
 import { useSettingsStore } from '@/store/settings';
 
 /** What each editor shortcut does. False lets the keys through. */
@@ -51,6 +52,7 @@ const ACTIONS: Record<
     editor.getTransforms(BlockquotePlugin).blockquote.toggle(),
   codeBlock: (editor) =>
     editor.getTransforms(CodeBlockPlugin).code_block.toggle(),
+  voiceNote: (editor) => toggleVoiceNote(editor),
   newLineAfter: (editor) =>
     editor.getTransforms(ExitBreakPlugin).exitBreak.insert({}),
   newLineBefore: (editor) =>

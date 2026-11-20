@@ -383,6 +383,25 @@ fn register_existing_attachment(
 /// Copies the file at `source_path` in as a new attachment, or links the
 /// attachment already in the vault with the same content. A file already in
 /// the attachment folder is tracked where it is.
+/// Stores the file at `source_path` as an attachment named after
+/// `original_name`, such as a recording kept in a temporary file.
+pub fn persist_attachment_named(
+    conn: &Connection,
+    vault_path: &Path,
+    original_name: &str,
+    source_path: &Path,
+) -> Result<PersistedAttachment, String> {
+    let (hash, size_bytes) = hash_file(source_path)?;
+    persist_attachment(
+        conn,
+        vault_path,
+        original_name,
+        &hash,
+        size_bytes,
+        AttachmentSource::File(source_path),
+    )
+}
+
 pub fn persist_attachment_file(
     conn: &Connection,
     vault_path: &Path,

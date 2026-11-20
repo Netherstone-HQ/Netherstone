@@ -456,7 +456,8 @@ test("sound, video and other files outside the vault show and open", async ({ pa
 
   // The browser panel only shows the vault's own files.
   await file.hover();
-  await editor(page).getByRole("button", { name: "More" }).click();
+  // The sound's player has a More menu of its own.
+  await editor(page).getByRole("button", { name: "More" }).last().click();
   await expect(page.getByRole("menu")).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Open in browser panel" })).toHaveCount(0);
 });
@@ -471,7 +472,8 @@ test("a vault file opens in the browser panel from its row's menu", async ({ pag
   const file = editor(page).getByText("Plan.pdf").first();
   await expect(file).toBeVisible();
   await file.hover();
-  await editor(page).getByRole("button", { name: "More" }).click();
+  // The sound's player has a More menu of its own.
+  await editor(page).getByRole("button", { name: "More" }).last().click();
   await page.getByRole("menuitem", { name: "Open in browser panel" }).click();
   await expect(page.getByRole("textbox", { name: "Browser address" })).toHaveValue(
     "file:///home/me/Vault/_attachments/Plan.pdf",

@@ -98,6 +98,7 @@ export const SHORTCUTS = [
   { id: "paragraph", label: "Paragraph", group: "blocks", scope: "editor", keys: ["mod+alt+0"], alternates: ["mod+shift+0"] },
   { id: "quote", label: "Quote", group: "blocks", scope: "editor", keys: ["mod+shift+period"] },
   { id: "codeBlock", label: "Code block", group: "blocks", scope: "editor", keys: ["mod+alt+8"] },
+  { id: "voiceNote", label: "Voice note", group: "blocks", scope: "editor", keys: ["mod+shift+r"] },
   { id: "newLineAfter", label: "New line after this block", group: "blocks", scope: "editor", keys: ["mod+enter"] },
   { id: "newLineBefore", label: "New line before this block", group: "blocks", scope: "editor", keys: ["mod+shift+enter"] },
   { id: "indent", label: "Indent", group: "blocks", scope: "editor", keys: ["tab"], fixed: true },

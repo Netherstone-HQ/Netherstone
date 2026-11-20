@@ -21,6 +21,11 @@ type NewShardLocation = "vault-root" | "current-folder";
 export type LinkOpener = "browser-panel" | "your-browser";
 /** How much bigger or smaller the whole interface is, in percent. */
 export type Zoom = 80 | 90 | 100 | 110 | 125 | 150;
+/**
+ * The microphone voice notes record from, or null for the system's default.
+ * The name is kept so a device that's gone can still be told apart.
+ */
+type MicrophoneChoice = { deviceId: string; label: string } | null;
 /** The fewest minutes between automatic syncs. */
 type SyncInterval = 5 | 15 | 30 | 60;
 
@@ -48,6 +53,9 @@ export interface Preferences {
   spellcheck: boolean;
   newShardLocation: NewShardLocation;
   showWordCount: boolean;
+
+  // ── Microphone ──────────────────────────────────────────────────────────────
+  microphone: MicrophoneChoice;
 
   // ── Files & attachments ─────────────────────────────────────────────────────
   mediaInsertionPreference: MediaInsertionPreference;
@@ -137,6 +145,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   spellcheck: true,
   newShardLocation: "current-folder",
   showWordCount: false,
+
+  microphone: null,
 
   mediaInsertionPreference: DEFAULT_MEDIA_INSERTION_PREFERENCE,
 

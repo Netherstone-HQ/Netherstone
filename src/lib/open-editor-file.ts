@@ -9,6 +9,7 @@ import {
   openMarkdownFile,
   type OpenMarkdownFileResult,
 } from "@/lib/editor-ast-cache";
+import { finishVoiceNoteBeforeLeaving } from "@/lib/voice/voice-note";
 import { useEditorStore, type OpenEditorFilePayload } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
@@ -54,7 +55,9 @@ export async function saveEditorFile() {
 
 /** Saves the open shard and closes it. It stays open if the save fails. */
 export async function closeEditorFile() {
-  if (await saveOpenShard()) useEditorStore.getState().closeFile();
+  if ((await finishVoiceNoteBeforeLeaving()) && (await saveOpenShard())) {
+    useEditorStore.getState().closeFile();
+  }
 }
 
 /**
@@ -81,7 +84,7 @@ async function readAndOpenFile(
 ): Promise<OpenMarkdownFileResult> {
   // Opening a file replaces the editor session. If the open shard's edits
   // can't be saved, stay on it rather than discard them.
-  if (!(await saveOpenShard())) {
+  if (!(await finishVoiceNoteBeforeLeaving()) || !(await saveOpenShard())) {
     throw new Error(
       `Unsaved changes could not be saved before opening ${filePath}.`,
     );

@@ -19,6 +19,10 @@ import {
   rememberSavedValue,
 } from "@/lib/outside-changes";
 import { syncBeforeQuit } from "@/lib/sync-before-quit";
+import {
+  finishVoiceNoteBeforeLeaving,
+  hasVoiceNote,
+} from "@/lib/voice/voice-note";
 import { settleRestoredEdits } from "@/lib/unsaved-edits";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 
@@ -117,6 +121,11 @@ export async function flushPendingAutosave(): Promise<void> {
  * are logged, so quitting goes ahead.
  */
 async function saveForQuit(sync: (() => Promise<void>) | null) {
+  try {
+    await finishVoiceNoteBeforeLeaving();
+  } catch (error) {
+    console.error("Failed to save the voice note on shutdown:", error);
+  }
   try {
     await flushPendingAutosave();
   } catch (error) {
@@ -398,7 +407,8 @@ export function useAutosave() {
         pendingCacheEntry !== null ||
         leftCacheEntries.size > 0 ||
         cacheWrites !== null ||
-        hasPendingDrawingSave();
+        hasPendingDrawingSave() ||
+        hasVoiceNote();
 
       // Asked before saving, since unsaved edits need the sync too.
       const sync = syncBeforeQuit();

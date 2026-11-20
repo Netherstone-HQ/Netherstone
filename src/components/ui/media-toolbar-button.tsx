@@ -11,6 +11,7 @@ import {
   FilmIcon,
   ImageIcon,
   LinkIcon,
+  MicIcon,
 } from "lucide-react";
 import { isUrl, KEYS, type TElement } from "platejs";
 import { useEditorRef } from "platejs/react";
@@ -23,6 +24,7 @@ import {
   type MediaDialogKind,
   type PersistedAttachment,
 } from "@/lib/commands/attachments";
+import { startVoiceNote } from "@/lib/voice/voice-note";
 import { useEditorStore, useSettingsStore, useVaultStore } from "@/store";
 import type { MediaInsertionPreference } from "@/store/settings";
 import {
@@ -367,6 +369,17 @@ export function MediaToolbarButton({
                 <LinkIcon />
                 Insert via URL
               </DropdownMenuItem>
+              {nodeType === KEYS.audio && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    editor.tf.focus();
+                    void startVoiceNote(editor);
+                  }}
+                >
+                  <MicIcon />
+                  Record voice note
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>

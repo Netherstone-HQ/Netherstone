@@ -1,6 +1,7 @@
 import { flushPendingAutosave, holdOpenShardCache } from "@/hooks/useAutosave";
 import { scanVault, setOpenVault } from "@/lib/commands/vault";
 import { isPathWithin } from "@/lib/drawing-files";
+import { finishVoiceNoteBeforeLeaving } from "@/lib/voice/voice-note";
 import { useEditorStore, useUIStore, useVaultStore } from "@/store";
 
 /**
@@ -42,6 +43,7 @@ async function closeFilesOutside(vaultPath: string) {
 
   const openPath = useEditorStore.getState().currentFilePath;
   if (!openPath || isPathWithin(openPath, vaultPath)) return;
+  await finishVoiceNoteBeforeLeaving();
   await flushPendingAutosave().catch(() => {});
   holdOpenShardCache();
   // Edits that couldn't be saved stay open rather than being lost.

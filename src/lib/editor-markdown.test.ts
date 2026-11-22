@@ -22,6 +22,8 @@ const CANONICAL: Record<string, string> = {
     "Link to [roadmap](./Projects/Netherstone%20roadmap.md).\n",
   "block image": "![alt text](attachments/image.png)\n",
   table: "| a | b |\n| - | - |\n| 1 | 2 |\n",
+  "table with a link":
+    "| a           | b |\n| ----------- | - |\n| [x](./y.md) | 2 |\n",
 };
 
 /** Notes written by hand or by other tools, with their content at risk. */
@@ -69,6 +71,16 @@ describe("open and save without edits", () => {
       expect(roundTrip(firstSave)).toBe(firstSave);
     },
   );
+
+  it("saves reference links and images as inline ones", () => {
+    expect(
+      roundTrip(
+        'See [docs][d] and [example][].\n\n![diagram][img]\n\n[d]: https://example.com/docs "Docs"\n[example]: https://example.com\n[img]: pic.png\n',
+      ),
+    ).toBe(
+      'See [docs](https://example.com/docs "Docs") and [example](https://example.com).\n\n![diagram](pic.png)\n',
+    );
+  });
 
   it.each(DOC_FILES)(
     "keeps all content of docs/%s",

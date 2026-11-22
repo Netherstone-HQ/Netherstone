@@ -11,7 +11,6 @@ import {
   isSameNode,
   mergeHunks,
   nextBlocks,
-  rebaseHistory,
 } from "@/lib/block-merge";
 import { fileExists } from "@/lib/commands/attachments";
 import { readMarkdownFile, saveMarkdownFile } from "@/lib/commands/shards";
@@ -419,7 +418,8 @@ export function mergeOutsideValue(
 
 /**
  * Replaces blocks of `editor` (`start`–`end`, sorted, in its blocks as they
- * are) without saving that to history. Undo steps elsewhere keep working.
+ * are) without saving that to history. Plate moves the undo and redo steps
+ * past the change, and drops the ones that touched the replaced blocks.
  */
 function replaceBlocks(editor: SlateEditor, changes: BlockChange[]) {
   if (!changes.length) return;
@@ -438,8 +438,6 @@ function replaceBlocks(editor: SlateEditor, changes: BlockChange[]) {
     editor.tf.deselect();
   }
 
-  const applied = editor.operations.length;
-  let expected = 0;
   editor.tf.withoutSaving(() => {
     editor.tf.withoutNormalizing(() => {
       // From the end, so the blocks before each change stay put.
@@ -454,24 +452,9 @@ function replaceBlocks(editor: SlateEditor, changes: BlockChange[]) {
         blocks.forEach((node, offset) => {
           editor.tf.apply({ type: "insert_node", path: [start + offset], node });
         });
-        expected += end - start + blocks.length;
       }
     });
   });
-
-  const extra = editor.operations
-    .slice(applied)
-    .filter((op) => op.type !== "set_selection").length - expected;
-  if (extra === 0) {
-    rebaseHistory(
-      editor,
-      changes.map(({ start, end, blocks }) => ({ start, end, count: blocks.length })),
-    );
-  } else {
-    // Normalizing changed more than the blocks; old steps can't apply.
-    editor.history.undos = [];
-    editor.history.redos = [];
-  }
 }
 
 type BlockChange = { start: number; end: number; blocks: Descendant[] };

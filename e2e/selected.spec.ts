@@ -337,8 +337,10 @@ test.describe("selected state per kind of element", () => {
 
   test("selecting across several elements", async ({ page }) => {
     await caretAtStart(page, "Before image");
+    // The first step ends inside the picture, and Slate keeps it there, so
+    // the picture shows selected from the start.
     await walk(page, "Shift+ArrowDown", [
-      ["diagram:Diagram"],
+      ["img", "diagram:Diagram"],
       ["img", "table:A", "diagram:Diagram"],
       ["img", "table:A", "diagram:Diagram"],
       ["img", "table:A", "diagram:Both", "equation"],

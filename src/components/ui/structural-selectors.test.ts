@@ -18,7 +18,13 @@ function* sourceFiles(directory: string): Generator<string> {
 // to it: about a second per shard switch with a long shard open.
 // `[&>span:first-child]:` or `last:` (a tag or class before the pseudo-class)
 // don't. Use `gap-*` for spacing and a border on each row for dividers.
+// `group-last/x:` and the like (`:is(:where(.group\/x):last-child *)`) test
+// the position of every ancestor of the element: any child added or removed
+// at the end of an ancestor, like a closed shard leaving, restyles the
+// whole subtree next to it. Use `[&:last-child>.child]:` on the group.
 const UNKEYED_STRUCTURAL = [
+  /(?<![\w-])(group|peer|in)-(first|last|only|odd|even|nth-)/,
+  /(?<![\w-])(group|peer|in)-\[[^\]]*:(first|last|only|nth-)/,
   /\*\]?:([\w-]+:|\[[^\]]*\]:)*(first|last|only|odd|even|nth-)/,
   /\[&[>_+~]\*?:(not\(:)?(first|last|only|nth-)/,
   /(?<![\w-])-?(space-[xy]|divide)-/,

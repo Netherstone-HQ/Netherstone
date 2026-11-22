@@ -6,11 +6,6 @@ allowBuilds:
 
 patchedDependencies:
   '@excalidraw/excalidraw': patches/@excalidraw__excalidraw.patch
-  # Stops a change in one table cell re-rendering every other cell. Plate
-  # 53.5 does the same upstream, but needs a Slate upgrade first. Read an
-  # ancestor element with useElementSelector, not useElement(key), which
-  # can now return the ancestor as it was when the child last rendered.
-  '@platejs/core': patches/@platejs__core.patch
   # Saving looked up every mark's plugin for each piece of text, and a mark
   # with no plugin here (comment, highlight, kbd, ...) built and resolved a
   # new plugin on each lookup: most of a long shard's save. Looked up once
@@ -18,11 +13,17 @@ patchedDependencies:
   '@platejs/markdown': patches/@platejs__markdown.patch
   # Fixes copying an empty last block, pasting over selected blocks, and
   # Enter on selected blocks, whose caret Plate dropped on the way to focus.
+  # Keeps selected blocks when the editor, losing focus to them, puts back
+  # the caret it already has (Slate 0.145).
   '@platejs/selection': patches/@platejs__selection.patch
   # React saves the caret of a focused contenteditable before each commit by
   # walking all of its DOM, and uses it only when focus moved. Skipped for the
   # Slate editor, which sets its own caret. Recheck on every React upgrade.
   react-dom: patches/react-dom.patch
+  # With the caret in an input inside the editor (the / and @ menus), Slate
+  # moved the page's caret back into the editor text, so the input took no
+  # typing in WebKit (slate#6360). Only done while the editor has focus now.
+  slate-react: patches/slate-react.patch
 
 overrides:
   # @platejs/math pins katex 0.16.22 while everything else uses 0.16.45, which

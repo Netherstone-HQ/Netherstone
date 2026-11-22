@@ -14,6 +14,7 @@ import {
 } from "@/lib/outside-changes";
 import { useEditorStore } from "@/store/editor";
 import { loadMarkdown } from "@/test/markdown";
+import { random } from "@/test/random";
 
 vi.mock("@/lib/commands/shards", () => ({
   readMarkdownFile: vi.fn(),
@@ -493,5 +494,167 @@ describe("reloadOpenShardIfChanged", () => {
     const editor = createEditor("One\n");
     store().setPlateEditor(editor);
     await vi.waitFor(() => expect(texts(editor)).toEqual(["One, outside"]));
+  });
+});
+
+describe("undo after an outside change", () => {
+  type Editor = ReturnType<typeof createEditor>;
+
+  /** Each typed word is its own undo step. */
+  function type(editor: Editor, index: number, text: string) {
+    editor.tf.withNewBatch(() => {
+      editor.tf.insertText(text, { at: editor.api.end([index])! });
+    });
+  }
+
+  /** Changes blocks `start`–`end` outside the app. */
+  function replace(editor: Editor, start: number, end: number, markdown: string) {
+    const value = [...editor.children];
+    value.splice(start, end - start, ...(markdown ? loadMarkdown(markdown) : []));
+    showOutsideValue(editor, value);
+  }
+
+  it("keeps undo working around blocks changed outside", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n\nFour\n");
+    type(editor, 0, "!");
+    type(editor, 3, "?");
+    replace(editor, 1, 3, "Outside A\n\nOutside B\n\nOutside C\n");
+    expect(texts(editor)).toEqual(["One!", "Outside A", "Outside B", "Outside C", "Four?"]);
+
+    editor.undo();
+    expect(texts(editor)).toEqual(["One!", "Outside A", "Outside B", "Outside C", "Four"]);
+    editor.undo();
+    expect(texts(editor)).toEqual(["One", "Outside A", "Outside B", "Outside C", "Four"]);
+
+    editor.redo();
+    editor.redo();
+    expect(texts(editor)).toEqual(["One!", "Outside A", "Outside B", "Outside C", "Four?"]);
+  });
+
+  it("drops steps in blocks changed outside and keeps the others", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n");
+    type(editor, 0, "1");
+    type(editor, 1, "2");
+    type(editor, 2, "3");
+    replace(editor, 1, 2, "Outside\n");
+
+    expect(editor.history.undos).toHaveLength(2);
+    editor.undo();
+    expect(texts(editor)).toEqual(["One1", "Outside", "Three"]);
+    editor.undo();
+    expect(texts(editor)).toEqual(["One", "Outside", "Three"]);
+  });
+
+  it("keeps redo working around blocks changed outside", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n");
+    type(editor, 0, "!");
+    type(editor, 2, "?");
+    editor.undo();
+    editor.undo();
+    replace(editor, 1, 2, "Outside\n");
+
+    editor.redo();
+    editor.redo();
+    expect(texts(editor)).toEqual(["One!", "Outside", "Three?"]);
+  });
+
+  it("keeps a step that moved a whole block", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n\nFour\n");
+    type(editor, 3, "!");
+    editor.tf.withNewBatch(() => editor.tf.moveNodes({ at: [0], to: [2] }));
+    replace(editor, 3, 4, "Outside\n");
+
+    expect(texts(editor)).toEqual(["Two", "Three", "One", "Outside"]);
+    expect(editor.history.undos).toHaveLength(1);
+    editor.undo();
+    expect(texts(editor)).toEqual(["One", "Two", "Three", "Outside"]);
+  });
+
+  it("moves split and joined blocks", () => {
+    const editor = createEditor("One\n\nTwo\n\nThree\n");
+    // Enter in the middle of "Three", then Backspace at the start of "Two".
+    editor.tf.withNewBatch(() => {
+      editor.tf.select({ path: [2, 0], offset: 2 });
+      editor.tf.insertBreak();
+    });
+    editor.tf.withNewBatch(() => {
+      editor.tf.select({ path: [1, 0], offset: 0 });
+      editor.tf.deleteBackward();
+    });
+    expect(texts(editor)).toEqual(["OneTwo", "Th", "ree"]);
+
+    replace(editor, 0, 0, "Zero\n\nZero again\n");
+    editor.undo();
+    expect(texts(editor)).toEqual(["Zero", "Zero again", "One", "Two", "Th", "ree"]);
+    editor.undo();
+    expect(texts(editor)).toEqual(["Zero", "Zero again", "One", "Two", "Three"]);
+  });
+
+  it("moves where undo puts the cursor", () => {
+    const editor = createEditor("One\n\nTwo\n");
+    editor.tf.select(editor.api.end([1])!);
+    editor.tf.insertText("!");
+    replace(editor, 0, 0, "Zero\n");
+    editor.tf.deselect();
+
+    editor.undo();
+    expect(editor.selection?.anchor.path[0]).toBe(2);
+  });
+
+  it("lets undo get back to the first text with only the outside change in", () => {
+    const next = random(11);
+    for (let round = 0; round < 60; round += 1) {
+      const length = 4 + next(6);
+      const lines = Array.from({ length }, (_, index) => `Line ${index}`);
+      const editor = createEditor(lines.join("\n\n") + "\n");
+      const original = texts(editor);
+
+      // Edits to the first blocks; the outside change is in the rest.
+      const tail = length - Math.floor(length / 2);
+      for (let step = 0; step < 10; step += 1) {
+        const index = next(editor.children.length - tail);
+        const offset = next(NodeApi.string(editor.children[index]).length + 1);
+        editor.tf.withNewBatch(() => {
+          switch (next(4)) {
+            case 0:
+              editor.tf.insertText(`+${step}`, { at: editor.api.end([index])! });
+              break;
+            case 1:
+              editor.tf.select({ path: [index, 0], offset });
+              editor.tf.insertBreak();
+              break;
+            case 2:
+              editor.tf.insertNodes(
+                { type: "p", children: [{ text: `new ${step}` }] },
+                { at: [index] },
+              );
+              break;
+            default:
+              if (index > 0) {
+                editor.tf.select({ path: [index, 0], offset: 0 });
+                editor.tf.deleteBackward();
+              }
+          }
+        });
+      }
+
+      const edited = texts(editor);
+      const steps = editor.history.undos.length;
+      const added = editor.children.length - length;
+      const start = editor.children.length - tail + next(tail + 1);
+      const end = start + next(editor.children.length - start + 1);
+      replace(editor, start, end, `Outside ${round}\n`);
+      expect(editor.history.undos).toHaveLength(steps);
+
+      for (let step = 0; step < steps; step += 1) editor.undo();
+      const expected = [...original];
+      expected.splice(start - added, end - start, `Outside ${round}`);
+      expect(texts(editor)).toEqual(expected);
+
+      for (let step = 0; step < steps; step += 1) editor.redo();
+      const redone = [...edited];
+      redone.splice(start, end - start, `Outside ${round}`);
+      expect(texts(editor)).toEqual(redone);
+    }
   });
 });

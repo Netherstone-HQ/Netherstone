@@ -1,5 +1,5 @@
 diff --git a/dist/react/index.js b/dist/react/index.js
-index 34768daa495810924ce94318f929307b35b68bd3..4858a00159d12db85530a0568b104fc7789419bf 100644
+index 34768daa495810924ce94318f929307b35b68bd3..5db33e285b8a77c5ac9310553359f2aea2c224d2 100644
 --- a/dist/react/index.js
 +++ b/dist/react/index.js
 @@ -1372,7 +1372,7 @@ const writeSelectedBlocksToDataTransfer = (editor, data) => {
@@ -45,3 +45,14 @@ index 34768daa495810924ce94318f929307b35b68bd3..4858a00159d12db85530a0568b104fc7
  			},
  			selectAll: () => {
  				if (getOptions().disableSelectAll) return selectAll$1();
+@@ -2044,7 +2044,9 @@ const BlockSelectionPlugin = createTPlatePlugin({
+ 				});
+ 			},
+ 			setSelection(props) {
+-				if (getOptions().selectedIds.size > 0 && !editor.getOption(BlockMenuPlugin, "openId")) api.blockSelection.deselect();
++				// Moving to the same spot isn't a new selection: the editor does that when it loses focus to the selected blocks.
++				const unchanged = !!editor.selection && RangeApi.equals({ ...editor.selection, ...props }, editor.selection);
++				if (!unchanged && getOptions().selectedIds.size > 0 && !editor.getOption(BlockMenuPlugin, "openId")) api.blockSelection.deselect();
+ 				setSelection(props);
+ 			},
+ 			toggleMark(key, options) {

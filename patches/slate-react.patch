@@ -1,0 +1,28 @@
+diff --git a/dist/index.es.js b/dist/index.es.js
+index 481f58f009996280b76fcf15417db95886f6985e..abd3bafaa2893de45e90d11eeea20af10c341240 100644
+--- a/dist/index.es.js
++++ b/dist/index.es.js
+@@ -3052,7 +3052,8 @@ const Editable = /*#__PURE__*/forwardRef((props, forwardedRef) => {
+           if (!ReactEditor.isComposing(editor) && !(androidInputManager !== null && androidInputManager !== void 0 && androidInputManager.hasPendingChanges()) && !(androidInputManager !== null && androidInputManager !== void 0 && androidInputManager.isFlushing())) {
+             const isCaretOutsideText = domSelection.isCollapsed && !isInSlateText(anchorNode);
+             if (isCaretOutsideText && editor.selection && Range.equals(range, editor.selection)) {
+-              restoreDomSelection(editor, domSelection, state);
++              // A text field inside the editor, like an input in a void, keeps its own caret.
++              if (activeElement === _el) restoreDomSelection(editor, domSelection, state);
+             } else {
+               Transforms.select(editor, range);
+             }
+diff --git a/dist/index.js b/dist/index.js
+index bc9a02adc20ac27bbaf2fba883f6c20c6379d943..521f4e28c3c6872e95e849fd78e86a2e1142d383 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3558,7 +3558,8 @@ var Editable = /*#__PURE__*/React.forwardRef(function (props, forwardedRef) {
+             if (!ReactEditor.isComposing(editor) && !(androidInputManager !== null && androidInputManager !== void 0 && androidInputManager.hasPendingChanges()) && !(androidInputManager !== null && androidInputManager !== void 0 && androidInputManager.isFlushing())) {
+               var isCaretOutsideText = domSelection.isCollapsed && !isInSlateText(anchorNode);
+               if (isCaretOutsideText && editor.selection && slate.Range.equals(range, editor.selection)) {
+-                restoreDomSelection(editor, domSelection, state);
++                // A text field inside the editor, like an input in a void, keeps its own caret.
++                if (activeElement === _el) restoreDomSelection(editor, domSelection, state);
+               } else {
+                 slate.Transforms.select(editor, range);
+               }

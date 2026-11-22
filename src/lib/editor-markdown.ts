@@ -23,7 +23,6 @@ import {
   restoreRawBlocks,
 } from "@/lib/markdown-raw-blocks";
 import { withTextAroundInlines } from "@/lib/markdown-inline-edges";
-import { inlineReferenceLinks } from "@/lib/markdown-reference-links";
 import { hasDollarPlaceholder, markDollars, restoreDollars } from "@/lib/markdown-dollars";
 import { setShardLinkFilePath } from "@/lib/markdown-shard-links";
 import {
@@ -270,7 +269,7 @@ export function deserializeEditorMarkdown(
   const { frontMatter, body } = splitFrontMatter(source);
   const value = withTextAroundInlines(
     editor,
-    deserializeMarkdownBody(editor, inlineReferenceLinks(body)),
+    deserializeMarkdownBody(editor, body),
   );
   return frontMatter === null
     ? value

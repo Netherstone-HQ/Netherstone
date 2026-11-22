@@ -3,6 +3,10 @@ import App from "./App";
 import { suppressNativeContextMenu } from "./lib/native-context-menu";
 import { reopenLastVault } from "./lib/open-vault";
 import { dismissSplash } from "./lib/splash";
+import { moveFontFacesToScript } from "./lib/font-faces";
+
+// Before anything renders, while the page is still small.
+moveFontFacesToScript();
 
 // The app lifts the splash when it is ready (useDismissSplash). If that never
 // happens, don't leave the user looking at it.

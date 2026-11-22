@@ -275,7 +275,6 @@ export function ToolbarGroup({
   return (
     <div
       className={cn(
-        'group/toolbar-group',
         'relative hidden has-[button]:flex',
         // Not a group variant on the separator, which tests the position of
         // every ancestor (see structural-selectors.test.ts).

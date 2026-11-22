@@ -70,9 +70,11 @@ export const ColumnElement = withHOC(
           'group/column relative',
           // Child selectors and variables rather than a group variant on
           // the column's position, which tests the position of every
-          // ancestor (see structural-selectors.test.ts).
+          // ancestor (see structural-selectors.test.ts). Each column sets
+          // both variables, so a column inside another doesn't inherit them.
           '[&:first-child>.column-content]:pl-0 [&:last-child>.column-content]:pr-0',
-          'first:[--drop-line-left:calc(var(--spacing)*-1)] last:[--drop-line-right:calc(var(--spacing)*-1)]'
+          '[--drop-line-left:-10.5px] first:[--drop-line-left:calc(var(--spacing)*-1)]',
+          '[--drop-line-right:-11px] last:[--drop-line-right:calc(var(--spacing)*-1)]'
         )}
         style={{ width: width ?? '100%' }}>
         {!readOnly && !isSelectionAreaVisible && (
@@ -143,9 +145,9 @@ function DropLine() {
         'slate-dropLine',
         'absolute bg-brand/50',
         dropLine === 'left' &&
-          'inset-y-0 left-[var(--drop-line-left,-10.5px)] w-1',
+          'inset-y-0 left-(--drop-line-left) w-1',
         dropLine === 'right' &&
-          'inset-y-0 right-[var(--drop-line-right,-11px)] w-1'
+          'inset-y-0 right-(--drop-line-right) w-1'
       )}
     />
   );

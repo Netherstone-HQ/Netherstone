@@ -24,6 +24,7 @@ function* sourceFiles(directory: string): Generator<string> {
 // whole subtree next to it. Use `[&:last-child>.child]:` on the group.
 const UNKEYED_STRUCTURAL = [
   /(?<![\w-])(group|peer|in)-(first|last|only|odd|even|nth-)/,
+  /(?<![\w-])(group|peer|in)-\[[^\]]*:(first|last|only|nth-)/,
   /\*\]?:([\w-]+:|\[[^\]]*\]:)*(first|last|only|odd|even|nth-)/,
   /\[&[>_+~]\*?:(not\(:)?(first|last|only|nth-)/,
   /(?<![\w-])-?(space-[xy]|divide)-/,

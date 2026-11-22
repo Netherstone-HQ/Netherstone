@@ -277,12 +277,15 @@ export function ToolbarGroup({
       className={cn(
         'group/toolbar-group',
         'relative hidden has-[button]:flex',
+        // Not a group variant on the separator, which tests the position of
+        // every ancestor (see structural-selectors.test.ts).
+        '[&:last-child>.toolbar-separator]:hidden!',
         className
       )}
     >
       <div className="flex items-center">{children}</div>
 
-      <div className="group-last/toolbar-group:hidden! mx-1.5 py-0.5">
+      <div className="toolbar-separator mx-1.5 py-0.5">
         <Separator orientation="vertical" />
       </div>
     </div>

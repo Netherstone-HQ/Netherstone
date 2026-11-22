@@ -236,6 +236,43 @@ test("a drawing opens, and adds to a shard as a picture", async ({ page }) => {
     .toContain('data-excalidraw="Sketch.excalidraw"');
 });
 
+test("fonts come from document.fonts, with none left in style sheets", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Notes.md": "# Notes\n", "Sketch.excalidraw": DRAWING },
+    open: "Notes.md",
+  });
+  // The drawing brings its own style sheet, loaded later.
+  await page.getByText("Sketch", { exact: true }).first().click();
+  await expect(page.locator(".excalidraw canvas").first()).toBeVisible({ timeout: 30_000 });
+
+  const fonts = await page.evaluate(() => {
+    const fontFaceRules = (rules: CSSRuleList): number =>
+      [...rules].reduce(
+        (count, rule) =>
+          count +
+          (rule instanceof CSSFontFaceRule ? 1 : 0) +
+          (rule instanceof CSSGroupingRule ? fontFaceRules(rule.cssRules) : 0),
+        0,
+      );
+    return {
+      inStyleSheets: [...document.styleSheets].reduce((count, sheet) => count + fontFaceRules(sheet.cssRules), 0),
+      // Chromium quotes family names with spaces.
+      families: [...new Set([...document.fonts].map((font) => font.family.replaceAll('"', "")))],
+    };
+  });
+  expect(fonts.inStyleSheets).toBe(0);
+  expect(fonts.families).toEqual(
+    expect.arrayContaining([
+      "Geist Variable",
+      "Geist Mono Variable",
+      "Newsreader Variable",
+      "Noto Color Emoji",
+      "KaTeX_Main",
+      "Assistant",
+    ]),
+  );
+});
+
 test("the export preview draws each format, and Word and web pages save", async ({ page }) => {
   await mockVault(page, {
     files: {

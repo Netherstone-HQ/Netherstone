@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { DndPlugin, DndScroller } from "@platejs/dnd";
-import { createPlatePlugin, useEditorRef, usePluginOption } from "platejs/react";
+import { useEditorRef, usePluginOption } from "platejs/react";
 
 import { toast } from "sonner";
 
@@ -51,10 +51,7 @@ export const DndKit = [
     },
     render: {
       aboveNodes: BlockDraggable,
+      afterEditable: () => <DragEdgeScroller />,
     },
-  }),
-  createPlatePlugin({
-    key: "drag-edge-scroller",
-    render: { afterEditable: () => <DragEdgeScroller /> },
   }),
 ];

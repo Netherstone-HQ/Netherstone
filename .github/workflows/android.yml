@@ -71,6 +71,12 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+          # Keeps Gradle's downloads between runs: Maven Central turns away
+          # runners that ask too often.
+          cache: gradle
+          cache-dependency-path: |
+            src-tauri/gen/android/**/*.gradle*
+            src-tauri/gen/android/**/gradle-wrapper.properties
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust }}

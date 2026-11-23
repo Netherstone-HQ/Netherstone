@@ -167,8 +167,10 @@ overrides:
 
 patchedDependencies:
   '@excalidraw/excalidraw': 63daa2f5f2caf687f5bad39b38924c737c19a1af3875c01427a44deb970e8aa5
+  '@platejs/core': ea4838bd9add362dd327a9544c3cbded68eb077c725b8a634f93144b5f03ea0e
   '@platejs/markdown': 043fa132b61800bf581f2de4c6c314a8073d868835a1d5b43665170ae07e5252
   '@platejs/selection': 5ea30f518ffe90d9720a2889ff9ce1b84c686be7bf46034322a0f7a5673359c0
+  jotai@2.8.4: 01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3
   react-dom: f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368
   slate-react: 94291d8377db1b96b3f8dae5a0684918fde08ee07b4e2faf6fa08144bb1a5f60
 
@@ -7042,7 +7044,7 @@ snapshots:
       react-compiler-runtime: 1.0.0(react@19.2.5)
       react-dom: 19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5)
 
-  '@platejs/core@53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))':
+  '@platejs/core@53.5.2(patch_hash=ea4838bd9add362dd327a9544c3cbded68eb077c725b8a634f93144b5f03ea0e)(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))':
     dependencies:
       '@platejs/slate': 53.3.18
       '@udecode/react-hotkeys': 52.0.11(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
@@ -7050,9 +7052,9 @@ snapshots:
       '@udecode/utils': 52.3.4
       clsx: 2.1.1
       is-hotkey: 0.2.0
-      jotai: 2.8.4(@types/react@19.2.14)(react@19.2.5)
-      jotai-optics: 0.4.0(jotai@2.8.4(@types/react@19.2.14)(react@19.2.5))(optics-ts@2.4.1)
-      jotai-x: 2.3.4(@types/react@19.2.14)(jotai@2.8.4(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
+      jotai: 2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5)
+      jotai-optics: 0.4.0(jotai@2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5))(optics-ts@2.4.1)
+      jotai-x: 2.3.4(@types/react@19.2.14)(jotai@2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
       lodash: 4.18.1
       nanoid: 5.1.9
       optics-ts: 2.4.1
@@ -7276,7 +7278,7 @@ snapshots:
 
   '@platejs/utils@53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))':
     dependencies:
-      '@platejs/core': 53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))
+      '@platejs/core': 53.5.2(patch_hash=ea4838bd9add362dd327a9544c3cbded68eb077c725b8a634f93144b5f03ea0e)(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))
       '@platejs/slate': 53.3.18
       '@udecode/react-utils': 52.3.4(@types/react@19.2.14)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
       '@udecode/utils': 52.3.4
@@ -9915,9 +9917,9 @@ snapshots:
 
   jose@6.2.2: {}
 
-  jotai-optics@0.4.0(jotai@2.8.4(@types/react@19.2.14)(react@19.2.5))(optics-ts@2.4.1):
+  jotai-optics@0.4.0(jotai@2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5))(optics-ts@2.4.1):
     dependencies:
-      jotai: 2.8.4(@types/react@19.2.14)(react@19.2.5)
+      jotai: 2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5)
       optics-ts: 2.4.1
 
   jotai-scope@0.7.2(jotai@2.11.0(@types/react@19.2.14)(react@19.2.5))(react@19.2.5):
@@ -9925,9 +9927,9 @@ snapshots:
       jotai: 2.11.0(@types/react@19.2.14)(react@19.2.5)
       react: 19.2.5
 
-  jotai-x@2.3.4(@types/react@19.2.14)(jotai@2.8.4(@types/react@19.2.14)(react@19.2.5))(react@19.2.5):
+  jotai-x@2.3.4(@types/react@19.2.14)(jotai@2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5))(react@19.2.5):
     dependencies:
-      jotai: 2.8.4(@types/react@19.2.14)(react@19.2.5)
+      jotai: 2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5)
     optionalDependencies:
       '@types/react': 19.2.14
       react: 19.2.5
@@ -9944,7 +9946,7 @@ snapshots:
       '@types/react': 19.2.14
       react: 19.2.5
 
-  jotai@2.8.4(@types/react@19.2.14)(react@19.2.5):
+  jotai@2.8.4(patch_hash=01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3)(@types/react@19.2.14)(react@19.2.5):
     optionalDependencies:
       '@types/react': 19.2.14
       react: 19.2.5
@@ -10914,7 +10916,7 @@ snapshots:
 
   platejs@53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)):
     dependencies:
-      '@platejs/core': 53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))
+      '@platejs/core': 53.5.2(patch_hash=ea4838bd9add362dd327a9544c3cbded68eb077c725b8a634f93144b5f03ea0e)(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))
       '@platejs/slate': 53.3.18
       '@platejs/utils': 53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5))
       '@udecode/react-hotkeys': 52.0.11(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)
@@ -11496,6 +11498,9 @@ snapshots:
       slate: 0.146.0
       slate-dom: 0.146.0(slate@0.146.0)
       tiny-invariant: 1.3.1
+    optionalDependencies:
+      '@types/lodash': 4.17.24
+      '@types/react': 19.2.14
 
   slate@0.146.0: {}
 

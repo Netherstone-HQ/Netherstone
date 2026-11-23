@@ -1,0 +1,32 @@
+diff --git a/dist/react/index.js b/dist/react/index.js
+index 78f0e0a75ab3893b540a093896b21cded2fa1fff..48c8ba8990201a76407f7bafc7a5f134456d9954 100644
+--- a/dist/react/index.js
++++ b/dist/react/index.js
+@@ -2394,7 +2394,18 @@ const useEditorComposing = (id) => {
+ *   const editor = useEditorRef();
+ *   const readOnly = useAtomStoreValue(editor.store, 'readOnly');
+ */
++/**
++* The editor of the closest `Plate`, read from context. Going through the
++* store cost every node component several hooks and a subscription.
++*/
++const EditorRefContext = React.createContext(null);
++function EditorRefProvider({ editor, children }) {
++	editor.store = usePlateLocalStore({ scope: editor.id });
++	return React.createElement(EditorRefContext.Provider, { value: editor }, children);
++}
+ const useEditorRef = (id) => {
++	const contextEditor = React.useContext(EditorRefContext);
++	if (contextEditor && (id === void 0 || id === contextEditor.id)) return contextEditor;
+ 	const store = usePlateStore(id);
+ 	const editor = useAtomStoreValue(store, "editor") ?? createPlateFallbackEditor();
+ 	editor.store = store;
+@@ -2828,7 +2839,7 @@ function PlateInner(t0) {
+ 			renderLeaf,
+ 			scope: editor.id,
+ 			scrollRef
+-		}, children);
++		}, /* @__PURE__ */ React.createElement(EditorRefProvider, { editor }, children));
+ 		$[0] = children;
+ 		$[1] = containerRef;
+ 		$[2] = decorate;

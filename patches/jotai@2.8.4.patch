@@ -1,0 +1,26 @@
+diff --git a/esm/react.mjs b/esm/react.mjs
+index 4c902cf4b514dcb02244a5bbf744622bf6668f65..654d033fee7ab43872c2eb20d6deb895a6f7aefa 100644
+--- a/esm/react.mjs
++++ b/esm/react.mjs
+@@ -76,7 +76,7 @@ function useAtomValue(atom, options) {
+       }
+       rerender();
+     });
+-    rerender();
++    if (!Object.is(store.get(atom), value)) rerender();
+     return unsub;
+   }, [store, atom, delay]);
+   useDebugValue(value);
+diff --git a/react.js b/react.js
+index 8bed9944db0ed5f9e842006ea2b22de571c3eca4..fbf4ffe9dca1eac28974b0510ac221d55e50f3f8 100644
+--- a/react.js
++++ b/react.js
+@@ -73,7 +73,7 @@ function useAtomValue(atom, options) {
+       }
+       rerender();
+     });
+-    rerender();
++    if (!Object.is(store.get(atom), value)) rerender();
+     return unsub;
+   }, [store, atom, delay]);
+   ReactExports.useDebugValue(value);

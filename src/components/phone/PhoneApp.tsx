@@ -1,5 +1,8 @@
 import { useEffect } from "react";
 import { useLaunches } from "@/lib/launch";
+import { usePreviewedChange } from "@/lib/assistant-changes";
+import { useAssistantStore } from "@/store/assistant";
+import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useEditorStore, useVaultStore } from "@/store";
 import { createFolderIn, createShardIn } from "./create";
@@ -16,6 +19,8 @@ import {
   useSelecting,
   type PhoneOverlay,
 } from "./nav";
+import { AssistantSheet } from "./AssistantSheet";
+import { HistorySheet } from "./HistorySheet";
 import { RowActions } from "./RowActions";
 import { SearchScreen } from "./SearchScreen";
 import { SettingsScreen } from "./SettingsScreen";
@@ -57,6 +62,9 @@ export function PhoneApp() {
   const closeNewFolder = useCloser("new-folder");
   const closeNewShard = useCloser("new-shard");
   const closeShardMenu = useCloser("shard-menu");
+  const closeHistorySheet = useCloser("history");
+  const closeAssistant = useCloser("assistant");
+  useSheetsFollowNav();
 
   return (
     <>
@@ -110,6 +118,17 @@ export function PhoneApp() {
       ) : null}
       <RowActions />
       {screen.kind === "file" && openPath ? (
+        <HistorySheet
+          filePath={openPath}
+          open={overlay?.kind === "history"}
+          onOpenChange={closeHistorySheet}
+        />
+      ) : null}
+      <AssistantSheet
+        open={overlay?.kind === "assistant"}
+        onOpenChange={closeAssistant}
+      />
+      {screen.kind === "file" && openPath ? (
         <ShardMenuSheet
           path={openPath}
           open={overlay?.kind === "shard-menu"}
@@ -143,4 +162,43 @@ function followSettingsRequests(): () => void {
       if (category) usePhoneNav.getState().push({ kind: "settings", category });
     }
   });
+}
+
+/**
+ * Keeps history and the assistant in step with Back: they're open while
+ * their sheet or what it opened is, and a restored version or a settled
+ * change closes the screen that showed it.
+ */
+function useSheetsFollowNav() {
+  const entries = usePhoneNav((s) => s.entries);
+  const has = (kind: string) => entries.some((entry) => entry.kind === kind);
+  const historyOpen = has("history");
+  const versionOpen = has("version");
+  const assistantOpen = has("assistant") || has("change");
+  const changeOpen = has("change");
+  const picked = useHistoryStore((s) => s.picked);
+  const change = usePreviewedChange();
+
+  useEffect(() => {
+    const history = useHistoryStore.getState();
+    if (!historyOpen && history.openIn !== null) history.closeHistory();
+    else if (historyOpen && !versionOpen && history.picked)
+      history.pickVersion(null);
+  }, [historyOpen, versionOpen]);
+
+  // Restored: back to the shard, where a toast says so.
+  useEffect(() => {
+    if (versionOpen && picked === null)
+      usePhoneNav.getState().closeFrom("history");
+  }, [versionOpen, picked]);
+
+  useEffect(() => {
+    useAssistantStore.getState().setOpen(assistantOpen);
+  }, [assistantOpen]);
+
+  // Applied or discarded: back to the chat.
+  useEffect(() => {
+    if (changeOpen && change === null)
+      usePhoneNav.getState().closeFrom("change");
+  }, [changeOpen, change]);
 }

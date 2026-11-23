@@ -30,6 +30,10 @@ export type PhoneOverlay =
   | { kind: "shard-menu" }
   | { kind: "assistant" }
   | { kind: "history" }
+  /** An earlier version of the open shard, over its history. */
+  | { kind: "version" }
+  /** A change the assistant proposed, shown in the open shard. */
+  | { kind: "change" }
   /** A row's long-press menu. */
   | { kind: "row-menu"; path: string }
   | { kind: "rename"; path: string }

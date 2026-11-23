@@ -22,6 +22,7 @@ import {
 } from "@/lib/assistant";
 import { openShardPath } from "@/lib/assistant-changes";
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
+import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
 import { useCompanionStore } from "@/store/companion";
 import { useEditorStore } from "@/store/editor";
@@ -108,8 +109,17 @@ function Starters({ onAsk }: { onAsk: (text: string) => void }) {
   );
 }
 
-/** The assistant, in the right sidebar's place: one chat at a time. */
-export function AssistantPanel() {
+/**
+ * The assistant, in the right sidebar's place: one chat at a time. A phone
+ * shows it in a sheet, which `onHide` closes.
+ */
+export function AssistantPanel({
+  onHide = closeAssistant,
+  className,
+}: {
+  onHide?: () => void;
+  className?: string;
+} = {}) {
   const { setup, reload } = useSetup();
   const vault = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
@@ -232,7 +242,10 @@ export function AssistantPanel() {
   return (
     <aside
       aria-label="Assistant"
-      className="flex h-full w-(--assistant-width) flex-col border-l bg-sidebar text-sidebar-foreground text-ui"
+      className={cn(
+        "flex h-full w-(--assistant-width) flex-col border-l bg-sidebar text-sidebar-foreground text-ui",
+        className,
+      )}
     >
       <div className="flex h-toolbar shrink-0 items-center gap-1 border-sidebar-border border-b pr-2.5 pl-3">
         {chatsShown && chat ? (
@@ -264,7 +277,7 @@ export function AssistantPanel() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            onClick={closeAssistant}
+            onClick={onHide}
             aria-label="Hide assistant"
             className="text-muted-foreground hover:text-foreground"
           >

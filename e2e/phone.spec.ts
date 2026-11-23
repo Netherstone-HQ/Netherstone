@@ -192,3 +192,72 @@ test("Settings lists the phone's categories, and each one opens", async ({ page 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+const now = Math.floor(Date.now() / 1000);
+
+test("history lists versions, a version opens on its own screen, and Restore puts it back", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Bread.md": "# Bread\n\nUse 350 g water.\n" },
+    versions: {
+      "Bread.md": [
+        { time: now - 3600, content: "# Bread\n\nUse 375 g water.\n\nRest an hour.\n", added: 3, removed: 1 },
+        { time: now - 7200, content: "# Bread\n", kind: "created" },
+      ],
+    },
+  });
+  await page.getByRole("button", { name: /^Bread/ }).click();
+  await expect(page.locator("[data-slate-editor]")).toContainText("350 g");
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("button", { name: "Show history" }).click();
+
+  const sheet = page.getByRole("dialog", { name: "History" });
+  await expect(sheet.getByText("Current")).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-history.png" });
+  await sheet.getByRole("button", { name: /Added 3 words, removed 1/ }).click();
+
+  await expect(page.getByRole("button", { name: "Restore this version" })).toBeVisible();
+  await expect(page.getByText("Show changes")).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-version.png" });
+
+  // Back returns to the list, and picking again shows the version again.
+  await page.goBack();
+  await expect(sheet.getByText("Current")).toBeVisible();
+  await sheet.getByRole("button", { name: /Added 3 words, removed 1/ }).click();
+  await page.getByRole("button", { name: "Restore this version" }).click();
+
+  await expect(page.getByText(/^Restored/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore this version" })).toHaveCount(0);
+  await expect(page.locator("[data-slate-editor]")).toContainText("375 g");
+  await page.screenshot({ path: "test-results/phone-restored.png" });
+});
+
+test("the assistant opens in a sheet, and its change shows in the shard with Apply", async ({ page }) => {
+  await mockVault(page, {
+    files: { "Trip.md": "# Trip\n\nLisbon in May, by train.\n" },
+    assistant: {
+      provider: true,
+      vaultAllowed: true,
+      picked: true,
+      answer: ["Here's the change."],
+      change: { path: "Trip.md", after: "# Trip\n\nLisbon in May, by train.\n\nBook the sleeper.\n" },
+    },
+  });
+  await page.getByRole("button", { name: /^Trip/ }).click();
+  await page.getByRole("button", { name: "Assistant", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Assistant" });
+  const box = sheet.getByRole("textbox", { name: "Message" });
+  await box.fill("Add a line about booking");
+  await box.press("Enter");
+  await expect(sheet.getByText("Here's the change.")).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-assistant.png" });
+
+  await sheet.getByRole("button", { name: "Trip", exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText("1 change")).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-assistant-change.png" });
+  await page.getByRole("button", { name: "Apply" }).click();
+
+  await expect(sheet).toBeVisible();
+  await page.getByRole("button", { name: "Hide assistant" }).click();
+  await expect(page.locator("[data-slate-editor]")).toContainText("Book the sleeper.");
+});

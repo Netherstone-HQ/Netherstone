@@ -1,9 +1,12 @@
 import { useEffect } from "react";
-import { EllipsisVerticalIcon, SearchIcon, SparklesIcon } from "lucide-react";
+import { EllipsisVerticalIcon, SearchIcon, SparkleIcon } from "lucide-react";
 import { EditorOrVersion } from "@/components/AppLayout";
 import { ExcalidrawView } from "@/components/ExcalidrawView";
 import { loadAssistantEnabled } from "@/lib/assistant";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { formatVersionTitle } from "@/lib/history";
+import { useEditorStore } from "@/store/editor";
+import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store";
 import { useAssistantStore } from "@/store/assistant";
 import { usePhoneNav } from "./nav";
@@ -24,6 +27,13 @@ export function FileScreen() {
   const drawingPath = useUIStore((s) => s.activeDrawingPath);
   const push = usePhoneNav((s) => s.push);
   const assistantOn = useAssistantStore((s) => s.enabled);
+  const openPath = useEditorStore((s) => s.currentFilePath);
+  const version = useHistoryStore((s) =>
+    s.openIn === "notes" ? s.picked : null,
+  );
+  const showsVersion = usePhoneNav((s) =>
+    s.entries.some((entry) => entry.kind === "version"),
+  );
 
   useEffect(() => {
     if (useAssistantStore.getState().enabled === null) {
@@ -49,6 +59,27 @@ export function FileScreen() {
     );
   }
 
+  if (showsVersion && version && openPath) {
+    return (
+      <PhoneFrame>
+        <PhoneTopBar>
+          <PhoneBackButton />
+          <div className="flex min-w-0 flex-1 flex-col pl-1">
+            <h1 className="truncate font-semibold">
+              {getVaultFileDisplayName(openPath.split(/[\\/]/).pop() ?? "")}
+            </h1>
+            <p className="truncate text-sm text-muted-foreground">
+              {formatVersionTitle(version.time)}
+            </p>
+          </div>
+        </PhoneTopBar>
+        <div className="relative flex min-h-0 flex-1">
+          <EditorOrVersion />
+        </div>
+      </PhoneFrame>
+    );
+  }
+
   return (
     <PhoneFrame>
       <PhoneTopBar>
@@ -65,7 +96,7 @@ export function FileScreen() {
             label="Assistant"
             onClick={() => push({ kind: "assistant" })}
           >
-            <SparklesIcon />
+            <SparkleIcon />
           </PhoneIconButton>
         ) : null}
         <PhoneIconButton

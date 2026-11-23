@@ -137,3 +137,16 @@ test("Select all right after opening takes the whole shard", async ({ page }) =>
   await expect(editor(page)).not.toContainText(`row ${SECTIONS - 1}`);
   await expect(editor(page)).not.toContainText("Long");
 });
+
+test("a block held at the bottom edge while dragged scrolls the shard", async ({ page }) => {
+  await heading(page, 1).hover();
+  const handle = page.locator("[data-plate-prevent-deselect]").filter({ visible: true }).first();
+  await handle.hover();
+  await page.mouse.down();
+  const { height } = page.viewportSize()!;
+  await page.mouse.move(400, height - 10, { steps: 10 });
+  await expect
+    .poll(() => editor(page).evaluate((el) => el.closest("main")!.scrollTop))
+    .toBeGreaterThan(500);
+  await page.mouse.up();
+});

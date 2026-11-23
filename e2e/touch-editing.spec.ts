@@ -196,6 +196,22 @@ test("while typing, a long press is left to the system", async ({ page }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
+test("typing / or @ opens its menu", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  const blocks = editor(page).locator("[data-slate-node='element']");
+  const count = await blocks.count();
+  await typeAt(page, "Second line.");
+
+  await page.keyboard.press("Enter");
+  await expect(blocks).toHaveCount(count + 1);
+  await page.keyboard.type("/quote");
+  await page.getByRole("option", { name: "Blockquote" }).click();
+  await page.keyboard.type("Quoted @Oth");
+  await expect(page.getByRole("option", { name: "Other" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => lastSave(page, "Note.md")).toContain("> Quoted");
+});
+
 test("a tap on a link opens it", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
 

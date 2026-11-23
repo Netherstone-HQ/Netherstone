@@ -41,7 +41,10 @@ patchedDependencies:
   # Also: on Android, a Gboard correction aimed outside the editor put the
   # corrected word after the typed one ("ratherather") instead of replacing
   # it (slate#6358). Fixed in slate-react 0.147.5, which Plate 53.5 doesn't
-  # use yet. Drop both once Plate moves to slate-react 0.147.5 or later.
+  # use yet. Those two can go once Plate moves to slate-react 0.147.5.
+  # Also on Android: after applying typed text, slate focused the editor
+  # again, taking focus from the / and @ menus' search so they closed at
+  # once. Check that the new version keeps that focus before dropping it.
   slate-react: patches/slate-react.patch
 
 overrides:

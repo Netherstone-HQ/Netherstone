@@ -1,0 +1,26 @@
+diff --git a/dist/index.es.js b/dist/index.es.js
+index fea425169edd90f15ea1d80674695c7ab9d0da75..cbb8a5c230a55fe90c242188bcffa390bcc79c1a 100644
+--- a/dist/index.es.js
++++ b/dist/index.es.js
+@@ -919,7 +919,7 @@ const DOMEditor = {
+         offset--;
+       }
+     }
+-    if (IS_ANDROID && !textNode && !exactMatch) {
++    if (IS_ANDROID && parentNode && !textNode && !exactMatch) {
+       const node = parentNode.hasAttribute('data-slate-node') ? parentNode : parentNode.closest('[data-slate-node]');
+       if (node && DOMEditor.hasDOMNode(editor, node, {
+         editable: true
+diff --git a/dist/index.js b/dist/index.js
+index b04669d599d293c6aba8780c385ef704ea88b6f8..b7b06c367b633f77059aad34e08d76b898a1de2c 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1145,7 +1145,7 @@ var DOMEditor = {
+         offset--;
+       }
+     }
+-    if (IS_ANDROID && !textNode && !exactMatch) {
++    if (IS_ANDROID && parentNode && !textNode && !exactMatch) {
+       var node = parentNode.hasAttribute('data-slate-node') ? parentNode : parentNode.closest('[data-slate-node]');
+       if (node && DOMEditor.hasDOMNode(editor, node, {
+         editable: true

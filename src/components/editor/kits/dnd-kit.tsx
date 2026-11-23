@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { insertManagedMediaFiles } from "@/components/editor/lib/media-insert";
 import { BlockDraggable } from "@/components/ui/block-draggable";
+import { IS_MOBILE } from "@/lib/platform";
 import { findScrollableAncestor } from "@/lib/scroll-root";
 
 /**
@@ -50,7 +51,8 @@ export const DndKit = [
       },
     },
     render: {
-      aboveNodes: BlockDraggable,
+      // No drag handles on a phone: blocks move from the long-press menu.
+      aboveNodes: IS_MOBILE ? undefined : BlockDraggable,
       afterEditable: () => <DragEdgeScroller />,
     },
   }),

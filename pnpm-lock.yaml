@@ -173,7 +173,8 @@ patchedDependencies:
   '@platejs/selection': 5ea30f518ffe90d9720a2889ff9ce1b84c686be7bf46034322a0f7a5673359c0
   jotai@2.8.4: 01d666c2804dedd5407a827df77a5f978124cc85704d11ed30134ba4372d10f3
   react-dom: f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368
-  slate-react: 94291d8377db1b96b3f8dae5a0684918fde08ee07b4e2faf6fa08144bb1a5f60
+  slate-dom: c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb
+  slate-react: adefed10bdc827b759e1e1238953f9b84866322758189546ad68eb3f79642a1a
 
 importers:
 
@@ -7063,9 +7064,9 @@ snapshots:
       react-compiler-runtime: 1.0.0(react@19.2.5)
       react-dom: 19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5)
       slate: 0.146.0
-      slate-dom: 0.146.0(slate@0.146.0)
+      slate-dom: 0.146.0(patch_hash=c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb)(slate@0.146.0)
       slate-hyperscript: 0.138.3(slate@0.146.0)
-      slate-react: 0.145.1(patch_hash=94291d8377db1b96b3f8dae5a0684918fde08ee07b4e2faf6fa08144bb1a5f60)(@types/lodash@4.17.24)(@types/react@19.2.14)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(slate-dom@0.146.0(slate@0.146.0))(slate@0.146.0)
+      slate-react: 0.145.1(patch_hash=adefed10bdc827b759e1e1238953f9b84866322758189546ad68eb3f79642a1a)(@types/lodash@4.17.24)(@types/react@19.2.14)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(slate-dom@0.146.0(patch_hash=c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb)(slate@0.146.0))(slate@0.146.0)
       use-deep-compare: 1.3.0(react@19.2.5)
       zustand: 5.0.12(@types/react@19.2.14)(immer@10.2.0)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
       zustand-x: 6.2.1(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(zustand@5.0.12(@types/react@19.2.14)(immer@10.2.0)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5)))
@@ -7236,7 +7237,7 @@ snapshots:
       lodash: 4.18.1
       scroll-into-view-if-needed: 3.1.0
       slate: 0.146.0
-      slate-dom: 0.146.0(slate@0.146.0)
+      slate-dom: 0.146.0(patch_hash=c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb)(slate@0.146.0)
 
   '@platejs/suggestion@53.2.3(platejs@53.5.2(@types/lodash@4.17.24)(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.5)))(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)':
     dependencies:
@@ -11472,7 +11473,7 @@ snapshots:
 
   sisteransi@1.0.5: {}
 
-  slate-dom@0.146.0(slate@0.146.0):
+  slate-dom@0.146.0(patch_hash=c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb)(slate@0.146.0):
     dependencies:
       '@juggle/resize-observer': 3.4.0
       direction: 1.0.4
@@ -11487,7 +11488,7 @@ snapshots:
     dependencies:
       slate: 0.146.0
 
-  slate-react@0.145.1(patch_hash=94291d8377db1b96b3f8dae5a0684918fde08ee07b4e2faf6fa08144bb1a5f60)(@types/lodash@4.17.24)(@types/react@19.2.14)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(slate-dom@0.146.0(slate@0.146.0))(slate@0.146.0):
+  slate-react@0.145.1(patch_hash=adefed10bdc827b759e1e1238953f9b84866322758189546ad68eb3f79642a1a)(@types/lodash@4.17.24)(@types/react@19.2.14)(react-dom@19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5))(react@19.2.5)(slate-dom@0.146.0(patch_hash=c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb)(slate@0.146.0))(slate@0.146.0):
     dependencies:
       '@juggle/resize-observer': 3.4.0
       direction: 1.0.4
@@ -11497,7 +11498,7 @@ snapshots:
       react-dom: 19.2.5(patch_hash=f1b4f5bf97d1b6b5ac917e203425ca2688f928169401ae6f1e18d5a206b48368)(react@19.2.5)
       scroll-into-view-if-needed: 3.1.0
       slate: 0.146.0
-      slate-dom: 0.146.0(slate@0.146.0)
+      slate-dom: 0.146.0(patch_hash=c3b508aad825fe7e756c017da0ecd7d05365e55faed5b3fbea2499732bfabfbb)(slate@0.146.0)
       tiny-invariant: 1.3.1
     optionalDependencies:
       '@types/lodash': 4.17.24

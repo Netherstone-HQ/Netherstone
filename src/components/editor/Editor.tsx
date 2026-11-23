@@ -25,7 +25,7 @@ import {
   offerCrashedEdits,
   restoreCrashedEditsOrSay,
 } from "@/lib/unsaved-edits";
-import { hasModKey } from "@/lib/platform";
+import { hasModKey, IS_MOBILE } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { isAssistantOn } from "@/lib/assistant";
 import { useEditorStore } from "@/store";
@@ -374,9 +374,10 @@ export function Editor() {
       const href = link.getAttribute("href")?.trim();
       if (!href || href.startsWith("#")) return;
 
-      // A link in the text opens on Ctrl+click; a plain click edits it.
+      // A link in the text opens on Ctrl+click; a plain click edits it. On a
+      // phone a tap opens it, and a long press selects its text to edit.
       const isTextLink = link.dataset.slateNode === "element";
-      if (isTextLink && !hasModKey(event)) {
+      if (isTextLink && !hasModKey(event) && !IS_MOBILE) {
         event.preventDefault();
         return;
       }

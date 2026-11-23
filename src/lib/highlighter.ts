@@ -1,6 +1,6 @@
 import type { createLowlight } from "lowlight";
 
-export type Highlighter = ReturnType<typeof createLowlight>;
+type Highlighter = ReturnType<typeof createLowlight>;
 
 let highlighter: Highlighter | null = null;
 let loading: Promise<Highlighter> | null = null;

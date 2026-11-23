@@ -94,12 +94,14 @@ export function pinChunkHeightsAbove(el: HTMLElement) {
 
 /**
  * Lays out `chunk` for one read and pins its real height as its intrinsic
- * size, which it keeps while `content-visibility: auto` skips it.
+ * size, which it keeps while `content-visibility: auto` skips it. Returns
+ * the height.
  */
-function pinChunkHeight(chunk: HTMLElement) {
+export function pinChunkHeight(chunk: HTMLElement) {
   pinnedChunks.add(chunk);
   chunk.style.contentVisibility = "visible";
-  const height = chunk.getBoundingClientRect().height;
-  chunk.style.containIntrinsicSize = `auto ${Math.round(height)}px`;
+  const height = Math.round(chunk.getBoundingClientRect().height);
+  chunk.style.containIntrinsicSize = `auto ${height}px`;
   chunk.style.contentVisibility = "auto";
+  return height;
 }

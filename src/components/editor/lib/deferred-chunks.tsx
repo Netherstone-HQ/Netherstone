@@ -5,17 +5,78 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
-import type { RenderChunkProps, SlateEditor } from "platejs";
+import {
+  createSlatePlugin,
+  type RenderChunkProps,
+  type SlateEditor,
+} from "platejs";
+import { DndPlugin } from "@platejs/dnd";
 import { cancelIdle, requestIdle } from "@/lib/idle-callback";
+import { findScrollableAncestor } from "@/lib/scroll-root";
+import { pinChunkHeight } from "./chunk-heights";
 
-/** Space an undrawn block holds until it's drawn and measured. */
+/**
+ * Space an undrawn block holds until it's drawn and measured. A shard past
+ * the drawn-element limit then uses what its first drawn blocks take.
+ */
 const UNDRAWN_BLOCK_HEIGHT_PX = 40;
 
 /** How far outside the window an undrawn chunk gets drawn early. */
-export const DRAW_AHEAD_MARGIN = "1500px 0px";
+const DRAW_AHEAD_PX = 1500;
+export const DRAW_AHEAD_MARGIN = `${DRAW_AHEAD_PX}px 0px`;
+
+/**
+ * Shards with up to this many elements stay fully drawn. In the Linux app a
+ * drawn element holds about 65 KB (script, page and style memory, measured
+ * on the bench shards), so this is about 1.2 GB: under the 1.5 GB past
+ * which WebKit frees memory every 30 s. The 390 KB bench shard (about 8,500
+ * elements) stays fully drawn.
+ */
+export const MAX_FULLY_DRAWN_ELEMENTS = 10_000;
+
+/**
+ * Most elements a longer shard keeps drawn, the parts nearest the screen.
+ * Lower than the above: drawing and undrawing leaves memory behind for a
+ * while (about 250 MB measured on the 1.3 MB bench shard).
+ */
+export const MAX_DRAWN_ELEMENTS = 6_000;
+
+/**
+ * Past the limit, the parts farthest from the screen are undrawn until this
+ * share of it is left, so drawing near the screen doesn't undraw on every
+ * step.
+ */
+const UNDRAW_DOWN_TO = 0.9;
+
+const TRIM_IDLE_TIMEOUT_MS = 1000;
+
+/** Whether `blocks` hold more elements than a shard keeps fully drawn. */
+export function isPastDrawnLimit(blocks: readonly unknown[]) {
+  let count = 0;
+  const visit = (node: unknown): boolean => {
+    const children = (node as { children?: unknown[] }).children;
+    if (!children) return false;
+    count += 1;
+    return count > MAX_FULLY_DRAWN_ELEMENTS || children.some(visit);
+  };
+  return blocks.some(visit);
+}
+
+/** A drawn lowest chunk, or one undrawn again for the limit. */
+export type TrackedChunk = {
+  first: number;
+  last: number;
+  /** Elements it holds while drawn. */
+  elements: number;
+  isUndrawn: boolean;
+  element: HTMLElement | null;
+  undraw: () => void;
+  redraw: () => void;
+};
 
 const DRAW_IDLE_TIMEOUT_MS = 500;
 
@@ -47,15 +108,35 @@ const MAX_STEP_GROWTH = 64;
  * The blocks drawn so far are always the first ones: `drawnBlocks` only
  * grows, and a chunk stays drawn once it is, even when edits above it shift
  * its blocks past `drawnBlocks`. Once the shard is closed, it only shrinks
- * (see `undrawInBackground`).
+ * (see `undrawInBackground`). The exception is a shard past the
+ * drawn-element limit: every block counts as reached, and each chunk is
+ * drawn and undrawn on its own, by how near the screen it is.
  */
 export class ChunkDrawer {
   private drawnBlocks: number;
   private closed = false;
   private readonly listeners = new Set<() => void>();
+  private editor: SlateEditor | null = null;
+  private readonly chunks = new Set<TrackedChunk>();
+  private trimId: number | null = null;
+  /** Too long to draw fully: only the parts near the screen stay drawn. */
+  private isLimited: boolean;
+  /** Space an undrawn block holds, once some are drawn: as much as they do. */
+  private blockHeight = UNDRAWN_BLOCK_HEIGHT_PX;
+  /** With the limit, the blocks drawn when the shard opens. */
+  private readonly firstDrawn: { from: number; to: number };
 
-  constructor(firstBlocks: number) {
-    this.drawnBlocks = firstBlocks;
+  /**
+   * Draws blocks up to `firstBlocks` first. A shard past the drawn-element
+   * limit (see `isPastDrawnLimit`) draws only from `limitedFrom` up to
+   * there, and later only what comes near the screen: drawing it all once
+   * took WebKit past 1.5 GB, and its memory release then left every style
+   * to redo on the next jump (about 1 s).
+   */
+  constructor(firstBlocks: number, limitedFrom?: number) {
+    this.isLimited = limitedFrom !== undefined;
+    this.firstDrawn = { from: limitedFrom ?? 0, to: firstBlocks };
+    this.drawnBlocks = this.isLimited ? Number.MAX_SAFE_INTEGER : firstBlocks;
   }
 
   subscribe = (listener: () => void) => {
@@ -72,6 +153,154 @@ export class ChunkDrawer {
   /** Whether the shard is closed and being undrawn. */
   get isClosed() {
     return this.closed;
+  }
+
+  attach(editor: SlateEditor) {
+    this.editor = editor;
+  }
+
+  /** Whether only the parts near the screen stay drawn, for the limit. */
+  get drawsNearScreenOnly() {
+    return this.isLimited;
+  }
+
+  /** Space a block not drawn yet holds, in pixels. */
+  get undrawnBlockHeight() {
+    return this.blockHeight;
+  }
+
+  /** Whether the chunk of blocks `first` to `last` starts as a placeholder. */
+  startsUndrawn(first: number, last: number) {
+    return (
+      this.isLimited &&
+      (last < this.firstDrawn.from || first >= this.firstDrawn.to)
+    );
+  }
+
+  /** Elements in the top-level blocks `first` to `last`, the blocks included. */
+  countElements(first: number, last: number) {
+    let count = 0;
+    const visit = (node: unknown) => {
+      const children = (node as { children?: unknown[] }).children;
+      if (!children) return;
+      count += 1;
+      children.forEach(visit);
+    };
+    this.editor?.children.slice(first, last + 1).forEach(visit);
+    return count;
+  }
+
+  /**
+   * Keeps count of a lowest chunk while it's drawn or undrawn for the limit.
+   * Returns a function that stops.
+   */
+  track(chunk: TrackedChunk) {
+    this.chunks.add(chunk);
+    if (!chunk.isUndrawn) this.scheduleTrim();
+    return () => {
+      this.chunks.delete(chunk);
+    };
+  }
+
+  /** Whether block `blockIndex` was drawn and is undrawn again for the limit. */
+  isUndrawnAgain(blockIndex: number) {
+    return !!this.undrawnChunkAt(blockIndex);
+  }
+
+  /** Draws again the chunk holding `blockIndex`, if it was undrawn for the limit. */
+  redrawAt(blockIndex: number) {
+    this.undrawnChunkAt(blockIndex)?.redraw();
+  }
+
+  /**
+   * Draws again the chunks the selection starts and ends in: the editor
+   * puts the caret into the page right after a change.
+   */
+  keepSelectionDrawn() {
+    const selection = this.editor?.selection;
+    if (!selection) return;
+    this.redrawAt(selection.anchor.path[0]);
+    this.redrawAt(selection.focus.path[0]);
+  }
+
+  private undrawnChunkAt(blockIndex: number) {
+    for (const chunk of this.chunks) {
+      if (
+        chunk.isUndrawn &&
+        chunk.first <= blockIndex &&
+        blockIndex <= chunk.last
+      ) {
+        return chunk;
+      }
+    }
+    return undefined;
+  }
+
+  private drawnElements() {
+    let count = 0;
+    for (const chunk of this.chunks)
+      if (!chunk.isUndrawn) count += chunk.elements;
+    return count;
+  }
+
+  private scheduleTrim() {
+    if (this.closed || this.trimId !== null) return;
+    const drawn = this.drawnElements();
+    if (drawn > MAX_FULLY_DRAWN_ELEMENTS) this.isLimited = true;
+    if (!this.isLimited || drawn <= MAX_DRAWN_ELEMENTS) return;
+
+    this.trimId = requestIdle(this.trim, { timeout: TRIM_IDLE_TIMEOUT_MS });
+  }
+
+  /** Undraws the drawn chunks farthest from the screen, down to the limit. */
+  private trim = (deadline: IdleDeadline) => {
+    this.trimId = null;
+    if (this.closed) return;
+    // The block being dragged keeps its part however far the drag scrolls:
+    // undrawing it would take away the drag's source. Trimming resumes with
+    // the next part drawn.
+    if (this.editor?.getOption(DndPlugin, "isDragging")) return;
+
+    this.undrawFarthest(
+      performance.now() + Math.max(STEP_BUDGET_MS, deadline.timeRemaining()),
+    );
+    this.scheduleTrim();
+  };
+
+  /**
+   * Undraws the drawn chunks farthest from the screen until the limit's
+   * share is left or `until` passes, at least one. Returns how many.
+   */
+  private undrawFarthest(until: number) {
+    let drawn = this.drawnElements();
+    const goal = MAX_DRAWN_ELEMENTS * UNDRAW_DOWN_TO;
+    if (drawn <= goal) return 0;
+
+    const selection = this.editor?.selection;
+    const held = selection
+      ? [selection.anchor.path[0], selection.focus.path[0]]
+      : [];
+
+    const farthest = [...this.chunks]
+      .filter(
+        (chunk) =>
+          !chunk.isUndrawn &&
+          chunk.element &&
+          !held.some((block) => chunk.first <= block && block <= chunk.last),
+      )
+      .map((chunk) => ({ chunk, distance: distanceFromScreen(chunk.element!) }))
+      .filter(({ distance }) => distance > DRAW_AHEAD_PX)
+      .sort((a, b) => b.distance - a.distance);
+
+    let undrawn = 0;
+    for (const { chunk } of farthest) {
+      if (drawn <= goal) break;
+      drawn -= chunk.elements;
+      chunk.undraw();
+      undrawn += 1;
+      if (performance.now() >= until) break;
+    }
+    return undrawn;
   }
 
   /** Draws every block up to and including `blockIndex`. */
@@ -109,6 +338,7 @@ export class ChunkDrawer {
       do {
         const count = blockCount();
         if (this.isDrawn(count - 1)) {
+          if (this.isLimited) this.sizeUndrawnLikeDrawn();
           // Blocks added from now on are drawn as they come.
           this.drawAll();
           onComplete?.();
@@ -159,6 +389,8 @@ export class ChunkDrawer {
     onEmpty: () => void,
   ) {
     this.closed = true;
+    if (this.trimId !== null) cancelIdle(this.trimId);
+    this.trimId = null;
     this.drawnBlocks = Math.min(this.drawnBlocks, blockCount);
     let idleId: number | null = null;
 
@@ -186,6 +418,36 @@ export class ChunkDrawer {
     };
   }
 
+  /**
+   * Gives the parts not drawn yet the space per block the drawn ones take,
+   * so the scrollbar fits the shard, keeping what's on screen in place.
+   */
+  private sizeUndrawnLikeDrawn() {
+    const drawn = [...this.chunks].filter(
+      (chunk) => !chunk.isUndrawn && chunk.element,
+    );
+    let blocks = 0;
+    let height = 0;
+    for (const chunk of drawn) {
+      blocks += chunk.last - chunk.first + 1;
+      height += pinChunkHeight(chunk.element!);
+    }
+    if (blocks === 0) return;
+
+    const anchor = drawn.find(
+      (chunk) => chunk.element!.getBoundingClientRect().bottom > 0,
+    )?.element;
+    const topBefore = anchor?.getBoundingClientRect().top;
+    this.blockHeight = Math.round(height / blocks);
+    flushSync(() => this.listeners.forEach((listener) => listener()));
+
+    if (!anchor || topBefore === undefined) return;
+    const scrollRoot = findScrollableAncestor(anchor);
+    if (scrollRoot) {
+      scrollRoot.scrollTop += anchor.getBoundingClientRect().top - topBefore;
+    }
+  }
+
   private setDrawnBlocks(count: number) {
     this.drawnBlocks = count;
     this.listeners.forEach((listener) => listener());
@@ -195,8 +457,33 @@ export class ChunkDrawer {
 const drawers = new WeakMap<SlateEditor, ChunkDrawer>();
 
 export function registerChunkDrawer(editor: SlateEditor, drawer: ChunkDrawer) {
+  drawer.attach(editor);
   drawers.set(editor, drawer);
 }
+
+/** How far `element` is above or below the window, 0 when in it. */
+function distanceFromScreen(element: HTMLElement) {
+  const { top, bottom } = element.getBoundingClientRect();
+  if (bottom < 0) return -bottom;
+  if (top > window.innerHeight) return top - window.innerHeight;
+  return 0;
+}
+
+/**
+ * Draws again a part undrawn for the drawn-element limit when the
+ * selection moves into it (an undo far down, Ctrl+End), before the editor
+ * puts the caret on the page.
+ */
+export const KeepSelectionDrawnPlugin = createSlatePlugin({
+  key: "keepSelectionDrawn",
+}).overrideEditor(({ editor, api: { onChange } }) => ({
+  api: {
+    onChange(options) {
+      drawers.get(editor)?.keepSelectionDrawn();
+      onChange(options);
+    },
+  },
+}));
 
 /**
  * Undraws a closed shard's `editor` in steps (see
@@ -228,9 +515,13 @@ export function undrawClosedEditor(
  */
 export function drawBlocksThrough(editor: SlateEditor, blockIndex: number) {
   const drawer = drawers.get(editor);
-  if (!drawer || drawer.isDrawn(blockIndex)) return true;
+  if (!drawer) return true;
+  if (drawer.isDrawn(blockIndex) && !drawer.isUndrawnAgain(blockIndex)) {
+    return true;
+  }
 
   drawer.drawThrough(blockIndex);
+  drawer.redrawAt(blockIndex);
   return false;
 }
 
@@ -264,27 +555,95 @@ function DeferredChunk({ attributes, children, lowest }: RenderChunkProps) {
 
   const wasDrawnRef = useRef(false);
   if (isDrawnNow) wasDrawnRef.current = true;
-  const isDrawn = drawer?.isClosed ? isDrawnNow : wasDrawnRef.current;
+  const isReached = drawer?.isClosed ? isDrawnNow : wasDrawnRef.current;
+  // Undrawn for the drawn-element limit, at the height it had if it was
+  // drawn before.
+  const [isUndrawnAgain, setUndrawnAgain] = useState(
+    () => !!drawer && !!range && drawer.startsUndrawn(range.first, range.last),
+  );
+  const keptHeightRef = useRef<number | null>(null);
+  const isDrawn = isReached && !isUndrawnAgain;
+  const blockHeight = useSyncExternalStore(
+    drawer?.subscribe ?? noSubscription,
+    () => drawer?.undrawnBlockHeight ?? UNDRAWN_BLOCK_HEIGHT_PX,
+  );
 
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const chunkRef = useRef<HTMLDivElement>(null);
+  const first = range?.first;
   const last = range?.last;
+
+  // Drawn now, with its height pinned. A part starting above the window
+  // moves what's on screen by however much taller or shorter it is than its
+  // placeholder, so the window scrolls by as much.
+  const redraw = () => {
+    const before = placeholderRef.current?.getBoundingClientRect();
+    flushSync(() => setUndrawnAgain(false));
+    const chunk = chunkRef.current;
+    if (!chunk || !before) return;
+
+    const height = pinChunkHeight(chunk);
+    keptHeightRef.current = height;
+    if (before.top < 0) {
+      const scrollRoot = findScrollableAncestor(chunk);
+      if (scrollRoot) scrollRoot.scrollTop += height - before.height;
+    }
+  };
+
+  useEffect(() => {
+    if (!drawer || drawer.isClosed || !isReached) return;
+    if (first === undefined || last === undefined) return;
+
+    return drawer.track({
+      first,
+      last,
+      elements: drawer.countElements(first, last),
+      isUndrawn: isUndrawnAgain,
+      get element() {
+        return chunkRef.current;
+      },
+      undraw: () => {
+        if (chunkRef.current) {
+          keptHeightRef.current = pinChunkHeight(chunkRef.current);
+        }
+        flushSync(() => setUndrawnAgain(true));
+      },
+      redraw,
+    });
+  }, [drawer, first, isReached, isUndrawnAgain, last]);
 
   useEffect(() => {
     const placeholder = placeholderRef.current;
     if (isDrawn || !drawer || drawer.isClosed) return;
     if (last === undefined || !placeholder) return;
 
+    let idleId: number | null = null;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        if (!isUndrawnAgain) {
           drawer.drawThrough(last);
+          return;
         }
+        // Drawn again only if it's still near the screen at the next quiet
+        // moment: a jump or a fast scroll passes many parts it shouldn't draw.
+        if (idleId !== null) return;
+        idleId = requestIdle(
+          () => {
+            idleId = null;
+            if (distanceFromScreen(placeholder) <= DRAW_AHEAD_PX) redraw();
+          },
+          { timeout: DRAW_IDLE_TIMEOUT_MS },
+        );
       },
       { rootMargin: DRAW_AHEAD_MARGIN },
     );
     observer.observe(placeholder);
-    return () => observer.disconnect();
-  }, [drawer, isDrawn, last]);
+    return () => {
+      observer.disconnect();
+      if (idleId !== null) cancelIdle(idleId);
+    };
+  }, [drawer, isDrawn, isUndrawnAgain, last]);
 
   if (!lowest) return children;
 
@@ -299,7 +658,9 @@ function DeferredChunk({ attributes, children, lowest }: RenderChunkProps) {
         contentEditable={false}
         data-undrawn-chunk=""
         style={{
-          height: (range.last - range.first + 1) * UNDRAWN_BLOCK_HEIGHT_PX,
+          height:
+            keptHeightRef.current ??
+            (range.last - range.first + 1) * blockHeight,
         }}
       />
     );
@@ -308,12 +669,13 @@ function DeferredChunk({ attributes, children, lowest }: RenderChunkProps) {
   // Off screen, a chunk keeps the space its placeholder had until it's
   // measured, so the scrollbar doesn't jump as later parts are drawn.
   const estimate = range
-    ? `auto ${(range.last - range.first + 1) * UNDRAWN_BLOCK_HEIGHT_PX}px`
+    ? `auto ${keptHeightRef.current ?? (range.last - range.first + 1) * blockHeight}px`
     : undefined;
 
   return (
     <div
       key="drawn"
+      ref={chunkRef}
       {...attributes}
       style={{ contentVisibility: "auto", containIntrinsicSize: estimate }}
     >

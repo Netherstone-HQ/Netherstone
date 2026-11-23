@@ -9,6 +9,7 @@ import {
   type TElement,
 } from "platejs";
 import { pinChunkHeightsAbove } from "@/components/editor/lib/chunk-heights";
+import { findScrollableAncestor } from "@/lib/scroll-root";
 import { drawBlocksThrough } from "@/components/editor/lib/deferred-chunks";
 
 const headingDepth: Record<string, number> = {
@@ -115,30 +116,6 @@ export function getPlateHeadingList(editor: SlateEditor): Heading[] {
 
   walk(editor.children, []);
   return headingList;
-}
-
-/**
- * Nearest scrollable ancestor (the element that actually moves when the user
- * scrolls the document): `<main>` for the open shard; an editor elsewhere
- * may scroll a box of its own.
- */
-function findScrollableAncestor(start: HTMLElement | null): HTMLElement | null {
-  let el: HTMLElement | null = start;
-
-  while (el) {
-    const { overflowY } = window.getComputedStyle(el);
-    const canScrollY =
-      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
-      el.scrollHeight > el.clientHeight + 1;
-
-    if (canScrollY) {
-      return el;
-    }
-
-    el = el.parentElement;
-  }
-
-  return null;
 }
 
 /** Sticky UI (e.g. fixed toolbar) inside the same scroll root as the heading. */

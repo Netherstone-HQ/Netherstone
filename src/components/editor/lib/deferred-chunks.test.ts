@@ -4,7 +4,11 @@ import type { SlateEditor } from "platejs";
 import {
   ChunkDrawer,
   drawBlocksThrough,
+  isPastDrawnLimit,
+  MAX_DRAWN_ELEMENTS,
+  MAX_FULLY_DRAWN_ELEMENTS,
   registerChunkDrawer,
+  type TrackedChunk,
 } from "./deferred-chunks";
 
 // The background steps use the timer fallback WebKit webviews get, which
@@ -122,7 +126,7 @@ describe("ChunkDrawer, once its shard is closed", () => {
 
 describe("drawBlocksThrough", () => {
   it("says whether a block was already drawn, and draws it", () => {
-    const editor = {} as SlateEditor;
+    const editor = { children: [] } as unknown as SlateEditor;
     const drawer = new ChunkDrawer(10);
     registerChunkDrawer(editor, drawer);
 
@@ -134,5 +138,144 @@ describe("drawBlocksThrough", () => {
 
   it("treats an editor drawn all at once as drawn", () => {
     expect(drawBlocksThrough({} as SlateEditor, 500)).toBe(true);
+  });
+});
+
+describe("ChunkDrawer, for a shard past the drawn-element limit", () => {
+  const BLOCKS_PER_CHUNK = 10;
+  const BLOCK_HEIGHT_PX = 40;
+
+  /** One-element blocks: a paragraph with one text. */
+  const blocks = (count: number) =>
+    Array.from({ length: count }, () => ({
+      type: "p",
+      children: [{ text: "" }],
+    }));
+
+  /**
+   * Tracks the shard's 10-block chunks as the component does, each laid out
+   * at its place on a page scrolled to the top.
+   */
+  function track(
+    drawer: ChunkDrawer,
+    blockCount: number,
+    isUndrawn: (first: number, last: number) => boolean,
+  ) {
+    const chunks: TrackedChunk[] = [];
+    for (let first = 0; first < blockCount; first += BLOCKS_PER_CHUNK) {
+      const last = first + BLOCKS_PER_CHUNK - 1;
+      const top = first * BLOCK_HEIGHT_PX;
+      const element = document.createElement("div");
+      element.getBoundingClientRect = () =>
+        ({ top, bottom: top + BLOCK_HEIGHT_PX * BLOCKS_PER_CHUNK }) as DOMRect;
+      const chunk: TrackedChunk = {
+        first,
+        last,
+        elements: BLOCKS_PER_CHUNK,
+        isUndrawn: isUndrawn(first, last),
+        element,
+        undraw: () => {
+          chunk.isUndrawn = true;
+        },
+        redraw: () => {
+          chunk.isUndrawn = false;
+        },
+      };
+      chunks.push(chunk);
+      drawer.track(chunk);
+    }
+    return chunks;
+  }
+
+  it("tells a shard past the limit from one under it", () => {
+    expect(isPastDrawnLimit(blocks(MAX_FULLY_DRAWN_ELEMENTS))).toBe(false);
+    expect(isPastDrawnLimit(blocks(MAX_FULLY_DRAWN_ELEMENTS + 1))).toBe(true);
+  });
+
+  it("draws only the first part, and others when asked for", () => {
+    const blockCount = MAX_FULLY_DRAWN_ELEMENTS + 500;
+    const editor = {
+      children: blocks(blockCount),
+      selection: null,
+      getOption: () => false,
+    } as unknown as SlateEditor;
+    const drawer = new ChunkDrawer(40, 0);
+    registerChunkDrawer(editor, drawer);
+    const chunks = track(drawer, blockCount, (first, last) =>
+      drawer.startsUndrawn(first, last),
+    );
+
+    expect(drawer.drawsNearScreenOnly).toBe(true);
+    expect(chunks.filter((c) => !c.isUndrawn).map((c) => c.first)).toEqual([
+      0, 10, 20, 30,
+    ]);
+
+    const lastBlock = blockCount - 1;
+    expect(drawBlocksThrough(editor, lastBlock)).toBe(false);
+    expect(chunks.at(-1)?.isUndrawn).toBe(false);
+    expect(drawBlocksThrough(editor, lastBlock)).toBe(true);
+  });
+
+  it("undraws the parts farthest from the screen once past the limit", () => {
+    vi.useFakeTimers();
+    const blockCount = MAX_FULLY_DRAWN_ELEMENTS + 500;
+    const drawer = new ChunkDrawer(blockCount);
+    registerChunkDrawer(
+      {
+        children: blocks(blockCount),
+        selection: null,
+        getOption: () => false,
+      } as unknown as SlateEditor,
+      drawer,
+    );
+    const chunks = track(drawer, blockCount, () => false);
+
+    vi.advanceTimersByTime(60_000);
+
+    const drawn = chunks.filter((c) => !c.isUndrawn);
+    expect(drawn.length * BLOCKS_PER_CHUNK).toBeLessThanOrEqual(
+      MAX_DRAWN_ELEMENTS,
+    );
+    expect(drawn[0].first).toBe(0);
+    expect(chunks.at(-1)?.isUndrawn).toBe(true);
+  });
+
+  it("undraws nothing while a block is being dragged", () => {
+    vi.useFakeTimers();
+    const blockCount = MAX_FULLY_DRAWN_ELEMENTS + 500;
+    const drawer = new ChunkDrawer(blockCount);
+    registerChunkDrawer(
+      {
+        children: blocks(blockCount),
+        selection: null,
+        getOption: () => true,
+      } as unknown as SlateEditor,
+      drawer,
+    );
+    const chunks = track(drawer, blockCount, () => false);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(chunks.every((c) => !c.isUndrawn)).toBe(true);
+  });
+
+  it("leaves a shard under the limit fully drawn", () => {
+    vi.useFakeTimers();
+    const blockCount = 2_000;
+    const drawer = new ChunkDrawer(blockCount);
+    registerChunkDrawer(
+      {
+        children: blocks(blockCount),
+        selection: null,
+        getOption: () => false,
+      } as unknown as SlateEditor,
+      drawer,
+    );
+    const chunks = track(drawer, blockCount, () => false);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(drawer.drawsNearScreenOnly).toBe(false);
+    expect(chunks.every((c) => !c.isUndrawn)).toBe(true);
   });
 });

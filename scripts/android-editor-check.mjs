@@ -27,6 +27,8 @@ const OUT = process.argv[2] ?? "android-editor-check";
 const APK = process.env.APK;
 const VAULT = process.env.VAULT ?? smallVault();
 const SHARD = "touch-check";
+// Android's own permission prompt.
+const PERMISSIONS = "com.android.permissioncontroller";
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
 // stuck step reaches it.
@@ -195,6 +197,14 @@ async function saveFailure(label) {
   await save("the screen picture", () => device.screenshot({ path: path.join(OUT, `${label}-screen.png`) }));
 }
 
+/** Asks for a voice note from the / menu, on a new line. */
+async function startVoiceNote() {
+  await shell("input keyevent KEYCODE_MOVE_END");
+  await shell("input keyevent KEYCODE_ENTER");
+  await typeKeys("/voice");
+  await tap(page.getByRole("option", { name: "Voice note" }));
+}
+
 const editor = () => page.locator("[data-slate-editor]").first();
 const block = (text) => editor().locator("[data-slate-node=element]").filter({ hasText: text }).last();
 const bar = () => page.getByRole("toolbar", { name: "Formatting" });
@@ -225,7 +235,8 @@ let shardFile;
 try {
   if (await shell(`pm list packages ${PACKAGE}`)) await shell(`pm uninstall ${PACKAGE}`);
   log("install", APK);
-  adb("install", "-g", APK);
+  // No permissions given up front: the microphone is asked for as on a phone.
+  adb("install", APK);
   await shell("wm dismiss-keyguard");
   adb("logcat", "-c");
 
@@ -235,6 +246,26 @@ try {
     await page.getByRole("button", { name: /^Create a new vault/ }).click();
     await page.getByRole("button", { name: "Create vault", exact: true }).click();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Take your vault everywhere" })).toBeVisible();
+  });
+
+  await step("github-sign-in", async () => {
+    // GitHub gives a code (so the app reached it), and the phone's browser
+    // opens on GitHub's page for it. The sign-in itself needs an account.
+    await page.getByRole("button", { name: "Connect GitHub" }).click();
+    await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
+    await page.getByRole("button", { name: "Copy code and open GitHub" }).click();
+    await expect
+      .poll(() => shell("dumpsys activity activities | grep -m1 topResumedActivity"), {
+        message: "another app in front",
+      })
+      .not.toContain(PACKAGE);
+    await shell(`am start -W -n ${ACTIVITY}`);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "Connect GitHub" })).toBeVisible();
+  });
+
+  await step("welcome-tour-end", async () => {
     await page.getByRole("button", { name: "Skip for now" }).click();
     await page.getByRole("button", { name: "Skip for now" }).click();
     await page.getByRole("button", { name: "Open Netherstone" }).click();
@@ -326,7 +357,28 @@ try {
     await expect.poll(() => readAppFile(shardFile)).toContain("> quoted line");
   });
 
+  await step("voice-note-refused", async () => {
+    await startVoiceNote();
+    await within(device.tap({ res: `${PERMISSIONS}:id/permission_deny_button` }), "the microphone prompt");
+    await expect(page.getByText("Microphone access is off for Netherstone")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open system settings" })).toBeVisible();
+    await tap(page.getByRole("button", { name: "Discard" }));
+  });
+
+  await step("voice-note-allowed", async () => {
+    await startVoiceNote();
+    await within(
+      device.tap({ res: `${PERMISSIONS}:id/permission_allow_foreground_only_button` }),
+      "the microphone prompt",
+    );
+    await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
+    await tap(page.getByRole("button", { name: "Save" }));
+    await expect.poll(() => readAppFile(shardFile)).toContain(".webm");
+  });
+
   await step("hide-keyboard", async () => {
+    await tap(block("quoted line"), 0.98);
+    await expect(bar()).toBeVisible();
     await tap(bar().getByRole("button", { name: "Hide keyboard" }));
     await expect.poll(keyboardInset).toBe(0);
     await expect(bar()).toBeHidden();

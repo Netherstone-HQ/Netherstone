@@ -5,7 +5,7 @@ import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 /**
  * What the phone's own screen parts cover, in CSS px. On Android the app's
  * frame shrinks above the keyboard and MainActivity.kt reports the sizes:
- * `NetherstoneInsets.get()` at start, a `systeminsets` event on each change.
+ * `NetherstoneAndroid.insets()` at start, a `systeminsets` event on each change.
  * Elsewhere the page stays full height and the keyboard covers the bottom of
  * the visual viewport.
  *
@@ -25,7 +25,8 @@ type Reported = { keyboard?: number; top?: number; bottom?: number };
 
 declare global {
   interface Window {
-    NetherstoneInsets?: { get(): string };
+    /** Set by MainActivity.kt on Android. */
+    NetherstoneAndroid?: { insets(): string; openAppSettings(): void };
   }
 }
 
@@ -73,7 +74,7 @@ if (typeof window !== "undefined") {
       apply((event as CustomEvent<Reported>).detail ?? {}),
     );
     try {
-      const reported = window.NetherstoneInsets?.get();
+      const reported = window.NetherstoneAndroid?.insets();
       if (reported) apply(JSON.parse(reported) as Reported);
     } catch {
       // An app built before the insets were reported: CSS falls back to env().

@@ -42,7 +42,7 @@ export const MediaEmbedElement = withHOC(
   function MediaEmbedElement(
     props: PlateElementProps<TMediaEmbedElement & TResizableProps>,
   ) {
-    const { align = "center", embed, isVideo, isYoutube, readOnly, unsafeUrl } =
+    const { align = "center", embed, focused, isVideo, isYoutube, readOnly, selected, unsafeUrl } =
       useMediaState({ urlParsers: [parseTwitterUrl, parseVideoUrl] });
     const width = useResizableValue("width");
     const isEditorMounted = useEditorMounted();
@@ -72,6 +72,7 @@ export const MediaEmbedElement = withHOC(
         <figure
           className="group relative m-0 w-full cursor-default"
           contentEditable={false}
+          data-selected={(focused && selected) || undefined}
         >
           <Resizable
             className={cn(isDragging && "opacity-50")}

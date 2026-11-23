@@ -220,6 +220,8 @@ export const VideoElement = withHOC(
       isUpload,
       isYoutube,
       readOnly,
+      focused,
+      selected,
       unsafeUrl,
     } = useMediaState({
       urlParsers: [parseTwitterUrl, parseVideoUrl],
@@ -406,6 +408,7 @@ export const VideoElement = withHOC(
         <figure
           className="group relative m-0 cursor-default"
           contentEditable={false}
+          data-selected={(focused && selected) || undefined}
         >
           <Resizable
             className={cn(isDragging && "opacity-50")}

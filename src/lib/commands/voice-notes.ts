@@ -58,12 +58,15 @@ export async function discardVoiceNote(): Promise<void> {
 
 /** Whether this system has a page to turn microphone access on. */
 export async function microphoneSettingsAvailable(): Promise<boolean> {
+  // On Android, the app's own settings page, where its permissions are.
+  if (window.NetherstoneAndroid) return true;
   assertTauri();
   return invoke<boolean>("microphone_settings_available");
 }
 
 /** Opens the system's microphone privacy page. */
 export async function openMicrophoneSettings(): Promise<void> {
+  if (window.NetherstoneAndroid) return window.NetherstoneAndroid.openAppSettings();
   assertTauri();
   await invoke("open_microphone_settings");
 }

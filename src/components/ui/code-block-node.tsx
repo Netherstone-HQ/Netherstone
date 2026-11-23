@@ -2,9 +2,14 @@
 
 import * as React from "react";
 
-import { formatCodeBlock, isLangSupported } from "@platejs/code-block";
+import {
+  formatCodeBlock,
+  isLangSupported,
+  setCodeBlockToDecorations,
+} from "@platejs/code-block";
+import { CodeBlockPlugin } from "@platejs/code-block/react";
 import { BracesIcon, Check, CheckIcon, CopyIcon } from "lucide-react";
-import { type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
+import { KEYS, type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
 import {
   type PlateElementProps,
   type PlateLeafProps,
@@ -32,6 +37,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { loadHighlighter } from "@/lib/highlighter";
 import { cn } from "@/lib/utils";
 import { CODE_LANGUAGES as languages } from "@/components/editor/lib/code-languages";
 import { DiagramPreview } from "@/components/ui/diagram-preview";
@@ -77,6 +83,35 @@ function useDiagramView(element: TCodeBlockElement, isDiagram: boolean) {
   return [view, choose] as const;
 }
 
+/**
+ * Loads the code highlighter the first time a code block shows, then colors
+ * the editor's code blocks. Its languages are most of the app's script, so
+ * they don't load with the app.
+ */
+function useHighlighter() {
+  const editor = useEditorRef();
+
+  React.useEffect(() => {
+    if (editor.getOption(CodeBlockPlugin, "lowlight")) return;
+    let cancelled = false;
+    void loadHighlighter().then((lowlight) => {
+      if (cancelled || editor.getOption(CodeBlockPlugin, "lowlight")) return;
+      editor.setOption(CodeBlockPlugin, "lowlight", lowlight);
+      const codeBlocks = editor.api.nodes<TCodeBlockElement>({
+        at: [],
+        match: { type: editor.getType(KEYS.codeBlock) },
+      });
+      for (const entry of codeBlocks) {
+        setCodeBlockToDecorations(editor, entry);
+      }
+      editor.api.redecorate();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor]);
+}
+
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
   const { editor, element } = props;
   const isDiagram = element.lang === DIAGRAM_LANG;
@@ -85,6 +120,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
   // An empty diagram has nothing to show but its code.
   const showsCode = !isDiagram || view !== "diagram" || !code.trim();
   const showsDiagram = isDiagram && view !== "code";
+  useHighlighter();
 
   return (
     <PlateElement

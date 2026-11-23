@@ -24,6 +24,22 @@ export default defineConfig({
     format: "es",
   },
 
+  build: {
+    // The startup script (3,176 kB) holds what showing a shard needs: React,
+    // Slate, Plate and the editor. Everything else loads on demand. Just
+    // above its size, so a build warns when the startup script grows.
+    chunkSizeWarningLimit: 3_300,
+    rollupOptions: {
+      treeshake: {
+        // @platejs/math's main entry imports KaTeX for a helper the app
+        // doesn't use, which kept KaTeX in the startup script. Loading KaTeX
+        // does nothing else (a quirks-mode check), so it's left out unless
+        // something calls it: the equation hook (patched) and export load it.
+        moduleSideEffects: (id) => !/\/katex\/dist\/katex\.m?js$/.test(id),
+      },
+    },
+  },
+
   resolve: {
     alias: [
       { find: "@", replacement: path.resolve(__dirname, "./src") },

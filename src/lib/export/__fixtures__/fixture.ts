@@ -6,7 +6,7 @@ import { loadMarkdown } from "@/test/markdown";
 
 import type { ImageMap } from "../assets";
 import { buildExportDocument } from "../build";
-import { loadHighlighter } from "../highlight";
+import { loadHighlighter } from "@/lib/highlighter";
 import { loadMath } from "../math";
 
 // The fixture has code and math, which the app loads on demand before building.

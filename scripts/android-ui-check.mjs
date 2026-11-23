@@ -42,13 +42,27 @@ function adb(...args) {
   }
 }
 
+/** Waits for `promise`, failing once the wait limit has passed. */
+async function within(promise, what) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Waited ${WAIT_LIMIT_MS} ms for ${what}`)), WAIT_LIMIT_MS);
+  });
+  try {
+    return await Promise.race([promise, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---- The app ----
 
 const [device] = await android.devices({ omitDriverInstall: true });
 if (!device) throw new Error("No Android device or emulator is connected");
 device.setDefaultTimeout(WAIT_LIMIT_MS);
 
-const shell = async (command) => (await device.shell(command)).toString().trim();
+const shell = async (command) =>
+  (await within(device.shell(command), `adb shell ${command}`)).toString().trim();
 
 /** Reads a file in the app's private storage (the emulator image allows root). */
 const readAppFile = (file) => shell(`su 0 cat '${file}'`);
@@ -59,13 +73,14 @@ let page;
 /** Starts the app fresh and attaches to its page once it's there. */
 async function launch() {
   if (webView) {
-    const closed = webView.waitForEvent("close");
+    const closed = new Promise((resolve) => webView.once("close", resolve));
     await shell(`am force-stop ${PACKAGE}`);
-    await closed;
+    await within(closed, "the old WebView to close");
   }
   await shell(`am start -W -n ${ACTIVITY}`);
   webView = await device.webView({ pkg: PACKAGE });
-  page = await webView.page();
+  // Playwright sets no limit on attaching to the page, so this sets one.
+  page = await within(webView.page(), "the app's page to attach");
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
 }

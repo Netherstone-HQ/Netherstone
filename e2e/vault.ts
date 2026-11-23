@@ -525,7 +525,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         },
         // The first line that isn't a heading, as the app's own reads it.
         get_shard_previews: ({ paths }) =>
-          (paths as string[]).map((path) => {
+          (paths as unknown as string[]).map((path) => {
             const content = files[relative(path)];
             const line = content
               ?.split("\n")

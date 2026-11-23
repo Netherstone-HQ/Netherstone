@@ -268,6 +268,7 @@ pub fn run() {
             shards::files::open_markdown_file,
             shards::files::save_markdown_file,
             shards::files::append_markdown_to_file,
+            shards::files::create_shard_file,
             shards::drawings::read_drawing_file,
             shards::drawings::save_drawing_file,
             shards::drawings::merge_drawings,

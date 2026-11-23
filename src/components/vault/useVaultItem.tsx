@@ -33,7 +33,6 @@ import {
 } from "@/components/canvas/AddToShardDialog";
 import { DrawingIcon } from "@/components/icons";
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
-import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import type { RowAction } from "@/components/vault/RowActions";
 import { flushPendingAutosave, writeLeftShardCaches } from "@/hooks/useAutosave";
 import {
@@ -57,6 +56,7 @@ import { openExportDialog } from "@/lib/export";
 import { openImportDialog } from "@/lib/import";
 import {
   createDrawing,
+  createShard,
   openFileHistory,
   openVaultFile,
 } from "@/lib/open-vault-file";
@@ -105,7 +105,6 @@ export function useVaultItem(
   const [newName, setNewName] = useState(getDisplayName(node));
   const [isMoving, setIsMoving] = useState(false);
   const [isConfirmingTrash, setIsConfirmingTrash] = useState(false);
-  const [isCreatingShard, setIsCreatingShard] = useState(false);
   // The drawing's scene, read when Add to shard… is picked, for its dialog.
   const [sceneToAdd, setSceneToAdd] = useState<ExportableScene | null>(null);
   const [isAddingToShard, setIsAddingToShard] = useState(false);
@@ -304,7 +303,11 @@ export function useVaultItem(
           {
             label: "New shard",
             icon: FilePlusIcon,
-            onSelect: () => setIsCreatingShard(true),
+            onSelect: () => {
+              if (currentVaultPath) {
+                void createShard(currentVaultPath, node.path);
+              }
+            },
           },
           {
             label: "New drawing",
@@ -422,13 +425,6 @@ export function useVaultItem(
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {node.kind === "directory" ? (
-        <NewShardDialog
-          open={isCreatingShard}
-          onOpenChange={setIsCreatingShard}
-          folder={node.path}
-        />
-      ) : null}
       {sceneToAdd ? (
         <AddToShardDialog
           open={isAddingToShard}

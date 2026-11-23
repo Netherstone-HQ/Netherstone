@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   ChevronsDownUpIcon,
   FilePlusIcon,
@@ -27,18 +26,13 @@ import { isPathWithin } from "@/lib/drawing-files";
 import { useUIStore, useVaultStore } from "@/store";
 import { FileTreeSkeleton } from "@/components/vault/FileTreeSkeleton";
 import { NewFolderRow } from "@/components/vault/NewFolderRow";
-import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { TreeNode } from "@/components/vault/TreeNode";
 import { useTreeDropTarget } from "@/components/vault/useTreeDropTarget";
-import { createDrawing } from "@/lib/open-vault-file";
+import { createDrawing, createShard } from "@/lib/open-vault-file";
 import { cn } from "@/lib/utils";
 import { useMenuAction } from "@/lib/use-menu-action";
 
-interface FileTreeProps {
-  onNewShard: () => void;
-}
-
-export function FileTree({ onNewShard }: FileTreeProps) {
+export function FileTree() {
   const { fileTree, isVaultLoading, currentVaultPath } = useVaultStore();
   const newFolderParent = useVaultStore((s) => s.newFolderParent);
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
@@ -48,7 +42,6 @@ export function FileTree({ onNewShard }: FileTreeProps) {
       : false,
   );
   const collapseAllFolders = useUIStore((s) => s.collapseAllFolders);
-  const [isCreatingRootShard, setIsCreatingRootShard] = useState(false);
   const addMenu = useMenuAction();
   const rootMenu = useMenuAction();
   // Folders inside the tree take their own drops; the rest is the vault root.
@@ -59,6 +52,9 @@ export function FileTree({ onNewShard }: FileTreeProps) {
   const isNamingRootFolder = newFolderParent === currentVaultPath;
   const startRootFolder = () => setNewFolderParent(currentVaultPath);
   const newDrawing = () => createDrawing(currentVaultPath);
+  // The header's New follows Settings; the space below the tree is the root.
+  const newShard = () => void createShard(currentVaultPath);
+  const newRootShard = () => void createShard(currentVaultPath, currentVaultPath);
 
   return (
     <section
@@ -102,7 +98,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
             align="end"
             onCloseAutoFocus={addMenu.onCloseAutoFocus}
           >
-            <DropdownMenuItem onSelect={addMenu.defer(onNewShard)}>
+            <DropdownMenuItem onSelect={addMenu.defer(newShard)}>
               <FilePlusIcon />
               New shard
             </DropdownMenuItem>
@@ -148,9 +144,7 @@ export function FileTree({ onNewShard }: FileTreeProps) {
             <div aria-hidden="true" className="min-h-8 flex-1" />
           </ContextMenuTrigger>
           <ContextMenuContent onCloseAutoFocus={rootMenu.onCloseAutoFocus}>
-            <ContextMenuItem
-              onSelect={rootMenu.defer(() => setIsCreatingRootShard(true))}
-            >
+            <ContextMenuItem onSelect={rootMenu.defer(newRootShard)}>
               <FilePlusIcon />
               New shard
             </ContextMenuItem>
@@ -165,12 +159,6 @@ export function FileTree({ onNewShard }: FileTreeProps) {
           </ContextMenuContent>
         </ContextMenu>
       </div>
-
-      <NewShardDialog
-        open={isCreatingRootShard}
-        onOpenChange={setIsCreatingRootShard}
-        folder={currentVaultPath}
-      />
     </section>
   );
 }

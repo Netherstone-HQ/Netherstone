@@ -130,6 +130,7 @@ commands.allow = [
   "open_markdown_file",
   "save_markdown_file",
   "append_markdown_to_file",
+  "create_shard_file",
   "read_drawing_file",
   "save_drawing_file",
   "merge_drawings",

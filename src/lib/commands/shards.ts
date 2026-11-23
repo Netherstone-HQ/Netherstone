@@ -32,6 +32,15 @@ export async function saveMarkdownFile(
   return invoke("save_markdown_file", { filePath, content, ...options });
 }
 
+/**
+ * Creates an empty shard in `directory`, named "Untitled" or the next free
+ * "Untitled 2", "Untitled 3"... Returns the new file's path.
+ */
+export async function createShardFile(directory: string): Promise<string> {
+  assertTauri();
+  return invoke<string>("create_shard_file", { directory });
+}
+
 export async function appendMarkdownToFile(
   filePath: string,
   markdown: string,

@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.netherstone" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/ink</item>
+        <item name="android:windowSplashScreenBackground">@color/ink</item>
+    </style>
+</resources>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ink, the splash and window background on every platform. -->
+    <color name="ink">#FF141516</color>
+</resources>

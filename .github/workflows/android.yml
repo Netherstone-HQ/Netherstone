@@ -53,10 +53,12 @@ jobs:
           # What ships to phones: checked against the size budget.
           - target: aarch64
             rust: aarch64-linux-android
+            env: aarch64_linux_android
             inspectable: false
           # What the emulator runs: DevTools on, so the check can read the page.
           - target: x86_64
             rust: x86_64-linux-android
+            env: x86_64_linux_android
             inspectable: true
     steps:
       - uses: actions/checkout@v7
@@ -95,7 +97,7 @@ jobs:
           export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
           BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           # OpenSSL's build looks for ranlib and ar under the target's name.
-          export RANLIB_${{ matrix.rust }}="$BIN/llvm-ranlib" AR_${{ matrix.rust }}="$BIN/llvm-ar"
+          export RANLIB_${{ matrix.env }}="$BIN/llvm-ranlib" AR_${{ matrix.env }}="$BIN/llvm-ar"
           export PATH="$BIN:$PATH"
           pnpm tauri android build --apk --target ${{ matrix.target }}
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk netherstone-${{ matrix.target }}.apk

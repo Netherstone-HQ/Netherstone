@@ -2,10 +2,11 @@ name: Android
 
 # Builds the Android app when anything it's built from changes: the arm64
 # APK is checked against the size budget, and an x86_64 build is driven on
-# an emulator (scripts/android-ui-check.mjs). Not a required check.
+# an emulator (scripts/android-ui-check.mjs, and the editor with the system
+# keyboard in scripts/android-editor-check.mjs). Not a required check.
 on:
   push:
-    branches: [main]
+    branches: [main, feat/mobile-editor-touch]
     paths:
       - "src/**"
       - "src-tauri/**"
@@ -15,6 +16,7 @@ on:
       - "pnpm-lock.yaml"
       - "vite.config.ts"
       - "scripts/android-ui-check.mjs"
+      - "scripts/android-editor-check.mjs"
       - ".github/workflows/android.yml"
   pull_request:
     paths:
@@ -26,6 +28,7 @@ on:
       - "pnpm-lock.yaml"
       - "vite.config.ts"
       - "scripts/android-ui-check.mjs"
+      - "scripts/android-editor-check.mjs"
       - ".github/workflows/android.yml"
 
 concurrency:
@@ -156,3 +159,39 @@ jobs:
         with:
           name: android-ui-check
           path: android-ui-check
+
+  editor:
+    name: Android editor
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Allow the emulator to use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk-x86_64
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-audio -camera-back none
+          script: APK=netherstone-x86_64.apk node scripts/android-editor-check.mjs android-editor-check
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-editor-check
+          path: android-editor-check

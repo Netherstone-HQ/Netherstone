@@ -1,13 +1,22 @@
 import { create } from "zustand";
 import type { SettingsCategory } from "@/store/ui";
 
+/** What Search shows only. */
+export type SearchFilter =
+  | { kind: "drawings" }
+  | { kind: "images" }
+  | { kind: "voice" }
+  | { kind: "pinned" }
+  | { kind: "tag"; tag: string };
+
 /** A full screen of the phone layout. */
 export type PhoneScreen =
   | { kind: "home" }
   | { kind: "folder"; path: string }
   /** The open shard, or the open drawing when Canvas is the mode. */
   | { kind: "file" }
-  | { kind: "search" }
+  /** Search, in one folder when `folder` is set. */
+  | { kind: "search"; folder?: string; filter?: SearchFilter }
   | { kind: "tags" }
   | { kind: "settings"; category: SettingsCategory | null }
   | { kind: "new-vault" };

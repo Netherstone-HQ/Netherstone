@@ -96,3 +96,76 @@ test("select mode picks shards, pins them together, and Back leaves it", async (
   const pinned = page.getByRole("region", { name: "Pinned" });
   await expect(pinned.getByRole("button", { name: /^Overview/ })).toBeVisible();
 });
+
+const V = "/home/me/Vault";
+
+test("search finds shards with the words lit, and Back from a result keeps the search", async ({ page }) => {
+  await page.addInitScript((vault) => {
+    window.__overrides = {
+      search_files: (args) =>
+        (args as { query: string }).query === "sync"
+          ? [
+              {
+                path: `${vault}/Architecture/Backend/Git sync.md`,
+                name: "Git sync.md",
+                title: [{ text: "Git ", highlight: false }, { text: "sync", highlight: true }],
+                snippet: [
+                  { text: "This keeps the vault in a private repository. ", highlight: false },
+                  { text: "Sync", highlight: true },
+                  { text: " runs on start.", highlight: false },
+                ],
+                section: null,
+                rank: 1,
+              },
+            ]
+          : [],
+      get_tagged_files: () => [
+        { path: `${vault}/Journal/2026-11-19.md`, name: "2026-11-19.md", last_modified: 1, tags: [{ tag: "journal", excerpt: null }] },
+        { path: `${vault}/Architecture/Overview.md`, name: "Overview.md", last_modified: 1, tags: [{ tag: "architecture", excerpt: null }] },
+      ],
+    };
+  }, V);
+  await mockVault(page, { files: FILES, nested: true });
+  await page.getByRole("button", { name: "Search this vault" }).click();
+
+  const field = page.getByRole("searchbox", { name: "Search this vault" });
+  await expect(field).toBeFocused();
+  await expect(page.getByRole("region", { name: "Show only" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "journal" })).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-search-start.png" });
+
+  await field.fill("sycn");
+  await expect(page.getByText("No shards match “sycn”")).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-search-none.png" });
+
+  await field.fill("sync");
+  await expect(page.getByText("1 shard", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-search.png" });
+  await page.getByRole("button", { name: /^Git sync/ }).click();
+  await expect(page.locator("[data-slate-editor]")).toContainText("private repository");
+
+  await page.goBack();
+  await expect(page.getByRole("searchbox")).toHaveValue("sync");
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(page.getByRole("region", { name: "Recent searches" }).getByRole("button", { name: "sync" })).toBeVisible();
+});
+
+test("All tags lists the vault's tags, and a tag shows its shards", async ({ page }) => {
+  await page.addInitScript((vault) => {
+    window.__overrides = {
+      get_tagged_files: () => [
+        { path: `${vault}/Journal/2026-11-19.md`, name: "2026-11-19.md", last_modified: 1, tags: [{ tag: "journal", excerpt: null }] },
+        { path: `${vault}/Architecture/Overview.md`, name: "Overview.md", last_modified: 1, tags: [{ tag: "architecture", excerpt: null }] },
+      ],
+    };
+  }, V);
+  await mockVault(page, { files: FILES, nested: true });
+  await page.getByRole("button", { name: "Search this vault" }).click();
+  await page.getByRole("button", { name: "All tags" }).click();
+
+  await expect(page.getByRole("heading", { name: "Tags" })).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-tags.png" });
+  await page.getByRole("button", { name: /^journal/ }).click();
+  await expect(page.getByRole("button", { name: /^2026-11-19/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Overview/ })).toHaveCount(0);
+});

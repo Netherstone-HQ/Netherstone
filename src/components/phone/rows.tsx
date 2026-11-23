@@ -187,11 +187,14 @@ export function FileRow({
   path,
   detail,
   preview,
+  onOpen = openFileScreen,
 }: {
   path: string;
   /** The folder it's in; without it the row shows the file's first line. */
   detail?: string;
   preview: ShardPreview | undefined;
+  /** Opens it some other way than at its top. */
+  onOpen?: (path: string) => Promise<void>;
 }) {
   const push = usePhoneNav((s) => s.push);
   const selecting = useSelecting();
@@ -217,7 +220,7 @@ export function FileRow({
         "flex min-h-16 w-full flex-col justify-center gap-0.5 px-4 text-left outline-none select-none active:bg-accent",
         selecting && checked && "bg-card",
       )}
-      onClick={() => (selecting ? toggle(path) : void openFileScreen(path))}
+      onClick={() => (selecting ? toggle(path) : void onOpen(path))}
       onContextMenu={(event) => {
         event.preventDefault();
         if (!selecting) push({ kind: "row-menu", path });

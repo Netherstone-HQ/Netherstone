@@ -16,6 +16,8 @@ import {
   type PhoneOverlay,
 } from "./nav";
 import { RowActions } from "./RowActions";
+import { SearchScreen } from "./SearchScreen";
+import { TagsScreen } from "./TagsScreen";
 import { usePhoneSelection } from "./selection";
 import { ShardMenuSheet } from "./ShardMenuSheet";
 import { VaultMenuSheet } from "./VaultMenuSheet";
@@ -59,6 +61,10 @@ export function PhoneApp() {
         <FolderScreen key={screen.path} path={screen.path} />
       ) : screen.kind === "file" ? (
         <FileScreen />
+      ) : screen.kind === "search" ? (
+        <SearchScreen entry={screen} />
+      ) : screen.kind === "tags" ? (
+        <TagsScreen />
       ) : (
         <HomeScreen />
       )}

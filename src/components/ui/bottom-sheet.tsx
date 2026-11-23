@@ -56,7 +56,10 @@ export function BottomSheet({
             className,
           )}
         >
-          <div aria-hidden="true" className="mx-auto mt-3 mb-2 h-1 w-8 shrink-0 rounded-full bg-input" />
+          <div
+            aria-hidden="true"
+            className="mx-auto mt-3 mb-2 h-1 w-8 shrink-0 rounded-full bg-input"
+          />
           <div className="flex min-h-11 shrink-0 items-center gap-2 pr-1 pl-4">
             <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
               {title}
@@ -90,7 +93,9 @@ export function BottomSheetItem({
       type="button"
       className={cn(
         "flex h-13 w-full items-center gap-4 px-4 text-left text-base outline-none active:bg-accent disabled:opacity-50 [&_svg]:size-5 [&_svg]:shrink-0",
-        danger ? "text-destructive" : "text-foreground [&>span:first-child_svg]:text-muted-foreground",
+        danger
+          ? "text-destructive"
+          : "text-foreground [&>span:first-child_svg]:text-muted-foreground",
         className,
       )}
       {...props}

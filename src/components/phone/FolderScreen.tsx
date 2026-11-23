@@ -37,7 +37,7 @@ export function FolderScreen({ path }: { path: string }) {
           <PhoneTitle>{folder?.name ?? path.split(/[\\/]/).pop()}</PhoneTitle>
           <PhoneIconButton
             label="Search in this folder"
-            onClick={() => push({ kind: "search" })}
+            onClick={() => push({ kind: "search", folder: path })}
           >
             <SearchIcon />
           </PhoneIconButton>

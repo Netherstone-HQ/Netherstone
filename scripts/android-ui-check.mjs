@@ -115,9 +115,13 @@ function type(text) {
   shell(`input text '${text.replaceAll(" ", "%s")}'`);
 }
 
+/** Starts the app and returns once its WebView can be inspected. */
 function launch() {
   shell(`am force-stop ${PACKAGE}`);
-  shell(`am start -W -n ${ACTIVITY}`);
+  adb("logcat", "-c");
+  shell(`am start -n ${ACTIVITY}`);
+  // The WebView comes after the first frame; MainActivity logs when it's ready.
+  adb("logcat", "-m", "1", "-s", "Netherstone:I", "-e", "WebView inspectable");
 }
 
 // ---- The check ----

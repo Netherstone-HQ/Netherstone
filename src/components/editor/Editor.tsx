@@ -35,6 +35,7 @@ import {
   RemoveClosedSessionContext,
   RemoveWhenClosed,
   SessionContent,
+  SpareSessionContents,
 } from "./lib/closed-session";
 import { openLinkTarget } from "./lib/link-target";
 import { resolveSessionValue } from "./lib/session-value";
@@ -421,6 +422,7 @@ export function Editor() {
           loading bar rather than a flash of "No shard open". */}
       {isLoading && <EditorLoadingBar />}
       {!currentFilePath && !isOpeningFile && <EditorEmptyState />}
+      <SpareSessionContents />
 
       {sessions.map((session) => {
         const isLeaving = session !== displayed;
@@ -437,7 +439,7 @@ export function Editor() {
             aria-hidden={isLeaving || isStale || undefined}
             {...(isLeaving || isStale ? INACTIVE_EVENTS : {})}
           >
-            <SessionContent isClosed={isLeaving}>
+            <SessionContent session={session.tick} isClosed={isLeaving}>
               <ClosedSessionRemoval
                 tick={session.tick}
                 isClosed={isLeaving}

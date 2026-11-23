@@ -330,6 +330,29 @@ describe("Editor", () => {
       }
     });
 
+    // In WebKit each new wheel listener restyles the page root, which can
+    // cost a whole-page restyle while a long shard is open.
+    it("adds no wheel listener when switching shards", async () => {
+      await openNote(NOTE);
+      const listen = vi.spyOn(EventTarget.prototype, "addEventListener");
+
+      for (const name of ["second", "third", "fourth"]) {
+        act(() => {
+          useEditorStore.getState().openFile({
+            path: `C:/vault/notes/${name}.md`,
+            content: `Shard ${name}\n`,
+          });
+        });
+        await waitFor(() =>
+          expect(useEditorStore.getState().plateEditor?.api.string([0])).toBe(
+            `Shard ${name}`,
+          ),
+        );
+      }
+
+      expect(listen.mock.calls.map(([type]) => type)).not.toContain("wheel");
+    });
+
     it("keeps the next shard's editor when the previous one is removed", async () => {
       await openNote(NOTE);
       act(() => {

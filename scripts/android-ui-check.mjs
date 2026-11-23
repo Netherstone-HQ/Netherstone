@@ -8,8 +8,8 @@
 //   APK=app.apk node scripts/android-ui-check.mjs out
 //
 // The APK must be built with ORG_GRADLE_PROJECT_netherstoneInspectable=true
-// so DevTools can read the page. Waits are on the page's own signals; the
-// CI job's timeout bounds the whole run.
+// so DevTools can read the page. Waits are on the page's own signals, each
+// with a limit so a stuck step fails with what was on screen.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -80,12 +80,18 @@ async function page(body) {
   return result.result.value;
 }
 
+// How long one wait may take before the check fails and says what the
+// screen showed. Far above any wait seen, so only a stuck step hits it.
+const WAIT_LIMIT_MS = 60_000;
+
 // In the page: waits for a condition by watching the DOM change.
 const PAGE_HELPERS = `
   const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
-  const waitFor = (check) => new Promise((resolve) => {
-    const done = () => { const value = check(); if (value) { observer.disconnect(); resolve(value); return true; } return false; };
+  const screenText = () => [...document.querySelectorAll("button, h1, h2, [role=menuitem]")].filter(visible).map((el) => el.getAttribute("aria-label") || el.textContent.trim()).filter(Boolean).slice(0, 40).join(" | ");
+  const waitFor = (check) => new Promise((resolve, reject) => {
+    const done = () => { const value = check(); if (value) { observer.disconnect(); clearTimeout(limit); resolve(value); return true; } return false; };
     const observer = new MutationObserver(done);
+    const limit = setTimeout(() => { observer.disconnect(); reject(new Error("Waited " + ${WAIT_LIMIT_MS} + " ms for: " + check.toString() + "\\nOn screen: " + screenText())); }, ${WAIT_LIMIT_MS});
     if (!done()) observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
   });
   const byText = (selector, text) => [...document.querySelectorAll(selector)].find((el) => visible(el) && el.textContent.trim() === text);

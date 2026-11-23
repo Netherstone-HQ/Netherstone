@@ -153,6 +153,19 @@ test("the style panel marks selected text", async ({ page }) => {
     .toContain("**Second** line.");
 });
 
+test("the style panel stays up while picking a text color", async ({
+  page,
+}) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await typeAt(page, "Second line.");
+  await select(page, "Second");
+
+  await bar(page).getByRole("button", { name: "Text style" }).click();
+  await panel(page).getByRole("radio", { name: "Text color" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(panel(page)).toBeVisible();
+});
+
 test("a long press on a block opens its menu while the keyboard is down", async ({
   page,
 }) => {

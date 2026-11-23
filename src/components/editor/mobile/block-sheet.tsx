@@ -56,7 +56,10 @@ export function BlockSheet() {
   const readOnly = useEditorReadOnly();
   const focused = useFocused();
   const { inset } = useKeyboard();
-  const [index, setIndex] = React.useState<number | null>(null);
+  // The block the sheet is for, by id, so edits elsewhere don't retarget it.
+  const [blockId, setBlockId] = React.useState<string | null>(null);
+  // Kept while the sheet slides away, so it keeps its name.
+  const [title, setTitle] = React.useState("");
   const [page, setPage] = React.useState<Page>("main");
   const typing = focused && inset > 0;
 
@@ -74,14 +77,16 @@ export function BlockSheet() {
       const path = node && editor.api.findPath(node);
       if (!path) return;
 
+      const id = (editor.children[path[0]] as TElement).id as
+        | string
+        | undefined;
+      if (!id) return;
       event.preventDefault();
       event.stopPropagation();
-      const top = path[0];
-      const id = (editor.children[top] as TElement).id;
-      if (id)
-        editor.getApi(BlockSelectionPlugin).blockSelection.set([id as string]);
+      editor.getApi(BlockSelectionPlugin).blockSelection.set([id]);
       setPage("main");
-      setIndex(top);
+      setTitle(blockName(editor.children[path[0]] as TElement));
+      setBlockId(id);
     };
 
     element.addEventListener("contextmenu", onLongPress, { capture: true });
@@ -91,12 +96,15 @@ export function BlockSheet() {
       });
   }, [editor, readOnly, typing]);
 
+  const found =
+    blockId === null
+      ? -1
+      : editor.children.findIndex((node) => node.id === blockId);
+  const index = found === -1 ? null : found;
   const block =
-    index === null
-      ? undefined
-      : (editor.children[index] as TElement | undefined);
+    index === null ? undefined : (editor.children[index] as TElement);
   const close = () => {
-    setIndex(null);
+    setBlockId(null);
     editor.getApi(BlockSelectionPlugin).blockSelection.deselect();
   };
   const at = index === null ? [] : [index];
@@ -114,7 +122,7 @@ export function BlockSheet() {
     <BottomSheet
       open={!!block}
       onOpenChange={(open) => !open && close()}
-      title={block ? blockName(block) : ""}
+      title={title}
       onCloseAutoFocus={(event) => event.preventDefault()}
     >
       {block && page === "main" && (

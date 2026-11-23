@@ -394,24 +394,29 @@ export function KeyboardBar() {
     setKeyboard(editor, false);
   };
 
-  // A tap in the text brings the keyboard back; leaving the shard closes the panel.
+  // A tap in the text brings the keyboard back; leaving the shard closes the
+  // panel. Focus may go to the panel's own menus, such as Text color.
   React.useEffect(() => {
     if (!styles) return;
     const element = editor.api.toDOMNode(editor);
     const onTextTap = () => closeStyles(false);
     const onFocusOut = (event: FocusEvent) => {
-      if (
-        event.relatedTarget &&
-        !element?.contains(event.relatedTarget as Node)
-      ) {
-        closeStyles(false);
-      }
+      const to = event.relatedTarget;
+      const staysInPanel =
+        to instanceof Element &&
+        (element?.contains(to) ||
+          to.closest(
+            "[data-keyboard-bar], [data-radix-popper-content-wrapper]",
+          ));
+      if (!staysInPanel) closeStyles(false);
     };
     element?.addEventListener("pointerdown", onTextTap);
     element?.addEventListener("focusout", onFocusOut);
     return () => {
       element?.removeEventListener("pointerdown", onTextTap);
       element?.removeEventListener("focusout", onFocusOut);
+      // Never leaves the editor without a keyboard, also when the shard closes.
+      element?.removeAttribute("inputmode");
     };
   }, [styles, editor, closeStyles]);
 

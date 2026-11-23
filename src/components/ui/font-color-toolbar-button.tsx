@@ -187,7 +187,7 @@ export function FontColorToolbarButton({
       open={open}
       onOpenChange={onToggle}
       button={
-        <ToolbarButton pressed={open} tooltip={tooltip}>
+        <ToolbarButton pressed={open} tooltip={tooltip} aria-label={tooltip}>
           {children}
         </ToolbarButton>
       }

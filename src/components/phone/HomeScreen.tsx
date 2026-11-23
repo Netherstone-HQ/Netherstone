@@ -16,9 +16,15 @@ import { cn } from "@/lib/utils";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import { useSyncStore } from "@/store/sync";
 import { CaptureBar } from "./CaptureBar";
-import { usePhoneNav } from "./nav";
-import { PhoneFrame, PhoneIconButton, PhoneSection, PhoneTopBar } from "./parts";
+import { usePhoneNav, useSelecting } from "./nav";
+import {
+  PhoneFrame,
+  PhoneIconButton,
+  PhoneSection,
+  PhoneTopBar,
+} from "./parts";
 import { FileRow, FolderRow } from "./rows";
+import { SelectActionBar, SelectTopBar } from "./SelectBars";
 import { SyncStrip, useSyncProblem } from "./SyncStrip";
 import { usePhonePrefs } from "./prefs";
 import { usePreviews } from "./usePreviews";
@@ -36,6 +42,7 @@ export function HomeScreen() {
   const push = usePhoneNav((s) => s.push);
   const sortByDate = usePhonePrefs((s) => s.sortByDate);
   const problem = useSyncProblem(vaultPath);
+  const selecting = useSelecting();
 
   const pinned = vaultPath
     ? pinnedFiles.filter((file) => isPathWithin(file.path, vaultPath))
@@ -53,35 +60,53 @@ export function HomeScreen() {
     ...files.map((f) => f.path),
   ]);
   const isEmpty = !isLoading && fileTree.length === 0;
+  const sortedFiles = sortByDate
+    ? newestFirst(files, (path) => previews.get(path)?.lastModified)
+    : files;
+  const fileRows = sortedFiles.map((file) => (
+    <FileRow
+      key={file.path}
+      path={file.path}
+      preview={previews.get(file.path)}
+    />
+  ));
 
   return (
     <PhoneFrame bottomInset={false}>
-      <PhoneTopBar>
-        <button
-          type="button"
-          className="flex h-12 min-w-0 items-center gap-1.5 rounded-full pr-2 pl-3 text-xl leading-7 font-semibold outline-none active:bg-accent"
-          onClick={() => push({ kind: "vault-menu" })}
-        >
-          <span className="truncate">
-            {vaultPath ? folderName(vaultPath) : "No vault"}
-          </span>
-          <ChevronDownIcon className="size-5 shrink-0" />
-        </button>
-        <div className="flex-1" />
-        <SyncButton vaultPath={vaultPath} />
-        <PhoneIconButton
-          label="More"
-          onClick={() => push({ kind: "more-menu", folder: vaultPath })}
-        >
-          <EllipsisVerticalIcon />
-        </PhoneIconButton>
-      </PhoneTopBar>
+      {selecting ? (
+        <SelectTopBar
+          shown={[...pinned, ...recent, ...files].map((file) => file.path)}
+        />
+      ) : (
+        <PhoneTopBar>
+          <button
+            type="button"
+            className="flex h-12 min-w-0 items-center gap-1.5 rounded-full pr-2 pl-3 text-xl leading-7 font-semibold outline-none active:bg-accent"
+            onClick={() => push({ kind: "vault-menu" })}
+          >
+            <span className="truncate">
+              {vaultPath ? folderName(vaultPath) : "No vault"}
+            </span>
+            <ChevronDownIcon className="size-5 shrink-0" />
+          </button>
+          <div className="flex-1" />
+          <SyncButton vaultPath={vaultPath} />
+          <PhoneIconButton
+            label="More"
+            onClick={() => push({ kind: "more-menu", folder: vaultPath })}
+          >
+            <EllipsisVerticalIcon />
+          </PhoneIconButton>
+        </PhoneTopBar>
+      )}
 
-      {vaultPath && problem ? (
+      {vaultPath && problem && !selecting ? (
         <SyncStrip vaultPath={vaultPath} problem={problem} />
       ) : null}
 
-      <SearchField onOpen={() => push({ kind: "search" })} />
+      {selecting ? null : (
+        <SearchField onOpen={() => push({ kind: "search" })} />
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {isLoading ? (
@@ -114,28 +139,25 @@ export function HomeScreen() {
                 ))}
               </PhoneSection>
             ) : null}
-            {folders.length > 0 || files.length > 0 ? (
+            {selecting ? (
+              fileRows
+            ) : folders.length > 0 || files.length > 0 ? (
               <PhoneSection label="Folders">
                 {folders.map((folder) => (
                   <FolderRow key={folder.path} folder={folder} />
                 ))}
-                {(sortByDate
-          ? newestFirst(files, (path) => previews.get(path)?.lastModified)
-          : files
-        ).map((file) => (
-                  <FileRow
-                    key={file.path}
-                    path={file.path}
-                    preview={previews.get(file.path)}
-                  />
-                ))}
+                {fileRows}
               </PhoneSection>
             ) : null}
           </>
         ) : null}
       </div>
 
-      {vaultPath ? <CaptureBar vaultPath={vaultPath} folder={vaultPath} /> : null}
+      {selecting ? (
+        <SelectActionBar />
+      ) : vaultPath ? (
+        <CaptureBar vaultPath={vaultPath} folder={vaultPath} />
+      ) : null}
       {vaultPath ? <ConflictDialog vaultPath={vaultPath} /> : null}
     </PhoneFrame>
   );

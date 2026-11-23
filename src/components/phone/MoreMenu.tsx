@@ -2,8 +2,10 @@ import {
   ArrowDownAZIcon,
   ArrowDownWideNarrowIcon,
   FolderPlusIcon,
+  SquareCheckIcon,
 } from "lucide-react";
 import { usePhoneNav } from "./nav";
+import { usePhoneSelection } from "./selection";
 import { usePhonePrefs } from "./prefs";
 
 const ITEM_CLASS =
@@ -36,6 +38,18 @@ export function MoreMenu({
         role="menu"
         className="absolute top-[calc(var(--safe-area-top,env(safe-area-inset-top))+3.5rem)] right-2 w-58 rounded-xl border bg-popover py-2 text-popover-foreground shadow-lg"
       >
+        <button
+          type="button"
+          role="menuitem"
+          className={ITEM_CLASS}
+          onClick={() => {
+            usePhoneSelection.getState().set([]);
+            replace({ kind: "select" });
+          }}
+        >
+          <SquareCheckIcon />
+          Select
+        </button>
         <button
           type="button"
           role="menuitem"

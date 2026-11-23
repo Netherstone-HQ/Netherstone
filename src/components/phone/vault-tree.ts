@@ -1,18 +1,27 @@
 import { isDrawingPath, isSamePath } from "@/lib/drawing-files";
 import type { FileTreeNode } from "@/store";
 
+/** The file or folder at `path` in `tree`, or null when it's gone. */
+export function findNode(
+  tree: FileTreeNode[],
+  path: string,
+): FileTreeNode | null {
+  for (const node of tree) {
+    if (isSamePath(node.path, path)) return node;
+    if (node.kind !== "directory") continue;
+    const inside = findNode(node.children ?? [], path);
+    if (inside) return inside;
+  }
+  return null;
+}
+
 /** The folder at `path` in `tree`, or null when it's gone. */
 export function findFolder(
   tree: FileTreeNode[],
   path: string,
 ): FileTreeNode | null {
-  for (const node of tree) {
-    if (node.kind !== "directory") continue;
-    if (isSamePath(node.path, path)) return node;
-    const inside = findFolder(node.children ?? [], path);
-    if (inside) return inside;
-  }
-  return null;
+  const node = findNode(tree, path);
+  return node?.kind === "directory" ? node : null;
 }
 
 /** How many shards and drawings are in `folder`, at any depth. */

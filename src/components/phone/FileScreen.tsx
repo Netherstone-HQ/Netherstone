@@ -1,9 +1,5 @@
 import { useEffect } from "react";
-import {
-  EllipsisVerticalIcon,
-  SearchIcon,
-  SparklesIcon,
-} from "lucide-react";
+import { EllipsisVerticalIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { EditorOrVersion } from "@/components/AppLayout";
 import { ExcalidrawView } from "@/components/ExcalidrawView";
 import { loadAssistantEnabled } from "@/lib/assistant";
@@ -58,7 +54,10 @@ export function FileScreen() {
       <PhoneTopBar>
         <PhoneBackButton />
         <div className="flex-1" />
-        <PhoneIconButton label="Search" onClick={() => push({ kind: "search" })}>
+        <PhoneIconButton
+          label="Search"
+          onClick={() => push({ kind: "search" })}
+        >
           <SearchIcon />
         </PhoneIconButton>
         {assistantOn ? (
@@ -69,7 +68,10 @@ export function FileScreen() {
             <SparklesIcon />
           </PhoneIconButton>
         ) : null}
-        <PhoneIconButton label="More" onClick={() => push({ kind: "shard-menu" })}>
+        <PhoneIconButton
+          label="More"
+          onClick={() => push({ kind: "shard-menu" })}
+        >
           <EllipsisVerticalIcon />
         </PhoneIconButton>
       </PhoneTopBar>

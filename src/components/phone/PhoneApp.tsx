@@ -12,8 +12,11 @@ import {
   usePhoneNav,
   usePhoneOverlay,
   usePhoneScreen,
+  useSelecting,
   type PhoneOverlay,
 } from "./nav";
+import { RowActions } from "./RowActions";
+import { usePhoneSelection } from "./selection";
 import { ShardMenuSheet } from "./ShardMenuSheet";
 import { VaultMenuSheet } from "./VaultMenuSheet";
 
@@ -39,6 +42,11 @@ export function PhoneApp() {
 
   useEffect(() => followBrowserHistory(), []);
 
+  const selecting = useSelecting();
+  useEffect(() => {
+    if (!selecting) usePhoneSelection.getState().set([]);
+  }, [selecting]);
+
   const closeVaultMenu = useCloser("vault-menu");
   const closeMoreMenu = useCloser("more-menu");
   const closeNewFolder = useCloser("new-folder");
@@ -60,7 +68,10 @@ export function PhoneApp() {
         onOpenChange={closeVaultMenu}
       />
       {overlay?.kind === "more-menu" && overlay.folder ? (
-        <MoreMenu folder={overlay.folder} onClose={() => closeMoreMenu(false)} />
+        <MoreMenu
+          folder={overlay.folder}
+          onClose={() => closeMoreMenu(false)}
+        />
       ) : null}
       {vaultPath ? (
         <>
@@ -86,6 +97,7 @@ export function PhoneApp() {
           />
         </>
       ) : null}
+      <RowActions />
       {screen.kind === "file" && openPath ? (
         <ShardMenuSheet
           path={openPath}

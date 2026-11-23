@@ -39,7 +39,9 @@ export function SyncStrip({
     return (
       <div role="status" className={STRIP_CLASS}>
         <CloudOffIcon className="size-5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1">Offline. Changes will sync later.</span>
+        <span className="min-w-0 flex-1">
+          Offline. Changes will sync later.
+        </span>
       </div>
     );
   }
@@ -50,7 +52,9 @@ export function SyncStrip({
       <div role="status" className={STRIP_CLASS}>
         <AlertCircleIcon className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
         <span className="min-w-0 flex-1">
-          {count === 1 ? "1 shard needs a decision" : `${count} shards need a decision`}
+          {count === 1
+            ? "1 shard needs a decision"
+            : `${count} shards need a decision`}
         </span>
         <button
           type="button"

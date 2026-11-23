@@ -1,13 +1,13 @@
 import { useState } from "react";
 import {
-  ArrowDownUpIcon,
-  HistoryIcon,
+  FolderInputIcon,
+  ClockIcon,
   Link2Icon,
   ListTreeIcon,
-  PencilIcon,
+  PenLineIcon,
   PinIcon,
   PinOffIcon,
-  Trash2Icon,
+  TrashIcon,
 } from "lucide-react";
 import {
   BottomSheet,
@@ -57,7 +57,10 @@ export function ShardMenuSheet({
         onOpenChange={close}
         title={item.displayName}
       >
-        <BottomSheetItem icon={<ListTreeIcon />} onClick={() => setPart("outline")}>
+        <BottomSheetItem
+          icon={<ListTreeIcon />}
+          onClick={() => setPart("outline")}
+        >
           Outline
         </BottomSheetItem>
         <BottomSheetItem
@@ -68,7 +71,7 @@ export function ShardMenuSheet({
           Links
         </BottomSheetItem>
         <BottomSheetItem
-          icon={<HistoryIcon />}
+          icon={<ClockIcon />}
           onClick={() => {
             replace({ kind: "history" });
             void openFileHistory(path).catch((error: unknown) =>
@@ -88,11 +91,14 @@ export function ShardMenuSheet({
         >
           {item.isPinned ? "Unpin" : "Pin"}
         </BottomSheetItem>
-        <BottomSheetItem icon={<PencilIcon />} onClick={() => setPart("rename")}>
+        <BottomSheetItem
+          icon={<PenLineIcon />}
+          onClick={() => setPart("rename")}
+        >
           Rename
         </BottomSheetItem>
         <BottomSheetItem
-          icon={<ArrowDownUpIcon />}
+          icon={<FolderInputIcon />}
           onClick={() => {
             item.startMove();
             close(false);
@@ -103,7 +109,7 @@ export function ShardMenuSheet({
         <BottomSheetSeparator />
         <BottomSheetItem
           danger
-          icon={<Trash2Icon />}
+          icon={<TrashIcon />}
           onClick={() => {
             close(false);
             item.trash();

@@ -20,7 +20,14 @@ export type PhoneOverlay =
   | { kind: "new-shard"; folder: string }
   | { kind: "shard-menu" }
   | { kind: "assistant" }
-  | { kind: "history" };
+  | { kind: "history" }
+  /** A row's long-press menu. */
+  | { kind: "row-menu"; path: string }
+  | { kind: "rename"; path: string }
+  | { kind: "move"; paths: string[] }
+  | { kind: "confirm-trash"; paths: string[] }
+  /** Picking shards to pin, move or delete together. */
+  | { kind: "select" };
 
 type Entry = PhoneScreen | PhoneOverlay;
 
@@ -47,6 +54,8 @@ interface PhoneNavState {
   replace: (entry: Entry) => void;
   /** Goes back one step, as the system Back does. */
   back: () => void;
+  /** Goes back until `kind` and everything over it have closed. */
+  closeFrom: (kind: Entry["kind"]) => void;
   /** Keeps the first `count` entries, after the browser went back. */
   truncate: (count: number) => void;
 }
@@ -57,6 +66,16 @@ const DEPTH_KEY = "phoneDepth";
 function depthOf(state: unknown): number {
   const depth = (state as Record<string, unknown> | null)?.[DEPTH_KEY];
   return typeof depth === "number" ? depth : 0;
+}
+
+// Set while the browser is going back, until it says where it landed, so a
+// second close before then doesn't go back twice.
+let goingBack = false;
+
+function goBack(steps: number) {
+  if (goingBack || steps <= 0) return;
+  goingBack = true;
+  history.go(-steps);
 }
 
 export const usePhoneNav = create<PhoneNavState>((set, get) => ({
@@ -71,7 +90,12 @@ export const usePhoneNav = create<PhoneNavState>((set, get) => ({
     set({ entries });
   },
   back: () => {
-    if (get().entries.length > 1) history.back();
+    goBack(Math.min(1, get().entries.length - 1));
+  },
+  closeFrom: (kind) => {
+    const { entries } = get();
+    const at = entries.findIndex((entry) => entry.kind === kind);
+    if (at > 0) goBack(entries.length - at);
   },
   truncate: (count) =>
     set((state) =>
@@ -87,8 +111,10 @@ export const usePhoneNav = create<PhoneNavState>((set, get) => ({
  */
 export function followBrowserHistory(): () => void {
   history.replaceState({ [DEPTH_KEY]: 0 }, "");
-  const onPop = (event: PopStateEvent) =>
+  const onPop = (event: PopStateEvent) => {
+    goingBack = false;
     usePhoneNav.getState().truncate(depthOf(event.state) + 1);
+  };
   window.addEventListener("popstate", onPop);
   return () => window.removeEventListener("popstate", onPop);
 }
@@ -110,4 +136,9 @@ export function usePhoneOverlay(): PhoneOverlay | null {
     const top = s.entries[s.entries.length - 1];
     return isScreen(top) ? null : top;
   });
+}
+
+/** Whether shards are being picked to act on together. */
+export function useSelecting(): boolean {
+  return usePhoneNav((s) => s.entries.some((entry) => entry.kind === "select"));
 }

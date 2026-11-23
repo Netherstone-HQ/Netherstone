@@ -85,7 +85,9 @@ export function VaultMenuSheet({
                   {isCurrent ? <CheckIcon className="size-5" /> : null}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate font-medium">{folderName(path)}</span>
+                  <span className="truncate font-medium">
+                    {folderName(path)}
+                  </span>
                   <span className="truncate text-sm leading-[18px] text-muted-foreground">
                     {vaultPlace(path, appStorage)}
                   </span>

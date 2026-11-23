@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import { useSyncStore } from "@/store/sync";
 import { CaptureBar } from "./CaptureBar";
+import { createUntitledShard } from "./create";
 import { usePhoneNav, useSelecting } from "./nav";
 import {
   PhoneFrame,
@@ -112,7 +113,7 @@ export function HomeScreen() {
         {isLoading ? (
           <LoadingRows />
         ) : isEmpty && vaultPath ? (
-          <EmptyVault folder={vaultPath} />
+          <EmptyVault vaultPath={vaultPath} />
         ) : vaultPath ? (
           <>
             {pinned.length > 0 ? (
@@ -142,7 +143,7 @@ export function HomeScreen() {
             {selecting ? (
               fileRows
             ) : folders.length > 0 || files.length > 0 ? (
-              <PhoneSection label="Folders">
+              <PhoneSection label="Files">
                 {folders.map((folder) => (
                   <FolderRow key={folder.path} folder={folder} />
                 ))}
@@ -214,15 +215,14 @@ function SearchField({
   );
 }
 
-function EmptyVault({ folder }: { folder: string }) {
-  const push = usePhoneNav((s) => s.push);
+function EmptyVault({ vaultPath }: { vaultPath: string }) {
   return (
     <div className="flex flex-col items-center gap-4 px-4 pt-32">
       <FileTextIcon className="size-8 text-muted-foreground" />
       <p className="text-lg font-semibold">No shards yet</p>
       <Button
         className="h-11 gap-2 px-4.5 text-base"
-        onClick={() => push({ kind: "new-shard", folder })}
+        onClick={() => void createUntitledShard(vaultPath, vaultPath)}
       >
         <PlusIcon className="size-5" />
         New shard

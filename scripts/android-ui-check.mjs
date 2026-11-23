@@ -23,7 +23,8 @@ const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-ui-check";
 const APK = process.env.APK;
-const SHARD = "android-check";
+// What + calls a new shard in a vault that has none by that name.
+const SHARD = "Untitled";
 const TYPED = "typed on the emulator";
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
@@ -162,25 +163,15 @@ try {
   });
 
   await step("create-shard", async () => {
+    // + makes an empty "Untitled" shard and opens it to type in.
     await page.getByRole("button", { name: "New shard", exact: true }).click();
-    const sheet = page.getByRole("dialog", { name: "New shard" });
-    const name = sheet.getByRole("textbox", { name: "Name" });
-    await expect(name).toBeFocused();
-    await page.keyboard.type(SHARD);
-    await expect(name).toHaveValue(SHARD);
-    await sheet.getByRole("button", { name: "Create", exact: true }).click();
-    await expect(sheet).toBeHidden();
-
+    await expect(page.locator("[data-slate-editor]")).toBeVisible();
     shardFile = `${vault}/${SHARD}.md`;
-    await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toContain(`# ${SHARD}`);
   });
 
   await step("type-and-save", async () => {
     const editor = page.locator("[data-slate-editor]");
-    await expect(editor).toContainText(SHARD);
     await editor.locator("[data-slate-node=element]").last().click();
-    await page.keyboard.press("End");
-    await page.keyboard.press("Enter");
     await page.keyboard.type(TYPED);
     await expect(editor).toContainText(TYPED);
     await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toContain(TYPED);

@@ -31,6 +31,16 @@ test("a folder opens a shard on its own screen, and Back steps out again", async
   await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
 });
 
+test("+ makes an Untitled shard, next to one already called that, and opens it", async ({ page }) => {
+  await mockVault(page, { files: { ...FILES, "Untitled.md": "Shopping list\n" }, nested: true });
+  await page.getByRole("button", { name: "New shard", exact: true }).click();
+
+  await expect(page.locator("[data-slate-editor]")).toBeVisible();
+  const saves = await page.evaluate(() => window.__saves.map((save) => save.filePath));
+  expect(saves).toContainEqual(expect.stringMatching(/\/Untitled 2\.md$/));
+  expect(saves).not.toContainEqual(expect.stringMatching(/\/Untitled\.md$/));
+});
+
 test("pressing and holding a row opens its menu, and Pin pins it", async ({ page }) => {
   await mockVault(page, { files: FILES, nested: true });
   await page.getByRole("button", { name: /^Start here/ }).click({ button: "right" });

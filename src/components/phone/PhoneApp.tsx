@@ -6,7 +6,7 @@ import { useAssistantStore } from "@/store/assistant";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useEditorStore, useVaultStore } from "@/store";
-import { createFolderIn, createShardIn, createVaultNamed } from "./create";
+import { createFolderIn, createVaultNamed } from "./create";
 import { FileScreen } from "./FileScreen";
 import { FolderScreen } from "./FolderScreen";
 import { HomeScreen } from "./HomeScreen";
@@ -61,7 +61,6 @@ export function PhoneApp() {
   const closeVaultMenu = useCloser("vault-menu");
   const closeMoreMenu = useCloser("more-menu");
   const closeNewFolder = useCloser("new-folder");
-  const closeNewShard = useCloser("new-shard");
   const closeNewVault = useCloser("new-vault");
   const closeShardMenu = useCloser("shard-menu");
   const closeHistorySheet = useCloser("history");
@@ -103,28 +102,16 @@ export function PhoneApp() {
         />
       ) : null}
       {vaultPath ? (
-        <>
-          <NameSheet
-            open={overlay?.kind === "new-folder"}
-            onOpenChange={closeNewFolder}
-            title="New folder"
-            onCreate={(name) =>
-              overlay?.kind === "new-folder"
-                ? createFolderIn(vaultPath, overlay.parent, name)
-                : Promise.resolve(null)
-            }
-          />
-          <NameSheet
-            open={overlay?.kind === "new-shard"}
-            onOpenChange={closeNewShard}
-            title="New shard"
-            onCreate={(name) =>
-              overlay?.kind === "new-shard"
-                ? createShardIn(vaultPath, overlay.folder, name)
-                : Promise.resolve(null)
-            }
-          />
-        </>
+        <NameSheet
+          open={overlay?.kind === "new-folder"}
+          onOpenChange={closeNewFolder}
+          title="New folder"
+          onCreate={(name) =>
+            overlay?.kind === "new-folder"
+              ? createFolderIn(vaultPath, overlay.parent, name)
+              : Promise.resolve(null)
+          }
+        />
       ) : null}
       <RowActions />
       {screen.kind === "file" && openPath ? (

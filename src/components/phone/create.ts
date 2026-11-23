@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { resolveVaultRelativePath } from "@/lib/drawing-files";
 import { createDrawing } from "@/lib/open-vault-file";
 import { createFolder, saveMarkdownFile } from "@/lib/commands/shards";
@@ -22,31 +23,31 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** What a new shard is called until it's renamed. */
+const NEW_SHARD_NAME = "Untitled";
+
 /**
- * Makes the shard `name` in `folder` and opens it in place of the sheet
- * that asked for it. Returns what went wrong,
- * or null.
+ * Makes an empty shard in `folder`, called "Untitled", or "Untitled 2" and
+ * so on when that's taken, and opens it to type in.
  */
-export async function createShardIn(
-  vaultPath: string,
-  folder: string,
-  name: string,
-): Promise<string | null> {
-  const title = name.replace(/\.md$/i, "");
-  const filePath = resolveVaultRelativePath(`${title}.md`, folder);
-  try {
-    // Expecting an empty file refuses the save when a shard of that name
-    // already has text, instead of writing over it.
-    await saveMarkdownFile(filePath, `# ${title}\n\n`, { expectedContent: "" });
-  } catch (error) {
-    return isChangedOnDiskError(error)
-      ? "A shard with this name is already here."
-      : message(error);
+export async function createUntitledShard(vaultPath: string, folder: string) {
+  for (let count = 1; ; count++) {
+    const name = count === 1 ? NEW_SHARD_NAME : `${NEW_SHARD_NAME} ${count}`;
+    const filePath = resolveVaultRelativePath(`${name}.md`, folder);
+    try {
+      // Expecting an empty file refuses the save when a shard of that name
+      // already has text, instead of writing over it.
+      await saveMarkdownFile(filePath, "", { expectedContent: "" });
+    } catch (error) {
+      if (isChangedOnDiskError(error)) continue;
+      toast.error("Couldn't make the shard", { description: message(error) });
+      return;
+    }
+    await openFileScreen(filePath);
+    await refreshTree(vaultPath);
+    await indexVault(vaultPath);
+    return;
   }
-  await openFileScreen(filePath, true);
-  await refreshTree(vaultPath);
-  await indexVault(vaultPath);
-  return null;
 }
 
 /** Makes the folder `name` in `parent` and opens it in place of the sheet. */

@@ -26,7 +26,6 @@ export type PhoneOverlay =
   | { kind: "new-vault" }
   | { kind: "more-menu"; folder: string | null }
   | { kind: "new-folder"; parent: string }
-  | { kind: "new-shard"; folder: string }
   | { kind: "shard-menu" }
   | { kind: "assistant" }
   | { kind: "history" }

@@ -4,7 +4,11 @@
 //! The front end turns a shard into HTML or a Word document
 //! (`src/lib/export/`). Large payloads travel as raw IPC bodies, not JSON.
 
+// Phones print through the system's print service instead, which comes
+// later; until then their PDF export refuses and this goes unused there.
+#[cfg_attr(mobile, allow(dead_code))]
 pub mod pdf;
+#[cfg_attr(mobile, allow(dead_code))]
 mod pdf_platform;
 
 use std::fs;

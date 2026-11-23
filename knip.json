@@ -9,6 +9,9 @@
     "scripts/**/*.mjs",
     "e2e/**/*.ts"
   ],
+  "ignoreBinaries": [
+    "adb"
+  ],
   "ignoreDependencies": [
     "@platejs/ai",
     "decode-named-character-reference"

@@ -11,6 +11,14 @@ use tauri_plugin_dialog::DialogExt;
 #[tauri::command(async)]
 pub(crate) fn open_import_dialog(app: tauri::AppHandle, folder: bool) -> Vec<String> {
     let dialog = app.dialog().file().set_title("Import");
+    // Phones have no folder picker.
+    #[cfg(mobile)]
+    let picked = if folder {
+        Vec::new()
+    } else {
+        dialog.blocking_pick_files().unwrap_or_default()
+    };
+    #[cfg(desktop)]
     let picked = if folder {
         dialog
             .blocking_pick_folder()
@@ -115,7 +123,7 @@ pub(crate) fn undo_import(
 
     let conn = db::open_connection()?;
     import::remove_new_attachments(&conn, vault, &asset_paths, since, |path| {
-        trash::delete(path)
+        crate::app_trash::delete(path)
             .map_err(|e| format!("Failed to move {} to the OS trash: {}", path.display(), e))
     })?;
     Ok(())

@@ -122,6 +122,7 @@ trait Keyring {
 struct OsKeyring;
 
 impl OsKeyring {
+    #[cfg(not(target_os = "android"))]
     fn entry(credential: &Credential) -> Result<keyring::Entry, String> {
         keyring::Entry::new(credential.keyring_service, credential.keyring_user)
             .map_err(|e| format!("Secure storage is unavailable: {}", e))
@@ -130,8 +131,33 @@ impl OsKeyring {
     /// The OS store, or `None` when this device has none. The store is set
     /// up once per run, and setting it up only fails when there is no store
     /// to talk to (no Secret Service on Linux), not when it is locked.
+    #[cfg(not(target_os = "android"))]
     fn open() -> Option<Self> {
         keyring::Entry::store_status().is_ok().then_some(Self)
+    }
+
+    /// On Android, `keyring::Entry` has no store: the Android Keystore store
+    /// is set as keyring's default and its entries used directly.
+    #[cfg(target_os = "android")]
+    fn entry(credential: &Credential) -> Result<keyring_core::Entry, String> {
+        keyring_core::Entry::new(credential.keyring_service, credential.keyring_user)
+            .map_err(|e| format!("Secure storage is unavailable: {}", e))
+    }
+
+    #[cfg(target_os = "android")]
+    fn open() -> Option<Self> {
+        static STORE: std::sync::LazyLock<bool> =
+            std::sync::LazyLock::new(|| match android_native_keyring_store::Store::new() {
+                Ok(store) => {
+                    keyring_core::set_default_store(store);
+                    true
+                }
+                Err(error) => {
+                    eprintln!("[Netherstone] Android Keystore is unavailable: {error}");
+                    false
+                }
+            });
+        STORE.then_some(Self)
     }
 }
 

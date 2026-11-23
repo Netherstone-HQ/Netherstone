@@ -42,8 +42,10 @@ pub fn history_action<R: Runtime>(
     })
 }
 
-/// Where a browser webview sits in its window, in physical pixels.
+/// Where a browser webview sits in its window, in physical pixels. Phones
+/// have no panel to place yet.
 #[derive(Clone, Copy)]
+#[cfg_attr(mobile, allow(dead_code))]
 pub struct Bounds {
     pub x: i32,
     pub y: i32,
@@ -95,13 +97,16 @@ pub fn set_bounds<R: Runtime>(webview: &Webview<R>, bounds: Bounds) -> Result<()
         })
     }
 
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
+    #[cfg(all(
+        desktop,
+        not(any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))
+    ))]
     {
         webview
             .set_bounds(tauri::Rect {
@@ -109,6 +114,12 @@ pub fn set_bounds<R: Runtime>(webview: &Webview<R>, bounds: Bounds) -> Result<()
                 size: tauri::PhysicalSize::new(bounds.width, bounds.height).into(),
             })
             .map_err(|error| format!("Failed to place browser webview: {error}"))
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = (webview, bounds);
+        Err(super::NO_PANEL_ON_MOBILE.to_string())
     }
 }
 

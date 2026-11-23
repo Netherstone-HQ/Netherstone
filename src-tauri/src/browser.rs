@@ -359,10 +359,21 @@ pub fn browser_set_visible(
     let label = label.unwrap_or_else(|| DEFAULT_BROWSER_WEBVIEW_LABEL.to_string());
     let webview = get_browser_webview(&app, &label)?;
 
-    if visible {
+    #[cfg(desktop)]
+    return if visible {
         webview.show()
     } else {
         webview.hide()
     }
-    .map_err(|error| format!("Failed to change browser webview visibility: {error}"))
+    .map_err(|error| format!("Failed to change browser webview visibility: {error}"));
+    #[cfg(mobile)]
+    {
+        let _ = (webview, visible);
+        Err(NO_PANEL_ON_MOBILE.to_string())
+    }
 }
+
+/// Phones can't place a second webview over the app; their browser panel
+/// is built later as its own screen.
+#[cfg(mobile)]
+const NO_PANEL_ON_MOBILE: &str = "The browser panel isn't available on this device yet.";

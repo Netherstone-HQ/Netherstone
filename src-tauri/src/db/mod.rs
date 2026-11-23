@@ -31,21 +31,45 @@ pub fn fill_kept_paths(conn: &Connection, paths: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Returns the path to the Netherstone database file in the OS's data directory.
+/// The app's data folder on a phone, from Tauri's path resolver: phones have
+/// no home folder for `dirs` to read. Set once at startup.
+#[cfg(mobile)]
+static MOBILE_DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+#[cfg(mobile)]
+pub fn set_mobile_data_dir(dir: PathBuf) {
+    if MOBILE_DATA_DIR.set(dir).is_err() {
+        eprintln!("[Netherstone] The app data folder was already set");
+    }
+}
+
+/// The folder holding the database, credentials, locks and history.
 ///
 /// Platform-specific locations:
-/// - Windows: `%APPDATA%\com.netherstone.app\netherstone.db`
-/// - macOS: `~/Library/Application Support/com.netherstone.app/netherstone.db`
-/// - Linux: `~/.local/share/com.netherstone.app/netherstone.db`
-pub fn get_db_path() -> Result<PathBuf, String> {
+/// - Windows: `%APPDATA%\com.netherstone.app`
+/// - macOS: `~/Library/Application Support/com.netherstone.app`
+/// - Linux: `~/.local/share/com.netherstone.app`
+/// - Android: the app's private data folder
+pub fn app_data_dir() -> Result<PathBuf, String> {
+    #[cfg(desktop)]
     let app_dir = dirs::data_dir()
         .ok_or_else(|| "Failed to determine AppData directory".to_string())?
         .join("com.netherstone.app");
+    #[cfg(mobile)]
+    let app_dir = MOBILE_DATA_DIR
+        .get()
+        .cloned()
+        .ok_or_else(|| "Failed to determine AppData directory".to_string())?;
 
     std::fs::create_dir_all(&app_dir)
         .map_err(|e| format!("Failed to create app directory: {}", e))?;
 
-    Ok(app_dir.join("netherstone.db"))
+    Ok(app_dir)
+}
+
+/// Returns the path to the Netherstone database file in the app's data folder.
+pub fn get_db_path() -> Result<PathBuf, String> {
+    Ok(app_data_dir()?.join("netherstone.db"))
 }
 
 /// Set once the schema and journal mode have been initialized for this process.

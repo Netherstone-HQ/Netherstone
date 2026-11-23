@@ -1,5 +1,6 @@
 mod ai_apps;
 mod ai_vaults;
+mod app_trash;
 mod asset_scope;
 mod assistant;
 mod attachments;
@@ -15,6 +16,7 @@ mod integrations;
 pub mod launch;
 mod links;
 mod locks;
+#[cfg(desktop)]
 mod main_view;
 mod markdown_text;
 mod mcp;
@@ -25,6 +27,8 @@ mod shard_links;
 mod shards;
 mod splash;
 mod sync;
+#[cfg(target_os = "android")]
+mod tls_android;
 mod tools;
 #[cfg(feature = "updater")]
 mod updater;
@@ -101,9 +105,12 @@ pub fn run() {
         .manage(browser::BrowserState::default())
         .manage(watcher::WatcherState::new())
         .setup(|app| {
+            #[cfg(mobile)]
+            db::set_mobile_data_dir(tauri::Manager::path(app).app_data_dir()?);
             for window in tauri::Manager::windows(app).values() {
                 window_icon::apply(window);
             }
+            #[cfg(desktop)]
             splash::show_main_window_eventually(app.handle());
             register_links(app);
             std::thread::spawn(open_source::remove_leftovers);
@@ -113,6 +120,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::ScaleFactorChanged { .. } => window_icon::apply(window),
+            #[cfg(desktop)]
             tauri::WindowEvent::Resized(size) => main_view::fit(window, *size),
             // A chat stops with the window it streams to.
             tauri::WindowEvent::Destroyed => assistant::stop_window(window.label()),
@@ -121,7 +129,10 @@ pub fn run() {
         .on_permission_request(microphone::answer)
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
+                #[cfg(mobile)]
+                microphone::page_started(webview, payload.url());
                 assistant::stop_window(webview.window().label());
+                #[cfg(desktop)]
                 main_view::take_over(webview);
                 microphone::enable_capture(webview);
             }

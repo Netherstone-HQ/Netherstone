@@ -11,9 +11,12 @@ use std::time::Duration;
 
 use serde::Deserialize;
 use tauri::http::{Request, Response, StatusCode};
-use tauri::{AppHandle, Manager, Runtime, UriSchemeContext, UriSchemeResponder, WebviewUrl};
+use tauri::{AppHandle, Runtime, UriSchemeContext, UriSchemeResponder};
+#[cfg(desktop)]
+use tauri::{Manager, WebviewUrl};
 use tokio::sync::oneshot;
 
+#[cfg(desktop)]
 use super::pdf_platform;
 
 /// The internal URL scheme export pages load from.
@@ -94,6 +97,7 @@ impl Drop for JobGuard {
     }
 }
 
+#[cfg(desktop)]
 pub async fn render<R: Runtime>(
     app: &AppHandle<R>,
     html: Vec<u8>,
@@ -151,6 +155,17 @@ pub async fn render<R: Runtime>(
 
     let _ = window.destroy();
     result
+}
+
+/// Phones print through the system's print service instead, which comes later.
+#[cfg(mobile)]
+pub async fn render<R: Runtime>(
+    _app: &AppHandle<R>,
+    _html: Vec<u8>,
+    _page: PageSetup,
+    _output: PathBuf,
+) -> Result<(), String> {
+    Err("PDF export isn't available on this device yet.".to_string())
 }
 
 #[cfg(test)]

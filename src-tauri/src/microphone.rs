@@ -8,8 +8,44 @@ use tauri::{Runtime, Url, Webview};
 /// Answers a webview's request for a device or permission.
 pub fn answer<R: Runtime>(view: Webview<R>, kind: PermissionKind) -> PermissionResponse {
     let own = view.label() == view.window().label();
+    // On Android this runs on the UI thread, and `url()` waits for that same
+    // thread: the app would hang, then abort. The page each view last started
+    // loading is kept instead.
+    #[cfg(mobile)]
+    let app_page = PAGES.is_app_page(view.label());
+    #[cfg(desktop)]
     let app_page = view.url().is_ok_and(|url| is_app_page(&url));
     decide(kind, own, app_page)
+}
+
+/// Keeps the page `view` started loading, for `answer` on phones.
+#[cfg(mobile)]
+pub fn page_started<R: Runtime>(view: &Webview<R>, url: &Url) {
+    PAGES.started(view.label(), url);
+}
+
+#[cfg(mobile)]
+static PAGES: Pages = Pages::new();
+
+/// The page each view last started loading, by view label.
+#[cfg(any(mobile, test))]
+struct Pages(std::sync::Mutex<std::collections::BTreeMap<String, Url>>);
+
+#[cfg(any(mobile, test))]
+impl Pages {
+    const fn new() -> Self {
+        Self(std::sync::Mutex::new(std::collections::BTreeMap::new()))
+    }
+
+    fn started(&self, label: &str, url: &Url) {
+        let mut pages = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        pages.insert(label.to_string(), url.clone());
+    }
+
+    fn is_app_page(&self, label: &str) -> bool {
+        let pages = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        pages.get(label).is_some_and(is_app_page)
+    }
 }
 
 fn decide(kind: PermissionKind, own_view: bool, app_page: bool) -> PermissionResponse {
@@ -120,5 +156,16 @@ mod tests {
         assert!(!is_app_page(&url("https://example.com/")));
         assert!(!is_app_page(&url("https://tauri.localhost.example.com/")));
         assert!(!is_app_page(&url("netherstone-pdf://localhost/")));
+    }
+
+    #[test]
+    fn a_view_is_judged_by_the_page_it_last_started_loading() {
+        let pages = Pages::new();
+        assert!(!pages.is_app_page("main"));
+        pages.started("main", &url("http://tauri.localhost/"));
+        assert!(pages.is_app_page("main"));
+        pages.started("main", &url("https://example.com/"));
+        assert!(!pages.is_app_page("main"));
+        assert!(!pages.is_app_page("other"));
     }
 }

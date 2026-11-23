@@ -1,11 +1,12 @@
 import * as React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppShortcuts } from "@/hooks/useAppShortcuts";
 import { useLaunches } from "@/lib/launch";
 import { saveEditorFile } from "@/lib/open-editor-file";
+import { createShard } from "@/lib/open-vault-file";
 import { useRecentSwitching } from "@/hooks/useRecentSwitching";
 import { cn } from "@/lib/utils";
-import { useEditorStore, useSettingsStore, useUIStore } from "@/store";
+import { useEditorStore, useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import { useHistoryStore, useShownVersion } from "@/store/history";
 
 import { RightSidebar } from "./sidebar/RightSidebar";
@@ -16,7 +17,6 @@ import { GalleryView } from "./gallery/GalleryView";
 import { SettingsPage } from "./settings/SettingsPage";
 import { ExportDialogHost } from "./export/ExportDialogHost";
 import { ImportDialogHost } from "./import/ImportDialogHost";
-import { NewShardDialog } from "./vault/NewShardDialog";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { BrowserPanel } from "./browser/BrowserPanel";
 import { useCoversBrowser } from "./browser/browserOcclusion";
@@ -216,6 +216,12 @@ const ModeAwareNotes = React.memo(function ModeAwareNotes({
   );
 });
 
+/** Ctrl+N: a new shard where Settings says, once a vault is open. */
+function newShard() {
+  const vaultPath = useVaultStore.getState().currentVaultPath;
+  if (vaultPath) void createShard(vaultPath);
+}
+
 /** Settings is drawn over the browser panel, so the native view steps aside. */
 function CoversBrowser() {
   useCoversBrowser();
@@ -226,12 +232,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const activeNavItem = useUIStore((s) => s.activeNavItem);
-  const [isNewShardDialogOpen, setIsNewShardDialogOpen] = useState(false);
-  const openNewShardDialog = useCallback(
-    () => setIsNewShardDialogOpen(true),
-    [],
-  );
-  useAppShortcuts({ onNewShard: openNewShardDialog, onSave: saveEditorFile });
+  useAppShortcuts({ onNewShard: newShard, onSave: saveEditorFile });
   useRecentSwitching();
   useLaunches();
 
@@ -246,7 +247,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           {/* Settings covers the left sidebar too: its categories take the
               sidebar's place, and the sidebar is back as it was on leaving. */}
           <div className="relative flex min-w-0 flex-1">
-            <MemoizedLeftSidebar onNewShard={openNewShardDialog} />
+            <MemoizedLeftSidebar />
 
             {/* Its own stacking layer, so the editor's raised parts (block
                 handles at z-50) stay under Settings and the sidebar. */}
@@ -266,10 +267,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             )}
           </div>
 
-          <NewShardDialog
-            open={isNewShardDialogOpen}
-            onOpenChange={setIsNewShardDialogOpen}
-          />
           <ExportDialogHost />
           <ImportDialogHost />
         </div>

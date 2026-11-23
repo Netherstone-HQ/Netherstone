@@ -361,6 +361,17 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           window.__saves.push({ filePath, content });
           return null;
         },
+        // As the desktop app: the first free Untitled name, made empty.
+        create_shard_file: ({ directory }) => {
+          let name = "Untitled.md";
+          for (let n = 2; relative(`${directory}/${name}`) in files; n++) {
+            name = `Untitled ${n}.md`;
+          }
+          const filePath = `${directory}/${name}`;
+          files[relative(filePath)] = "";
+          tree.push({ name, path: filePath, kind: "file" });
+          return filePath;
+        },
         keep_unsaved_edits: ({ filePath, copy }) => {
           window.__keptEdits[filePath] = copy;
           return null;

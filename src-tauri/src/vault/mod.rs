@@ -422,6 +422,21 @@ pub fn unique_drawing_path(dir: &Path, name: &str) -> Result<PathBuf, String> {
     Ok(candidate)
 }
 
+/// Name a new shard starts with, before it's renamed.
+const NEW_SHARD_NAME: &str = "Untitled";
+
+/// Returns a free path in `dir` for a new shard: `Untitled.md`, then
+/// `Untitled 2.md`, `Untitled 3.md` and so on.
+pub fn untitled_shard_path(dir: &Path) -> PathBuf {
+    let mut candidate = dir.join(format!("{}.md", NEW_SHARD_NAME));
+    let mut counter: u32 = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{} {}.md", NEW_SHARD_NAME, counter));
+        counter += 1;
+    }
+    candidate
+}
+
 /// Why a new vault folder couldn't be made. The app turns each into its own
 /// message, so these are codes rather than sentences.
 pub const VAULT_NAME_EMPTY: &str = "vault-name-empty";
@@ -631,6 +646,22 @@ mod tests {
 
         assert!(unique_drawing_path(&vault, "  ").is_err());
         assert!(unique_drawing_path(&vault, "a/b").is_err());
+        std::fs::remove_dir_all(&vault).unwrap();
+    }
+
+    #[test]
+    fn untitled_shard_path_counts_up_past_taken_names() {
+        let vault = temp_vault("untitled");
+
+        let first = untitled_shard_path(&vault);
+        assert_eq!(first, vault.join("Untitled.md"));
+        std::fs::write(&first, "kept").unwrap();
+
+        let second = untitled_shard_path(&vault);
+        assert_eq!(second, vault.join("Untitled 2.md"));
+        std::fs::write(&second, "").unwrap();
+
+        assert_eq!(untitled_shard_path(&vault), vault.join("Untitled 3.md"));
         std::fs::remove_dir_all(&vault).unwrap();
     }
 

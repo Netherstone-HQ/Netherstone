@@ -22,7 +22,8 @@ const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-ui-check";
 const APK = process.env.APK;
-const SHARD = "android-check";
+// What New shard names the first shard of a vault.
+const SHARD = "Untitled";
 const TYPED = "typed on the emulator";
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
@@ -162,27 +163,19 @@ try {
   await step("create-shard", async () => {
     await page.getByRole("button", { name: "New", exact: true }).click();
     await page.getByRole("menuitem", { name: "New shard" }).click();
-    const name = page.locator("#shard-name");
-    await expect(name).toBeFocused();
-    await page.keyboard.type(SHARD);
-    await expect(name).toHaveValue(SHARD);
-    await page.getByRole("button", { name: "Create shard" }).click();
-    await expect(name).toBeHidden();
+    await expect(page.locator("[data-slate-editor]")).toBeFocused();
 
     shardFile = `${vault}/${SHARD}.md`;
-    await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toContain(`# ${SHARD}`);
+    await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toBe("");
   });
 
   await step("type-and-save", async () => {
     const editor = page.locator("[data-slate-editor]");
-    await expect(editor).toContainText(SHARD);
     // Until the app has a phone layout, both sidebars leave the shard no
     // room on a phone screen, so close them as a person would.
     await page.getByRole("button", { name: "Hide left sidebar" }).click();
     await page.getByRole("button", { name: "Hide right sidebar" }).click();
     await editor.locator("[data-slate-node=element]").last().click();
-    await page.keyboard.press("End");
-    await page.keyboard.press("Enter");
     await page.keyboard.type(TYPED);
     await expect(editor).toContainText(TYPED);
     await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toContain(TYPED);

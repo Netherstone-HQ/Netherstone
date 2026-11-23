@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, mockVault, test } from "./vault";
+import { expect, mockVault, test, VAULT_PATH } from "./vault";
 
 const FILES = { "Note.md": "# Note\n\nStart\n" };
 
@@ -87,6 +87,38 @@ test("with no shard open, the editor offers New shard and Import", async ({ page
 
   await buttons.filter({ hasText: "Import" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("New shard opens an empty Untitled shard, never one that's taken", async ({ page }) => {
+  await mockVault(page, { files: { ...FILES, "Untitled.md": "Kept\n" } });
+
+  const buttons = page.locator('[data-slot="empty-content"] button');
+  await buttons.filter({ hasText: "New shard" }).click();
+
+  const editor = page.locator("[data-slate-editor]");
+  await expect(editor).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.keyboard.type("Fresh");
+  await expect
+    .poll(() => page.evaluate(() => window.__saves.at(-1)))
+    .toEqual({ filePath: `${VAULT_PATH}/Untitled 2.md`, content: expect.stringContaining("Fresh") });
+  const savedPaths = await page.evaluate(() => window.__saves.map((save) => save.filePath));
+  expect(savedPaths).not.toContain(`${VAULT_PATH}/Untitled.md`);
+});
+
+test("Ctrl+N from an open shard opens a new Untitled shard ready to type", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+
+  const editor = page.locator("[data-slate-editor]");
+  await expect(editor).toContainText("Start");
+  await page.keyboard.press("Control+n");
+
+  await expect(editor).not.toContainText("Note");
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("Fresh");
+  await expect
+    .poll(() => page.evaluate(() => window.__saves.at(-1)))
+    .toEqual({ filePath: `${VAULT_PATH}/Untitled.md`, content: expect.stringContaining("Fresh") });
 });
 
 test("with no vault open, the editor offers New vault and Open vault", async ({ page }) => {

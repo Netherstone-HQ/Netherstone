@@ -130,6 +130,24 @@ fn record_writing_after_save(file_path: &str, content: &str, previous: Option<St
     }
 }
 
+/// Creates an empty shard in `directory` under a name no file there has yet
+/// (see [`vault::untitled_shard_path`]) and returns its path.
+#[tauri::command(async)]
+pub(crate) fn create_shard_file(directory: String) -> Result<String, String> {
+    in_open_vault(&directory)?;
+    let dir = Path::new(&directory);
+    if !dir.is_dir() {
+        return Err(format!("Not a directory: {}", directory));
+    }
+
+    let vault = vault_access::get().open_vault()?;
+    let writes = locks::vault_writes()?;
+    let path = vault::untitled_shard_path(dir);
+    let file_path = path.to_string_lossy().into_owned();
+    write_shard(&writes, &vault, &file_path, "")?;
+    Ok(file_path)
+}
+
 #[tauri::command(async)]
 pub(crate) fn append_markdown_to_file(file_path: String, markdown: String) -> Result<(), String> {
     in_open_vault(&file_path)?;

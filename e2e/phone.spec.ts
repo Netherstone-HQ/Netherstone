@@ -36,9 +36,13 @@ test("+ makes an Untitled shard, next to one already called that, and opens it",
   await page.getByRole("button", { name: "New shard", exact: true }).click();
 
   await expect(page.locator("[data-slate-editor]")).toBeVisible();
-  const saves = await page.evaluate(() => window.__saves.map((save) => save.filePath));
-  expect(saves).toContainEqual(expect.stringMatching(/\/Untitled 2\.md$/));
-  expect(saves).not.toContainEqual(expect.stringMatching(/\/Untitled\.md$/));
+  const opened = await page.evaluate(() =>
+    window.__commands
+      .filter((c) => c.command === "open_markdown_file")
+      .map((c) => (c.args as { filePath: string }).filePath),
+  );
+  expect(opened).toContainEqual(expect.stringMatching(/\/Untitled 2\.md$/));
+  expect(opened).not.toContainEqual(expect.stringMatching(/\/Untitled\.md$/));
 });
 
 test("pressing and holding a row opens its menu, and Pin pins it", async ({ page }) => {

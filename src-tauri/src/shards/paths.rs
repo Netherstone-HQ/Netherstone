@@ -285,7 +285,12 @@ pub(crate) fn rename_path(
     let is_case_only_rename = old_path_normalized.eq_ignore_ascii_case(&new_path_normalized)
         && old_path_normalized != new_path_normalized;
 
-    if new_path.exists() && !is_case_only_rename {
+    // A case-only rename finds the item itself under the new name, unless
+    // the folder also holds another one spelled exactly that way, as a disk
+    // that tells cases apart can.
+    let is_taken =
+        new_path.exists() && (!is_case_only_rename || has_entry_named(parent, &resolved_new_name));
+    if is_taken {
         return Err(format!(
             "A {} with name '{}' already exists",
             if is_directory { "folder" } else { "file" },
@@ -303,6 +308,15 @@ pub(crate) fn rename_path(
     rewrite_links_after_path_change(vault, old_path, &new_path, "rename");
 
     Ok(new_path_string)
+}
+
+/// Whether `dir` holds an entry named exactly `name`, case included.
+fn has_entry_named(dir: &Path, name: &str) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|entry| entry.file_name() == std::ffi::OsStr::new(name))
+    })
 }
 
 #[tauri::command(async)]
@@ -519,5 +533,37 @@ mod tests {
         assert!(escapes.iter().all(Result::is_err));
         assert!(!moved_out);
         assert_eq!(Path::new(&renamed), folder.join("Roadmap.md"));
+    }
+
+    #[test]
+    fn rename_never_writes_over_a_taken_name() {
+        let dir = std::env::temp_dir().join(format!("netherstone-taken-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shard = dir.join("plan.md");
+        std::fs::write(&shard, "mine").unwrap();
+        std::fs::write(dir.join("Notes.md"), "kept").unwrap();
+        let shard_path = shard.to_string_lossy().into_owned();
+
+        let onto_other = rename_path(&dir, &shard_path, "Notes".into());
+        // Where the disk tells cases apart, "Plan.md" can be another shard.
+        let other_case = dir.join("Plan.md");
+        let has_other_case = !other_case.exists();
+        if has_other_case {
+            std::fs::write(&other_case, "theirs").unwrap();
+        }
+        let onto_other_case = rename_path(&dir, &shard_path, "Plan".into());
+        let notes = std::fs::read_to_string(dir.join("Notes.md")).unwrap();
+        let other = std::fs::read_to_string(&other_case).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(onto_other.is_err());
+        assert_eq!(notes, "kept");
+        if has_other_case {
+            assert!(onto_other_case.is_err());
+            assert_eq!(other, "theirs");
+        } else {
+            assert!(onto_other_case.is_ok());
+            assert_eq!(other, "mine");
+        }
     }
 }

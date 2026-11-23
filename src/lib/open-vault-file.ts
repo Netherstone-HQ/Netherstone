@@ -2,13 +2,17 @@ import { toast } from "sonner";
 import {
   finishDrawingSession,
   isDrawingPath,
+  isPathWithin,
   isSamePath,
 } from "@/lib/drawing-files";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { createDrawingFile } from "@/lib/commands/drawings";
+import { createShardFile } from "@/lib/commands/shards";
 import { scanVault } from "@/lib/commands/vault";
+import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
+import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 
@@ -80,6 +84,59 @@ export async function createDrawing(vaultPath: string, folder = vaultPath) {
   } catch (error) {
     console.error("[Netherstone] Failed to create drawing:", error);
     toast.error("Couldn't create drawing", {
+      description: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/** The vault root, or the open shard's folder when Settings asks for it. */
+function newShardFolder(vaultPath: string): string {
+  const openPath = useEditorStore.getState().currentFilePath;
+  if (
+    useSettingsStore.getState().newShardLocation !== "current-folder" ||
+    !openPath ||
+    !isPathWithin(openPath, vaultPath)
+  ) {
+    return vaultPath;
+  }
+  const folder = openPath.replace(/[\\/][^\\/]*$/, "");
+  return folder || vaultPath;
+}
+
+/**
+ * Puts the cursor in the shard at `filePath` once its editor is on screen.
+ * Gives up when another shard opens first.
+ */
+function focusWhenShown(filePath: string) {
+  const shown = useEditorStore.getState().plateEditor;
+  const unsubscribe = useEditorStore.subscribe((state) => {
+    const opening = state.openingFilePath ?? state.currentFilePath;
+    if (opening !== filePath) {
+      unsubscribe();
+      return;
+    }
+    const editor = state.plateEditor;
+    if (state.currentFilePath !== filePath || !editor || editor === shown) return;
+    unsubscribe();
+    window.requestAnimationFrame(() => editor.tf.focus());
+  });
+}
+
+/**
+ * Creates an empty "Untitled" shard in `folder` and opens it ready to type,
+ * saying so if that fails. Without `folder`, Settings decides where it goes.
+ */
+export async function createShard(vaultPath: string, folder?: string) {
+  try {
+    const filePath = await createShardFile(folder ?? newShardFolder(vaultPath));
+    focusWhenShown(filePath);
+    await openEditorFile(filePath);
+    // New shard works from any mode; the shard opens in the editor.
+    useUIStore.getState().openMode("editor");
+    await refreshVault(vaultPath);
+  } catch (error) {
+    console.error("[Netherstone] Failed to create shard:", error);
+    toast.error("Couldn't create shard", {
       description: error instanceof Error ? error.message : String(error),
     });
   }

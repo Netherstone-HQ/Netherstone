@@ -1,32 +1,11 @@
 name: Android
 
-# Builds the Android app when anything it's built from changes: the arm64
-# APK is checked against the size budget, and an x86_64 build is driven on
-# an emulator (scripts/android-ui-check.mjs). Not a required check.
+# Builds the Android app on request (Actions > Android > Run workflow): the
+# arm64 APK is checked against the size budget, and an x86_64 build is driven
+# on an emulator (scripts/android-ui-check.mjs). Run it on a branch before a
+# build goes to a phone.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "public/**"
-      - "index.html"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "vite.config.ts"
-      - "scripts/android-ui-check.mjs"
-      - ".github/workflows/android.yml"
-  pull_request:
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "public/**"
-      - "index.html"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "vite.config.ts"
-      - "scripts/android-ui-check.mjs"
-      - ".github/workflows/android.yml"
+  workflow_dispatch:
 
 concurrency:
   group: android-${{ github.ref }}

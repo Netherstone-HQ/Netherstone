@@ -21,7 +21,6 @@ import { openEditorFile } from '@/lib/open-editor-file';
 import { cn } from '@/lib/utils';
 import { isMarkdownPath } from '@/lib/drawing-files';
 import { isAbsolutePathLike } from '@/lib/markdown-shard-links';
-import { useMounted } from '@/hooks/use-mounted';
 import { useEditorStore, useVaultStore } from '@/store';
 import type { FileTreeNode } from '@/store';
 
@@ -44,7 +43,6 @@ export function MentionElement(
 
   const selected = useElementSelected();
   const focused = useFocused();
-  const mounted = useMounted();
   const readOnly = useReadOnly();
 
   return (
@@ -88,7 +86,7 @@ export function MentionElement(
         },
       }}
     >
-      {mounted && IS_APPLE ? (
+      {IS_APPLE ? (
         // Mac OS IME https://github.com/ianstormtaylor/slate/issues/3490
         <>
           {props.children}

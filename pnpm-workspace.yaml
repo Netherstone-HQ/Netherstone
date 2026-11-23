@@ -6,6 +6,10 @@ allowBuilds:
 
 patchedDependencies:
   '@excalidraw/excalidraw': patches/@excalidraw__excalidraw.patch
+  # Every node component looked up the editor through Plate's store, a few
+  # hooks and a subscription each, many times per block: most of a long
+  # shard's memory. Read from a context inside Plate now. Still in Plate 53.5.
+  '@platejs/core': patches/@platejs__core.patch
   # Saving looked up every mark's plugin for each piece of text, and a mark
   # with no plugin here (comment, highlight, kbd, ...) built and resolved a
   # new plugin on each lookup: most of a long shard's save. Looked up once
@@ -16,6 +20,10 @@ patchedDependencies:
   # Keeps selected blocks when the editor, losing focus to them, puts back
   # the caret it already has (Slate 0.145).
   '@platejs/selection': patches/@platejs__selection.patch
+  # useAtomValue re-rendered every component once after mounting, even with
+  # nothing changed, so a long shard kept two copies of each block's React
+  # state. Re-renders only on a change now. Still in jotai 2.19. Plate's copy.
+  jotai@2.8.4: patches/jotai@2.8.4.patch
   # React saves the caret of a focused contenteditable before each commit by
   # walking all of its DOM, and uses it only when focus moved. Skipped for the
   # Slate editor, which sets its own caret. Recheck on every React upgrade.

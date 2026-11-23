@@ -7,6 +7,8 @@ import { WindowTitleBar } from "@/components/WindowTitleBar";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { IS_PHONE } from "@/components/phone/phone-shell";
+import { IS_MOBILE } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/store/settings";
 import { useSyncStore } from "@/store/sync";
@@ -84,12 +86,16 @@ export function Onboarding({
     <div
       className={cn(
         "relative flex h-full w-full flex-col bg-background text-foreground",
+        IS_PHONE && "h-dvh pt-safe-top pb-safe-bottom",
         leaving && "onboarding-leave",
       )}
     >
-      <div className="absolute inset-x-0 top-0 z-10">
-        <WindowTitleBar bare />
-      </div>
+      {/* Phones and tablets have no window to move or close. */}
+      {IS_MOBILE ? null : (
+        <div className="absolute inset-x-0 top-0 z-10">
+          <WindowTitleBar bare />
+        </div>
+      )}
       {onClose ? (
         <Hint label={copy.common.close} side="bottom">
           <Button
@@ -107,7 +113,7 @@ export function Onboarding({
       {step === "welcome" ? (
         <WelcomeStep onStart={next} />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col pt-9">
+        <div className={cn("flex min-h-0 flex-1 flex-col", !IS_PHONE && "pt-9")}>
           <StepProgress.Provider
             value={{
               index: steps.indexOf(step),

@@ -5,9 +5,11 @@ import {
   FolderPlusIcon,
   LoaderCircleIcon,
   RotateCcwIcon,
+  SmartphoneIcon,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
+import { IS_PHONE } from "@/components/phone/phone-shell";
 import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNotice";
 import { GitHubSignIn } from "@/components/settings/GitHubSignIn";
 import { Button } from "@/components/ui/button";
@@ -39,7 +41,7 @@ export type VaultChoice = {
 type Option = "create" | "restore";
 
 /** Turns a failure from `create_vault` into a sentence from copy.ts. */
-function vaultErrorText(error: unknown) {
+export function vaultErrorText(error: unknown) {
   const code = errorMessage(error);
   const errors: Record<string, string> = copy.vault.errors;
   if (code in errors) return errors[code];
@@ -63,6 +65,35 @@ export function VaultStep({
       .then(setLocation)
       .catch(() => {});
   }, []);
+
+  if (IS_PHONE) {
+    return option === "create" ? (
+      <PhoneCreateVault
+        location={location}
+        onBack={() => setOption(null)}
+        onCreated={onChoose}
+      />
+    ) : (
+      <Step title={copy.vault.title} body={copy.vault.phoneBody} onBack={onBack}>
+        <div className="flex flex-col gap-2.5">
+          {currentVaultPath ? (
+            <ChoiceCard
+              icon={<FolderIcon />}
+              title={copy.vault.keep.title(folderName(currentVaultPath))}
+              description={copy.vault.keep.description}
+              onClick={() => onChoose({ path: currentVaultPath, kind: "kept" })}
+            />
+          ) : null}
+          <ChoiceCard
+            icon={<SmartphoneIcon />}
+            title={copy.vault.create.title}
+            description={copy.vault.create.phoneDescription}
+            onClick={() => setOption("create")}
+          />
+        </div>
+      </Step>
+    );
+  }
 
   async function openExisting() {
     const picked = await openVaultDialog();
@@ -126,6 +157,77 @@ export function VaultStep({
   );
 }
 
+/** A phone's own step for a new vault: just its name, kept on this phone. */
+function PhoneCreateVault({
+  location,
+  onBack,
+  onCreated,
+}: {
+  location: string | null;
+  onBack: () => void;
+  onCreated: (choice: VaultChoice) => void;
+}) {
+  const [name, setName] = useState<string>(copy.vault.create.defaultName);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const formId = "phone-create-vault";
+
+  async function create() {
+    if (!location) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onCreated(await createEmptyVault(location, name));
+    } catch (e) {
+      setError(vaultErrorText(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Step
+      title={copy.vault.create.title}
+      onBack={onBack}
+      action={
+        <Button
+          type="submit"
+          form={formId}
+          className="h-11 px-4.5 text-base"
+          disabled={busy || !location}
+        >
+          {busy ? <LoaderCircleIcon className="animate-spin" /> : null}
+          {copy.vault.create.submit}
+        </Button>
+      }
+    >
+      <form
+        id={formId}
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void create();
+        }}
+      >
+        <label className="flex flex-col gap-1.5">
+          <FieldLabel>{copy.vault.create.nameLabel}</FieldLabel>
+          <Input
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value);
+              setError(null);
+            }}
+            aria-invalid={error ? true : undefined}
+            enterKeyHint="go"
+            className="h-12 rounded-xl text-base focus-visible:border-brand"
+            autoFocus
+          />
+        </label>
+        {error ? <Hint tone="error">{error}</Hint> : null}
+      </form>
+    </Step>
+  );
+}
+
 function LocationRow({
   label,
   location,
@@ -163,7 +265,7 @@ function LocationRow({
 }
 
 /** Makes an empty vault with the Start here guide. */
-async function createEmptyVault(location: string, name: string): Promise<VaultChoice> {
+export async function createEmptyVault(location: string, name: string): Promise<VaultChoice> {
   const path = await createVault(location, name);
   await openVault(path);
   const startHerePath = await addStartHere(path);

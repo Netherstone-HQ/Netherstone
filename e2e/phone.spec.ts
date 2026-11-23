@@ -261,3 +261,34 @@ test("the assistant opens in a sheet, and its change shows in the shard with App
   await page.getByRole("button", { name: "Hide assistant" }).click();
   await expect(page.locator("[data-slate-editor]")).toContainText("Book the sleeper.");
 });
+
+test("the welcome tour fits a phone: no window buttons, a vault made by name", async ({ page }) => {
+  await mockVault(page, { files: {}, noVault: true });
+  await page.addInitScript(() => {
+    const settings = JSON.parse(localStorage.getItem("netherstone-settings") ?? "{}");
+    settings.state.onboardingCompletedAt = null;
+    localStorage.setItem("netherstone-settings", JSON.stringify(settings));
+    window.__overrides = {
+      default_vault_location: () => "/home/me/Vaults",
+      create_vault: (args) => `${(args as { parent: string }).parent}/${(args as { name: string }).name}`,
+    };
+  });
+  await page.reload();
+
+  await page.getByRole("button", { name: "Get started" }).click();
+  await expect(page.getByRole("heading", { name: "Where should your knowledge live?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /minimize|maximize|close/i })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/phone-onboarding-vault.png" });
+
+  await page.getByRole("button", { name: /^Create a new vault/ }).click();
+  await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("My Vault");
+  await page.screenshot({ path: "test-results/phone-onboarding-name.png" });
+  await page.getByRole("button", { name: "Create vault" }).click();
+
+  const created = await page.evaluate(() =>
+    window.__commands.filter((c) => c.command === "create_vault").map((c) => c.args),
+  );
+  expect(created).toEqual([{ parent: "/home/me/Vaults", name: "My Vault" }]);
+  await expect(page.getByRole("heading", { name: "Where should your knowledge live?" })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/phone-onboarding-next.png" });
+});

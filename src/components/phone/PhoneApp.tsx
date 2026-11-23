@@ -1,11 +1,12 @@
 import { useEffect } from "react";
+import { copy } from "@/components/onboarding/copy";
 import { useLaunches } from "@/lib/launch";
 import { usePreviewedChange } from "@/lib/assistant-changes";
 import { useAssistantStore } from "@/store/assistant";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useEditorStore, useVaultStore } from "@/store";
-import { createFolderIn, createShardIn } from "./create";
+import { createFolderIn, createShardIn, createVaultNamed } from "./create";
 import { FileScreen } from "./FileScreen";
 import { FolderScreen } from "./FolderScreen";
 import { HomeScreen } from "./HomeScreen";
@@ -61,6 +62,7 @@ export function PhoneApp() {
   const closeMoreMenu = useCloser("more-menu");
   const closeNewFolder = useCloser("new-folder");
   const closeNewShard = useCloser("new-shard");
+  const closeNewVault = useCloser("new-vault");
   const closeShardMenu = useCloser("shard-menu");
   const closeHistorySheet = useCloser("history");
   const closeAssistant = useCloser("assistant");
@@ -82,6 +84,14 @@ export function PhoneApp() {
         <HomeScreen />
       )}
 
+      <NameSheet
+        open={overlay?.kind === "new-vault"}
+        onOpenChange={closeNewVault}
+        title="New vault"
+        initialName={copy.vault.create.defaultName}
+        submitLabel={copy.vault.create.submit}
+        onCreate={createVaultNamed}
+      />
       <VaultMenuSheet
         open={overlay?.kind === "vault-menu"}
         onOpenChange={closeVaultMenu}

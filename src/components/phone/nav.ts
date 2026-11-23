@@ -18,12 +18,12 @@ export type PhoneScreen =
   /** Search, in one folder when `folder` is set. */
   | { kind: "search"; folder?: string; filter?: SearchFilter }
   | { kind: "tags" }
-  | { kind: "settings"; category: SettingsCategory | null }
-  | { kind: "new-vault" };
+  | { kind: "settings"; category: SettingsCategory | null };
 
 /** A sheet or menu over the screen under it. */
 export type PhoneOverlay =
   | { kind: "vault-menu" }
+  | { kind: "new-vault" }
   | { kind: "more-menu"; folder: string | null }
   | { kind: "new-folder"; parent: string }
   | { kind: "new-shard"; folder: string }
@@ -51,7 +51,6 @@ const SCREEN_KINDS = new Set<string>([
   "search",
   "tags",
   "settings",
-  "new-vault",
 ]);
 
 function isScreen(entry: Entry): entry is PhoneScreen {

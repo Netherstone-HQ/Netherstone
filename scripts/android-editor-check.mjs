@@ -357,6 +357,8 @@ try {
     const option = page.getByRole("option", { name: "Blockquote" });
     await expect(option).toBeVisible();
     await tap(option);
+    // The menu gives focus back to the shard; then the keyboard types there.
+    await expect(editor()).toBeFocused();
     await typeKeys("quoted line");
     await expect.poll(() => readAppFile(shardFile)).toContain("> quoted line");
   });

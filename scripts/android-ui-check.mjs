@@ -34,8 +34,13 @@ fs.mkdirSync(OUT, { recursive: true });
 expect.configure({ timeout: WAIT_LIMIT_MS });
 
 const log = (...parts) => console.log(new Date().toISOString().slice(11, 23), ...parts);
-const adb = (...args) =>
-  execFileSync("adb", args, { encoding: "utf8", maxBuffer: 64 << 20, timeout: WAIT_LIMIT_MS }).trim();
+function adb(...args) {
+  try {
+    return execFileSync("adb", args, { encoding: "utf8", maxBuffer: 64 << 20, timeout: WAIT_LIMIT_MS }).trim();
+  } catch (error) {
+    throw new Error(`adb ${args.join(" ")} failed: ${String(error.stderr || error.message).trim()}`);
+  }
+}
 
 // ---- The app ----
 
@@ -156,6 +161,10 @@ try {
   await step("type-and-save", async () => {
     const editor = page.locator("[data-slate-editor]");
     await expect(editor).toContainText(SHARD);
+    // Until the app has a phone layout, both sidebars leave the shard no
+    // room on a phone screen, so close them as a person would.
+    await page.getByRole("button", { name: "Hide left sidebar" }).click();
+    await page.getByRole("button", { name: "Hide right sidebar" }).click();
     await editor.locator("[data-slate-node=element]").last().click();
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
@@ -166,8 +175,10 @@ try {
 
   await step("reopen", async () => {
     await launch();
+    // The left sidebar comes back as it was left: closed.
+    await page.getByRole("button", { name: "Show left sidebar" }).click();
     const sidebar = page.locator('[data-sidebar="sidebar"]');
-    await sidebar.getByText(SHARD, { exact: true }).click();
+    await sidebar.getByText(SHARD, { exact: true }).first().click();
     await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
   });
 } finally {

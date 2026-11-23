@@ -160,6 +160,24 @@ export function useVaultItem(
     setIsRenaming(false);
     setNewName(getDisplayName(node));
   };
+  /** Renames the item to `name`; throws when that fails. */
+  const renameTo = async (name: string) => {
+    try {
+      const persistedOpenFile = await persistOpenFileBeforePathChange(node, "rename", editor);
+      await flushDrawingAffectedBy(node.path);
+      suppressPathChange(node, null);
+      useHistoryStore.getState().startPathChange(node.path);
+
+      const newPath = await renameFile(node.path, name);
+
+      await finishPathChange(node, newPath, persistedOpenFile, "rename", followers);
+    } catch (error) {
+      console.error("Failed to rename:", error);
+      useHistoryStore.getState().endPathChange();
+      throw error;
+    }
+  };
+
   const handleRename = async () => {
     if (isRenameSubmittingRef.current) return;
 
@@ -173,21 +191,11 @@ export function useVaultItem(
     isRenameSubmittingRef.current = true;
 
     try {
-      const persistedOpenFile = await persistOpenFileBeforePathChange(node, "rename", editor);
-      await flushDrawingAffectedBy(node.path);
-      suppressPathChange(node, null);
-      useHistoryStore.getState().startPathChange(node.path);
-
-      const newPath = await renameFile(node.path, trimmedName);
-
-      await finishPathChange(node, newPath, persistedOpenFile, "rename", followers);
-      cancelRename();
+      await renameTo(trimmedName);
     } catch (error) {
-      console.error("Failed to rename:", error);
-      useHistoryStore.getState().endPathChange();
       alert(error instanceof Error ? error.message : String(error));
-      cancelRename();
     } finally {
+      cancelRename();
       isRenameSubmittingRef.current = false;
     }
   };
@@ -456,6 +464,11 @@ export function useVaultItem(
     open,
     isRenaming,
     renameInputProps,
+    renameTo,
+    startMove: () => setIsMoving(true),
+    trash: handleTrash,
+    isPinned,
+    togglePin: () => togglePinnedFile({ name: node.name, path: node.path }),
     moveToFolder,
     dialogs,
   };

@@ -294,6 +294,7 @@ pub fn run() {
             shards::queries::get_broken_links,
             shards::queries::get_charts,
             shards::queries::get_file_metadata,
+            shards::previews::get_shard_previews,
             shards::queries::get_backlinks,
             shards::paths::rename_file,
             shards::paths::move_file,

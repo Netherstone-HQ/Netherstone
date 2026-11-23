@@ -4,6 +4,7 @@ pub mod cache;
 pub mod drawings;
 pub mod files;
 pub mod paths;
+pub mod previews;
 pub mod queries;
 pub mod recovery;
 

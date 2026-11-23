@@ -25,6 +25,8 @@ import { CompanionHost } from "@/components/brand/CompanionHost";
 import { preloadEditorMarkdownWorker } from "@/lib/editor-markdown-worker";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { useWelcomeTour } from "@/components/onboarding/useWelcomeTour";
+import { IS_PHONE } from "@/components/phone/phone-shell";
+import { PhoneApp } from "@/components/phone/PhoneApp";
 
 function App() {
   useVaultInit();
@@ -51,6 +53,8 @@ function App() {
         <TooltipProvider>
           {screen === "onboarding" ? (
             <Onboarding onDone={finish} onClose={close} />
+          ) : IS_PHONE ? (
+            <PhoneApp />
           ) : screen === "app-after-onboarding" ? (
             <div className="flex h-full w-full animate-in fade-in duration-300">
               <AppLayout />

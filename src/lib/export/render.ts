@@ -9,7 +9,7 @@ import { deserializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 
 import { loadImages, type AssetIO, type ImageMap, type LoadContext } from "./assets";
 import { buildExportDocument } from "./build";
-import { loadHighlighter } from "./highlight";
+import { loadHighlighter } from "@/lib/highlighter";
 import { renderHtmlDocument, renderPreviewDocument } from "./html";
 import { loadMath } from "./math";
 import type { ExportDocument } from "./model";

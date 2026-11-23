@@ -24,6 +24,18 @@ export default defineConfig({
     format: "es",
   },
 
+  build: {
+    rollupOptions: {
+      treeshake: {
+        // @platejs/math's main entry imports KaTeX for a helper the app
+        // doesn't use, which kept KaTeX in the startup script. Loading KaTeX
+        // does nothing else (a quirks-mode check), so it's left out unless
+        // something calls it: the equation components and export load it.
+        moduleSideEffects: (id) => !/\/katex\/dist\/katex\.m?js$/.test(id),
+      },
+    },
+  },
+
   resolve: {
     alias: [
       { find: "@", replacement: path.resolve(__dirname, "./src") },

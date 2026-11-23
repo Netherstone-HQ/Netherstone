@@ -1,4 +1,5 @@
-import { EquationPlugin, InlineEquationPlugin } from '@platejs/math/react';
+import { lazy, Suspense } from 'react';
+import { BaseEquationPlugin, BaseInlineEquationPlugin } from '@platejs/math';
 import {
   isHotkey,
   PathApi,
@@ -7,13 +8,58 @@ import {
   TextApi,
   type Path,
   type SlateEditor,
+  type TEquationElement,
 } from 'platejs';
+import {
+  PlateElement,
+  toPlatePlugin,
+  type PlateElementProps,
+} from 'platejs/react';
 
 import { stepOver } from '@/components/editor/step-over';
-import {
-  EquationElement,
-  InlineEquationElement,
-} from '@/components/ui/equation-node';
+
+// The equation components bring KaTeX, so they load with the first equation
+// shown, not with the app. Until then an equation shows its TeX.
+const LazyEquationElement = lazy(() =>
+  import('@/components/ui/equation-node').then((m) => ({
+    default: m.EquationElement,
+  }))
+);
+const LazyInlineEquationElement = lazy(() =>
+  import('@/components/ui/equation-node').then((m) => ({
+    default: m.InlineEquationElement,
+  }))
+);
+
+function EquationSource(props: PlateElementProps<TEquationElement>) {
+  return (
+    <PlateElement {...props}>
+      <span contentEditable={false} className="font-mono text-muted-foreground">
+        {props.element.texExpression}
+      </span>
+      {props.children}
+    </PlateElement>
+  );
+}
+
+function EquationElement(props: PlateElementProps<TEquationElement>) {
+  return (
+    <Suspense fallback={<EquationSource {...props} />}>
+      <LazyEquationElement {...props} />
+    </Suspense>
+  );
+}
+
+function InlineEquationElement(props: PlateElementProps<TEquationElement>) {
+  return (
+    <Suspense fallback={<EquationSource {...props} />}>
+      <LazyInlineEquationElement {...props} />
+    </Suspense>
+  );
+}
+
+const EquationPlugin = toPlatePlugin(BaseEquationPlugin);
+const InlineEquationPlugin = toPlatePlugin(BaseInlineEquationPlugin);
 
 /**
  * The inline equation selected, or the one the caret is right next to

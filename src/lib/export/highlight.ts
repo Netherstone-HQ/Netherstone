@@ -1,7 +1,6 @@
-import type { createLowlight } from "lowlight";
-
 import type { CodeToken } from "./model";
 import { CODE_TOKEN_STYLES } from "./theme";
+import { getHighlighter } from "@/lib/highlighter";
 
 type HastNode =
   | { type: "text"; value: string }
@@ -11,18 +10,6 @@ type HastNode =
       children: HastNode[];
     }
   | { type: "root"; children: HastNode[] };
-
-let lowlight: ReturnType<typeof createLowlight> | null = null;
-
-/**
- * Loads the highlighter with every language the editor knows. It's large, so
- * it loads only for documents with code blocks; until then code is plain.
- */
-export async function loadHighlighter() {
-  if (lowlight) return;
-  const { all, createLowlight } = await import("lowlight");
-  lowlight ??= createLowlight(all);
-}
 
 /** `hljs-title function_` → `title.function_` */
 function scopeFromClasses(classNames: string[] | undefined): string | undefined {
@@ -45,11 +32,11 @@ function styleFor(scopes: string[]) {
 /**
  * Splits code into lines of colored tokens with the editor's highlighting.
  * Unknown languages come back as plain text, and so does everything before
- * `loadHighlighter` has run.
+ * `loadHighlighter` (in `@/lib/highlighter`) has run.
  */
 export function highlightCode(code: string, language: string): CodeToken[][] {
   const lines: CodeToken[][] = [[]];
-  const engine = lowlight;
+  const engine = getHighlighter();
 
   const push = (text: string, scopes: string[]) => {
     const style = styleFor(scopes);

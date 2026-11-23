@@ -4,7 +4,6 @@ import {
   CodeLinePlugin,
   CodeSyntaxPlugin,
 } from '@platejs/code-block/react';
-import { all, createLowlight } from 'lowlight';
 
 import {
   CodeBlockElement,
@@ -12,13 +11,11 @@ import {
   CodeSyntaxLeaf,
 } from '@/components/ui/code-block-node';
 
-const lowlight = createLowlight(all);
-
 export const CodeBlockKit = [
   CodeBlockPlugin.configure({
     inputRules: [CodeBlockRules.markdown({ on: 'match' })],
+    // The highlighter loads once a code block shows (see CodeBlockElement).
     node: { component: CodeBlockElement },
-    options: { lowlight },
   }),
   CodeLinePlugin.withComponent(CodeLineElement),
   CodeSyntaxPlugin.withComponent(CodeSyntaxLeaf),

@@ -150,18 +150,20 @@ try {
   launch();
   await connect();
 
-  await step("app-loads", () =>
-    page(`await waitFor(() => document.readyState === "complete" && window.__TAURI_INTERNALS__); return 1;`),
-  );
+  // The app has drawn its first screen: the welcome tour or, once that's
+  // done, the sidebar.
+  const appDrawn = `await waitFor(() => window.__TAURI_INTERNALS__ && (startingWith("button", "Get started") || document.querySelector('[data-sidebar="sidebar"]'))); return 1;`;
+  await step("app-loads", () => page(appDrawn));
 
   await step("onboarding", async () => {
     // The way forward on each step, in this order: the vault step's create
-    // button shows once its card is open. A new vault goes in the app's
-    // storage.
-    const forward = ["Get started", "Create vault", "Create a new vault", "Continue", "Open Netherstone"];
+    // button shows once its card is open, and sync and the assistant are
+    // skipped. A new vault goes in the app's storage. The tour is over once
+    // the app's sidebar is up.
+    const forward = ["Get started", "Create vault", "Create a new vault", "Continue", "Skip for now", "Open Netherstone"];
     for (;;) {
       const next = await page(`
-        const done = () => !document.querySelector('[aria-label^="Step "]');
+        const done = () => !!document.querySelector('[data-sidebar="sidebar"]');
         const pick = () => done() ? "done" : ${JSON.stringify(forward)}.find((t) => startingWith("button", t) && !startingWith("button", t).disabled);
         return await waitFor(pick);`);
       if (next === "done") break;
@@ -211,7 +213,7 @@ try {
   await step("reopen", async () => {
     launch();
     await connect();
-    await page(`await waitFor(() => document.readyState === "complete" && window.__TAURI_INTERNALS__); return 1;`);
+    await page(appDrawn);
     await tap(SHARD, `() => byText('[data-sidebar="sidebar"] span', ${JSON.stringify(SHARD)})`);
     await page(`await waitFor(() => document.querySelector("[data-slate-editor]")?.textContent.includes(${JSON.stringify(TYPED)})); return 1;`);
   });

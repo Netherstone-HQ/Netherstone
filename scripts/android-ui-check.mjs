@@ -105,6 +105,21 @@ async function screenshot(name) {
 
 // ---- Android input ----
 
+/**
+ * Where the WebView's top left corner is on the screen, in pixels: below the
+ * status bar unless the app draws behind it. Read from Android's own view of
+ * the window.
+ */
+let origin;
+function webViewOrigin() {
+  shell("uiautomator dump /data/local/tmp/ui.xml");
+  const match = shell("cat /data/local/tmp/ui.xml").match(
+    /class="android\.webkit\.WebView"[^>]*?bounds="\[(\d+),(\d+)\]/,
+  );
+  if (!match) throw new Error("Android shows no WebView on screen");
+  return { x: Number(match[1]), y: Number(match[2]) };
+}
+
 /** Taps the middle of the element `find` (page code) returns, as a finger would. */
 async function tap(what, find) {
   const box = await page(`
@@ -112,8 +127,11 @@ async function tap(what, find) {
     el.scrollIntoView({ block: "center" });
     const r = el.getBoundingClientRect();
     return { x: (r.left + r.width / 2) * devicePixelRatio, y: (r.top + r.height / 2) * devicePixelRatio };`);
-  log("tap", what);
-  shell(`input tap ${Math.round(box.x)} ${Math.round(box.y)}`);
+  origin ??= webViewOrigin();
+  const x = Math.round(origin.x + box.x);
+  const y = Math.round(origin.y + box.y);
+  log("tap", what, `at ${x},${y}`);
+  shell(`input tap ${x} ${y}`);
 }
 
 function type(text) {
@@ -124,6 +142,8 @@ function type(text) {
 /** Starts the app and returns once its WebView can be inspected. */
 function launch() {
   shell(`am force-stop ${PACKAGE}`);
+  shell("wm dismiss-keyguard");
+  origin = undefined;
   adb("logcat", "-c");
   shell(`am start -n ${ACTIVITY}`);
   // The WebView comes after the first frame; MainActivity logs when it's ready.
@@ -141,7 +161,13 @@ async function step(name, run) {
     await screenshot(`${String(steps.length).padStart(2, "0")}-${name}`);
   } catch (error) {
     steps.push({ name, ok: false, error: String(error?.stack ?? error) });
-    await screenshot(`${String(steps.length).padStart(2, "0")}-${name}-failed`).catch(() => {});
+    const failed = `${String(steps.length).padStart(2, "0")}-${name}-failed`;
+    await screenshot(failed).catch(() => {});
+    // The whole screen as Android drew it, in case something covers the app.
+    fs.writeFileSync(
+      path.join(OUT, `${failed}-screen.png`),
+      execFileSync("adb", ["exec-out", "screencap", "-p"], { maxBuffer: 64 << 20 }),
+    );
     throw error;
   }
 }

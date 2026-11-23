@@ -196,7 +196,10 @@ try {
     for (;;) {
       const next = await page(`
         const done = () => !!document.querySelector('[data-sidebar="sidebar"]');
-        const pick = () => done() ? "done" : ${JSON.stringify(forward)}.find((t) => startingWith("button", t) && !startingWith("button", t).disabled);
+        // A forward button that's turned off means the step is busy (a vault
+        // being made, say): wait for it rather than tap something else.
+        const shown = () => ${JSON.stringify(forward)}.map((t) => [t, startingWith("button", t)]).filter(([, el]) => el);
+        const pick = () => { if (done()) return "done"; const now = shown(); return now.some(([, el]) => el.disabled) ? null : now[0]?.[0]; };
         return await waitFor(pick);`);
       if (next === "done") break;
       const before = await page(`return document.body.innerText.length + ":" + document.querySelector('[aria-label^="Step "]')?.getAttribute("aria-label");`);

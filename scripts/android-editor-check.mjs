@@ -260,7 +260,16 @@ try {
         message: "another app in front",
       })
       .not.toContain(PACKAGE);
-    await shell(`am start -W -n ${ACTIVITY}`);
+    // Without -W: waiting for the launch can hang while the browser is busy.
+    await shell(`am start -n ${ACTIVITY}`);
+    await expect
+      .poll(() => shell("dumpsys activity activities | grep -m1 topResumedActivity"), {
+        message: "the app back in front",
+      })
+      .toContain(PACKAGE);
+    // Still waiting: a poll that failed while the app was in the background
+    // doesn't end the sign-in.
+    await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("button", { name: "Connect GitHub" })).toBeVisible();
   });

@@ -242,6 +242,10 @@ pub async fn finish_sign_in(remember: bool) -> Result<Option<GitHubAccount>, Str
             .unwrap_or(false)
     };
 
+    // A phone pauses the app while the user approves in the browser, so a
+    // poll can fail to reach GitHub; the next one is tried until the code
+    // expires, and only then is the last network error shown.
+    let mut last_network_error = None;
     let token = loop {
         tokio::time::sleep(Duration::from_secs(interval)).await;
         if !still_pending() {
@@ -249,10 +253,22 @@ pub async fn finish_sign_in(remember: bool) -> Result<Option<GitHubAccount>, Str
         }
         if Instant::now() >= deadline {
             clear_sign_in(id);
-            return Err("The sign-in code expired. Start again to get a new one.".into());
+            return Err(last_network_error.unwrap_or_else(|| {
+                "The sign-in code expired. Start again to get a new one.".into()
+            }));
         }
 
-        match device_flow::poll_access_token(&client, &device_code, interval).await? {
+        let outcome = match device_flow::poll_access_token(&client, &device_code, interval).await {
+            Ok(outcome) => {
+                last_network_error = None;
+                outcome
+            }
+            Err(message) => {
+                last_network_error = Some(message);
+                continue;
+            }
+        };
+        match outcome {
             PollOutcome::Token(token) => break token,
             PollOutcome::Pending => {}
             PollOutcome::SlowDown(next) => interval = next,

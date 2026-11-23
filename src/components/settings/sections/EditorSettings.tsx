@@ -6,6 +6,7 @@ import {
   SettingsGroup,
 } from "@/components/settings/settings-ui";
 import type { ContentWidth, ReadingFont, TextSize } from "@/store/settings";
+import { IS_PHONE } from "@/components/phone/phone-shell";
 
 const FONTS: Option<ReadingFont>[] = [
   {
@@ -63,12 +64,15 @@ export function EditorSettings() {
           options={FONTS}
         />
         <PreferenceSegments name="textSize" label="Text size" options={SIZES} />
-        <PreferenceSegments
-          name="contentWidth"
-          label="Line width"
-          description="How wide the text column gets in a large window"
-          options={WIDTHS}
-        />
+        {/* A phone's text column is always its width. */}
+        {IS_PHONE ? null : (
+          <PreferenceSegments
+            name="contentWidth"
+            label="Line width"
+            description="How wide the text column gets in a large window"
+            options={WIDTHS}
+          />
+        )}
       </SettingsGroup>
     </>
   );

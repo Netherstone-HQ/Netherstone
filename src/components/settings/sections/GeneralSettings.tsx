@@ -26,6 +26,7 @@ import {
   type Integration,
   type Integrations,
 } from "@/lib/commands/integrations";
+import { IS_MOBILE } from "@/lib/platform";
 import {
   MAX_RECENT_FILES_LIMIT,
   MIN_RECENT_FILES_LIMIT,
@@ -43,26 +44,33 @@ export function GeneralSettings() {
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Sidebar">
+      <SettingsGroup title={IS_MOBILE ? "Home" : "Sidebar"}>
         <RecentShardsRows />
       </SettingsGroup>
 
-      <SettingsGroup title="Links">
-        <PreferenceSegments
-          name="openLinksIn"
-          label="Open links in"
-          options={[
-            { value: "browser-panel", label: "Browser panel" },
-            { value: "your-browser", label: "Your browser" },
-          ]}
-        />
-      </SettingsGroup>
+      {/* Phones have no browser panel yet. */}
+      {IS_MOBILE ? null : (
+        <SettingsGroup title="Links">
+          <PreferenceSegments
+            name="openLinksIn"
+            label="Open links in"
+            options={[
+              { value: "browser-panel", label: "Browser panel" },
+              { value: "your-browser", label: "Your browser" },
+            ]}
+          />
+        </SettingsGroup>
+      )}
 
       <SettingsGroup title="Deleting">
         <PreferenceSwitch
           name="confirmBeforeDelete"
           label="Ask before moving to trash"
-          description="Deleted shards and folders go to your system trash"
+          description={
+            IS_MOBILE
+              ? "Deleted shards and folders go to the trash"
+              : "Deleted shards and folders go to your system trash"
+          }
         />
       </SettingsGroup>
 

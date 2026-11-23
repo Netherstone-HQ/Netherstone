@@ -169,3 +169,26 @@ test("All tags lists the vault's tags, and a tag shows its shards", async ({ pag
   await expect(page.getByRole("button", { name: /^2026-11-19/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Overview/ })).toHaveCount(0);
 });
+
+test("Settings lists the phone's categories, and each one opens", async ({ page }) => {
+  await mockVault(page, { files: FILES, nested: true });
+  await page.getByRole("button", { name: /^Vault/ }).first().click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await page.screenshot({ path: "test-results/phone-settings.png" });
+
+  const names = await page.getByRole("navigation", { name: "Settings" }).getByRole("button").allInnerTexts();
+  expect(names.map((name) => name.split("\n")[0])).toEqual([
+    "General", "Appearance", "Editor", "Microphone", "Vault", "Files & attachments", "Sync", "AI assistant", "About",
+  ]);
+  for (const name of ["General", "Appearance", "Editor", "Microphone", "Vault", "Files & attachments", "Sync", "AI assistant", "About"]) {
+    await page.getByRole("button", { name: new RegExp(`^${name}`) }).click();
+    await expect(page.getByRole("heading", { name, exact: true }).first()).toBeVisible();
+    await page.screenshot({ path: `test-results/phone-settings-${name.split(" ")[0].toLowerCase()}.png`, fullPage: true });
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  }
+  // Wide content must not make the page scroll sideways.
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});

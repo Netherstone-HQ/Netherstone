@@ -19,7 +19,7 @@ import { openVaultDialog, type RenameVaultError } from "@/lib/commands/vault";
 import { leaveSettings } from "@/lib/leave-settings";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { openVault } from "@/lib/open-vault";
-import { REVEAL_LABEL } from "@/lib/platform";
+import { IS_MOBILE, REVEAL_LABEL } from "@/lib/platform";
 import { indexVault } from "@/lib/refresh-vault";
 import { renameVault } from "@/lib/rename-vault";
 import { useVaultStore } from "@/store/vault";
@@ -40,27 +40,33 @@ export function VaultSettings() {
             description="Any folder works, even an empty one"
           />
         )}
-        <SettingRow
-          label="Open another vault"
-          description="Switch to a different folder"
-        >
-          <Button variant="outline" size="sm" onClick={() => void openOther()}>
-            Choose folder
-          </Button>
-        </SettingRow>
+        {/* Phones switch vaults from the vault menu, and have no folder picker. */}
+        {IS_MOBILE ? null : (
+          <SettingRow
+            label="Open another vault"
+            description="Switch to a different folder"
+          >
+            <Button variant="outline" size="sm" onClick={() => void openOther()}>
+              Choose folder
+            </Button>
+          </SettingRow>
+        )}
       </SettingsGroup>
 
-      <SettingsGroup title="New shards">
-        <PreferenceSegments
-          name="newShardLocation"
-          label="Create new shards in"
-          description="Where a shard goes when you create it from the sidebar or header"
-          options={[
-            { value: "vault-root", label: "Top of the vault" },
-            { value: "current-folder", label: "Current folder" },
-          ]}
-        />
-      </SettingsGroup>
+      {/* On phones a new shard goes in the folder on screen. */}
+      {IS_MOBILE ? null : (
+        <SettingsGroup title="New shards">
+          <PreferenceSegments
+            name="newShardLocation"
+            label="Create new shards in"
+            description="Where a shard goes when you create it from the sidebar or header"
+            options={[
+              { value: "vault-root", label: "Top of the vault" },
+              { value: "current-folder", label: "Current folder" },
+            ]}
+          />
+        </SettingsGroup>
+      )}
 
       {vaultPath ? (
         <SettingsGroup title="Search">
@@ -121,13 +127,15 @@ function VaultNameRow({ vaultPath }: { vaultPath: string }) {
           <Button variant="outline" size="sm" onClick={() => setDraft(name)}>
             Rename
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void revealItemInDir(vaultPath).catch(showError)}
-          >
-            {REVEAL_LABEL}
-          </Button>
+          {IS_MOBILE ? null : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void revealItemInDir(vaultPath).catch(showError)}
+            >
+              {REVEAL_LABEL}
+            </Button>
+          )}
         </div>
       </SettingRow>
     );

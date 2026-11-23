@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { useVaultStore } from "@/store";
 import { useSyncStore } from "@/store/sync";
 import { usePhoneNav } from "./nav";
-import { useSyncProblem } from "./SyncStrip";
+import { syncStatusLabel, useSyncProblem } from "./SyncStrip";
 
 /**
  * Where a vault lives, as its row says it: in the app's own storage, or
@@ -60,13 +60,7 @@ export function VaultMenuSheet({
     }
   }
 
-  const status = !syncOn
-    ? "Off"
-    : problem === "offline"
-      ? "Offline"
-      : problem
-        ? "Needs attention"
-        : "Up to date";
+  const status = syncStatusLabel(syncOn, problem);
 
   return (
     <BottomSheet open={open} onOpenChange={onOpenChange} title="Vaults">

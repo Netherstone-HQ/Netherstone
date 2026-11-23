@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLaunches } from "@/lib/launch";
+import { useUIStore } from "@/store/ui";
 import { useEditorStore, useVaultStore } from "@/store";
 import { createFolderIn, createShardIn } from "./create";
 import { FileScreen } from "./FileScreen";
@@ -17,6 +18,7 @@ import {
 } from "./nav";
 import { RowActions } from "./RowActions";
 import { SearchScreen } from "./SearchScreen";
+import { SettingsScreen } from "./SettingsScreen";
 import { TagsScreen } from "./TagsScreen";
 import { usePhoneSelection } from "./selection";
 import { ShardMenuSheet } from "./ShardMenuSheet";
@@ -43,6 +45,7 @@ export function PhoneApp() {
   useLaunches();
 
   useEffect(() => followBrowserHistory(), []);
+  useEffect(() => followSettingsRequests(), []);
 
   const selecting = useSelecting();
   useEffect(() => {
@@ -65,6 +68,8 @@ export function PhoneApp() {
         <SearchScreen entry={screen} />
       ) : screen.kind === "tags" ? (
         <TagsScreen />
+      ) : screen.kind === "settings" ? (
+        <SettingsScreen key={screen.category} category={screen.category} />
       ) : (
         <HomeScreen />
       )}
@@ -113,4 +118,29 @@ export function PhoneApp() {
       ) : null}
     </>
   );
+}
+
+/**
+ * Opens the Settings screen when something asks the desktop way, such as
+ * a "Set up" link in the assistant. Returns a cleanup.
+ */
+function followSettingsRequests(): () => void {
+  const take = () => {
+    const { activeNavItem, settingsCategory, setActiveNavItem } =
+      useUIStore.getState();
+    if (activeNavItem !== "settings") return false;
+    setActiveNavItem(null);
+    return settingsCategory;
+  };
+  // Settings left open on a computer before doesn't open on start.
+  take();
+  return useUIStore.subscribe((state, prev) => {
+    if (
+      state.activeNavItem === "settings" &&
+      prev.activeNavItem !== "settings"
+    ) {
+      const category = take();
+      if (category) usePhoneNav.getState().push({ kind: "settings", category });
+    }
+  });
 }

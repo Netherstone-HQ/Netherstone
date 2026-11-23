@@ -16,6 +16,13 @@ export function useSyncProblem(vaultPath: string | null): SyncProblem | null {
   });
 }
 
+/** Sync's state in a word or two, for the vault menu and Settings. */
+export function syncStatusLabel(syncOn: boolean, problem: SyncProblem | null) {
+  if (!syncOn) return "Off";
+  if (problem === "offline") return "Offline";
+  return problem ? "Needs attention" : "Up to date";
+}
+
 const STRIP_CLASS =
   "mx-4 mb-2 flex min-h-14 shrink-0 items-center gap-3 rounded-xl border bg-card py-1 pr-1 pl-4";
 const ACTION_CLASS =

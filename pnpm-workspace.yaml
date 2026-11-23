@@ -15,6 +15,9 @@ patchedDependencies:
   # new plugin on each lookup: most of a long shard's save. Looked up once
   # now, same Markdown. Still in Plate 53.5.
   '@platejs/markdown': patches/@platejs__markdown.patch
+  # The equation hook imported KaTeX (260 KB) at load, so it was in the
+  # startup script. It loads KaTeX with the first equation shown now.
+  '@platejs/math': patches/@platejs__math.patch
   # Fixes copying an empty last block, pasting over selected blocks, and
   # Enter on selected blocks, whose caret Plate dropped on the way to focus.
   # Keeps selected blocks when the editor, losing focus to them, puts back

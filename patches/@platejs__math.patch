@@ -1,0 +1,28 @@
+diff --git a/dist/react/index.js b/dist/react/index.js
+index b57145daf699343b4c2b6a1656c81407b939e2e2..4e73cc94357452e7b8cd51bd6309f61dde2a1f63 100644
+--- a/dist/react/index.js
++++ b/dist/react/index.js
+@@ -1,6 +1,5 @@
+ import { n as BaseEquationPlugin, r as getEquationExpression, t as BaseInlineEquationPlugin } from "../BaseInlineEquationPlugin-BtcwMqRJ.js";
+ import { isHotkey } from "platejs";
+-import katex from "katex";
+ import { toPlatePlugin, useEditorRef, useElement } from "platejs/react";
+ import React, { useEffect, useRef } from "react";
+ 
+@@ -15,8 +14,14 @@ const InlineEquationPlugin = toPlatePlugin(BaseInlineEquationPlugin);
+ //#region src/react/hooks/useEquationElement.ts
+ const useEquationElement = ({ element, katexRef, options }) => {
+ 	React.useEffect(() => {
+-		if (!katexRef.current) return;
+-		katex.render(getEquationExpression(element), katexRef.current, options);
++		let cancelled = false;
++		import("katex").then(({ default: katex }) => {
++			if (cancelled || !katexRef.current) return;
++			katex.render(getEquationExpression(element), katexRef.current, options);
++		});
++		return () => {
++			cancelled = true;
++		};
+ 	}, [element.texExpression]);
+ };
+ 

@@ -30,7 +30,7 @@ export default defineConfig({
         // @platejs/math's main entry imports KaTeX for a helper the app
         // doesn't use, which kept KaTeX in the startup script. Loading KaTeX
         // does nothing else (a quirks-mode check), so it's left out unless
-        // something calls it: the equation components and export load it.
+        // something calls it: the equation hook (patched) and export load it.
         moduleSideEffects: (id) => !/\/katex\/dist\/katex\.m?js$/.test(id),
       },
     },

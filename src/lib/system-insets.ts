@@ -26,7 +26,12 @@ type Reported = { keyboard?: number; top?: number; bottom?: number };
 declare global {
   interface Window {
     /** Set by MainActivity.kt on Android. */
-    NetherstoneAndroid?: { insets(): string; openAppSettings(): void };
+    NetherstoneAndroid?: {
+      insets(): string;
+      openAppSettings(): void;
+      /** Shows or hides the keyboard; focus and the caret stay. */
+      setKeyboard(shown: boolean): void;
+    };
   }
 }
 

@@ -10,6 +10,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 
@@ -25,7 +26,7 @@ class MainActivity : TauriActivity() {
       // scripts/android-ui-check.mjs waits for this line.
       Log.i("Netherstone", "WebView inspectable")
     }
-    webView.addJavascriptInterface(PageBridge(), "NetherstoneAndroid")
+    webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
     fitAboveKeyboard(webView)
   }
 
@@ -33,7 +34,7 @@ class MainActivity : TauriActivity() {
   @Volatile private var insetsJson = "{}"
 
   /** What the page can ask of Android, as `window.NetherstoneAndroid`. */
-  private inner class PageBridge {
+  private inner class PageBridge(private val webView: WebView) {
     @JavascriptInterface fun insets(): String = insetsJson
 
     /** This app's page in the system settings, where its permissions are. */
@@ -43,6 +44,15 @@ class MainActivity : TauriActivity() {
         startActivity(
           Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
         )
+      }
+    }
+
+    /** Shows or hides the keyboard, leaving focus and the caret where they are. */
+    @JavascriptInterface
+    fun setKeyboard(shown: Boolean) {
+      runOnUiThread {
+        val controller = WindowCompat.getInsetsController(window, webView)
+        if (shown) controller.show(WindowInsetsCompat.Type.ime()) else controller.hide(WindowInsetsCompat.Type.ime())
       }
     }
   }

@@ -332,10 +332,17 @@ function InsertSheet({
   );
 }
 
-/** Moves focus out of the editor and back, which shows or hides the keyboard. */
-function refocus(editor: PlateEditor) {
-  const element = editor.api.toDOMNode(editor);
-  element?.blur();
+/**
+ * Shows or hides the keyboard while the editor keeps focus. Android does it
+ * itself; elsewhere moving focus out and back makes the browser pick up the
+ * editor's `inputmode`.
+ */
+function setKeyboard(editor: PlateEditor, shown: boolean) {
+  if (window.NetherstoneAndroid) {
+    window.NetherstoneAndroid.setKeyboard(shown);
+    return;
+  }
+  editor.api.toDOMNode(editor)?.blur();
   editor.tf.focus();
 }
 
@@ -375,7 +382,7 @@ export function KeyboardBar() {
     (showKeyboard: boolean) => {
       editor.api.toDOMNode(editor)?.removeAttribute("inputmode");
       setStyles(false);
-      if (showKeyboard) refocus(editor);
+      if (showKeyboard) setKeyboard(editor, true);
     },
     [editor],
   );
@@ -384,7 +391,7 @@ export function KeyboardBar() {
     // No keyboard for the editor while it keeps the caret.
     editor.api.toDOMNode(editor)?.setAttribute("inputmode", "none");
     setStyles(true);
-    refocus(editor);
+    setKeyboard(editor, false);
   };
 
   // A tap in the text brings the keyboard back; leaving the shard closes the panel.

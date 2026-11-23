@@ -14,6 +14,7 @@ import {
   type RenderChunkProps,
   type SlateEditor,
 } from "platejs";
+import { DndPlugin } from "@platejs/dnd";
 import { cancelIdle, requestIdle } from "@/lib/idle-callback";
 import { findScrollableAncestor } from "@/lib/scroll-root";
 import { pinChunkHeight } from "./chunk-heights";
@@ -255,6 +256,10 @@ export class ChunkDrawer {
   private trim = (deadline: IdleDeadline) => {
     this.trimId = null;
     if (this.closed) return;
+    // The block being dragged keeps its part however far the drag scrolls:
+    // undrawing it would take away the drag's source. Trimming resumes with
+    // the next part drawn.
+    if (this.editor?.getOption(DndPlugin, "isDragging")) return;
 
     this.undrawFarthest(
       performance.now() + Math.max(STEP_BUDGET_MS, deadline.timeRemaining()),

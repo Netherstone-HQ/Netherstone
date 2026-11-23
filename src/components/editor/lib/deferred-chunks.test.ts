@@ -197,6 +197,7 @@ describe("ChunkDrawer, for a shard past the drawn-element limit", () => {
     const editor = {
       children: blocks(blockCount),
       selection: null,
+      getOption: () => false,
     } as unknown as SlateEditor;
     const drawer = new ChunkDrawer(40, 0);
     registerChunkDrawer(editor, drawer);
@@ -223,6 +224,7 @@ describe("ChunkDrawer, for a shard past the drawn-element limit", () => {
       {
         children: blocks(blockCount),
         selection: null,
+        getOption: () => false,
       } as unknown as SlateEditor,
       drawer,
     );
@@ -238,6 +240,25 @@ describe("ChunkDrawer, for a shard past the drawn-element limit", () => {
     expect(chunks.at(-1)?.isUndrawn).toBe(true);
   });
 
+  it("undraws nothing while a block is being dragged", () => {
+    vi.useFakeTimers();
+    const blockCount = MAX_FULLY_DRAWN_ELEMENTS + 500;
+    const drawer = new ChunkDrawer(blockCount);
+    registerChunkDrawer(
+      {
+        children: blocks(blockCount),
+        selection: null,
+        getOption: () => true,
+      } as unknown as SlateEditor,
+      drawer,
+    );
+    const chunks = track(drawer, blockCount, () => false);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(chunks.every((c) => !c.isUndrawn)).toBe(true);
+  });
+
   it("leaves a shard under the limit fully drawn", () => {
     vi.useFakeTimers();
     const blockCount = 2_000;
@@ -246,6 +267,7 @@ describe("ChunkDrawer, for a shard past the drawn-element limit", () => {
       {
         children: blocks(blockCount),
         selection: null,
+        getOption: () => false,
       } as unknown as SlateEditor,
       drawer,
     );

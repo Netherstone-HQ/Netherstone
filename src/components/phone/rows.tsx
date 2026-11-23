@@ -9,6 +9,7 @@ import {
   TrashIcon,
 } from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
+import { Dot } from "@/components/ui/dot";
 import type { ShardPreview } from "@/lib/commands/shards";
 import {
   getVaultFileDisplayName,
@@ -20,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { useUIStore, type FileTreeNode } from "@/store";
 import { pinAll, trashAll } from "./item-batch";
 import { openFileScreen } from "./open-file";
-import { Sep } from "./parts";
 import { usePhoneNav, useSelecting } from "./nav";
 import { usePhoneSelection } from "./selection";
 import { countFiles, fileKindLabel } from "./vault-tree";
@@ -239,7 +239,7 @@ export function FileRow({
       {date || second ? (
         <span className="flex w-full min-w-0 items-center gap-2 pl-8 text-sm leading-5 text-muted-foreground">
           {date ? <span className="shrink-0">{date}</span> : null}
-          {date && second ? <Sep /> : null}
+          {date && second ? <Dot className="mx-0" /> : null}
           {second ? <span className="min-w-0 truncate">{second}</span> : null}
         </span>
       ) : null}

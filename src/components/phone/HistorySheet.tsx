@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { ChevronRightIcon, XIcon } from "lucide-react";
 import { useFileHistory } from "@/components/history/HistoryPanel";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { Dot } from "@/components/ui/dot";
 import { isDrawingPath } from "@/lib/drawing-files";
 import {
   describeVersion,
@@ -30,7 +31,7 @@ function Row({
   onPick,
 }: {
   time: string;
-  detail: string | null;
+  detail: React.ReactNode;
   end: React.ReactNode;
   onPick?: () => void;
 }) {
@@ -85,10 +86,19 @@ export function HistorySheet({
   const sharesDay = days[0]?.label === currentDay;
   const showsDevices = history !== null && namesDevices(history);
 
-  const describe = (version: FileVersion) =>
-    [showsDevices ? version.device : null, describeVersion(version, isDrawing)]
-      .filter(Boolean)
-      .join(" • ");
+  const describe = (version: FileVersion) => {
+    const device = showsDevices ? version.device : null;
+    const what = describeVersion(version, isDrawing);
+    return device ? (
+      <>
+        {device}
+        <Dot />
+        {what}
+      </>
+    ) : (
+      what
+    );
+  };
 
   const pick = (version: FileVersion) => {
     pickVersion(version);

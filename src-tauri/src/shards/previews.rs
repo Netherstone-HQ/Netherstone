@@ -49,7 +49,9 @@ fn preview_file(path: &str) -> ShardPreview {
         path: path.to_string(),
         last_modified: modified_secs(file),
         preview: if is_markdown {
-            std::fs::read_to_string(file).ok().and_then(|text| preview_of(&text))
+            std::fs::read_to_string(file)
+                .ok()
+                .and_then(|text| preview_of(&text))
         } else {
             None
         },

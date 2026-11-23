@@ -102,13 +102,3 @@ export function PhoneSection({
     </section>
   );
 }
-
-/** A drawn dot between two parts of a row's second line. */
-export function Sep() {
-  return (
-    <span
-      aria-hidden="true"
-      className="size-[3px] shrink-0 rounded-full bg-current"
-    />
-  );
-}

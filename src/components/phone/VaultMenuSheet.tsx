@@ -19,7 +19,7 @@ import { syncStatusLabel, useSyncProblem } from "./SyncStrip";
  * Where a vault lives, as its row says it: in the app's own storage, or
  * the folder holding it.
  */
-export function vaultPlace(path: string, appStorage: string | null) {
+function vaultPlace(path: string, appStorage: string | null) {
   if (appStorage && isPathWithin(path, appStorage)) return "On this phone";
   const parent = path.replace(/[\\/][^\\/]*[\\/]?$/, "");
   return `In ${parent}`;

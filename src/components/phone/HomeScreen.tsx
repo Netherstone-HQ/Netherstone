@@ -195,7 +195,7 @@ function SyncButton({ vaultPath }: { vaultPath: string | null }) {
 }
 
 /** Looks like a search field; opens Search. */
-export function SearchField({
+function SearchField({
   onOpen,
   label = "Search this vault",
 }: {

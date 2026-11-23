@@ -147,7 +147,9 @@ function launch() {
   adb("logcat", "-c");
   shell(`am start -n ${ACTIVITY}`);
   // The WebView comes after the first frame; MainActivity logs when it's ready.
-  adb("logcat", "-m", "1", "-s", "Netherstone:I", "-e", "WebView inspectable");
+  execFileSync("adb", ["logcat", "-m", "1", "-s", "Netherstone:I", "-e", "WebView inspectable"], {
+    timeout: WAIT_LIMIT_MS,
+  });
 }
 
 // ---- The check ----
@@ -240,7 +242,7 @@ try {
     shell("input keyevent KEYCODE_MOVE_END");
     shell("input keyevent KEYCODE_ENTER");
     type(TYPED);
-    await page(`await window.__saved; return 1;`);
+    await page(`await Promise.race([window.__saved, new Promise((_, reject) => setTimeout(() => reject(new Error("The typed text wasn't saved within " + ${WAIT_LIMIT_MS} + " ms. On screen: " + screenText())), ${WAIT_LIMIT_MS}))]); return 1;`);
     const onDisk = shell(`cat '${shardFile}'`);
     if (!onDisk.includes(TYPED)) throw new Error(`The saved file holds: ${onDisk}`);
   });

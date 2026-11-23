@@ -33,6 +33,7 @@ import { TrailingLineKit } from "./kits/trailing-line-kit";
 
 import { AutoformatKit } from "./kits/autoformat-kit";
 import { SelectedElementsPlugin } from "@/components/ui/use-element-selected";
+import { KeepSelectionDrawnPlugin } from "./lib/deferred-chunks";
 
 export const EditorKit = [
   ...ShortcutsKit, // first, so its keys run before other key handling
@@ -53,6 +54,7 @@ export const EditorKit = [
   ...FloatingToolbarKit,
   ...FontKit, // text color, background, size and font
   ...FrontMatterKit, // YAML front matter, kept as it is in the file
+  KeepSelectionDrawnPlugin, // the parts of a long shard holding the caret stay drawn
   ...LineHeightKit,
   ...LinkKit,
   ...ListKit,

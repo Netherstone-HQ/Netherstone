@@ -15,6 +15,7 @@ import { RemoveWhenClosed, useIsSessionClosed } from "./lib/closed-session";
 import {
   ChunkDrawer,
   ChunkDrawerContext,
+  isPastDrawnLimit,
   registerChunkDrawer,
   renderDeferredChunk,
 } from "./lib/deferred-chunks";
@@ -82,9 +83,15 @@ export const MountedEditor = memo(function MountedEditor({
   const [savedPosition] = useState(() =>
     getShardScrollPosition(currentFilePath),
   );
-  const [drawer] = useState(
-    () => new ChunkDrawer((savedPosition?.block ?? 0) + FIRST_DRAWN_BLOCKS),
-  );
+  const [drawer] = useState(() => {
+    const firstBlocks = (savedPosition?.block ?? 0) + FIRST_DRAWN_BLOCKS;
+    return isPastDrawnLimit(initialValue)
+      ? new ChunkDrawer(
+          firstBlocks,
+          Math.max(0, firstBlocks - 2 * FIRST_DRAWN_BLOCKS),
+        )
+      : new ChunkDrawer(firstBlocks);
+  });
   const [opensAtLink] = useState(() => {
     const { pendingLinkReveal } = useEditorStore.getState();
     return (
@@ -151,7 +158,8 @@ export const MountedEditor = memo(function MountedEditor({
     const selectAll = event.key === "a" || event.key === "A";
     if (!selectAll && event.key !== "End") return;
 
-    const allDrawn = drawer.isDrawn(editor.children.length - 1);
+    const allDrawn =
+      drawer.isDrawn(editor.children.length - 1) && !drawer.drawsNearScreenOnly;
     if (selectAll && allDrawn) return;
     const end = editor.api.end([]);
     if (!end) return;

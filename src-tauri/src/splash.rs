@@ -4,18 +4,27 @@
 //! tauri.conf.json). index.html puts the splash in the page, then calls
 //! `show_main_window`, so the first thing on screen is the splash.
 
+#[cfg(desktop)]
 use std::time::Duration;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::WebviewWindow;
+#[cfg(desktop)]
+use tauri::{AppHandle, Manager};
 
 /// How long to wait for the page before showing the window anyway, so a
 /// page that fails to load still leaves the user a window to close.
+#[cfg(desktop)]
 const SHOW_FALLBACK: Duration = Duration::from_secs(3);
 
+/// Phones show the app's one window from the start.
 #[tauri::command]
 pub fn show_main_window(window: WebviewWindow) {
+    #[cfg(desktop)]
     let _ = window.show();
+    #[cfg(mobile)]
+    let _ = window;
 }
 
+#[cfg(desktop)]
 pub fn show_main_window_eventually(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {

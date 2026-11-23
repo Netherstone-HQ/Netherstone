@@ -3,18 +3,24 @@
 use crate::vault_access::{self, open_vault_only};
 use crate::{asset_scope, assistant, db, gone_vaults, locks, sync, vault, watcher};
 use std::path::Path;
-use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command(async)]
 pub(crate) fn open_vault_dialog(app: tauri::AppHandle) -> Option<String> {
-    let picked = app
-        .dialog()
-        .file()
-        .blocking_pick_folder()?
-        .into_path()
-        .ok()?;
+    let picked = pick_folder(&app)?;
     vault_access::get().allow(&picked);
     Some(picked.to_string_lossy().into_owned())
+}
+
+#[cfg(desktop)]
+fn pick_folder(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog().file().blocking_pick_folder()?.into_path().ok()
+}
+
+/// Phones have no folder picker: vaults live in the app's storage.
+#[cfg(mobile)]
+fn pick_folder(_app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    None
 }
 
 /// Makes `vault_path` the open vault, the only folder the other commands

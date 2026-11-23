@@ -28,12 +28,23 @@ fn hold(thread_lock: &'static Mutex<()>, path: &Path) -> Result<LockGuard, Strin
         .write(true)
         .open(path)
         .map_err(|e| format!("Failed to open {}: {}", path.display(), e))?;
-    file.lock()
-        .map_err(|e| format!("Failed to lock {}: {}", path.display(), e))?;
+    lock(&file).map_err(|e| format!("Failed to lock {}: {}", path.display(), e))?;
     Ok(LockGuard {
         _file: file,
         _thread: thread,
     })
+}
+
+/// Waits for the OS file lock on `file`. Rust's own `File::lock` isn't
+/// built for Android, whose kernel has the same `flock` as desktop Linux.
+#[cfg(not(target_os = "android"))]
+fn lock(file: &File) -> std::io::Result<()> {
+    file.lock()
+}
+
+#[cfg(target_os = "android")]
+fn lock(file: &File) -> std::io::Result<()> {
+    fs4::FileExt::lock(file)
 }
 
 static VAULT_WRITES: Mutex<()> = Mutex::new(());
@@ -96,6 +107,21 @@ mod tests {
         let other = File::open(dir.join("history.lock")).unwrap();
         assert!(other.try_lock().is_err());
         drop(guard);
+        assert!(other.try_lock().is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_android_lock_is_the_same_os_lock_as_desktop() {
+        // Android takes the lock through fs4; desktop Linux through std.
+        // Both are flock, so each refuses the other.
+        let dir = crate::sync::state::tests::temp_dir("locks-fs4");
+        let path = dir.join("writes.lock");
+        let held = File::create(&path).unwrap();
+        fs4::FileExt::lock(&held).unwrap();
+        let other = File::open(&path).unwrap();
+        assert!(other.try_lock().is_err());
+        drop(held);
         assert!(other.try_lock().is_ok());
     }
 }

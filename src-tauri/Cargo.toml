@@ -53,7 +53,6 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"] }
 base64 = "0.23"
 similar = "2"
-trash = "5"
 urlencoding = "2.1"
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 keyring = "4.2"
@@ -87,6 +86,8 @@ tauri = { version = "2", features = ["protocol-asset", "unstable", "test"] }
 socket2 = "0.6"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# Phones have no OS trash; deleting there moves files to the app's own trash.
+trash = "5"
 # Opening the app again hands what it opened to the window already open.
 tauri-plugin-single-instance = "2"
 
@@ -111,3 +112,15 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
 gtk = "0.18"
 webkit2gtk = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Builds OpenSSL into the app, as on macOS: Android ships none for apps.
+git2 = { version = "0.21", default-features = false, features = ["vendored-openssl"] }
+# Hands libgit2 Android's system certificates (tls_android.rs).
+libgit2-sys = "0.18"
+openssl = "0.10"
+foreign-types = "0.3"
+# keyring's Entry has no Android store, so the app uses its core with the
+# Android Keystore store.
+keyring-core = "1"
+android-native-keyring-store = "1"

@@ -88,7 +88,7 @@ pub(crate) fn delete_gone_vault_history(vault_id: String) -> Result<u64, String>
         &db::open_connection()?,
         &sync::sync_root()?,
         &vault_id,
-        |path| trash::delete(path).map_err(|e| e.to_string()),
+        |path| crate::app_trash::delete(path).map_err(|e| e.to_string()),
     )
 }
 

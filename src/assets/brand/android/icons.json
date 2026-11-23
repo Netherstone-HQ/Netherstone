@@ -1,0 +1,7 @@
+{
+  "default": "../netherstone-app-icon.svg",
+  "bg_color": "#141516",
+  "android_bg": "background.svg",
+  "android_fg": "foreground.svg",
+  "android_monochrome": "monochrome.svg"
+}

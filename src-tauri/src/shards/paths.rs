@@ -384,7 +384,7 @@ pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
 
     let markdown_paths = collect_markdown_file_paths(target)?;
 
-    trash::delete(target)
+    crate::app_trash::delete(target)
         .map_err(|e| format!("Failed to move {} to the OS trash: {}", target_path, e))?;
     drop(writes);
 

@@ -48,6 +48,10 @@ fn transfer_error_message(e: &git2::Error, action: &str) -> String {
 
 /// Callbacks that authenticate as the signed-in GitHub user.
 fn authenticated_callbacks(token: &str) -> RemoteCallbacks<'_> {
+    // Every fetch and push starts here, so this is where Android's trusted
+    // certificates reach libgit2.
+    #[cfg(target_os = "android")]
+    crate::tls_android::trust_system_certificates();
     let mut callbacks = RemoteCallbacks::new();
     let mut auth_attempts = 0;
     callbacks.credentials(move |_url, _username, _allowed| {

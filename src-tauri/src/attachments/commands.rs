@@ -149,7 +149,7 @@ pub(crate) fn remove_unused_drawing_pictures_in(vault: &Path) -> Result<Vec<Stri
         vault,
         || shard_paths(vault),
         crate::locks::vault_writes,
-        |paths| trash::delete_all(paths).map_err(|e| e.to_string()),
+        |paths| crate::app_trash::delete_all(paths).map_err(|e| e.to_string()),
     )
 }
 
@@ -240,7 +240,7 @@ pub(crate) fn clean_up_attachments(
         .as_secs() as i64;
     let conn = db::open_connection()?;
     cleanup::clean_up_vault_attachments(&conn, vault, &shards, &asset_paths, now, |path| {
-        trash::delete(path).map_err(|e| e.to_string())
+        crate::app_trash::delete(path).map_err(|e| e.to_string())
     })
 }
 

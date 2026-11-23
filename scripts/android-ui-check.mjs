@@ -112,7 +112,10 @@ async function screenshot(name) {
  */
 let origin;
 function webViewOrigin() {
-  shell("uiautomator dump /data/local/tmp/ui.xml");
+  // uiautomator can exit as killed after writing the file, so its status is
+  // ignored; the file is removed first so a missing dump can't read as an
+  // old one.
+  shell("rm -f /data/local/tmp/ui.xml; uiautomator dump /data/local/tmp/ui.xml || true");
   const match = shell("cat /data/local/tmp/ui.xml").match(
     /class="android\.webkit\.WebView"[^>]*?bounds="\[(\d+),(\d+)\]/,
   );

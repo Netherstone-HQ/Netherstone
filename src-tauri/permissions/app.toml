@@ -166,6 +166,7 @@ commands.allow = [
   "restore_app_trash",
   "delete_app_trash",
   "choose_export_path",
+  "share_export_path",
   "write_export_file",
   "read_export_asset",
   "fetch_export_asset",

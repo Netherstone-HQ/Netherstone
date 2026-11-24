@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
+  FileCodeIcon,
+  FileTypeIcon,
   FolderInputIcon,
   ClockIcon,
   Link2Icon,
@@ -7,8 +9,10 @@ import {
   PenLineIcon,
   PinIcon,
   PinOffIcon,
+  ShareIcon,
   TrashIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   BottomSheet,
   BottomSheetItem,
@@ -23,11 +27,45 @@ import {
 } from "@/components/sidebar/right-sidebar/useShardInfo";
 import { useVaultItem } from "@/components/vault/useVaultItem";
 import { openFileHistory } from "@/lib/open-vault-file";
+import type { ExportFormat } from "@/lib/export";
+import { isSamePath } from "@/lib/drawing-files";
+import { shareExport } from "@/lib/export/share";
+import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { usePhoneNav } from "./nav";
 
-type Part = "menu" | "outline" | "links" | "rename";
+type Part = "menu" | "outline" | "links" | "rename" | "export";
+
+/** What a shard can be shared as from a phone. */
+const SHARED_FORMATS: { format: ExportFormat; label: string; icon: ReactNode }[] = [
+  { format: "docx", label: "Word document", icon: <FileTypeIcon /> },
+  { format: "html", label: "Web page", icon: <FileCodeIcon /> },
+];
+
+/** Builds the open shard as `format` and opens the share sheet with it. */
+async function share(path: string, name: string, format: ExportFormat) {
+  const { plateEditor, currentFilePath } = useEditorStore.getState();
+  const value =
+    plateEditor && currentFilePath && isSamePath(currentFilePath, path)
+      ? (plateEditor.children as unknown[])
+      : undefined;
+  try {
+    await shareExport(
+      {
+        filePath: path,
+        fileName: name,
+        value,
+        vaultPath: useVaultStore.getState().currentVaultPath,
+      },
+      format,
+    );
+  } catch (error) {
+    toast.error(`Couldn't export ${name}`, {
+      description: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 /** The open shard's menu: what's in it, its history, and file actions. */
 export function ShardMenuSheet({
@@ -107,6 +145,9 @@ export function ShardMenuSheet({
         >
           Move
         </BottomSheetItem>
+        <BottomSheetItem icon={<ShareIcon />} onClick={() => setPart("export")}>
+          Export
+        </BottomSheetItem>
         <BottomSheetSeparator />
         <BottomSheetItem
           danger
@@ -138,6 +179,25 @@ export function ShardMenuSheet({
           <LinksSection links={links} />
           <LinkedFromSection backlinks={indexed?.linkedFrom ?? null} />
         </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={open && part === "export"}
+        onOpenChange={close}
+        title="Export"
+      >
+        {SHARED_FORMATS.map(({ format, label, icon }) => (
+          <BottomSheetItem
+            key={format}
+            icon={icon}
+            onClick={() => {
+              close(false);
+              void share(path, item.displayName, format);
+            }}
+          >
+            {label}
+          </BottomSheetItem>
+        ))}
       </BottomSheet>
 
       <NameSheet

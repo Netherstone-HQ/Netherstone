@@ -31,6 +31,8 @@ declare global {
       openAppSettings(): void;
       /** Shows or hides the keyboard; focus and the caret stay. */
       setKeyboard(shown: boolean): void;
+      /** Offers an export to share (see `shareExportPath`) to other apps. */
+      shareFile(path: string, mimeType: string): void;
     };
   }
 }

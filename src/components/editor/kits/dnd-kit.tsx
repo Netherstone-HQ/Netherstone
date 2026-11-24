@@ -10,6 +10,11 @@ import { BlockDraggable } from "@/components/ui/block-draggable";
 import { IS_MOBILE } from "@/lib/platform";
 import { findScrollableAncestor } from "@/lib/scroll-root";
 
+/** Marks the edges, which come up a moment after a drag starts. */
+const EDGE_PROPS: React.HTMLAttributes<HTMLDivElement> & { "data-drag-edge": string } = {
+  "data-drag-edge": "",
+};
+
 /**
  * Scrolls the shard while a block is held at the top or bottom edge. Plate's
  * own scroller scrolls the window unless it's given the element that scrolls,
@@ -26,7 +31,7 @@ function DragEdgeScroller() {
       : null;
   }, [editor, isDragging]);
 
-  return <DndScroller containerRef={containerRef} />;
+  return <DndScroller containerRef={containerRef} scrollAreaProps={EDGE_PROPS} />;
 }
 
 export const DndKit = [

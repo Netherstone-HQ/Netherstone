@@ -110,6 +110,22 @@ async function launch() {
   page.on("pageerror", (error) => log("page error:", error.message));
 }
 
+/** The package of the app in front, or "" while none is. */
+async function appInFront() {
+  const line = await shell("dumpsys activity activities | grep -m1 topResumedActivity");
+  return line.match(/ u0 ([\w.]+)\//)?.[1] ?? "";
+}
+
+/** Closes whatever app is in front of this one, as a person would. */
+async function bringAppBack() {
+  const other = await appInFront();
+  if (other === PACKAGE) return;
+  if (other) await shell(`am force-stop ${other}`);
+  // The launcher's own way in: brings the running app back as it was.
+  await shell(`am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n ${ACTIVITY}`);
+  await poll(appInFront, "the app back in front").toBe(PACKAGE);
+}
+
 /**
  * Finds where the page sits on screen: taps `target` where it would be if
  * the page filled the screen, reads where the page saw the touch, and works
@@ -334,18 +350,18 @@ try {
     try {
       await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
       await page.getByRole("button", { name: "Copy code and open GitHub" }).click();
-      const inFront = () => shell("dumpsys activity activities | grep -m1 topResumedActivity");
-      await poll(inFront, "another app in front").not.toContain(PACKAGE);
+      const other = async () => ![PACKAGE, ""].includes(await appInFront());
+      await poll(other, "another app in front").toBe(true);
       // Closing the browser brings the app back: starting the app again can
       // leave the browser's first-run screen in front.
-      const browser = (await inFront()).match(/ u0 ([\w.]+)\//)[1];
-      await shell(`am force-stop ${browser}`);
-      await poll(inFront, "the app back in front").toContain(PACKAGE);
+      await shell(`am force-stop ${await appInFront()}`);
+      await poll(appInFront, "the app back in front").toBe(PACKAGE);
       // Still waiting: a poll that failed while the app was in the background
       // doesn't end the sign-in.
       await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
     } finally {
       // Back to where the tour goes on, whatever happened.
+      await bringAppBack();
       const cancel = page.getByRole("button", { name: "Cancel" });
       if (await cancel.isVisible()) await cancel.click();
     }

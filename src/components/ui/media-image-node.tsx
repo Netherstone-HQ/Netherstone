@@ -254,7 +254,11 @@ export const ImageElement = withHOC(
     return (
       <MediaToolbar plugin={ImagePlugin}>
         <PlateElement {...props} className="py-2.5">
-          <figure className="group relative m-0" contentEditable={false}>
+          <figure
+            className="group relative m-0"
+            contentEditable={false}
+            data-selected={(focused && selected) || undefined}
+          >
             <Resizable
               align={align}
               options={{

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Descendant } from "platejs";
+import { bytesBody } from "@/lib/commands/bytes";
 import { assertTauri } from "@/lib/commands/tauri";
 import type { ShardCache } from "@/lib/editor-markdown-worker";
 import { useVaultStore } from "@/store/vault";
@@ -91,7 +92,7 @@ export async function writeShardCache(
 ): Promise<void> {
   assertTauri();
   try {
-    await invoke("write_shard_cache", cache.body, {
+    await invoke("write_shard_cache", bytesBody(cache.body), {
       headers: {
         "x-vault-path": encodeURIComponent(vaultPath),
         "x-file-path": encodeURIComponent(filePath),

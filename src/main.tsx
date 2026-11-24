@@ -4,6 +4,8 @@ import { suppressNativeContextMenu } from "./lib/native-context-menu";
 import { reopenLastVault } from "./lib/open-vault";
 import { dismissSplash } from "./lib/splash";
 import { moveFontFacesToScript } from "./lib/font-faces";
+// Sets the keyboard and system bar sizes on phones before the first render.
+import "./lib/system-insets";
 
 // Before anything renders, while the page is still small.
 moveFontFacesToScript();

@@ -63,8 +63,9 @@ function formatMb(bytes: number): string {
   return (bytes / BYTES_PER_MB).toFixed(1);
 }
 
+// On a narrow screen, the buttons go under the words rather than squeeze them.
 const boxClass =
-  "flex h-14 items-center gap-3 rounded-xl border border-border bg-card pr-2.5 pl-4 text-card-foreground shadow-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  "flex min-h-14 flex-wrap items-center gap-3 rounded-xl border border-border bg-card py-2 pr-2.5 pl-4 text-card-foreground shadow-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** The wave, timer and size, drawn straight from the meter. */
 function Meter({ paused }: { paused: boolean }) {
@@ -185,7 +186,7 @@ function ProblemRow({ problem }: { problem: VoiceNoteProblem }) {
   return (
     <>
       <CircleAlert className="size-icon shrink-0 text-orange-700 dark:text-orange-400" />
-      <span role="status" className="min-w-0 flex-1 text-ui">
+      <span role="status" className="min-w-0 flex-1 basis-40 text-ui">
         {PROBLEM_TEXT[problem]}
       </span>
       {opensSettings ? (
@@ -269,7 +270,7 @@ export function VoiceRecordingElement(props: PlateElementProps) {
         ) : phase === "waiting" || phase === null ? (
           <>
             <div className="size-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
-            <span role="status" className="min-w-0 flex-1 text-ui">
+            <span role="status" className="min-w-0 flex-1 basis-40 text-ui">
               Waiting for microphone access
             </span>
             <Button variant="ghost" size="sm" onClick={discard}>

@@ -31,9 +31,22 @@ patchedDependencies:
   # walking all of its DOM, and uses it only when focus moved. Skipped for the
   # Slate editor, which sets its own caret. Recheck on every React upgrade.
   react-dom: patches/react-dom.patch
+  # On Android, reading a caret in text the keyboard had just removed threw
+  # instead of returning nothing (slate#6346). Fixed in slate-dom 0.147.3,
+  # which Plate 53.5 doesn't use yet.
+  slate-dom: patches/slate-dom.patch
   # With the caret in an input inside the editor (the / and @ menus), Slate
   # moved the page's caret back into the editor text, so the input took no
   # typing in WebKit (slate#6360). Only done while the editor has focus now.
+  # Also: on Android, a Gboard correction aimed outside the editor put the
+  # corrected word after the typed one ("ratherather") instead of replacing
+  # it (slate#6358). Fixed in slate-react 0.147.5, which Plate 53.5 doesn't
+  # use yet. Those two can go once Plate moves to slate-react 0.147.5.
+  # Also on Android: after applying typed text, slate focused the editor
+  # again, taking focus from the / and @ menus' search so they closed at
+  # once. Check that the new version keeps that focus before dropping it.
+  # Also on Android: when typed text became something else (the / that opens
+  # the menu), the typed character stayed on screen. Check that too.
   slate-react: patches/slate-react.patch
 
 overrides:

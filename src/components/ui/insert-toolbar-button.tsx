@@ -37,7 +37,7 @@ import {
 
 import { ToolbarButton, ToolbarDropdown, ToolbarMenuGroup } from "./toolbar";
 
-type Group = {
+export type InsertGroup = {
   group: string;
   items: Item[];
 };
@@ -50,7 +50,7 @@ type Item = {
   label?: string;
 };
 
-const groups: Group[] = [
+export const insertGroups: InsertGroup[] = [
   {
     group: "Basic blocks",
     items: [
@@ -230,7 +230,7 @@ export function InsertToolbarButton({ submenu }: { submenu?: boolean }) {
       }}
       submenu={submenu ? { icon: <PlusIcon />, label: "Insert" } : undefined}
     >
-      {groups.map(({ group, items: nestedItems }) => (
+      {insertGroups.map(({ group, items: nestedItems }) => (
         <ToolbarMenuGroup key={group} label={group}>
           {nestedItems.map(({ icon, label, value, onSelect }) => (
             <DropdownMenuItem

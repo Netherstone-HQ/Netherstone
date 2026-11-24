@@ -11,12 +11,14 @@ pub mod pdf;
 #[cfg_attr(mobile, allow(dead_code))]
 mod pdf_platform;
 
+use std::borrow::Cow;
 use std::fs;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 use tauri::ipc::{Request, Response};
 use tauri_plugin_dialog::DialogExt;
@@ -98,10 +100,26 @@ pub(crate) fn header(request: &Request<'_>, name: &str) -> Option<String> {
         .map(|value| value.into_owned())
 }
 
-pub(crate) fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String> {
-    match request.body() {
-        tauri::ipc::InvokeBody::Raw(bytes) => Ok(bytes),
-        _ => Err("The file arrived in an unexpected format.".to_string()),
+/// The bytes a command was sent: raw, or as `{ "base64": … }` from
+/// Android's webview, which can't send raw bytes.
+pub(crate) fn body_bytes<'a>(request: &'a Request<'_>) -> Result<Cow<'a, [u8]>, String> {
+    bytes_of(request.body())
+}
+
+fn bytes_of(body: &tauri::ipc::InvokeBody) -> Result<Cow<'_, [u8]>, String> {
+    let unexpected = || "The file arrived in an unexpected format.".to_string();
+    match body {
+        tauri::ipc::InvokeBody::Raw(bytes) => Ok(Cow::Borrowed(bytes)),
+        tauri::ipc::InvokeBody::Json(value) => {
+            let text = value
+                .get("base64")
+                .and_then(|v| v.as_str())
+                .ok_or_else(unexpected)?;
+            STANDARD
+                .decode(text)
+                .map(Cow::Owned)
+                .map_err(|_| unexpected())
+        }
     }
 }
 
@@ -111,7 +129,7 @@ pub(crate) fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String>
 pub fn write_export_file(request: Request<'_>) -> Result<(), String> {
     let path = header(&request, "x-export-path").ok_or("The export is missing its destination.")?;
     check_chosen(Path::new(&path))?;
-    write_atomically(Path::new(&path), raw_body(&request)?)
+    write_atomically(Path::new(&path), &body_bytes(&request)?)
 }
 
 /// Reads an image on this computer for an export. Only pictures, the same
@@ -256,7 +274,7 @@ pub async fn export_pdf(app: tauri::AppHandle, request: Request<'_>) -> Result<(
         &header(&request, "x-export-page").ok_or("The export is missing its paper size.")?,
     )
     .map_err(|error| format!("The export's paper size is malformed: {error}"))?;
-    let html = raw_body(&request)?.to_vec();
+    let html = body_bytes(&request)?.into_owned();
 
     // Printed beside the target, then renamed over it, like other exports.
     let temp_path = temp_path_for(&output)?;
@@ -352,6 +370,25 @@ fn with_extension(path: PathBuf, extension: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::ipc::InvokeBody;
+
+    #[test]
+    fn bytes_come_raw_or_as_base64() {
+        let raw = InvokeBody::Raw(b"voice".to_vec());
+        assert_eq!(bytes_of(&raw).unwrap().as_ref(), b"voice");
+        let android = InvokeBody::Json(serde_json::json!({ "base64": "dm9pY2U=" }));
+        assert_eq!(bytes_of(&android).unwrap().as_ref(), b"voice");
+    }
+
+    #[test]
+    fn other_bodies_are_refused() {
+        for value in [
+            serde_json::json!([118, 111]),
+            serde_json::json!({ "base64": "not base64!" }),
+        ] {
+            assert!(bytes_of(&InvokeBody::Json(value)).is_err());
+        }
+    }
 
     #[test]
     fn file_stems_drop_reserved_characters() {

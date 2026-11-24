@@ -20,6 +20,7 @@ import { ListKit } from "./kits/list-kit";
 import { MarkdownKit } from "./kits/markdown-kit";
 import { MathKit } from "./kits/math-kit";
 import { MediaKit } from "./kits/media-kit";
+import { MobileEditingKit } from "./kits/mobile-editing-kit";
 import { MentionKit } from "./kits/mention-kit";
 import { RawBlockKit } from "./kits/raw-block-kit";
 import { ShardLinkKit } from "./kits/shard-link-kit";
@@ -33,6 +34,7 @@ import { TrailingLineKit } from "./kits/trailing-line-kit";
 
 import { AutoformatKit } from "./kits/autoformat-kit";
 import { SelectedElementsPlugin } from "@/components/ui/use-element-selected";
+import { IS_MOBILE } from "@/lib/platform";
 import { KeepSelectionDrawnPlugin } from "./lib/deferred-chunks";
 
 export const EditorKit = [
@@ -41,7 +43,8 @@ export const EditorKit = [
   ...AutoformatKit, // Markdown shortcuts as you type
   ...BasicBlocksKit, // headings, quotes and dividers
   ...BasicMarksKit, // bold, italic, code, highlight and the other marks
-  ...BlockMenuKit, // a block's right-click menu
+  // A block's right-click menu; on a phone, a long press opens it as a sheet.
+  ...(IS_MOBILE ? MobileEditingKit : BlockMenuKit),
   ...BlockPlaceholderKit,
   ...CalloutKit,
   ...CodeBlockKit,
@@ -50,8 +53,8 @@ export const EditorKit = [
   ...DndKit,
   ...EmojiKit,
   ...ExitBreakKit,
-  ...FixedToolbarKit,
-  ...FloatingToolbarKit,
+  // On a phone, the bar above the keyboard takes the toolbars' place.
+  ...(IS_MOBILE ? [] : [...FixedToolbarKit, ...FloatingToolbarKit]),
   ...FontKit, // text color, background, size and font
   ...FrontMatterKit, // YAML front matter, kept as it is in the file
   KeepSelectionDrawnPlugin, // the parts of a long shard holding the caret stay drawn

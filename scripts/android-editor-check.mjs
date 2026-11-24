@@ -21,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { _android as android, expect } from "@playwright/test";
+import { _android as android, expect as baseExpect } from "@playwright/test";
 import { startAndAttach } from "./android-webview.mjs";
 
 const PACKAGE = "tech.blueblood.netherstone";
@@ -49,7 +49,8 @@ const LONG_PRESS_MS = 1000;
 
 if (!APK) throw new Error("Set APK to the APK to install");
 fs.mkdirSync(OUT, { recursive: true });
-expect.configure({ timeout: WAIT_LIMIT_MS });
+// configure returns a new expect; the imported one keeps its 5 s limit.
+const expect = baseExpect.configure({ timeout: WAIT_LIMIT_MS });
 
 const log = (...parts) => console.log(new Date().toISOString().slice(11, 23), ...parts);
 function adb(...args) {
@@ -113,7 +114,7 @@ async function launch() {
     await shell(`am force-stop ${PACKAGE}`);
     await within(closed, "the old WebView to close");
   }
-  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within }));
+  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
 }

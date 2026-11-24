@@ -14,9 +14,9 @@ const adb = (...args) => execFileSync("adb", args, { encoding: "utf8" }).trim();
  * DevTools socket lists it. Attaching while the page is still blank, with
  * the app's worker starting, can leave Playwright waiting for the page
  * forever (seen in 4 of 30 restarts; none in 50 after waiting for this).
- * The wait has expect's limit.
+ * Waits up to `timeout` ms.
  */
-async function appPageLoaded(pid) {
+async function appPageLoaded(pid, timeout) {
   const port = adb("forward", "tcp:0", `localabstract:webview_devtools_remote_${pid}`);
   const shown = async () => {
     const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
@@ -25,7 +25,7 @@ async function appPageLoaded(pid) {
     return targets.some((target) => target.type === "page" && target.url.startsWith(APP_ORIGIN));
   };
   try {
-    await expect.poll(shown, { message: "the app's page to load" }).toBe(true);
+    await expect.poll(shown, { message: "the app's page to load", timeout }).toBe(true);
   } finally {
     adb("forward", "--remove", `tcp:${port}`);
   }
@@ -33,11 +33,12 @@ async function appPageLoaded(pid) {
 
 /**
  * Starts the app (`pkg`, activity `activity`) on `device` and attaches to its
- * page. `shell` runs a device command; `within` limits a wait.
+ * page. `shell` runs a device command; `within` limits a wait, and `timeout`
+ * is how long the page may take to load, in ms.
  */
-export async function startAndAttach({ device, pkg, activity, shell, within }) {
+export async function startAndAttach({ device, pkg, activity, shell, within, timeout }) {
   await shell(`am start -W -n ${activity}`);
-  await appPageLoaded(await shell(`pidof ${pkg}`));
+  await appPageLoaded(await shell(`pidof ${pkg}`), timeout);
   const webView = await device.webView({ pkg });
   // Playwright sets no limit on attaching to the page, so this sets one.
   const page = await within(webView.page(), "the app's page to attach");

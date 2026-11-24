@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { IS_ANDROID } from "@/lib/platform";
 import { copy } from "@/components/onboarding/copy";
 import { useLaunches } from "@/lib/launch";
 import { usePreviewedChange } from "@/lib/assistant-changes";
@@ -14,6 +15,7 @@ import { MoreMenu } from "./MoreMenu";
 import { NameSheet } from "./NameSheet";
 import {
   followBrowserHistory,
+  followSystemBack,
   usePhoneNav,
   usePhoneOverlay,
   usePhoneScreen,
@@ -51,6 +53,7 @@ export function PhoneApp() {
   useLaunches();
 
   useEffect(() => followBrowserHistory(), []);
+  useEffect(() => (IS_ANDROID ? followSystemBack() : undefined), []);
   useEffect(() => followSettingsRequests(), []);
 
   const selecting = useSelecting();

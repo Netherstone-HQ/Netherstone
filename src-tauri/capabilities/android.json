@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android",
+  "description": "Android only: the phone layout closes the app when Back is pressed on home.",
+  "platforms": ["android"],
+  "webviews": ["main"],
+  "permissions": ["core:app:allow-exit"]
+}

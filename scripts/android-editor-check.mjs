@@ -614,6 +614,23 @@ try {
     }
   });
 
+  await step("system-back", async () => {
+    // Android's own Back: the first press puts the keyboard away, the next
+    // leaves the shard for home.
+    await openFromHome(SHARD);
+    await tap(block(SHARD), 0.98);
+    await poll(keyboardInset).toBeGreaterThan(0);
+    log(
+      "history before Back:",
+      await page.evaluate(() => ({ length: history.length, index: navigation.currentEntry?.index })),
+    );
+    await shell("input keyevent KEYCODE_BACK");
+    await poll(keyboardInset).toBe(0);
+    await expect(editor()).toBeVisible();
+    await shell("input keyevent KEYCODE_BACK");
+    await expect(home()).toBeVisible();
+  });
+
   await step(
     "reopen",
     async () => {

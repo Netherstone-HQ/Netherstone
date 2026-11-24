@@ -1,3 +1,4 @@
+import { exit, onBackButtonPress } from "@tauri-apps/api/app";
 import { create } from "zustand";
 import type { SettingsCategory } from "@/store/ui";
 
@@ -128,6 +129,22 @@ export function followBrowserHistory(): () => void {
   };
   window.addEventListener("popstate", onPop);
   return () => window.removeEventListener("popstate", onPop);
+}
+
+/**
+ * Has Android's Back close the top sheet or screen, and close the app from
+ * home. The app decides rather than the webview, whose Back can skip
+ * history entries that were added without a tap. Returns a cleanup.
+ */
+export function followSystemBack(): () => void {
+  const listening = onBackButtonPress(() => {
+    const { entries, back } = usePhoneNav.getState();
+    if (entries.length > 1) back();
+    else void exit();
+  }).catch(() => null);
+  return () => {
+    void listening.then((listener) => listener?.unregister());
+  };
 }
 
 /** The screen on show: the top entry that isn't a sheet or menu. */

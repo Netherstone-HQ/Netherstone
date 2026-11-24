@@ -60,8 +60,11 @@ export function moveItem(node: FileTreeNode, destination: string) {
   return changePath(node, "move", () => moveFile(node.path, destination));
 }
 
-/** Moves `node` to the trash, closing it first if it's open. */
-export async function deleteItem(node: FileTreeNode) {
+/**
+ * Moves `node` to the trash, closing it first if it's open. On a phone,
+ * returns its id in the app's trash.
+ */
+export async function deleteItem(node: FileTreeNode): Promise<string | null> {
   const { currentFilePath, closeFile } = useEditorStore.getState();
   const deletesOpenFile =
     !!currentFilePath && isPathWithin(currentFilePath, node.path);
@@ -74,7 +77,7 @@ export async function deleteItem(node: FileTreeNode) {
     // So the cache rows go with it, not land after.
     await writeLeftShardCaches(node.path);
 
-    await deleteVaultPath(node.path);
+    const trashed = await deleteVaultPath(node.path);
 
     const { activeDrawingPath, openDrawing, forgetRememberedPaths } =
       useUIStore.getState();
@@ -87,6 +90,7 @@ export async function deleteItem(node: FileTreeNode) {
     if (deletesOpenFile) closeFile();
 
     await refreshVault(useVaultStore.getState().currentVaultPath);
+    return trashed;
   } catch (error) {
     console.error("Failed to delete:", error);
     throw error;

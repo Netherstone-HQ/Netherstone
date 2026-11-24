@@ -32,6 +32,7 @@ import type { ExportFormat } from "@/lib/export";
 import { isSamePath } from "@/lib/drawing-files";
 import { shareExport } from "@/lib/export/share";
 import { useEditorStore, useVaultStore } from "@/store";
+import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { usePhoneNav } from "./nav";
 
@@ -153,10 +154,7 @@ export function ShardMenuSheet({
         <BottomSheetItem
           danger
           icon={<TrashIcon />}
-          onClick={() => {
-            close(false);
-            item.trash();
-          }}
+          onClick={() => trashAll([path])}
         >
           Move to trash
         </BottomSheetItem>

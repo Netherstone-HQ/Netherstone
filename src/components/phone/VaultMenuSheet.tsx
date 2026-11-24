@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { CheckIcon, CloudIcon, PlusIcon, SettingsIcon } from "lucide-react";
+import {
+  CheckIcon,
+  CloudIcon,
+  PlusIcon,
+  SettingsIcon,
+  TrashIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   BottomSheet,
@@ -14,6 +20,7 @@ import { useVaultStore } from "@/store";
 import { useSyncStore } from "@/store/sync";
 import { usePhoneNav } from "./nav";
 import { syncStatusLabel, useSyncProblem } from "./SyncStrip";
+import { useAppTrash } from "./trash";
 
 /**
  * Where a vault lives, as its row says it: in the app's own storage, or
@@ -41,9 +48,11 @@ export function VaultMenuSheet({
   );
   const problem = useSyncProblem(current);
   const [appStorage, setAppStorage] = useState<string | null>(null);
+  const trashCount = useAppTrash((s) => s.items.length);
 
   useEffect(() => {
     if (!open) return;
+    void useAppTrash.getState().load();
     void defaultVaultLocation()
       .then(setAppStorage)
       .catch(() => {});
@@ -118,6 +127,13 @@ export function VaultMenuSheet({
         }
       >
         Sync
+      </BottomSheetItem>
+      <BottomSheetItem
+        icon={<TrashIcon />}
+        onClick={() => replace({ kind: "trash" })}
+        end={trashCount > 0 ? <span className="text-sm">{trashCount}</span> : null}
+      >
+        Trash
       </BottomSheetItem>
       <BottomSheetItem
         icon={<SettingsIcon />}

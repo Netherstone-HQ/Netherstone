@@ -16,6 +16,13 @@ function originOf(url) {
   }
 }
 
+/**
+ * How long one look at the page list may take. Through `adb forward`, a
+ * socket the WebView hasn't opened yet takes the connection and never
+ * answers, so a look that takes longer is tried again.
+ */
+const LOOK_LIMIT_MS = 2_000;
+
 const adb = (...args) => execFileSync("adb", args, { encoding: "utf8" }).trim();
 
 /**
@@ -28,7 +35,9 @@ const adb = (...args) => execFileSync("adb", args, { encoding: "utf8" }).trim();
 async function appPageLoaded(pid, timeout) {
   const port = adb("forward", "tcp:0", `localabstract:webview_devtools_remote_${pid}`);
   const shown = async () => {
-    const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
+    const targets = await fetch(`http://127.0.0.1:${port}/json/list`, {
+      signal: AbortSignal.timeout(LOOK_LIMIT_MS),
+    })
       .then((response) => response.json())
       .catch(() => []);
     return targets.some((target) => target.type === "page" && originOf(target.url) === APP_ORIGIN);

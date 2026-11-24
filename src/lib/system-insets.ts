@@ -45,8 +45,8 @@ const listeners = new Set<() => void>();
 const px = (value: number | undefined) =>
   `${Math.max(0, Math.round(value ?? 0))}px`;
 
-/** Records the keyboard's height. Exported for tests. */
-export function setKeyboardInset(inset: number) {
+/** Records the keyboard's height. */
+function setKeyboardInset(inset: number) {
   const next = Math.max(0, Math.round(inset));
   document.documentElement.style.setProperty("--keyboard-inset", px(next));
   if (next === state.inset) return;

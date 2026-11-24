@@ -119,6 +119,12 @@ async function launch() {
   page = await within(webView.page(), "the app's page to attach");
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
+  // What the app reports as going wrong, such as a file it couldn't read,
+  // which its toast shows only for a few seconds.
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      log(`page ${message.type()}:`, message.text());
+  });
 }
 
 /** The package of the app in front, or "" while none is. */
@@ -600,6 +606,18 @@ try {
     const inGallery = `/sdcard/Pictures/netherstone-check-${Date.now()}.png`;
     adb("push", GALLERY_PICTURE, inGallery);
     await shell("content call --method scan_volume --uri content://media --arg external_primary");
+    // The picker hands on the size the gallery has for the file, and the
+    // app's read of it fails unless that's the size on disk: wait until
+    // the gallery has it right.
+    const size = fs.statSync(GALLERY_PICTURE).size;
+    const name = path.posix.basename(inGallery);
+    await poll(
+      () =>
+        shell(
+          `content query --uri content://media/external/images/media --projection _size --where "_display_name='${name}'"`,
+        ),
+      "the gallery to know the picture's size",
+    ).toContain(`_size=${size}`);
     await insertFromBar("Picture");
     await tapSystemButton(/^Photo taken on/);
     await tapSystemButton(/^Add \(1\)$/);

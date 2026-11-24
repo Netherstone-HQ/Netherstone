@@ -29,11 +29,9 @@ const OUT = process.argv[2] ?? "android-editor-check";
 const APK = process.env.APK;
 const VAULT = process.env.VAULT ?? smallVault();
 const SHARD = "touch-check";
-// Android's own permission prompt (Google's build of it on Google images)
-// and its buttons, by what they say.
-const PERMISSIONS = /permissioncontroller$/;
+// The buttons of Android's own permission prompt, by what they say.
 const DENY = /^Don.t allow$/;
-const ALLOW = "While using the app";
+const ALLOW = /^While using the app$/;
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
 // stuck step reaches it.
@@ -174,6 +172,25 @@ async function tap(locator, fx, fy) {
 async function longPress(locator) {
   const { x, y } = await pointOn(locator, 0.3);
   await shell(`input swipe ${x} ${y} ${x} ${y} ${LONG_PRESS_MS}`);
+}
+
+/**
+ * Taps a button of a system window (not the app's page) by what it says,
+ * found in the screen's layout as Android describes it. `uiautomator dump`
+ * can be killed after writing its file, so only the file is read.
+ */
+async function tapSystemButton(label) {
+  const layout = "/data/local/tmp/layout.xml";
+  const boundsOf = async () => {
+    const xml = await shell(`rm -f ${layout}; uiautomator dump ${layout} > /dev/null 2>&1; cat ${layout}`);
+    for (const [, text, bounds] of xml.matchAll(/text="([^"]*)"[^>]*bounds="([^"]+)"/g)) {
+      if (label.test(text)) return bounds;
+    }
+    return null;
+  };
+  await poll(boundsOf, `a button saying ${label}`).not.toBeNull();
+  const [x1, y1, x2, y2] = (await boundsOf()).match(/\d+/g).map(Number);
+  await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
 /** Text typed on the keyboard, one key at a time. */
@@ -317,6 +334,9 @@ async function roomForTheShard() {
 
 /** Opens a shard from the left sidebar by its name. */
 async function openFromSidebar(name) {
+  // Either button is there once the app has drawn its window.
+  const toggle = page.getByRole("button", { name: /^(Show|Hide) left sidebar$/ });
+  await expect(toggle).toBeVisible();
   const show = page.getByRole("button", { name: "Show left sidebar" });
   if (await show.isVisible()) await show.click();
   await sidebar().getByText(name, { exact: true }).first().click();
@@ -499,7 +519,7 @@ try {
 
   await step("voice-note-refused", async () => {
     await startVoiceNote();
-    await within(device.tap({ pkg: PERMISSIONS, text: DENY }), "the microphone prompt");
+    await tapSystemButton(DENY);
     await expect(page.getByText("Microphone access is off for Netherstone")).toBeVisible();
     await expect(page.getByRole("button", { name: "Open system settings" })).toBeVisible();
     await tap(page.getByRole("button", { name: "Discard" }));
@@ -508,7 +528,7 @@ try {
   await step("voice-note-allowed", async () => {
     // Refused once, Android asks again the next time.
     await startVoiceNote();
-    await within(device.tap({ pkg: PERMISSIONS, text: ALLOW }), "the microphone prompt");
+    await tapSystemButton(ALLOW);
     await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
     await tap(page.getByRole("button", { name: "Save" }));
     await onDisk().toContain(".webm");

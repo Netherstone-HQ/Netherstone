@@ -133,6 +133,9 @@ function encoderEngine(
   let writer: WebmWriter | null = null;
   let frames = 0;
   let paused = false;
+  // Set once the recording is finishing: blocks the audio thread still
+  // sends after that would reach a closed encoder.
+  let finishing = false;
   const encoder = new AudioEncoder({
     output: (chunk, metadata) => {
       const packet = new Uint8Array(chunk.byteLength);
@@ -162,7 +165,7 @@ function encoderEngine(
 
   return {
     take(samples) {
-      if (paused) return;
+      if (paused || finishing) return;
       const data = new AudioData({
         format: "f32",
         sampleRate: OPUS_SAMPLE_RATE,
@@ -179,6 +182,7 @@ function encoderEngine(
     resume: () => (paused = false),
     durationMs: () => (frames / OPUS_SAMPLE_RATE) * 1000,
     async finish() {
+      finishing = true;
       await encoder.flush();
       encoder.close();
       if (!writer) return null;

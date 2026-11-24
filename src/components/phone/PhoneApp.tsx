@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { IS_ANDROID } from "@/lib/platform";
 import { copy } from "@/components/onboarding/copy";
 import { useLaunches } from "@/lib/launch";
+import { saveVoiceNoteWhenHidden } from "@/lib/voice/voice-note";
 import { usePreviewedChange } from "@/lib/assistant-changes";
 import { useAssistantStore } from "@/store/assistant";
 import { useHistoryStore } from "@/store/history";
@@ -55,6 +56,7 @@ export function PhoneApp() {
 
   useEffect(() => followBrowserHistory(), []);
   useEffect(() => (IS_ANDROID ? followSystemBack() : undefined), []);
+  useEffect(() => (IS_ANDROID ? saveVoiceNoteWhenHidden() : undefined), []);
   useEffect(() => followSettingsRequests(), []);
 
   const selecting = useSelecting();

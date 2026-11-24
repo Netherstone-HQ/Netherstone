@@ -172,10 +172,14 @@ async function calibrate(target) {
   await closeNotResponding();
   await shell(`input tap ${at.x} ${at.y}`);
   const seen = () => page.evaluate(() => window.__calibrationTap);
-  // A dialog that came up over the app took the tap: it goes, and the tap
-  // is made again.
+  // A tap the page didn't see, as when a dialog came up over the app and
+  // took it, is made again, the dialog gone first. The target is plain
+  // text, so a tap too many does nothing.
   await poll(async () => {
-    if (!(await seen()) && (await closeNotResponding())) await shell(`input tap ${at.x} ${at.y}`);
+    if (!(await seen())) {
+      await closeNotResponding();
+      await shell(`input tap ${at.x} ${at.y}`);
+    }
     return seen();
   }, "the calibration tap").not.toBeNull();
   const client = await seen();

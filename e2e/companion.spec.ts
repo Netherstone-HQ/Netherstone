@@ -38,6 +38,19 @@ async function feet(page: Page) {
   });
 }
 
+/**
+ * Waits out the panels' slides. Opening the assistant beside the browser
+ * panel folds the file list away, which moves the browser panel's grip.
+ */
+async function settled(page: Page) {
+  await page.evaluate(async () => {
+    const slides = () => document.getAnimations().filter((slide) => slide instanceof CSSTransition);
+    for (let running = slides(); running.length > 0; running = slides()) {
+      await Promise.allSettled(running.map((slide) => slide.finished));
+    }
+  });
+}
+
 async function turnAssistantOff(page: Page) {
   const settings = page.getByRole("button", { name: "Settings", exact: true });
   await settings.click();
@@ -157,6 +170,7 @@ test("stays left of the browser panel, and moves with the panel when it's dragge
   };
   const onPerch = async () => JSON.stringify(await feet(page)) === JSON.stringify(await perch());
   await expect.poll(onPerch).toBe(true);
+  await settled(page);
   const before = await perch();
   const grip = (await handle.boundingBox())!;
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);

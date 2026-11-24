@@ -28,6 +28,7 @@ import { RowActions } from "./RowActions";
 import { SearchScreen } from "./SearchScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { TagsScreen } from "./TagsScreen";
+import { TrashScreen } from "./TrashScreen";
 import { usePhoneSelection } from "./selection";
 import { ShardMenuSheet } from "./ShardMenuSheet";
 import { VaultMenuSheet } from "./VaultMenuSheet";
@@ -82,6 +83,8 @@ export function PhoneApp() {
         <TagsScreen />
       ) : screen.kind === "settings" ? (
         <SettingsScreen key={screen.category} category={screen.category} />
+      ) : screen.kind === "trash" ? (
+        <TrashScreen />
       ) : (
         <HomeScreen />
       )}

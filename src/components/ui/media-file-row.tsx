@@ -112,7 +112,8 @@ export function MediaFileRow({
         className={cn(
           "ml-auto flex shrink-0 items-center gap-0.5",
           !warning &&
-            "opacity-0 transition-opacity focus-within:opacity-100 group-hover/file:opacity-100",
+            // Touch screens have no hover, so the actions stay shown there.
+            "opacity-0 transition-opacity focus-within:opacity-100 group-hover/file:opacity-100 pointer-coarse:opacity-100",
         )}
         onClick={stopPlate}
         onMouseDown={stopPlate}

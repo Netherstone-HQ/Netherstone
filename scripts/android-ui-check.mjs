@@ -87,6 +87,17 @@ async function launch() {
   page.on("pageerror", (error) => log("page error:", error.message));
 }
 
+/** The text on screen, as Android describes it, whichever app shows it. */
+async function screenText() {
+  const layout = "/data/local/tmp/layout.xml";
+  const xml = await shell(`rm -f ${layout}; uiautomator dump ${layout} > /dev/null 2>&1; cat ${layout}`);
+  return [...xml.matchAll(/text="([^"]+)"/g)].map(([, text]) => text).join("\n");
+}
+
+/** Whether the app is the one in front. */
+const appInFront = async () =>
+  (await shell("dumpsys activity activities | grep -m1 topResumedActivity")).includes(PACKAGE);
+
 /** Whether `file` is in the app's private storage. */
 const appFileExists = async (file) =>
   (await shell(`su 0 test -e '${file}' && echo yes || echo no`)) === "yes";
@@ -225,6 +236,27 @@ try {
     await recent.getByRole("button", { name: new RegExp(`^${SHARD}`) }).click();
     await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
   });
+
+  // Export from the shard's menu: the file goes to Android's share sheet.
+  for (const [label, extension, starts] of [
+    ["Word document", "docx", "PK"],
+    ["Web page", "html", "<!doctype html>"],
+  ]) {
+    await step(`share-${extension}`, async () => {
+      await page.getByRole("button", { name: "More", exact: true }).click();
+      await page.getByRole("button", { name: "Export", exact: true }).click();
+      await page.getByRole("button", { name: label, exact: true }).click();
+      const file = `${SHARD}.${extension}`;
+      await expect.poll(screenText, { message: "the share sheet with the file" }).toContain(file);
+      const shared = await readAppFile(`/data/data/${PACKAGE}/cache/shared/${file}`);
+      expect(shared.startsWith(starts)).toBe(true);
+      if (extension === "html") expect(shared).toContain(TYPED);
+      // Back closes the share sheet, back to the shard.
+      await shell("input keyevent KEYCODE_BACK");
+      await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
+      await expect.poll(appInFront, { message: "the app back in front" }).toBe(true);
+    });
+  }
 
   await step("trash-then-undo", async () => {
     await backToHome();

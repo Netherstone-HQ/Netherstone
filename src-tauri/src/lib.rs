@@ -304,6 +304,7 @@ pub fn run() {
             app_trash::restore_app_trash,
             app_trash::delete_app_trash,
             export::choose_export_path,
+            export::share_export_path,
             export::write_export_file,
             export::read_export_asset,
             export::fetch_export_asset,

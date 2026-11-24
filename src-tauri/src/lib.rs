@@ -12,6 +12,7 @@ mod export;
 mod github;
 mod gone_vaults;
 mod import;
+mod incoming;
 mod integrations;
 pub mod launch;
 mod links;
@@ -305,6 +306,8 @@ pub fn run() {
             app_trash::delete_app_trash,
             export::choose_export_path,
             export::share_export_path,
+            incoming::take_shared,
+            incoming::save_shared_file,
             export::write_export_file,
             export::read_export_asset,
             export::fetch_export_asset,

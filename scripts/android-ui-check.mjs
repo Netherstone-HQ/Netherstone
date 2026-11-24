@@ -2,7 +2,9 @@
 // Drives the Android app on an emulator the way a person would: goes through
 // the welcome tour, creates a shard from home, types into it, checks the
 // file on disk, goes back home with the system Back key, then restarts the
-// app, opens the shard from Recent and checks the text is back.
+// app, opens the shard from Recent and checks the text is back. Then it
+// exports, uses the trash, saves a link and a picture another app shares,
+// and imports a document another app opens with Netherstone.
 //
 //   APK=app.apk node scripts/android-ui-check.mjs out
 //
@@ -26,6 +28,13 @@ const APK = process.env.APK;
 // What + calls a new shard in a vault that has none by that name.
 const SHARD = "Untitled";
 const TYPED = "typed on the emulator";
+// What another app shares and opens with Netherstone.
+const SHARED_LINK = "https://example.com/shared-page";
+const SHARED_TITLE = "Shared page";
+const SHARED_PICTURE = "shared-picture.png";
+const PICTURE_FILE = "src-tauri/icons/32x32.png";
+const OPENED_NOTE = "opened-note.md";
+const OPENED_TEXT = "opened from another app";
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
 // stuck step reaches it.
@@ -131,6 +140,21 @@ async function trashFromHome() {
   await expect(page.getByText("Moved to Trash").last()).toBeVisible();
   await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} gone` }).toBe(false);
 }
+
+/**
+ * Puts `file` in the app's cache for sharing and returns the content link
+ * its file provider gives it, as another app would hand over its own files.
+ */
+async function providedFile(name, file) {
+  const folder = `/data/data/${PACKAGE}/cache/shared`;
+  const owner = await shell(`su 0 stat -c %u:%g /data/data/${PACKAGE}`);
+  adb("push", file, `/data/local/tmp/${name}`);
+  await shell(`su 0 sh -c "mkdir -p ${folder} && cp /data/local/tmp/${name} ${folder}/${name} && chown -R ${owner} ${folder}"`);
+  return `content://${PACKAGE}.fileprovider/my_cache_images/shared/${name}`;
+}
+
+/** The sheet a share from another app opens in. */
+const shareSheet = () => page.getByRole("dialog", { name: "Save to Netherstone" });
 
 /** Opens the Trash from the vault menu. */
 async function openTrash() {
@@ -300,6 +324,52 @@ try {
     await expect(page.getByText("Trash is empty")).toBeVisible();
     // Nothing of it is left in the app's data either.
     expect(await shell(`su 0 find /data/data/${PACKAGE} -path '*/trash/*'`)).toBe("");
+  });
+
+  // Another app shares a page: it's saved as a new shard, named for it.
+  await step("share-in-link", async () => {
+    await shell("input keyevent KEYCODE_BACK");
+    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+    await shell(
+      `am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT '${SHARED_LINK}' --es android.intent.extra.SUBJECT '${SHARED_TITLE}' -n ${ACTIVITY}`,
+    );
+    await expect(shareSheet()).toContainText(SHARED_TITLE);
+    await expect(shareSheet()).toContainText(new URL(SHARED_LINK).hostname);
+    await shareSheet().getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.locator("[data-slate-editor]")).toContainText(SHARED_TITLE);
+    await expect
+      .poll(() => readAppFile(`${vault}/${SHARED_TITLE}.md`), { message: "the shared page's shard" })
+      .toContain(`[${SHARED_TITLE}](${SHARED_LINK})`);
+  });
+
+  // Another app shares a picture: it's added to the end of the shard on screen.
+  await step("share-in-picture", async () => {
+    const link = await providedFile(SHARED_PICTURE, PICTURE_FILE);
+    await shell(`am start -a android.intent.action.SEND -t image/png --eu android.intent.extra.STREAM ${link} -n ${ACTIVITY}`);
+    await expect(shareSheet()).toContainText(SHARED_PICTURE);
+    await shareSheet().getByRole("radio", { name: "Add to a shard" }).click();
+    await expect(shareSheet()).toContainText(SHARED_TITLE);
+    await shareSheet().getByRole("button", { name: "Save", exact: true }).click();
+    await expect(shareSheet()).toBeHidden();
+    const shard = `${vault}/${SHARED_TITLE}.md`;
+    await expect.poll(() => readAppFile(shard), { message: "the picture in the shard" }).toContain(
+      `_attachments/${SHARED_PICTURE}`,
+    );
+    expect(await readAppFile(shard)).toContain(SHARED_LINK);
+    await expect(page.locator("[data-slate-editor] img")).toHaveCount(1);
+  });
+
+  // Open with: a document another app opens with Netherstone is imported and shown.
+  await step("open-with", async () => {
+    const note = path.join(OUT, OPENED_NOTE);
+    fs.writeFileSync(note, `# Opened note\n\n${OPENED_TEXT}\n`);
+    const link = await providedFile(OPENED_NOTE, note);
+    await shell(`am start -a android.intent.action.VIEW -t text/markdown -d ${link} -n ${ACTIVITY}`);
+    await expect(page.getByText(`Imported ${OPENED_NOTE}`)).toBeVisible();
+    await expect(page.locator("[data-slate-editor]")).toContainText(OPENED_TEXT);
+    await expect
+      .poll(() => readAppFile(`${vault}/${OPENED_NOTE}`), { message: "the imported shard" })
+      .toContain(OPENED_TEXT);
   });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));

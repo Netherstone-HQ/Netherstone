@@ -70,7 +70,7 @@ export async function createFolderIn(
 }
 
 /** Today as a shard's title says it: "24 Nov". */
-function today() {
+export function today() {
   return new Date().toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
@@ -78,7 +78,7 @@ function today() {
 }
 
 /** `title`, or "`title` 2" and so on, whichever is free in `folder`. */
-async function freeTitle(folder: string, title: string) {
+export async function freeTitle(folder: string, title: string) {
   for (let count = 1; ; count += 1) {
     const candidate = count === 1 ? title : `${title} ${count}`;
     if (!(await fileExists(joinPath(folder, `${candidate}.md`))))

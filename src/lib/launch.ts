@@ -13,6 +13,8 @@ import { useVaultStore } from "@/store";
 
 /** Sent by Rust (launch.rs) when something is opened from outside the app. */
 const LAUNCH_EVENT = "launch";
+/** Sent by Android's MainActivity when another app opened a file with this one. */
+const OPENED_EVENT = "opened";
 const WAITING_TOAST_ID = "launch-waiting";
 
 /**
@@ -24,11 +26,15 @@ const WAITING_TOAST_ID = "launch-waiting";
  *
  * Rust holds the paths; this only asks for them, so the window never says
  * which files may be read.
+ *
+ * `importFiles` takes the files in; the import window by default.
  */
-export function useLaunches() {
+export function useLaunches(importFiles: ImportFiles = openImportDialog) {
   useEffect(() => {
+    importLaunched = importFiles;
     const take = () => void openLaunched();
     const unlisten = listen(LAUNCH_EVENT, take);
+    window.addEventListener(OPENED_EVENT, take);
     const stopVault = useVaultStore.subscribe((state, previous) => {
       if (state.currentVaultPath !== previous.currentVaultPath) take();
     });
@@ -41,12 +47,17 @@ export function useLaunches() {
     take();
     return () => {
       void unlisten.then((stop) => stop());
+      window.removeEventListener(OPENED_EVENT, take);
       stopVault();
       stopImport();
       stopLink();
     };
-  }, []);
+  }, [importFiles]);
 }
+
+/** Imports files opened from outside the app into the vault at `vaultPath`. */
+type ImportFiles = (vaultPath: string, paths: string[]) => unknown;
+let importLaunched: ImportFiles = openImportDialog;
 
 // One take at a time, so a vault opening mid-take is seen by the next one.
 let taking = Promise.resolve();
@@ -82,7 +93,7 @@ async function takeOnce() {
     const outside = files.filter((path) => !inVault.includes(path));
     const last = inVault.at(-1);
     if (last) await openVaultFile(last);
-    if (outside.length) openImportDialog(vaultPath, outside);
+    if (outside.length) await importLaunched(vaultPath, outside);
   } else if (waiting.length && !vaultPath) {
     toast(`Open or create a vault to import ${waitingText(waiting)}`, {
       id: WAITING_TOAST_ID,

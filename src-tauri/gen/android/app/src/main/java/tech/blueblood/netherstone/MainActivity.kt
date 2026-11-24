@@ -1,7 +1,9 @@
 package tech.blueblood.netherstone
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -9,6 +11,7 @@ import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -33,6 +36,40 @@ class MainActivity : TauriActivity() {
     }
     webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
     fitAboveKeyboard(webView)
+    // Once wry has set its chrome client, files picked for the page go
+    // through PickerChromeClient. Before Android 8 the client can't be read,
+    // so wry's stays.
+    webView.post {
+      val wry = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) webView.webChromeClient else null
+      if (wry != null && wry !is PickerChromeClient) webView.webChromeClient = PickerChromeClient(wry, this)
+    }
+  }
+
+  /** Where a pick for the page goes once the picker returns. */
+  private var onPicked: ((List<Uri>) -> Unit)? = null
+
+  private val picker =
+    registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+      val data = result.data
+      val picked =
+        when {
+          result.resultCode != RESULT_OK || data == null -> emptyList()
+          data.clipData != null -> (0 until data.clipData!!.itemCount).map { data.clipData!!.getItemAt(it).uri }
+          else -> listOfNotNull(data.data)
+        }
+      onPicked?.invoke(picked)
+      onPicked = null
+    }
+
+  /** Shows a picker for the page (`intent`); `done` gets what was picked, or nothing. */
+  fun pickForPage(intent: Intent, done: (List<Uri>) -> Unit) {
+    onPicked = done
+    try {
+      picker.launch(intent)
+    } catch (error: ActivityNotFoundException) {
+      onPicked = null
+      done(emptyList())
+    }
   }
 
   /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */

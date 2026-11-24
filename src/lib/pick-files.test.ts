@@ -42,8 +42,10 @@ describe("pickFiles", () => {
     const input = await opened;
     expect(input.accept).toBe("image/*");
     expect(input.getAttribute("capture")).toBe("environment");
+    expect(input.isConnected).toBe(true);
     input.dispatchEvent(new Event("cancel"));
     expect(await picked).toEqual([]);
+    expect(input.isConnected).toBe(false);
   });
 
   it("resolves with the chosen files, named", async () => {

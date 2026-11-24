@@ -55,13 +55,21 @@ export function pickFiles(
     input.type = "file";
     input.accept = ACCEPT_BY_KIND[kind];
     input.multiple = multiple;
+    input.hidden = true;
     if (camera) input.setAttribute("capture", "environment");
+    // In the page while the picker is open: an input nothing holds can be
+    // collected while the picker or camera runs, and its change is lost.
+    document.body.append(input);
+    const done = (files: File[]) => {
+      input.remove();
+      resolve(files);
+    };
     input.addEventListener(
       "change",
-      () => resolve(Array.from(input.files ?? [], (file) => named(file, kind, camera))),
+      () => done(Array.from(input.files ?? [], (file) => named(file, kind, camera))),
       { once: true },
     );
-    input.addEventListener("cancel", () => resolve([]), { once: true });
+    input.addEventListener("cancel", () => done([]), { once: true });
     input.click();
   });
 }

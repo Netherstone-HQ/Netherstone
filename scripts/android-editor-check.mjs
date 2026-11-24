@@ -27,8 +27,9 @@ const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-editor-check";
 const APK = process.env.APK;
+const LINKS = JSON.parse(fs.readFileSync("src/data/links.json", "utf8"));
 /** A web page a shard links to: the site, from the app's own list of links. */
-const WEB_PAGE = JSON.parse(fs.readFileSync("src/data/links.json", "utf8")).site;
+const WEB_PAGE = LINKS.site;
 /** A one-pixel PNG, pasted as a picture. */
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -122,6 +123,16 @@ async function launch() {
 async function appInFront() {
   const line = await shell("dumpsys activity activities | grep -m1 topResumedActivity");
   return line.match(/ u0 ([\w.]+)\//)?.[1] ?? "";
+}
+
+/**
+ * Waits until the page's storage on disk holds `text`. Android's webview
+ * writes it a few seconds late, so a restart before then loses it.
+ */
+async function storedOnDisk(text) {
+  const folder = `/data/data/${PACKAGE}/app_webview/Default/Local Storage/leveldb`;
+  const count = () => su(`cat '${folder}'/* | grep -c -a '${text}' || true`);
+  await poll(count, `${text} in the page's storage on disk`).not.toBe("0");
 }
 
 /** Closes whatever app is in front of this one, as a person would. */
@@ -379,11 +390,15 @@ try {
     try {
       await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
       await page.getByRole("button", { name: "Copy code and open GitHub" }).click();
-      const other = async () => ![PACKAGE, ""].includes(await appInFront());
-      await poll(other, "another app in front").toBe(true);
+      // The app that opens web pages on this phone.
+      const resolved = await shell(
+        `cmd package resolve-activity --brief -a android.intent.action.VIEW -d ${LINKS.github}`,
+      );
+      const browser = resolved.split("\n").at(-1).split("/")[0];
+      await poll(appInFront, "the browser in front").toBe(browser);
       // Closing the browser brings the app back: starting the app again can
       // leave the browser's first-run screen in front.
-      await shell(`am force-stop ${await appInFront()}`);
+      await shell(`am force-stop ${browser}`);
       await poll(appInFront, "the app back in front").toBe(PACKAGE);
       // Still waiting: a poll that failed while the app was in the background
       // doesn't end the sign-in.
@@ -422,6 +437,9 @@ try {
       // The shard the check types in.
       shardFile = `${vault}/${SHARD}.md`;
       await su(`printf '# ${SHARD}\\n' > '${shardFile}' && chown ${owner} '${shardFile}'`);
+      // The finished tour and the vault, kept before the app restarts.
+      await storedOnDisk('onboardingCompletedAt":"');
+      await storedOnDisk('currentVaultPath":"/');
       await launch();
       await calibrate(page.getByRole("heading", { name: "Files", exact: true }));
     },

@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { hasPendingDrawingSave } from "@/lib/drawing-files";
+import { IS_MOBILE } from "@/lib/platform";
 import { setSyncBeforeQuit } from "@/lib/sync-before-quit";
 import { useEditorStore } from "@/store/editor";
 import { useGitHubStore } from "@/store/github";
@@ -18,7 +20,8 @@ const STARTUP_DELAY_MS = 3_000;
  * window with edits, when you come back, while edits wait, and when the
  * connection returns, at most once per `autoSyncInterval` (30 minutes for
  * now). A sync asked for sooner waits for the interval to end. Quitting with
- * edits syncs right away.
+ * edits syncs right away, and so does leaving the app on a phone, which
+ * Android may end in the background without warning.
  */
 export function useBackgroundSync() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -34,6 +37,11 @@ export function useBackgroundSync() {
   useEffect(() => {
     if (!accountLoaded) void loadAccount();
   }, [accountLoaded, loadAccount]);
+
+  // Whether the open vault syncs, which nothing else may ask on a phone.
+  useEffect(() => {
+    if (vaultPath) void useSyncStore.getState().load(vaultPath);
+  }, [vaultPath]);
 
   useEffect(() => {
     if (!vaultPath || !enabled || !signedIn || !autoSync) return;
@@ -62,6 +70,16 @@ export function useBackgroundSync() {
       if (!synced && since !== undefined) {
         pendingSince = Math.min(pendingSince ?? since, since);
       }
+    };
+
+    /** Saves the open shard, then syncs now, as quitting does. */
+    const saveAndSync = async () => {
+      try {
+        await flushPendingAutosave();
+      } catch (error) {
+        console.error("[Netherstone] Couldn't save before syncing:", error);
+      }
+      await sync();
     };
 
     /** Syncs at `at`, or when the interval since the last sync ends. */
@@ -98,7 +116,8 @@ export function useBackgroundSync() {
     // Leaving with edits pushes them; coming back picks up other devices'.
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
-        if (focused || hasUnsyncedEdits()) syncBy(Date.now());
+        if (!focused && IS_MOBILE && hasUnsyncedEdits()) void saveAndSync();
+        else if (focused || hasUnsyncedEdits()) syncBy(Date.now());
       })
       .then((fn) => {
         if (cancelled) fn();

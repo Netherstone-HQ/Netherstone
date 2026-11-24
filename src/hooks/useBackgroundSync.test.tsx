@@ -41,6 +41,17 @@ vi.mock("@/lib/drawing-files", () => ({
   hasPendingDrawingSave: () => false,
 }));
 
+const platform = vi.hoisted(() => ({ IS_MOBILE: false }));
+vi.mock("@/lib/platform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/platform")>()),
+  get IS_MOBILE() {
+    return platform.IS_MOBILE;
+  },
+}));
+
+const flushPendingAutosave = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/hooks/useAutosave", () => ({ flushPendingAutosave }));
+
 const VAULT = "C:/vault";
 const MINUTE = 60_000;
 const INTERVAL = 30 * MINUTE;
@@ -88,6 +99,25 @@ describe("useBackgroundSync", () => {
     cleanup();
     vi.useRealTimers();
     useVaultStore.setState({ currentVaultPath: null });
+    platform.IS_MOBILE = false;
+  });
+
+  it("saves and syncs edits right away when a phone app is left", async () => {
+    platform.IS_MOBILE = true;
+    await openVault();
+    edit();
+    leave();
+    await act(async () => {});
+    expect(flushPendingAutosave).toHaveBeenCalled();
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a phone app without edits alone", async () => {
+    platform.IS_MOBILE = true;
+    await openVault();
+    leave();
+    await act(async () => {});
+    expect(sync).not.toHaveBeenCalled();
   });
 
   it("syncs at most once per interval when leaving and coming back", async () => {

@@ -1,7 +1,16 @@
 diff --git a/dist/index.es.js b/dist/index.es.js
-index 481f58f009996280b76fcf15417db95886f6985e..307f751d53adece076ae594359408aaa0921bf92 100644
+index 481f58f..c74c0d0 100644
 --- a/dist/index.es.js
 +++ b/dist/index.es.js
+@@ -4,7 +4,7 @@ import throttle from 'lodash/throttle';
+ import React, { useContext, createContext, useRef, useEffect, useLayoutEffect, useState, memo, forwardRef, useCallback, useReducer, useMemo, Fragment, Component } from 'react';
+ import scrollIntoView from 'scroll-into-view-if-needed';
+ import { Node, Range, Editor, Path, Point, Transforms, Location, Text as Text$1, Scrubber } from 'slate';
+-import { DOMEditor, isTrackedMutation, EDITOR_TO_FORCE_RENDER, IS_NODE_MAP_DIRTY, EDITOR_TO_PENDING_DIFFS, EDITOR_TO_PENDING_SELECTION, applyStringDiff, EDITOR_TO_PENDING_INSERTION_MARKS, isDOMSelection, isDOMNode, IS_COMPOSING, EDITOR_TO_PENDING_ACTION, EDITOR_TO_USER_MARKS, targetRange, verifyDiffState, EDITOR_TO_PLACEHOLDER_ELEMENT, normalizeStringDiff, mergeStringDiffs, normalizeRange, normalizePoint, CAN_USE_DOM, IS_ANDROID, EDITOR_TO_SCHEDULE_FLUSH, MARK_PLACEHOLDER_SYMBOL, IS_FIREFOX, PLACEHOLDER_SYMBOL, IS_WEBKIT, isTextDecorationsEqual, isElementDecorationsEqual, EDITOR_TO_KEY_TO_ELEMENT, NODE_TO_ELEMENT, ELEMENT_TO_NODE, NODE_TO_INDEX, NODE_TO_PARENT, Key, splitDecorationsByChild, isDOMElement, getSelection, IS_READ_ONLY, getActiveElement, IS_FOCUSED, getDefaultView, EDITOR_TO_WINDOW, EDITOR_TO_ELEMENT, containsShadowAware, IS_CHROME, EDITOR_TO_USER_SELECTION, HAS_BEFORE_INPUT_SUPPORT, isPlainTextOnlyPaste, Hotkeys, IS_FIREFOX_LEGACY, IS_IOS, IS_WECHATBROWSER, IS_UC_MOBILE, TRIPLE_CLICK, copyNodeInUse, EDITOR_TO_ON_CHANGE, withDOM } from 'slate-dom';
++import { DOMEditor, isTrackedMutation, EDITOR_TO_FORCE_RENDER, NODE_TO_KEY, IS_NODE_MAP_DIRTY, EDITOR_TO_PENDING_DIFFS, EDITOR_TO_PENDING_SELECTION, applyStringDiff, EDITOR_TO_PENDING_INSERTION_MARKS, isDOMSelection, isDOMNode, IS_COMPOSING, EDITOR_TO_PENDING_ACTION, EDITOR_TO_USER_MARKS, targetRange, verifyDiffState, EDITOR_TO_PLACEHOLDER_ELEMENT, normalizeStringDiff, mergeStringDiffs, normalizeRange, normalizePoint, CAN_USE_DOM, IS_ANDROID, EDITOR_TO_SCHEDULE_FLUSH, MARK_PLACEHOLDER_SYMBOL, IS_FIREFOX, PLACEHOLDER_SYMBOL, IS_WEBKIT, isTextDecorationsEqual, isElementDecorationsEqual, EDITOR_TO_KEY_TO_ELEMENT, NODE_TO_ELEMENT, ELEMENT_TO_NODE, NODE_TO_INDEX, NODE_TO_PARENT, Key, splitDecorationsByChild, isDOMElement, getSelection, IS_READ_ONLY, getActiveElement, IS_FOCUSED, getDefaultView, EDITOR_TO_WINDOW, EDITOR_TO_ELEMENT, containsShadowAware, IS_CHROME, EDITOR_TO_USER_SELECTION, HAS_BEFORE_INPUT_SUPPORT, isPlainTextOnlyPaste, Hotkeys, IS_FIREFOX_LEGACY, IS_IOS, IS_WECHATBROWSER, IS_UC_MOBILE, TRIPLE_CLICK, copyNodeInUse, EDITOR_TO_ON_CHANGE, withDOM } from 'slate-dom';
+ export { NODE_TO_INDEX, NODE_TO_PARENT } from 'slate-dom';
+ import ReactDOM from 'react-dom';
+ import { ResizeObserver } from '@juggle/resize-observer';
 @@ -103,6 +103,25 @@ const COMPOSITION_RECHECK_DELAY = 50;
  const debug = (..._) => {};
  // Type guard to check if a value is a DataTransfer
@@ -28,7 +37,23 @@ index 481f58f009996280b76fcf15417db95886f6985e..307f751d53adece076ae594359408aaa
  const EDITOR_TO_FLUSH_DEFERRED_DIFFS = new WeakMap();
  function createAndroidInputManager({
    editor,
-@@ -453,6 +472,7 @@ function createAndroidInputManager({
+@@ -263,6 +282,15 @@ function createAndroidInputManager({
+         id
+       }) => id !== diff.id));
+       if (!verifyDiffState(editor, diff)) {
++        // The leaf's DOM still holds what was typed when the document took
++        // something else (a / menu's trigger): a new key draws it again
++        // when its block renders.
++        if (Node.has(editor, diff.path)) {
++          const leaf = Node.get(editor, diff.path);
++          if (Text$1.isText(leaf)) {
++            NODE_TO_KEY.set(leaf, new Key());
++          }
++        }
+         scheduleSelectionChange = false;
+         EDITOR_TO_PENDING_ACTION.delete(editor);
+         EDITOR_TO_USER_MARKS.delete(editor);
+@@ -453,6 +481,7 @@ function createAndroidInputManager({
        insertPositionHint = false;
      }
      let [nativeTargetRange] = event.getTargetRanges();
@@ -36,7 +61,7 @@ index 481f58f009996280b76fcf15417db95886f6985e..307f751d53adece076ae594359408aaa
      if (nativeTargetRange && !isNodeMapDirty) {
        targetRange = ReactEditor.toSlateRange(editor, nativeTargetRange, {
          exactMatch: false,
-@@ -696,6 +716,15 @@ function createAndroidInputManager({
+@@ -696,6 +725,15 @@ function createAndroidInputManager({
            if (EDITOR_TO_PENDING_INSERTION_MARKS.get(editor)) {
              text = text.replace('\uFEFF', '');
            }
@@ -52,7 +77,7 @@ index 481f58f009996280b76fcf15417db95886f6985e..307f751d53adece076ae594359408aaa
            // Pastes from the Android clipboard will generate `insertText` events.
            // If the copied text contains any newlines, Android will append an
            // extra newline to the end of the copied text.
-@@ -3052,7 +3081,8 @@ const Editable = /*#__PURE__*/forwardRef((props, forwardedRef) => {
+@@ -3052,7 +3090,8 @@ const Editable = /*#__PURE__*/forwardRef((props, forwardedRef) => {
            if (!ReactEditor.isComposing(editor) && !(androidInputManager !== null && androidInputManager !== void 0 && androidInputManager.hasPendingChanges()) && !(androidInputManager !== null && androidInputManager !== void 0 && androidInputManager.isFlushing())) {
              const isCaretOutsideText = domSelection.isCollapsed && !isInSlateText(anchorNode);
              if (isCaretOutsideText && editor.selection && Range.equals(range, editor.selection)) {
@@ -62,7 +87,7 @@ index 481f58f009996280b76fcf15417db95886f6985e..307f751d53adece076ae594359408aaa
              } else {
                Transforms.select(editor, range);
              }
-@@ -3210,6 +3240,11 @@ const Editable = /*#__PURE__*/forwardRef((props, forwardedRef) => {
+@@ -3210,6 +3249,11 @@ const Editable = /*#__PURE__*/forwardRef((props, forwardedRef) => {
            if (!el) {
              return;
            }
@@ -75,7 +100,7 @@ index 481f58f009996280b76fcf15417db95886f6985e..307f751d53adece076ae594359408aaa
            setDomSelection(forceChange);
          };
 diff --git a/dist/index.js b/dist/index.js
-index bc9a02adc20ac27bbaf2fba883f6c20c6379d943..521f4e28c3c6872e95e849fd78e86a2e1142d383 100644
+index bc9a02a..521f4e2 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -3558,7 +3558,8 @@ var Editable = /*#__PURE__*/React.forwardRef(function (props, forwardedRef) {

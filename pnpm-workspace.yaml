@@ -45,6 +45,8 @@ patchedDependencies:
   # Also on Android: after applying typed text, slate focused the editor
   # again, taking focus from the / and @ menus' search so they closed at
   # once. Check that the new version keeps that focus before dropping it.
+  # Also on Android: when typed text became something else (the / that opens
+  # the menu), the typed character stayed on screen. Check that too.
   slate-react: patches/slate-react.patch
 
 overrides:

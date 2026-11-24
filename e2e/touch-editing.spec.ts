@@ -225,6 +225,21 @@ test("typing / or @ opens its menu", async ({ page }) => {
   await expect.poll(() => lastSave(page, "Note.md")).toContain("> Quoted");
 });
 
+test("the / that opens the menu doesn't stay on screen", async ({ page }) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  const blocks = editor(page).locator("[data-slate-node='element']");
+  const count = await blocks.count();
+  await typeAt(page, "Second line.");
+
+  await page.keyboard.press("Enter");
+  await expect(blocks).toHaveCount(count + 1);
+  await page.keyboard.type("/voice");
+  await page.getByRole("option", { name: "Voice note" }).click();
+  // The line the menu was on stays, empty, under the voice note.
+  await expect(page.getByRole("group", { name: "Voice note recording" })).toBeVisible();
+  await expect(editor(page)).not.toContainText("/");
+});
+
 test("a tap on a link opens it", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
 

@@ -382,14 +382,14 @@ pub(crate) fn move_path(
 }
 
 #[tauri::command(async)]
-pub(crate) fn delete_vault_path(target_path: String) -> Result<(), String> {
+pub(crate) fn delete_vault_path(target_path: String) -> Result<Option<String>, String> {
     vault_access::get().check_inside(Path::new(&target_path))?;
     delete_path(&vault_access::get().open_vault()?, Path::new(&target_path))
 }
 
-/// Moves a shard, drawing or folder of `vault` to the OS trash and forgets
-/// the shards' cached state.
-pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
+/// Moves a shard, drawing or folder of `vault` to the trash and forgets the
+/// shards' cached state. On a phone, returns its id in the app's trash.
+pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<Option<String>, String> {
     let target_path = target.to_string_lossy();
     let writes = locks::vault_writes()?;
     if !target.exists() {
@@ -398,8 +398,8 @@ pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
 
     let markdown_paths = collect_markdown_file_paths(target)?;
 
-    crate::app_trash::delete(target)
-        .map_err(|e| format!("Failed to move {} to the OS trash: {}", target_path, e))?;
+    let trashed = crate::app_trash::delete_vault_item(target)
+        .map_err(|e| format!("Failed to move {} to the trash: {}", target_path, e))?;
     drop(writes);
 
     for markdown_path in &markdown_paths {
@@ -458,7 +458,7 @@ pub(crate) fn delete_path(vault: &Path, target: &Path) -> Result<(), String> {
         );
     }
 
-    Ok(())
+    Ok(trashed)
 }
 
 #[cfg(test)]

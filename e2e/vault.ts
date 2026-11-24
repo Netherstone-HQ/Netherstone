@@ -106,6 +106,8 @@ declare global {
     __vaultFiles: VaultFiles;
     /** Unsaved edits the app kept after an editor crash, by shard path. */
     __keptEdits: Record<string, string>;
+    /** What's in the app's trash on a phone, as list_app_trash answers it. */
+    __appTrash: { id: string; name: string; from: string; isFolder: boolean; deletedAt: number; bytes: number; historyOf: string | null }[];
     __emit: (event: string, payload: unknown) => void;
     /** Runs the animation frames a test held back, and stops holding them. */
     __releaseFrames: () => void;
@@ -273,6 +275,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
       };
       window.__vaultFiles = files;
       window.__keptEdits = {};
+      window.__appTrash ??= [];
 
       localStorage.setItem(
         "netherstone-vault",
@@ -419,6 +422,16 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           return null;
         },
         read_unsaved_edits: ({ filePath }) => window.__keptEdits[filePath] ?? null,
+        list_app_trash: () => window.__appTrash,
+        restore_app_trash: ({ ids }) => {
+          const restored = window.__appTrash.filter((item) => (ids as unknown as string[]).includes(item.id));
+          window.__appTrash = window.__appTrash.filter((item) => !restored.includes(item));
+          return restored.map((item) => item.from);
+        },
+        delete_app_trash: ({ ids }) => {
+          window.__appTrash = window.__appTrash.filter((item) => !(ids as unknown as string[]).includes(item.id));
+          return null;
+        },
         discard_unsaved_edits: ({ filePath }) => {
           delete window.__keptEdits[filePath];
           return null;

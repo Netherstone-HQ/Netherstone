@@ -70,11 +70,23 @@ function App() {
           <NestedVaultDialog />
           <OpenLinkDialog />
           <CompanionHost />
-          <Toaster />
+          <Toaster {...(IS_PHONE ? PHONE_TOASTS : {})} />
         </TooltipProvider>
       </DndProvider>
     </ThemeProvider>
   );
 }
+
+/**
+ * On a phone, toasts sit above the bottom bar (the capture bar is the
+ * tallest) and the system's gesture or button bar, as on the canvas.
+ */
+const PHONE_BOTTOM_BAR_PX = 80;
+const PHONE_TOAST_GAP_PX = 8;
+const PHONE_TOAST_BOTTOM = `calc(var(--safe-area-bottom, env(safe-area-inset-bottom)) + ${PHONE_BOTTOM_BAR_PX + PHONE_TOAST_GAP_PX}px)`;
+const PHONE_TOASTS = {
+  offset: { bottom: PHONE_TOAST_BOTTOM },
+  mobileOffset: { bottom: PHONE_TOAST_BOTTOM },
+};
 
 export default App;

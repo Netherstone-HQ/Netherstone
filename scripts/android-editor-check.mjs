@@ -332,29 +332,17 @@ async function discardVoiceNote() {
 const editor = () => page.locator("[data-slate-editor]").first();
 const block = (text) => editor().locator("[data-slate-node=element]").filter({ hasText: text }).last();
 const bar = () => page.getByRole("toolbar", { name: "Formatting" });
-const sidebar = () => page.locator('[data-sidebar="sidebar"]');
+const home = () => page.getByRole("button", { name: "Search this vault" });
 
-/**
- * Until the app has a phone layout, the desktop sidebars leave a shard no
- * room on a phone screen: close them as a person would, when they're there.
- */
-async function roomForTheShard() {
-  for (const name of ["Hide left sidebar", "Hide right sidebar"]) {
-    const button = page.getByRole("button", { name });
-    if (await button.isVisible()) await button.click();
-  }
-}
-
-/** Opens a shard from the left sidebar by its name. */
-async function openFromSidebar(name) {
-  // Either button is there once the app has drawn its window.
-  const toggle = page.getByRole("button", { name: /^(Show|Hide) left sidebar$/ });
-  await expect(toggle).toBeVisible();
-  const show = page.getByRole("button", { name: "Show left sidebar" });
-  if (await show.isVisible()) await show.click();
-  await sidebar().getByText(name, { exact: true }).first().click();
+/** Goes back to the vault's home with the app's own Back, then opens a shard listed there. */
+async function openFromHome(name) {
+  const back = page.getByRole("button", { name: "Back", exact: true });
+  await expect(home().or(back).first()).toBeVisible();
+  while (await back.isVisible()) await back.click();
+  await expect(home()).toBeVisible();
+  const named = new RegExp(`^${name}`);
+  await page.getByRole("region", { name: "Files" }).getByRole("button", { name: named }).first().click();
   await expect(editor()).toBeVisible();
-  await roomForTheShard();
 }
 
 let vault;
@@ -415,7 +403,7 @@ try {
       await page.getByRole("button", { name: "Skip for now" }).click();
       await page.getByRole("button", { name: "Skip for now" }).click();
       await page.getByRole("button", { name: "Open Netherstone" }).click();
-      await expect(sidebar()).toBeVisible();
+      await expect(home()).toBeVisible();
       vault = await page.evaluate(
         () => JSON.parse(localStorage.getItem("netherstone-vault")).state.currentVaultPath,
       );
@@ -431,26 +419,20 @@ try {
       adb("push", VAULT, "/data/local/tmp/sample-vault");
       const owner = await su(`stat -c %u:%g '${vault}'`);
       await su(`cp -r /data/local/tmp/sample-vault/. '${vault}/' && chown -R ${owner} '${vault}'`);
+      // The shard the check types in.
+      shardFile = `${vault}/${SHARD}.md`;
+      await su(`printf '# ${SHARD}\\n' > '${shardFile}' && chown ${owner} '${shardFile}'`);
       await launch();
-      await calibrate(sidebar().getByText("Files", { exact: true }).first());
-      await expect(sidebar().getByText("Start here", { exact: true }).first()).toBeVisible();
+      await calibrate(page.getByRole("heading", { name: "Files", exact: true }));
     },
     setup,
   );
 
   await step(
-    "create-shard",
+    "open-shard",
     async () => {
-      await page.getByRole("button", { name: "New", exact: true }).click();
-      await page.getByRole("menuitem", { name: "New shard" }).click();
-      const name = page.locator("#shard-name");
-      await expect(name).toBeFocused();
-      await page.keyboard.type(SHARD);
-      await page.getByRole("button", { name: "Create shard" }).click();
-      await expect(name).toBeHidden();
-      shardFile = `${vault}/${SHARD}.md`;
-      await onDisk().toContain(`# ${SHARD}`);
-      await roomForTheShard();
+      await openFromHome(SHARD);
+      await expect(block(SHARD)).toBeVisible();
     },
     setup,
   );
@@ -597,7 +579,7 @@ try {
   );
 
   await step("link-tap", async () => {
-    await openFromSidebar("Start here");
+    await openFromHome("Start here");
     await tap(editor().getByText("Writing basics", { exact: true }).first());
     await expect(editor()).toContainText("Every heading level");
   });
@@ -605,7 +587,7 @@ try {
   await step("web-link-tap", async () => {
     // Phones have no browser panel yet: the page opens in the system's browser.
     try {
-      await openFromSidebar("Start here");
+      await openFromHome("Start here");
       await tap(editor().getByText("Links", { exact: true }).first());
       await tap(editor().getByText("The website", { exact: true }).first());
       await poll(appInFront, "the system's browser in front").not.toMatch(new RegExp(`^(${PACKAGE})?$`));
@@ -618,7 +600,7 @@ try {
     "reopen",
     async () => {
       await launch();
-      await openFromSidebar(SHARD);
+      await openFromHome(SHARD);
       await expect(editor()).toContainText("typed with the keyboard");
     },
     typed,

@@ -1,4 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { IS_MOBILE } from "@/lib/platform";
 import { type LinkOpener, useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 
@@ -18,13 +19,14 @@ export function isWebPageUrl(href: string) {
 
 /**
  * Opens web pages where `openIn` says, or where Settings says by default.
- * Anything else (mailto:, tel:) goes to the system's own app.
+ * Anything else (mailto:, tel:) goes to the system's own app. Phones have no
+ * browser panel yet, so pages open in the system's browser there.
  */
 export async function openWebLink(
   href: string,
   openIn: LinkOpener = useSettingsStore.getState().openLinksIn,
 ) {
-  if (openIn === "your-browser" || !isWebPageUrl(href)) {
+  if (IS_MOBILE || openIn === "your-browser" || !isWebPageUrl(href)) {
     await openUrl(href);
     return;
   }

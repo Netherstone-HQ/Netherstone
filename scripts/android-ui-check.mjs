@@ -19,7 +19,8 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { _android as android, expect } from "@playwright/test";
+import { _android as android, expect as baseExpect } from "@playwright/test";
+import { startAndAttach } from "./android-webview.mjs";
 
 const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
@@ -42,7 +43,8 @@ const WAIT_LIMIT_MS = Number(process.env.WAIT_LIMIT_MS ?? 60_000);
 
 if (!APK) throw new Error("Set APK to the APK to install");
 fs.mkdirSync(OUT, { recursive: true });
-expect.configure({ timeout: WAIT_LIMIT_MS });
+// configure returns a new expect; the imported one keeps its 5 s limit.
+const expect = baseExpect.configure({ timeout: WAIT_LIMIT_MS });
 
 const log = (...parts) => console.log(new Date().toISOString().slice(11, 23), ...parts);
 function adb(...args) {
@@ -88,10 +90,7 @@ async function launch() {
     await shell(`am force-stop ${PACKAGE}`);
     await within(closed, "the old WebView to close");
   }
-  await shell(`am start -W -n ${ACTIVITY}`);
-  webView = await device.webView({ pkg: PACKAGE });
-  // Playwright sets no limit on attaching to the page, so this sets one.
-  page = await within(webView.page(), "the app's page to attach");
+  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
 }
@@ -203,6 +202,9 @@ try {
   log("install", APK);
   adb("install", "-g", APK);
   await shell("wm dismiss-keyguard");
+  // A slow emulator can say another app "isn't responding" in a dialog over
+  // this one, which would take the check's taps and Back presses.
+  await shell("settings put global hide_error_dialogs 1");
   adb("logcat", "-c");
 
   await step("app-loads", async () => {

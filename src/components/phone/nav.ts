@@ -46,7 +46,7 @@ export type PhoneOverlay =
   | { kind: "select" }
   /** A trash item's menu: Restore or Delete forever. */
   | { kind: "trash-item"; id: string }
-  | { kind: "confirm-delete-forever"; id: string }
+  | { kind: "confirm-delete-forever"; ids: string[] }
   | { kind: "confirm-empty-trash" };
 
 type Entry = PhoneScreen | PhoneOverlay;

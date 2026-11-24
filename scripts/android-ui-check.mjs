@@ -239,13 +239,25 @@ try {
   await step("restore-from-trash", async () => {
     await trashFromHome();
     await openTrash();
-    await page.getByRole("list", { name: "Deleted items" }).getByRole("button", { name: new RegExp(`^${SHARD}`) }).click();
+    await page.getByRole("region", { name: "Deleted items" }).getByRole("button", { name: new RegExp(`^${SHARD}`) }).click();
     await page.getByRole("button", { name: "Restore" }).click();
     await expect(page.getByText("Trash is empty")).toBeVisible();
     await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} restored` }).toBe(true);
     expect(await readAppFile(shardFile)).toContain(TYPED);
   });
 
+  await step("select-and-restore", async () => {
+    await shell("input keyevent KEYCODE_BACK");
+    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+    await trashFromHome();
+    await openTrash();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await page.getByRole("checkbox", { name: new RegExp(`^${SHARD}`) }).click();
+    await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+    await page.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText("Trash is empty")).toBeVisible();
+    await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} restored` }).toBe(true);
+  });
   await step("empty-trash", async () => {
     await shell("input keyevent KEYCODE_BACK");
     await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();

@@ -177,10 +177,28 @@ pub struct TrashedItem {
     /// Milliseconds since 1970.
     pub deleted_at: u64,
     pub bytes: u64,
+    /// For what isn't a file of the vault, such as the history of a vault
+    /// that's gone: the name of the vault it was kept for.
+    pub history_of: Option<String>,
 }
 
-/// What's in the trash from `vault`, most recently deleted first.
-fn list(trash: &Path, vault: &Path) -> Vec<TrashedItem> {
+/// The vault a trashed sync history was kept for, by its record inside it.
+fn history_name(trash: &Path, batch: &str, name: &str) -> Option<String> {
+    crate::sync::state::records(&trash.join(batch))
+        .into_iter()
+        .find(|record| record.vault_id == name)
+        .map(|record| {
+            Path::new(&record.vault_path)
+                .file_name()
+                .map_or(record.vault_path.clone(), |name| {
+                    name.to_string_lossy().into_owned()
+                })
+        })
+}
+
+/// What's in the trash from `vault`, and the vault histories kept in
+/// `histories` (they belong to no vault), most recently deleted first.
+fn list(trash: &Path, vault: &Path, histories: &Path) -> Vec<TrashedItem> {
     let Ok(entries) = std::fs::read_dir(trash) else {
         return Vec::new();
     };
@@ -197,12 +215,17 @@ fn list(trash: &Path, vault: &Path) -> Vec<TrashedItem> {
             })
         })
         .filter(|(_, _, from, kept, _)| {
-            kept.exists() && crate::vault_access::is_within(vault, from)
+            kept.exists()
+                && (crate::vault_access::is_within(vault, from)
+                    || crate::vault_access::is_within(histories, from))
         })
         .map(|(batch, name, from, kept, deleted_at)| TrashedItem {
             id: format!("{batch}/{name}"),
             is_folder: kept.is_dir(),
             bytes: size_of(&kept),
+            history_of: crate::vault_access::is_within(histories, &from)
+                .then(|| history_name(trash, &batch, &name))
+                .flatten(),
             name,
             from,
             deleted_at,
@@ -307,19 +330,23 @@ fn forget_batch_if_empty(trash: &Path, batch: &str, record: &Record) -> Result<(
 #[tauri::command(async)]
 pub(crate) fn list_app_trash() -> Result<Vec<TrashedItem>, String> {
     let vault = crate::vault_access::get().open_vault()?;
-    Ok(list(&trash_dir()?, &vault))
+    Ok(list(&trash_dir()?, &vault, &crate::sync::sync_root()?))
 }
 
-/// Puts trash items back in the open vault. Returns where each one went.
+/// Puts trash items back in the open vault, or a vault's history back with
+/// the others. Returns where each one went.
 #[tauri::command(async)]
 pub(crate) fn restore_app_trash(ids: Vec<String>) -> Result<Vec<String>, String> {
     let vault = crate::vault_access::get().open_vault()?;
+    let histories = crate::sync::sync_root()?;
     let trash = trash_dir()?;
     let _writes = crate::locks::vault_writes()?;
     ids.iter()
         .map(|id| {
             restore(&trash, id, |path| {
-                if crate::vault_access::is_within(&vault, path) {
+                if crate::vault_access::is_within(&vault, path)
+                    || crate::vault_access::is_within(&histories, path)
+                {
                     Ok(())
                 } else {
                     Err(format!("{} isn't in the open vault", path.display()))
@@ -335,7 +362,7 @@ pub(crate) fn restore_app_trash(ids: Vec<String>) -> Result<Vec<String>, String>
 pub(crate) fn delete_app_trash(ids: Vec<String>) -> Result<(), String> {
     let vault = crate::vault_access::get().open_vault()?;
     let trash = trash_dir()?;
-    let listed = list(&trash, &vault);
+    let listed = list(&trash, &vault, &crate::sync::sync_root()?);
     ids.iter().try_for_each(|id| {
         if !listed.iter().any(|item| &item.id == id) {
             return Err(format!("{id} isn't in this vault's trash"));
@@ -433,7 +460,7 @@ mod tests {
             write_record(&trash, batch, &record).unwrap();
         }
 
-        let items = list(&trash, &vault);
+        let items = list(&trash, &vault, &root.join("sync"));
 
         assert_eq!(
             items,
@@ -445,6 +472,7 @@ mod tests {
                     is_folder: false,
                     deleted_at: 300,
                     bytes: 4,
+                    history_of: None,
                 },
                 TrashedItem {
                     id: "1/old.md".into(),
@@ -453,6 +481,7 @@ mod tests {
                     is_folder: false,
                     deleted_at: 100,
                     bytes: 3,
+                    history_of: None,
                 },
             ]
         );
@@ -518,7 +547,7 @@ mod tests {
 
         delete_forever(&trash, "1/a.md").unwrap();
 
-        let left: Vec<_> = list(&trash, &vault)
+        let left: Vec<_> = list(&trash, &vault, &root.join("sync"))
             .into_iter()
             .map(|item| item.id)
             .collect();
@@ -526,6 +555,40 @@ mod tests {
         delete_forever(&trash, "1/b.md").unwrap();
         assert!(!trash.join("1").exists());
         assert!(!record_path(&trash, "1").exists());
+    }
+
+    #[test]
+    fn a_gone_vaults_history_is_listed_by_its_vaults_name() {
+        let root = temp("app-trash-history");
+        let vault = root.join("vault");
+        let sync = root.join("sync");
+        let trash = root.join("trash");
+        std::fs::create_dir_all(&vault).unwrap();
+        crate::sync::state::save_record(
+            &sync,
+            &crate::sync::state::VaultSyncRecord {
+                vault_id: "abc".into(),
+                vault_path: root.join("Old notes").to_string_lossy().into_owned(),
+                sync_enabled: false,
+                remote_url: None,
+                repo_name: None,
+                branch: "main".into(),
+                last_commit: None,
+                last_commit_at: None,
+                last_sync_at: None,
+                last_packed_at: None,
+                conflicts: Vec::new(),
+            },
+        )
+        .unwrap();
+        move_to_trash(&trash, &sync.join("abc"), "1").unwrap();
+
+        let items = list(&trash, &vault, &sync);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].history_of.as_deref(), Some("Old notes"));
+        let back = restore(&trash, &items[0].id, anywhere).unwrap();
+        assert_eq!(back, sync.join("abc"));
     }
 
     #[test]

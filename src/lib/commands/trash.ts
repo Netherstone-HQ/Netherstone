@@ -13,6 +13,8 @@ export interface TrashedItem {
   /** Milliseconds since 1970. */
   deletedAt: number;
   bytes: number;
+  /** For the history of a vault that's gone: that vault's name. */
+  historyOf: string | null;
 }
 
 /** What's in the app's trash from the open vault, newest first. */

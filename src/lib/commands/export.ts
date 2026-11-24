@@ -21,6 +21,18 @@ export async function chooseExportPath(
   });
 }
 
+/**
+ * On a phone, a path in the app's cache for an export to share rather than
+ * save. What was shared before is cleared out.
+ */
+export async function shareExportPath(
+  defaultName: string,
+  format: ExportFileFormat,
+): Promise<string> {
+  assertTauri();
+  return invoke<string>("share_export_path", { defaultName, format });
+}
+
 /** Writes a finished export to `path`, replacing any file there. */
 export async function writeExportFile(
   path: string,

@@ -301,6 +301,7 @@ pub fn run() {
             shards::paths::move_file,
             shards::paths::delete_vault_path,
             export::choose_export_path,
+            export::share_export_path,
             export::write_export_file,
             export::read_export_asset,
             export::fetch_export_asset,

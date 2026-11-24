@@ -90,6 +90,39 @@ pub fn choose_export_path(
     Some(path.to_string_lossy().into_owned())
 }
 
+/// Where an export to share goes on a phone: a folder of the app's cache,
+/// which Android's share sheet can hand on (`res/xml/file_paths.xml`).
+const SHARE_FOLDER: &str = "shared";
+
+/// On a phone, a path for an export that's shared rather than saved, under
+/// the app's cache. What was shared before is cleared out first.
+#[tauri::command(async)]
+pub fn share_export_path(
+    app: tauri::AppHandle,
+    default_name: String,
+    format: ExportFormat,
+) -> Result<String, String> {
+    use tauri::Manager;
+    let folder = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join(SHARE_FOLDER);
+    if folder.exists() {
+        fs::remove_dir_all(&folder)
+            .map_err(|e| format!("Failed to clear {}: {e}", folder.display()))?;
+    }
+    fs::create_dir_all(&folder)
+        .map_err(|e| format!("Failed to create {}: {e}", folder.display()))?;
+    let (_, extension) = format.filter();
+    let path = folder.join(format!("{}.{extension}", sanitize_file_stem(&default_name)));
+    CHOSEN_PATHS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(path.clone());
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// A header of a raw IPC request, URI-decoded.
 pub(crate) fn header(request: &Request<'_>, name: &str) -> Option<String> {
     request

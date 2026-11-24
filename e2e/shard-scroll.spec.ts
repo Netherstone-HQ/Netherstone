@@ -144,7 +144,11 @@ test("a block held at the bottom edge while dragged scrolls the shard", async ({
   await handle.hover();
   await page.mouse.down();
   const { height } = page.viewportSize()!;
-  await page.mouse.move(400, height - 10, { steps: 10 });
+  // The edges only scroll once they're up, a moment after the drag starts,
+  // and a held pointer sends nothing more, so the block reaches the edge after.
+  await page.mouse.move(400, height / 2, { steps: 5 });
+  await expect(page.locator("[data-drag-edge]")).toHaveCount(2);
+  await page.mouse.move(400, height - 10, { steps: 5 });
   await expect
     .poll(() => editor(page).evaluate((el) => el.closest("main")!.scrollTop))
     .toBeGreaterThan(500);

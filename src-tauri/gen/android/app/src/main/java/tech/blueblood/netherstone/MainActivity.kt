@@ -9,10 +9,15 @@ import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import java.io.File
+
+/** The cache folder exports to share go in, as share_export_path names it. */
+private const val SHARE_FOLDER = "shared"
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +50,29 @@ class MainActivity : TauriActivity() {
           Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
         )
       }
+    }
+
+    /**
+     * Offers a file to other apps through Android's share sheet. Only an
+     * export in the app's cache folder for sharing (`share_export_path`)
+     * is handed on, so a page script can't send any other file.
+     */
+    @JavascriptInterface
+    fun shareFile(path: String, mimeType: String) {
+      val shared = File(cacheDir, SHARE_FOLDER).canonicalFile
+      val file = File(path).canonicalFile
+      if (file.parentFile != shared || !file.isFile) {
+        Log.w("Netherstone", "Not shared: $path isn't an export to share")
+        return
+      }
+      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", file)
+      val send = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_TITLE, file.name)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      runOnUiThread { startActivity(Intent.createChooser(send, null)) }
     }
 
     /** Shows or hides the keyboard, leaving focus and the caret where they are. */

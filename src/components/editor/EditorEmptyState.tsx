@@ -11,15 +11,14 @@ import {
 } from "@/components/ui/empty";
 import { openVaultDialog } from "@/lib/commands/vault";
 import { openImportDialog } from "@/lib/import";
+import { createShard } from "@/lib/open-vault-file";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, openVault } from "@/lib/open-vault";
 import { useVaultStore } from "@/store";
-import { NewShardDialog } from "@/components/vault/NewShardDialog";
 import { NewVaultDialog } from "@/components/vault/NewVaultDialog";
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
 
 export function EditorEmptyState() {
-  const [isNewShardDialogOpen, setIsNewShardDialogOpen] = useState(false);
   const [isNewVaultOpen, setIsNewVaultOpen] = useState(false);
   const currentVaultPath = useVaultStore((s) => s.currentVaultPath);
 
@@ -49,7 +48,7 @@ export function EditorEmptyState() {
         <EmptyContent className="max-w-none flex-row items-center justify-center gap-2">
           {currentVaultPath ? (
             <>
-              <Button onClick={() => setIsNewShardDialogOpen(true)}>
+              <Button onClick={() => void createShard(currentVaultPath)}>
                 <PlusIcon />
                 New shard
               </Button>
@@ -76,10 +75,6 @@ export function EditorEmptyState() {
         </EmptyContent>
       </Empty>
 
-      <NewShardDialog
-        open={isNewShardDialogOpen}
-        onOpenChange={setIsNewShardDialogOpen}
-      />
       <NewVaultDialog open={isNewVaultOpen} onOpenChange={setIsNewVaultOpen} />
     </>
   );

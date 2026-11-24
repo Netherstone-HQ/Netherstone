@@ -32,7 +32,7 @@ function useIsRenamedFrom(before: string | undefined, filePath: string) {
  * The open file's history, loaded again as versions are saved and as the
  * file changes, so the top row knows whether it's saved as a version.
  */
-function useFileHistory(filePath: string) {
+export function useFileHistory(filePath: string) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const tick = useHistoryStore((s) => s.versionsTick);
   const isChangingPath = useHistoryStore((s) => s.pathChange !== null);

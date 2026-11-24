@@ -52,11 +52,7 @@ import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store";
 import { LeftSidebarResizeHandle } from "./LeftSidebarResizeHandle";
 
-interface LeftSidebarProps {
-  onNewShard: () => void;
-}
-
-export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
+export function LeftSidebar() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isNewVaultOpen, setIsNewVaultOpen] = useState(false);
   const vaultMenu = useMenuAction();
@@ -280,7 +276,7 @@ export function LeftSidebar({ onNewShard }: LeftSidebarProps) {
             <>
               <PinnedSection />
               <RecentFilesSection />
-              <FileTree onNewShard={onNewShard} />
+              <FileTree />
             </>
           )}
         </div>

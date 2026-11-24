@@ -1,5 +1,8 @@
 import { createContext, useContext, type ReactNode } from "react";
 
+import { ChevronRightIcon } from "lucide-react";
+
+import { IS_PHONE } from "@/components/phone/phone-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { copy } from "./copy";
@@ -26,6 +29,36 @@ export function Step({
   onBack?: () => void;
   action?: ReactNode;
 }) {
+  if (IS_PHONE) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 px-6 pt-5">
+          <StepDots align="start" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6">
+          <div className="onboarding-step pt-7 pb-6">
+            <div className="mb-6 flex flex-col gap-3">
+              <h1 className="font-semibold text-[28px] leading-9 tracking-tight">{title}</h1>
+              {body ? <p className="text-muted-foreground leading-6">{body}</p> : null}
+            </div>
+            {children}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-3 px-6 pt-3 pb-6">
+          {onBack ? (
+            <Button variant="outline" className="h-11 px-4.5 text-base" onClick={onBack}>
+              {copy.common.back}
+            </Button>
+          ) : (
+            <span />
+          )}
+          {/* Every step's action at the size of a thumb. */}
+          <div className="[&_button]:h-11 [&_button]:px-4.5 [&_button]:text-base">{action}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-6">
@@ -57,11 +90,11 @@ export function Step({
   );
 }
 
-function StepDots() {
+function StepDots({ align = "center" }: { align?: "center" | "start" }) {
   const { index, total } = useContext(StepProgress);
   return (
     <div
-      className="flex justify-center gap-1.5"
+      className={cn("flex gap-1.5", align === "center" ? "justify-center" : "justify-start")}
       role="img"
       aria-label={copy.common.stepLabel(index + 1, total)}
     >
@@ -137,6 +170,10 @@ export function ChoiceCard({
           <span className="block font-medium text-ui">{title}</span>
           <span className="block text-muted-foreground text-ui">{description}</span>
         </span>
+        {/* On a phone a card leads to its own screen. */}
+        {IS_PHONE && !children ? (
+          <ChevronRightIcon className="ml-auto size-5 shrink-0 text-muted-foreground" />
+        ) : null}
       </button>
       {selected && children ? (
         <div className="onboarding-fade flex flex-col gap-4 border-t px-4 py-4">{children}</div>

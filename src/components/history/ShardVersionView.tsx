@@ -14,7 +14,8 @@ import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useVaultStore } from "@/store/vault";
 import { isInlineElement, VersionPreviewKit } from "./history-diff-kit";
-import { VersionBar } from "./VersionBar";
+import { IS_PHONE } from "@/components/phone/phone-shell";
+import { PhoneRestoreBar, VersionBar } from "./VersionBar";
 
 type Loaded = {
   id: string;
@@ -157,6 +158,7 @@ export function ShardVersionView({
       ) : (
         <VersionDocument key={loaded.id} value={loaded.value} />
       )}
+      {IS_PHONE ? <PhoneRestoreBar version={version} /> : null}
     </div>
   );
 }

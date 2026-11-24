@@ -122,6 +122,8 @@ export type MockVaultOptions = {
   assets?: Record<string, Buffer>;
   /** Empty folders shown in the sidebar. */
   folders?: string[];
+  /** Files with a `/` in their path sit in folders, as the real scan has them. */
+  nested?: boolean;
   /** The shard open when the app starts, relative to the vault. None when left out. */
   open?: string;
   /** The drawing open on the canvas when the app starts, relative to the vault. */
@@ -242,6 +244,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
     files,
     assets = {},
     folders = [],
+    nested = false,
     open,
     drawing,
     noVault = false,
@@ -254,7 +257,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
   } = options;
 
   await page.addInitScript(
-    ({ vaultPath, files, binaries, folders, theme, open, drawing, noVault, otherVaults, versions, current, assistant, companion }) => {
+    ({ vaultPath, files, binaries, folders, nested, theme, open, drawing, noVault, otherVaults, versions, current, assistant, companion }) => {
       const now = Date.now();
       const seconds = Math.floor(now / 1000);
       const relative = (filePath: string) =>
@@ -313,19 +316,47 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         }),
       );
 
-      const tree = [
-        ...folders.map((name) => ({
-          name,
-          path: `${vaultPath}/${name}`,
-          kind: "directory",
-          children: [],
-        })),
-        ...Object.keys(files).map((name) => ({
-          name,
-          path: `${vaultPath}/${name}`,
-          kind: "file",
-        })),
-      ];
+      type Node = { name: string; path: string; kind: string; children?: Node[] };
+      // Files in folders, as the real scan returns them.
+      const nestedTree = () => {
+        const root: Node[] = [];
+        const folderAt = (parts: string[]) => {
+          let level = root;
+          let path = vaultPath;
+          for (const name of parts) {
+            path = `${path}/${name}`;
+            let folder = level.find((node) => node.kind === "directory" && node.name === name);
+            if (!folder) {
+              folder = { name, path, kind: "directory", children: [] };
+              level.push(folder);
+            }
+            level = folder.children!;
+          }
+          return level;
+        };
+        for (const folder of folders) folderAt(folder.split("/"));
+        for (const file of Object.keys(files)) {
+          const parts = file.split("/");
+          const name = parts.pop()!;
+          folderAt(parts).push({ name, path: `${vaultPath}/${file}`, kind: "file" });
+        }
+        return root;
+      };
+      const tree = nested
+        ? nestedTree()
+        : [
+            ...folders.map((name) => ({
+              name,
+              path: `${vaultPath}/${name}`,
+              kind: "directory",
+              children: [],
+            })),
+            ...Object.keys(files).map((name) => ({
+              name,
+              path: `${vaultPath}/${name}`,
+              kind: "file",
+            })),
+          ];
 
       type Args = Record<string, string>;
       type Options = { headers?: Record<string, string> };
@@ -371,6 +402,17 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           files[relative(filePath)] = content;
           window.__saves.push({ filePath, content });
           return null;
+        },
+        // As the desktop app: the first free Untitled name, made empty.
+        create_shard_file: ({ directory }) => {
+          let name = "Untitled.md";
+          for (let n = 2; relative(`${directory}/${name}`) in files; n++) {
+            name = `Untitled ${n}.md`;
+          }
+          const filePath = `${directory}/${name}`;
+          files[relative(filePath)] = "";
+          tree.push({ name, path: filePath, kind: "file" });
+          return filePath;
         },
         keep_unsaved_edits: ({ filePath, copy }) => {
           window.__keptEdits[filePath] = copy;
@@ -503,6 +545,20 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
             tags: [],
           };
         },
+        // The first line that isn't a heading, as the app's own reads it.
+        get_shard_previews: ({ paths }) =>
+          (paths as unknown as string[]).map((path) => {
+            const content = files[relative(path)];
+            const line = content
+              ?.split("\n")
+              .map((text) => text.trim())
+              .find((text) => text && !text.startsWith("#"));
+            return {
+              path,
+              lastModified: content === undefined ? null : seconds,
+              preview: path.endsWith(".md") ? (line ?? null) : null,
+            };
+          }),
         get_backlinks: () => [],
         get_backlinks_count: () => 0,
         get_tagged_files: () => [],
@@ -915,6 +971,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         Object.entries(assets).map(([name, bytes]) => [name, bytes.toString("base64")]),
       ),
       folders,
+      nested,
       theme,
       open,
       drawing,

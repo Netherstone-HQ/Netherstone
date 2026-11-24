@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 
 import { DrawingIcon } from "@/components/icons";
+import { usePhoneNav } from "@/components/phone/nav";
+import { IS_PHONE } from "@/components/phone/phone-shell";
 import { Button } from "@/components/ui/button";
 import {
   applyAssistantChange,
@@ -122,6 +124,8 @@ function appliedPath(change: ChatChange): string {
 
 /** Brings the open shard's preview of a change back into view. */
 function revealPreview() {
+  // A phone's sheet covers the shard: it steps aside for the change.
+  if (IS_PHONE) usePhoneNav.getState().push({ kind: "change" });
   // Set aside to edit: shown again, and it brings the change into view.
   if (useAssistantStore.getState().previewSetAside !== null) {
     useAssistantStore.setState({ previewSetAside: null });

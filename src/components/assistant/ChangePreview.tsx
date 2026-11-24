@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeftIcon } from "lucide-react";
 import { Plate, usePlateEditor } from "platejs/react";
 
 import { resolveSessionValue } from "@/components/editor/lib/session-value";
@@ -8,6 +9,8 @@ import {
 } from "@/components/history/history-diff-kit";
 import { Editor as PlateEditor, EditorContainer } from "@/components/ui/editor";
 import { Button } from "@/components/ui/button";
+import { usePhoneNav } from "@/components/phone/nav";
+import { IS_PHONE } from "@/components/phone/phone-shell";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import {
   applyAssistantChange,
@@ -132,6 +135,19 @@ export function ChangePreview({
   const [scrollTop] = useState(editorScrollTop);
   const busy = useAssistantStore((s) => s.busyChanges.includes(change.id));
   if (!value) return null;
+  if (IS_PHONE) {
+    return (
+      <div className="absolute inset-0 flex flex-col bg-background">
+        <PreviewDocument
+          key={`${change.id}:${change.count}`}
+          value={value}
+          scrollTop={scrollTop}
+        />
+        <PhoneChangeBar change={change} busy={busy} />
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
       {/* Says why the shard can't be edited now, and how to go on. */}
@@ -165,6 +181,45 @@ export function ChangePreview({
         value={value}
         scrollTop={scrollTop}
       />
+    </div>
+  );
+}
+
+/** On a phone: back to the assistant, how much changes, Discard and Apply. */
+function PhoneChangeBar({ change, busy }: { change: ChatChange; busy: boolean }) {
+  const back = usePhoneNav((s) => s.back);
+  return (
+    <div className="flex h-18 shrink-0 items-center gap-2 rounded-t-[20px] border-t bg-popover pr-3 pl-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Back to the assistant"
+        className="size-12 rounded-full"
+        onClick={back}
+      >
+        <ArrowLeftIcon className="size-5" />
+      </Button>
+      <span className="min-w-0 flex-1 truncate">
+        {change.count === 1 ? "1 change" : `${change.count} changes`}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-11 px-4 text-base"
+        disabled={busy}
+        onClick={() => void discardAssistantChange(change)}
+      >
+        Discard
+      </Button>
+      <Button
+        type="button"
+        className="h-11 px-4 text-base"
+        disabled={busy}
+        onClick={() => void applyAssistantChange(change)}
+      >
+        Apply
+      </Button>
     </div>
   );
 }

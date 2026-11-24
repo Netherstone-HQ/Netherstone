@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MinusIcon, SquareIcon, XIcon } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { IS_MOBILE } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { NetherstoneMark } from "@/components/brand/NetherstoneMark";
 import { Hint } from "@/components/ui/tooltip";
@@ -77,7 +78,8 @@ export function WindowTitleBar({ bare = false }: { bare?: boolean }) {
     [isMaximized, isTauriWindow],
   );
 
-  if (!isTauriWindow) {
+  // Phones and tablets have no window to move, size or close.
+  if (!isTauriWindow || IS_MOBILE) {
     return null;
   }
 

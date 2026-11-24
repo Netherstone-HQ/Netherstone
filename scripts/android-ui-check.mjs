@@ -18,6 +18,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { _android as android, expect } from "@playwright/test";
+import { startAndAttach } from "./android-webview.mjs";
 
 const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
@@ -79,10 +80,7 @@ async function launch() {
     await shell(`am force-stop ${PACKAGE}`);
     await within(closed, "the old WebView to close");
   }
-  await shell(`am start -W -n ${ACTIVITY}`);
-  webView = await device.webView({ pkg: PACKAGE });
-  // Playwright sets no limit on attaching to the page, so this sets one.
-  page = await within(webView.page(), "the app's page to attach");
+  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
 }

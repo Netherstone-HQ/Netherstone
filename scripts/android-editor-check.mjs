@@ -22,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { _android as android, expect } from "@playwright/test";
+import { startAndAttach } from "./android-webview.mjs";
 
 const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
@@ -112,9 +113,7 @@ async function launch() {
     await shell(`am force-stop ${PACKAGE}`);
     await within(closed, "the old WebView to close");
   }
-  await shell(`am start -W -n ${ACTIVITY}`);
-  webView = await device.webView({ pkg: PACKAGE });
-  page = await within(webView.page(), "the app's page to attach");
+  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
 }
@@ -152,19 +151,24 @@ async function bringAppBack() {
  */
 async function calibrate(target) {
   const scale = await page.evaluate(() => window.devicePixelRatio);
-  const seen = page.evaluate(
-    () =>
-      new Promise((resolve) =>
-        window.addEventListener("pointerdown", (e) => resolve({ x: e.clientX, y: e.clientY }), {
-          once: true,
-          capture: true,
-        }),
-      ),
-  );
+  // The listener is in place before the tap: a tap that lands first is
+  // never seen.
+  await page.evaluate(() => {
+    window.__calibrationTap = new Promise((resolve) =>
+      window.addEventListener("pointerdown", (e) => resolve({ x: e.clientX, y: e.clientY }), {
+        once: true,
+        capture: true,
+      }),
+    );
+  });
   screen = { scale, x: 0, y: 0 };
+  await expect(target).toBeVisible();
   const at = await pointOn(target);
   await shell(`input tap ${at.x} ${at.y}`);
-  const client = await within(seen, "the calibration tap");
+  const client = await within(
+    page.evaluate(() => window.__calibrationTap),
+    "the calibration tap",
+  );
   screen = { scale, x: at.x - client.x * scale, y: at.y - client.y * scale };
   log("screen", screen);
 }

@@ -58,10 +58,7 @@ fn take(incoming: &Path, kind: &str, arrival: &Path) -> Option<PathBuf> {
     match fs::rename(arrival, &taken) {
         Ok(()) => Some(taken),
         Err(error) => {
-            eprintln!(
-                "[Netherstone] Couldn't take {}: {error}",
-                arrival.display()
-            );
+            eprintln!("[Netherstone] Couldn't take {}: {error}", arrival.display());
             None
         }
     }
@@ -200,7 +197,10 @@ mod tests {
             .collect();
         assert_eq!(names, ["Notes.txt", "Plan.md"]);
         assert!(opened_in(&incoming).is_empty(), "taken already");
-        assert!(incoming.join(OPENED).join("300.part").exists(), "still copying");
+        assert!(
+            incoming.join(OPENED).join("300.part").exists(),
+            "still copying"
+        );
     }
 
     #[test]

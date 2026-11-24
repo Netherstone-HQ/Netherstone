@@ -25,7 +25,7 @@ const SHARED_EVENT = "shared";
 const MAX_TITLE_LENGTH = 60;
 
 /** A link that was shared: where it goes, what it's called and its site. */
-export interface SharedLink {
+interface SharedLink {
   url: string;
   title: string;
   site: string;
@@ -49,7 +49,7 @@ export const useShareIn = create<{ shared: Shared | null; id: number }>(() => ({
  * Takes the latest share from another app and shows it in its sheet, in
  * place of one still showing.
  */
-export async function takeShareIn() {
+async function takeShareIn() {
   const shared = await takeShared();
   if (!shared) return;
   useShareIn.setState((state) => ({ shared, id: state.id + 1 }));

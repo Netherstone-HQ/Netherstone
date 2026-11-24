@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { devices, type Page } from "@playwright/test";
 
 import {
   ANDROID_PHONE,
@@ -322,4 +322,35 @@ test("a picture pasted on Android is added to the vault", async ({ page }) => {
     .poll(() => page.evaluate(() => window.__binaries["_attachments/pasted.png"]))
     .toBe(PNG);
   await expect.poll(() => lastSave(page, "Note.md")).toContain("_attachments/pasted.png");
+});
+
+test.describe("in the phone layout", () => {
+  // The browser stays the file's own; only the phone's screen and touch.
+  const { defaultBrowserType: _browser, ...phone } = devices["Pixel 7"];
+  test.use(phone);
+
+  /** What was last written for `name`: phones have no "Saved" in a top bar to wait for. */
+  const written = (page: Page, name: string) =>
+    page.evaluate(
+      (name) => window.__saves.filter((save) => save.filePath.endsWith(`/${name}`)).at(-1)?.content,
+      name,
+    );
+
+  test("a shard opened from home has the bar above the keyboard, and its links open", async ({
+    page,
+  }) => {
+    await mockVault(page, { files: FILES, nested: true });
+    await page
+      .getByRole("region", { name: "Files" })
+      .getByRole("button", { name: /^Note/ })
+      .click();
+    await typeAt(page, "First line.");
+    await bar(page).getByRole("button", { name: "Bulleted list" }).click();
+    await expect.poll(() => written(page, "Note.md")).toContain("- First line.");
+
+    await bar(page).getByRole("button", { name: "Hide keyboard" }).click();
+    await keyboard(page, 0);
+    await editor(page).getByText("Other").click();
+    await expect(page.getByText("Other body text.")).toBeVisible();
+  });
 });

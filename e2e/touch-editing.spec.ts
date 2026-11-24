@@ -240,6 +240,28 @@ test("the / that opens the menu doesn't stay on screen", async ({ page }) => {
   await expect(editor(page)).not.toContainText("/");
 });
 
+test("a voice note's problem stays readable on a narrow screen", async ({
+  page,
+}) => {
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await typeAt(page, "Second line.");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/voice");
+  await page.getByRole("option", { name: "Voice note" }).click();
+
+  const card = page.getByRole("group", { name: "Voice note recording" });
+  const discard = card.getByRole("button", { name: "Discard" });
+  await expect(discard).toBeVisible();
+  // As wide as the shard is on a phone.
+  await card.evaluate((element) => (element.style.width = "300px"));
+  const cardBox = (await card.boundingBox())!;
+  const words = (await card.getByRole("status").boundingBox())!;
+  const button = (await discard.boundingBox())!;
+  // The buttons go under the words instead of squeezing them or spilling out.
+  expect(words.width).toBeGreaterThan(button.width);
+  expect(button.x + button.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+});
+
 test("a tap on a link opens it", async ({ page }) => {
   await mockVault(page, { files: FILES, open: "Note.md" });
 

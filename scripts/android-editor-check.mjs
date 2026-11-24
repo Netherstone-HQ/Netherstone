@@ -7,7 +7,7 @@
 //   APK=app.apk [VAULT=path/to/sample-vault] node scripts/android-editor-check.mjs out
 //
 // Without VAULT (on CI, which has no copy of the sample vault) it writes the
-// two shards of it that the check opens.
+// shards of it that the check opens.
 // The APK must be built with ORG_GRADLE_PROJECT_netherstoneInspectable=true.
 // The page is read with Playwright's Android support. Taps and long presses
 // go through `adb shell input`, like a finger, so the keyboard and long-press
@@ -30,6 +30,11 @@ const APK = process.env.APK;
 const VAULT = process.env.VAULT ?? smallVault();
 const SHARD = "touch-check";
 // The buttons of Android's own permission prompt, by what they say.
+/** A web page a shard links to: the site, from the app's own list of links. */
+const WEB_PAGE = JSON.parse(fs.readFileSync("src/data/links.json", "utf8")).site;
+/** A one-pixel PNG, pasted as a picture. */
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 const DENY = /^Don.t allow$/;
 const ALLOW = /^While using the app$/;
 
@@ -72,12 +77,14 @@ function smallVault() {
   fs.mkdirSync(path.join(folder, "Guide"));
   fs.writeFileSync(
     path.join(folder, "Start here.md"),
-    "# Start here\n\n- [Writing basics](Guide/Writing%20basics.md): headings, text styles, lists and tasks\n",
+    "# Start here\n\n- [Writing basics](Guide/Writing%20basics.md): headings, text styles, lists and tasks\n" +
+      "- [Links](Guide/Links.md): links between shards, to the web and to headings\n",
   );
   fs.writeFileSync(
     path.join(folder, "Guide", "Writing basics.md"),
     "# Writing basics\n\nEvery heading level, the text styles and the kinds of list. #guide\n",
   );
+  fs.writeFileSync(path.join(folder, "Guide", "Links.md"), `# Links\n\n- [The website](${WEB_PAGE})\n`);
   return folder;
 }
 
@@ -316,6 +323,12 @@ async function startVoiceNote() {
   await tap(page.getByRole("option", { name: "Voice note" }));
 }
 
+/** Drops a voice note a failed step left in the shard, so later steps see the shard as it was. */
+async function discardVoiceNote() {
+  const discard = page.getByRole("group", { name: "Voice note recording" }).getByRole("button", { name: "Discard" });
+  if (await discard.isVisible()) await tap(discard);
+}
+
 const editor = () => page.locator("[data-slate-editor]").first();
 const block = (text) => editor().locator("[data-slate-node=element]").filter({ hasText: text }).last();
 const bar = () => page.getByRole("toolbar", { name: "Formatting" });
@@ -518,25 +531,48 @@ try {
   });
 
   await step("voice-note-refused", async () => {
-    await startVoiceNote();
-    await tapSystemButton(DENY);
-    await expect(page.getByText("Microphone access is off for Netherstone")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open system settings" })).toBeVisible();
-    await tap(page.getByRole("button", { name: "Discard" }));
+    try {
+      await startVoiceNote();
+      await tapSystemButton(DENY);
+      await expect(page.getByText("Microphone access is off for Netherstone")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Open system settings" })).toBeVisible();
+    } finally {
+      await discardVoiceNote();
+    }
   });
 
   await step(
     "voice-note-allowed",
     async () => {
-      // Refused once, Android asks again the next time.
-      await startVoiceNote();
-      await tapSystemButton(ALLOW);
-      await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
-      await tap(page.getByRole("button", { name: "Save" }));
-      await onDisk().toContain(".webm");
+      try {
+        // Refused once, Android asks again the next time.
+        await startVoiceNote();
+        await tapSystemButton(ALLOW);
+        await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
+        await tap(page.getByRole("button", { name: "Save" }));
+        await expect(page.getByRole("group", { name: "Audio" })).toBeVisible();
+        await onDisk().toMatch(/_attachments\/[^)"]+\.webm/);
+      } finally {
+        await discardVoiceNote();
+      }
     },
     { needs: ["voice-note-refused"] },
   );
+
+  await step("paste-picture", async () => {
+    await newLine();
+    // As a keyboard's clipboard pastes it: a file in the paste's data.
+    await editor().evaluate((element, base64) => {
+      const transfer = new DataTransfer();
+      const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+      transfer.items.add(new File([bytes], "pasted.png", { type: "image/png" }));
+      element.dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+      );
+    }, PNG);
+    await onDisk().toContain("_attachments/pasted.png");
+    await poll(() => su(`base64 '${vault}/_attachments/pasted.png' | tr -d '\\n'`)).toBe(PNG);
+  });
 
   await step("hide-keyboard", async () => {
     await tap(block(SHARD), 0.98);
@@ -564,6 +600,18 @@ try {
     await openFromSidebar("Start here");
     await tap(editor().getByText("Writing basics", { exact: true }).first());
     await expect(editor()).toContainText("Every heading level");
+  });
+
+  await step("web-link-tap", async () => {
+    // Phones have no browser panel yet: the page opens in the system's browser.
+    try {
+      await openFromSidebar("Start here");
+      await tap(editor().getByText("Links", { exact: true }).first());
+      await tap(editor().getByText("The website", { exact: true }).first());
+      await poll(appInFront, "the system's browser in front").not.toMatch(new RegExp(`^(${PACKAGE})?$`));
+    } finally {
+      await bringAppBack();
+    }
   });
 
   await step(

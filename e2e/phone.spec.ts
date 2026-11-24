@@ -306,3 +306,36 @@ test("the welcome tour fits a phone: no window buttons, a vault made by name", a
   await expect(page.getByRole("heading", { name: "Where should your knowledge live?" })).toHaveCount(0);
   await page.screenshot({ path: "test-results/phone-onboarding-next.png" });
 });
+
+test("the Trash restores an item, and Select deletes several forever", async ({ page }) => {
+  await page.addInitScript((vault) => {
+    const today = Date.now();
+    window.__appTrash = [
+      { id: "1/2026-11-18.md", name: "2026-11-18.md", from: `${vault}/Journal/2026-11-18.md`, isFolder: false, deletedAt: today, bytes: 2048, historyOf: null },
+      { id: "2/Ideas", name: "Ideas", from: `${vault}/Ideas`, isFolder: true, deletedAt: today, bytes: 1024, historyOf: null },
+      { id: "3/abc", name: "abc", from: "/data/sync/abc", isFolder: true, deletedAt: today, bytes: 4096, historyOf: "Old notes" },
+    ];
+  }, V);
+  await mockVault(page, { files: FILES, nested: true });
+  await page.getByRole("button", { name: /^Vault/ }).first().click();
+  await expect(page.getByRole("button", { name: /^Trash/ })).toContainText("3");
+  await page.getByRole("button", { name: /^Trash/ }).click();
+  await expect(page.getByText("3 items")).toBeVisible();
+  const trash = page.getByRole("region", { name: "Deleted items" });
+  await expect(trash.getByRole("button", { name: /^2026-11-18/ })).toContainText("Journal");
+  await expect(trash.getByRole("button", { name: /^History of Old notes/ })).toContainText("A vault that's gone");
+  await page.screenshot({ path: "test-results/phone-trash.png" });
+
+  await trash.getByRole("button", { name: /^2026-11-18/ }).click();
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(trash.getByRole("button")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByRole("button", { name: "Select all" }).click();
+  await expect(page.getByRole("heading", { name: "2 selected" })).toBeVisible();
+  await page.getByRole("button", { name: "Delete forever" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Delete 2 items forever?");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByText("Trash is empty")).toBeVisible();
+  expect(await page.evaluate(() => window.__appTrash)).toEqual([]);
+});

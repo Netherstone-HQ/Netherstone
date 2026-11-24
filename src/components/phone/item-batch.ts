@@ -4,6 +4,7 @@ import { isSamePath } from "@/lib/drawing-files";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import { usePhoneNav } from "./nav";
+import { rememberedOf, showMovedToTrash } from "./trash";
 import { findNode } from "./vault-tree";
 
 // Pin, move and trash for one row or several picked shards. Each closes
@@ -20,6 +21,7 @@ function nodesOf(paths: string[]): FileTreeNode[] {
 const ACTION_KINDS = new Set<string>([
   "select",
   "row-menu",
+  "shard-menu",
   "rename",
   "move",
   "confirm-trash",
@@ -74,21 +76,27 @@ export async function moveAll(paths: string[], destination: string) {
 export function trashAll(paths: string[]) {
   if (useSettingsStore.getState().confirmBeforeDelete) {
     const { entries, push, replace } = usePhoneNav.getState();
-    // From a row's menu the question takes the menu's place.
-    const open =
-      entries[entries.length - 1]?.kind === "row-menu" ? replace : push;
+    // From a menu the question takes the menu's place.
+    const top = entries[entries.length - 1]?.kind;
+    const open = top === "row-menu" || top === "shard-menu" ? replace : push;
     open({ kind: "confirm-trash", paths });
   } else {
     void runTrash(paths);
   }
 }
 
-/** Moves `paths` to the trash without asking. */
+/** Moves `paths` to the trash without asking, with Undo after. */
 export async function runTrash(paths: string[]) {
+  const trashed: string[] = [];
+  const remembered = rememberedOf(paths);
   try {
-    for (const node of nodesOf(paths)) await deleteItem(node);
+    for (const node of nodesOf(paths)) {
+      const id = await deleteItem(node);
+      if (id) trashed.push(id);
+    }
   } catch (error) {
     reportFailure("Couldn't move to trash", error);
   }
   closeActions();
+  showMovedToTrash(trashed, remembered);
 }

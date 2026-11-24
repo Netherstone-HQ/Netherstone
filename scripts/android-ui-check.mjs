@@ -87,6 +87,46 @@ async function launch() {
   page.on("pageerror", (error) => log("page error:", error.message));
 }
 
+/** Whether `file` is in the app's private storage. */
+const appFileExists = async (file) =>
+  (await shell(`su 0 test -e '${file}' && echo yes || echo no`)) === "yes";
+
+const keyboardUp = async () => /mInputShown=true/.test(await shell("dumpsys input_method"));
+
+/**
+ * Android's own Back key, as a thumb would press it, from a shard to home.
+ * While the keyboard is up, the first press only puts it away.
+ */
+async function backToHome() {
+  if (await keyboardUp()) {
+    await shell("input keyevent KEYCODE_BACK");
+    await expect.poll(keyboardUp, { message: "the keyboard to go away" }).toBe(false);
+  }
+  await shell("input keyevent KEYCODE_BACK");
+  await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+}
+
+/** The shard's row in the Files list on home. */
+const shardRow = (section = "Files") =>
+  page.getByRole("region", { name: section }).getByRole("button", { name: new RegExp(`^${SHARD}`) });
+
+/** Moves the shard to the trash from its row's menu on home. */
+async function trashFromHome() {
+  // A press and hold opens the row's menu, as a right click does.
+  await shardRow().click({ button: "right" });
+  await page.getByRole("button", { name: "Move to trash" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Move to trash" }).click();
+  // The newest one: the toast of a delete just before may still show.
+  await expect(page.getByText("Moved to Trash").last()).toBeVisible();
+  await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} gone` }).toBe(false);
+}
+
+/** Opens the Trash from the vault menu. */
+async function openTrash() {
+  await page.getByRole("button", { name: /^My Vault/ }).click();
+  await page.getByRole("button", { name: /^Trash/ }).click();
+  await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
+}
 // ---- Steps ----
 
 const steps = [];
@@ -177,24 +217,57 @@ try {
     await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toContain(TYPED);
   });
 
-  await step("system-back", async () => {
-    // Android's own Back key, as a thumb would press it. While the keyboard
-    // is up, the first press only puts it away.
-    const keyboardUp = async () =>
-      /mInputShown=true/.test(await shell("dumpsys input_method"));
-    if (await keyboardUp()) {
-      await shell("input keyevent KEYCODE_BACK");
-      await expect.poll(keyboardUp, { message: "the keyboard to go away" }).toBe(false);
-    }
-    await shell("input keyevent KEYCODE_BACK");
-    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
-  });
+  await step("system-back", backToHome);
 
   await step("reopen", async () => {
     await launch();
     const recent = page.getByRole("region", { name: "Recent" });
     await recent.getByRole("button", { name: new RegExp(`^${SHARD}`) }).click();
     await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
+  });
+
+  await step("trash-then-undo", async () => {
+    await backToHome();
+    await trashFromHome();
+    await page.getByRole("button", { name: "Undo" }).last().click();
+    await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} back` }).toBe(true);
+    expect(await readAppFile(shardFile)).toContain(TYPED);
+    // Home remembers it as before.
+    await expect(shardRow("Recent")).toBeVisible();
+  });
+
+  await step("restore-from-trash", async () => {
+    await trashFromHome();
+    await openTrash();
+    await page.getByRole("region", { name: "Deleted items" }).getByRole("button", { name: new RegExp(`^${SHARD}`) }).click();
+    await page.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText("Trash is empty")).toBeVisible();
+    await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} restored` }).toBe(true);
+    expect(await readAppFile(shardFile)).toContain(TYPED);
+  });
+
+  await step("select-and-restore", async () => {
+    await shell("input keyevent KEYCODE_BACK");
+    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+    await trashFromHome();
+    await openTrash();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await page.getByRole("checkbox", { name: new RegExp(`^${SHARD}`) }).click();
+    await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+    await page.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText("Trash is empty")).toBeVisible();
+    await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} restored` }).toBe(true);
+  });
+  await step("empty-trash", async () => {
+    await shell("input keyevent KEYCODE_BACK");
+    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+    await trashFromHome();
+    await openTrash();
+    await page.getByRole("button", { name: "Empty Trash" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Empty Trash" }).click();
+    await expect(page.getByText("Trash is empty")).toBeVisible();
+    // Nothing of it is left in the app's data either.
+    expect(await shell(`su 0 find /data/data/${PACKAGE} -path '*/trash/*'`)).toBe("");
   });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));

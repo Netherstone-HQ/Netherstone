@@ -70,10 +70,15 @@ export async function moveFile(
   return invoke<string>("move_file", { sourcePath, destinationDir });
 }
 
-/** Sends a file or folder in the vault to the trash. */
-export async function deleteVaultPath(targetPath: string): Promise<void> {
+/**
+ * Sends a file or folder in the vault to the trash. On a phone, returns its
+ * id in the app's trash.
+ */
+export async function deleteVaultPath(
+  targetPath: string,
+): Promise<string | null> {
   assertTauri();
-  return invoke("delete_vault_path", { targetPath });
+  return invoke<string | null>("delete_vault_path", { targetPath });
 }
 
 export interface SearchResult {

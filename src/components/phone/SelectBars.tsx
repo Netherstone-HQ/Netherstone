@@ -69,7 +69,8 @@ export function SelectActionBar() {
   );
 }
 
-function BarButton({
+/** A labelled icon button in a bottom bar. */
+export function BarButton({
   label,
   icon,
   disabled,

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,32 +13,9 @@ import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { useVaultStore, type FileTreeNode } from "@/store";
 import { closeActions, moveAll, runTrash } from "./item-batch";
 import { NameSheet } from "./NameSheet";
-import { usePhoneNav, usePhoneOverlay, type PhoneOverlay } from "./nav";
+import { closer, useLast } from "./nav";
 import { RowMenuSheet } from "./RowMenuSheet";
 import { findNode } from "./vault-tree";
-
-type Of<K extends PhoneOverlay["kind"]> = Extract<PhoneOverlay, { kind: K }>;
-
-/**
- * The overlay of `kind` while it's open, and the last one after it closes,
- * so its sheet can slide away showing what it showed.
- */
-function useLast<K extends PhoneOverlay["kind"]>(kind: K) {
-  const overlay = usePhoneOverlay();
-  const [last, setLast] = useState<Of<K> | null>(null);
-  const current = overlay?.kind === kind ? (overlay as Of<K>) : null;
-  if (current && current !== last) setLast(current);
-  return { open: current !== null, overlay: current ?? last };
-}
-
-/** Closes `kind` when its sheet or dialog asks to, unless it's gone already. */
-function closer(kind: PhoneOverlay["kind"]) {
-  return (open: boolean) => {
-    if (open) return;
-    const { entries, back } = usePhoneNav.getState();
-    if (entries[entries.length - 1]?.kind === kind) back();
-  };
-}
 
 function displayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;

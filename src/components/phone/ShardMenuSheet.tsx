@@ -23,6 +23,7 @@ import {
 } from "@/components/sidebar/right-sidebar/useShardInfo";
 import { useVaultItem } from "@/components/vault/useVaultItem";
 import { openFileHistory } from "@/lib/open-vault-file";
+import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { usePhoneNav } from "./nav";
 
@@ -110,10 +111,7 @@ export function ShardMenuSheet({
         <BottomSheetItem
           danger
           icon={<TrashIcon />}
-          onClick={() => {
-            close(false);
-            item.trash();
-          }}
+          onClick={() => trashAll([path])}
         >
           Move to trash
         </BottomSheetItem>

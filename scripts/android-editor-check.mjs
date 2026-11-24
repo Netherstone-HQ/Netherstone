@@ -525,14 +525,18 @@ try {
     await tap(page.getByRole("button", { name: "Discard" }));
   });
 
-  await step("voice-note-allowed", async () => {
-    // Refused once, Android asks again the next time.
-    await startVoiceNote();
-    await tapSystemButton(ALLOW);
-    await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
-    await tap(page.getByRole("button", { name: "Save" }));
-    await onDisk().toContain(".webm");
-  });
+  await step(
+    "voice-note-allowed",
+    async () => {
+      // Refused once, Android asks again the next time.
+      await startVoiceNote();
+      await tapSystemButton(ALLOW);
+      await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
+      await tap(page.getByRole("button", { name: "Save" }));
+      await onDisk().toContain(".webm");
+    },
+    { needs: ["voice-note-refused"] },
+  );
 
   await step("hide-keyboard", async () => {
     await tap(block(SHARD), 0.98);

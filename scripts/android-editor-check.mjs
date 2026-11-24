@@ -215,9 +215,17 @@ async function tapSystemButton(label) {
   await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
-/** Text typed on the keyboard, one key at a time. */
+/**
+ * Text typed on the keyboard, one key at a time, each sent on its own as a
+ * finger would. One `input text` for the whole text sends the keys within
+ * a millisecond or so, faster than any typing: right after a / menu turned
+ * the line into a quote, 2 lines in 25 then came out with two letters
+ * swapped ("quotedl ine"), and none in 25 typed key by key.
+ */
 async function typeKeys(text) {
-  await shell(`input text '${text.replaceAll(" ", "%s")}'`);
+  for (const key of text) {
+    await shell(key === " " ? "input keyevent KEYCODE_SPACE" : `input text '${key}'`);
+  }
 }
 
 const keyboardInset = () =>

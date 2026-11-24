@@ -487,19 +487,6 @@ export async function retryVoiceNote() {
   await startCapture(current);
 }
 
-/**
- * On a phone, saves a recording when the app goes out of sight: Android may
- * stop the app then without warning, and a phone switches apps far more
- * often than a computer closes a window. Returns a cleanup.
- */
-export function saveVoiceNoteWhenHidden(): () => void {
-  const onChange = () => {
-    if (document.visibilityState === "hidden") void finishVoiceNoteBeforeLeaving();
-  };
-  document.addEventListener("visibilitychange", onChange);
-  return () => document.removeEventListener("visibilitychange", onChange);
-}
-
 /** Whether a recording would be lost if the app closed now. */
 export function hasVoiceNote(): boolean {
   return session !== null;

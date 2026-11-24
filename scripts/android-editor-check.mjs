@@ -687,6 +687,27 @@ try {
     typed,
   );
 
+  await step(
+    "voice-note-shard",
+    async () => {
+      // Home's microphone makes a shard named for today and records in it.
+      await openFromHome(SHARD);
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(home()).toBeVisible();
+      await page.getByRole("button", { name: "Record a voice note" }).click();
+      await expect(page.getByRole("heading", { name: /^Voice note, / })).toBeVisible();
+      await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
+      // Out of sight, Android may stop the app at any time: the recording
+      // is saved as it goes.
+      await shell("input keyevent KEYCODE_HOME");
+      await poll(appInFront, "the launcher in front").not.toBe(PACKAGE);
+      const saved = () => su(`cat "$(find '${vault}' -maxdepth 1 -name 'Voice note, *.md' | head -1)"`);
+      await poll(saved, "the recording saved into its shard").toMatch(/_attachments\/[^)"]+\.webm/);
+      await bringAppBack();
+      await expect(page.getByRole("group", { name: "Audio" })).toBeVisible();
+    },
+    { needs: ["voice-note-allowed"] },
+  );
   await step("photo-shard", async () => {
     // The camera on home's bar makes a shard of the photo, named for today.
     await openFromHome(SHARD);

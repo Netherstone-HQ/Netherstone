@@ -27,14 +27,14 @@ const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-editor-check";
 const APK = process.env.APK;
-const VAULT = process.env.VAULT ?? smallVault();
-const SHARD = "touch-check";
-// The buttons of Android's own permission prompt, by what they say.
 /** A web page a shard links to: the site, from the app's own list of links. */
 const WEB_PAGE = JSON.parse(fs.readFileSync("src/data/links.json", "utf8")).site;
 /** A one-pixel PNG, pasted as a picture. */
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+const VAULT = process.env.VAULT ?? smallVault();
+const SHARD = "touch-check";
+// The buttons of Android's own permission prompt, by what they say.
 const DENY = /^Don.t allow$/;
 const ALLOW = /^While using the app$/;
 

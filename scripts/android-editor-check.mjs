@@ -33,6 +33,8 @@ const WEB_PAGE = LINKS.site;
 /** A one-pixel PNG, pasted as a picture. */
 const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+/** A picture for the phone's gallery, for the photo picker to offer. */
+const GALLERY_PICTURE = "src-tauri/icons/32x32.png";
 const VAULT = process.env.VAULT ?? smallVault();
 const SHARD = "touch-check";
 // The buttons of Android's own permission prompt, by what they say.
@@ -201,8 +203,10 @@ async function tapSystemButton(label) {
   const layout = "/data/local/tmp/layout.xml";
   const boundsOf = async () => {
     const xml = await shell(`rm -f ${layout}; uiautomator dump ${layout} > /dev/null 2>&1; cat ${layout}`);
-    for (const [, text, bounds] of xml.matchAll(/text="([^"]*)"[^>]*bounds="([^"]+)"/g)) {
-      if (label.test(text)) return bounds;
+    for (const [, text, description, bounds] of xml.matchAll(
+      /text="([^"]*)"[^>]*content-desc="([^"]*)"[^>]*bounds="([^"]+)"/g,
+    )) {
+      if (label.test(text) || label.test(description)) return bounds;
     }
     return null;
   };
@@ -344,6 +348,20 @@ const editor = () => page.locator("[data-slate-editor]").first();
 const block = (text) => editor().locator("[data-slate-node=element]").filter({ hasText: text }).last();
 const bar = () => page.getByRole("toolbar", { name: "Formatting" });
 const home = () => page.getByRole("button", { name: "Search this vault" });
+
+/** Picks `item` from the bar's Insert sheet, on a new line. */
+async function insertFromBar(item) {
+  await newLine();
+  await tap(bar().getByRole("button", { name: "Insert", exact: true }));
+  await tap(page.getByRole("dialog").getByRole("button", { name: item, exact: true }));
+}
+
+/** Takes a picture in the camera app the app opened, and hands it back. */
+async function takePhoto() {
+  await tapSystemButton(/^Shutter$/);
+  await tapSystemButton(/^Done$/);
+  await poll(appInFront, "the app back in front").toBe(PACKAGE);
+}
 
 /** Goes back to the vault's home with the app's own Back, then opens a shard listed there. */
 async function openFromHome(name) {
@@ -574,6 +592,34 @@ try {
     await poll(() => su(`base64 '${vault}/_attachments/pasted.png' | tr -d '\\n'`)).toBe(PNG);
   });
 
+  await step("picture-from-phone", async () => {
+    // A picture in the phone's gallery, where the photo picker finds it:
+    // the app's icon, so it isn't the pasted picture the vault has already.
+    // A new name each run: the gallery keeps what it knew of an old file
+    // by its name, its size too.
+    const inGallery = `/sdcard/Pictures/netherstone-check-${Date.now()}.png`;
+    adb("push", GALLERY_PICTURE, inGallery);
+    await shell("content call --method scan_volume --uri content://media --arg external_primary");
+    await insertFromBar("Picture");
+    await tapSystemButton(/^Photo taken on/);
+    await tapSystemButton(/^Add \(1\)$/);
+    await poll(appInFront, "the app back in front").toBe(PACKAGE);
+    // The picker names it by its number; the app gives it a word instead.
+    await onDisk().toContain("_attachments/picture.png");
+    await poll(() => su(`base64 '${vault}/_attachments/picture.png' | tr -d '\\n'`)).toBe(
+      fs.readFileSync(GALLERY_PICTURE).toString("base64"),
+    );
+    // The gallery as it was, once the app has read the picture.
+    await shell(`rm -f ${inGallery}`);
+    await shell("content call --method scan_volume --uri content://media --arg external_primary");
+  });
+
+  await step("photo-from-camera", async () => {
+    await insertFromBar("Take a photo");
+    await takePhoto();
+    await onDisk().toMatch(/_attachments\/photo(-\d+)?\.jpg/);
+  });
+
   await step("hide-keyboard", async () => {
     await tap(block(SHARD), 0.98);
     await expect(bar()).toBeVisible();
@@ -640,6 +686,19 @@ try {
     },
     typed,
   );
+
+  await step("photo-shard", async () => {
+    // The camera on home's bar makes a shard of the photo, named for today.
+    await openFromHome(SHARD);
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(home()).toBeVisible();
+    await page.getByRole("button", { name: "Take a photo" }).click();
+    await takePhoto();
+    await expect(page.getByRole("heading", { name: /^Photo, / })).toBeVisible();
+    await expect(editor().getByRole("img")).toBeVisible();
+    const made = await su(`find '${vault}' -maxdepth 1 -name 'Photo, *.md'`);
+    expect(made).not.toBe("");
+  });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));
   const summary = steps.map((s) => `${s.ok ? "pass" : s.skipped ? "skip" : "FAIL"} ${s.name}`).join("\n");

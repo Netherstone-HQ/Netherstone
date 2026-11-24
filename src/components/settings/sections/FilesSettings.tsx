@@ -2,6 +2,7 @@ import { FolderInput, Link2 } from "lucide-react";
 
 import { AttachmentsSection } from "@/components/settings/AttachmentsSection";
 import { SettingsGroup } from "@/components/settings/settings-ui";
+import { IS_ANDROID } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   type MediaInsertionPreference,
@@ -35,61 +36,64 @@ export function FilesSettings() {
 
   return (
     <>
-      <SettingsGroup
-        title="Adding files"
-        description="When you add a file from your computer to a shard"
-      >
-        <fieldset className="flex flex-col gap-2 p-2">
-          <legend className="sr-only">Adding files</legend>
-          {INSERT_OPTIONS.map((option) => {
-            const Icon = option.icon;
-            const checked = value === option.value;
-            return (
-              <label
-                key={option.value}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-lg border border-transparent p-3 transition-colors hover:bg-accent/40",
-                  checked && "border-primary/40 bg-accent/50",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="media-insertion-preference"
-                  value={option.value}
-                  checked={checked}
-                  onChange={() =>
-                    setPreference("mediaInsertionPreference", option.value)
-                  }
-                  className="sr-only"
-                />
-                <span
+      {/* A phone's files can't be linked where they are: they're always copied in. */}
+      {IS_ANDROID ? null : (
+        <SettingsGroup
+          title="Adding files"
+          description="When you add a file from your computer to a shard"
+        >
+          <fieldset className="flex flex-col gap-2 p-2">
+            <legend className="sr-only">Adding files</legend>
+            {INSERT_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const checked = value === option.value;
+              return (
+                <label
+                  key={option.value}
                   className={cn(
-                    "mt-0.5 rounded-md border p-1.5 text-muted-foreground",
-                    checked && "border-primary/30 bg-primary/10 text-primary",
+                    "flex cursor-pointer items-start gap-3 rounded-lg border border-transparent p-3 transition-colors hover:bg-accent/40",
+                    checked && "border-primary/40 bg-accent/50",
                   )}
                 >
-                  <Icon className="size-4" />
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="block font-medium text-ui">
-                    {option.title}
+                  <input
+                    type="radio"
+                    name="media-insertion-preference"
+                    value={option.value}
+                    checked={checked}
+                    onChange={() =>
+                      setPreference("mediaInsertionPreference", option.value)
+                    }
+                    className="sr-only"
+                  />
+                  <span
+                    className={cn(
+                      "mt-0.5 rounded-md border p-1.5 text-muted-foreground",
+                      checked && "border-primary/30 bg-primary/10 text-primary",
+                    )}
+                  >
+                    <Icon className="size-4" />
                   </span>
-                  <span className="block text-muted-foreground text-ui-sm leading-5">
-                    {option.description}
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="block font-medium text-ui">
+                      {option.title}
+                    </span>
+                    <span className="block text-muted-foreground text-ui-sm leading-5">
+                      {option.description}
+                    </span>
                   </span>
-                </span>
-                <span
-                  aria-hidden
-                  className={cn(
-                    "mt-1 size-4 shrink-0 rounded-full border",
-                    checked && "border-[5px] border-primary",
-                  )}
-                />
-              </label>
-            );
-          })}
-        </fieldset>
-      </SettingsGroup>
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-1 size-4 shrink-0 rounded-full border",
+                      checked && "border-[5px] border-primary",
+                    )}
+                  />
+                </label>
+              );
+            })}
+          </fieldset>
+        </SettingsGroup>
+      )}
 
       <AttachmentsSection />
     </>

@@ -1,7 +1,11 @@
-import { PlusIcon } from "lucide-react";
+import { CameraIcon, PlusIcon } from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
 import { PhoneIconButton } from "./parts";
-import { createDrawingIn, createUntitledShard } from "./create";
+import {
+  createDrawingIn,
+  createPhotoShard,
+  createUntitledShard,
+} from "./create";
 
 /**
  * The bar along the bottom of home and folders: ways to capture on the
@@ -17,6 +21,12 @@ export function CaptureBar({
   return (
     <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
       <div className="flex h-20 items-center pr-4 pl-1">
+        <PhoneIconButton
+          label="Take a photo"
+          onClick={() => void createPhotoShard(vaultPath, folder)}
+        >
+          <CameraIcon />
+        </PhoneIconButton>
         <PhoneIconButton
           label="New drawing"
           onClick={() => void createDrawingIn(vaultPath, folder)}

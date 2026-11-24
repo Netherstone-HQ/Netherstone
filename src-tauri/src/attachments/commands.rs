@@ -128,7 +128,7 @@ pub(crate) fn persist_attachment_bytes(
     let conn = db::open_connection()?;
 
     let attachment =
-        store::persist_attachment_bytes(&conn, vault, &file_name, export::raw_body(&request)?)?;
+        store::persist_attachment_bytes(&conn, vault, &file_name, &export::body_bytes(&request)?)?;
     asset_scope::show_linked_file(&app, Path::new(&attachment.absolute_path));
     Ok(attachment)
 }

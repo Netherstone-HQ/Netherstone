@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { bytesBody } from "./bytes";
 import { assertTauri } from "./tauri";
 
 export type ExportFileFormat = "html" | "pdf" | "docx";
@@ -26,7 +27,7 @@ export async function writeExportFile(
   bytes: Uint8Array,
 ): Promise<void> {
   assertTauri();
-  await invoke("write_export_file", bytes, {
+  await invoke("write_export_file", bytesBody(bytes), {
     headers: { "x-export-path": encodeURIComponent(path) },
   });
 }

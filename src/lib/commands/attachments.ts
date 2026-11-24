@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { bytesBody } from "./bytes";
 import { assertTauri } from "./tauri";
 
 export type MediaDialogKind = "audio" | "file" | "image" | "video";
@@ -117,7 +118,7 @@ export async function persistAttachmentBytes(
   vaultPath: string,
 ): Promise<PersistedAttachment> {
   assertTauri();
-  return invoke<PersistedAttachment>("persist_attachment_bytes", bytes, {
+  return invoke<PersistedAttachment>("persist_attachment_bytes", bytesBody(bytes), {
     headers: {
       "x-file-name": encodeURIComponent(fileName),
       "x-vault-path": encodeURIComponent(vaultPath),

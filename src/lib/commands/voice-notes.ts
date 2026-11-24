@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PersistedAttachment } from "./attachments";
+import { bytesBody } from "./bytes";
 import { assertTauri } from "./tauri";
 
 /** Why a recording couldn't be written or saved. */
@@ -27,7 +28,7 @@ export async function beginVoiceNote(): Promise<{ syncLimitBytes: number }> {
 /** Adds bytes to the recording's temporary file. */
 export async function appendVoiceNote(bytes: Uint8Array): Promise<void> {
   assertTauri();
-  await invoke("voice_note_append", bytes);
+  await invoke("voice_note_append", bytesBody(bytes));
 }
 
 /**
@@ -41,7 +42,7 @@ export async function saveVoiceNote(
   replaces: number,
 ): Promise<PersistedAttachment> {
   assertTauri();
-  return invoke<PersistedAttachment>("voice_note_save", head, {
+  return invoke<PersistedAttachment>("voice_note_save", bytesBody(head), {
     headers: {
       "x-file-name": encodeURIComponent(fileName),
       "x-vault-path": encodeURIComponent(vaultPath),

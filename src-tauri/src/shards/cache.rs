@@ -39,7 +39,8 @@ pub(crate) fn write_shard_cache(request: tauri::ipc::Request<'_>) -> Result<(), 
     let vault_path = export::header(&request, "x-vault-path").ok_or_else(|| missing("vault"))?;
     let file_path = export::header(&request, "x-file-path").ok_or_else(|| missing("shard"))?;
     let markdown_bytes = export::header(&request, "x-markdown-bytes");
-    let (markdown, tree) = split_shard_cache(export::raw_body(&request)?, markdown_bytes)?;
+    let body = export::body_bytes(&request)?;
+    let (markdown, tree) = split_shard_cache(&body, markdown_bytes)?;
 
     write_ast_cache(&vault_path, &file_path, markdown, |conn, content_hash| {
         db::ast_cache::upsert_ast_cache_json(

@@ -120,12 +120,12 @@ pub fn voice_note_begin() -> Result<Started, WriteError> {
 /// Adds the body to the recording's temporary file.
 #[tauri::command(async)]
 pub fn voice_note_append(request: tauri::ipc::Request<'_>) -> Result<(), WriteError> {
-    let bytes = export::raw_body(&request)?;
+    let bytes = export::body_bytes(&request)?;
     let mut current = RECORDING.lock().map_err(|e| e.to_string())?;
     let recording = current.as_mut().ok_or_else(|| WriteError::Failed {
         message: "No recording is running.".into(),
     })?;
-    recording.file.write_all(bytes)?;
+    recording.file.write_all(&bytes)?;
     Ok(())
 }
 
@@ -144,7 +144,7 @@ pub fn voice_note_save(
     let replaced: u64 = export::header(&request, "x-head-replaces")
         .and_then(|value| value.parse().ok())
         .unwrap_or_default();
-    let head = export::raw_body(&request)?;
+    let head = export::body_bytes(&request)?;
     open_vault_only(&vault_path)?;
     let vault = Path::new(&vault_path);
 
@@ -153,7 +153,7 @@ pub fn voice_note_save(
         message: "No recording is running.".into(),
     })?;
     recording.file.sync_all()?;
-    let finished = with_head(&recording.path, head, replaced)?;
+    let finished = with_head(&recording.path, &head, replaced)?;
     let size = std::fs::metadata(&finished)?.len();
     if !has_room(vault, size) {
         let _ = std::fs::remove_file(&finished);

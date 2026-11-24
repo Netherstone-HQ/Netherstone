@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import {
+  ANDROID_PHONE,
   caretAfter,
   editor,
   expect,
@@ -129,6 +130,22 @@ test("a voice note records at the cursor and saves as a WebM clip", async ({ pag
   await expect(page.getByRole("group", { name: "Audio" })).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+Shift+z");
   await expect(page.getByRole("group", { name: "Audio" })).toHaveCount(1);
+});
+
+test.describe("on Android", () => {
+  test.use({ userAgent: ANDROID_PHONE });
+
+  test("a voice note is saved", async ({ page }) => {
+    await openVault(page);
+    await startFromSlash(page);
+    await expect(timer(page)).not.toHaveText("0:00");
+    await block(page).getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("group", { name: "Audio" })).toBeVisible();
+
+    const clip = await savedClip(page);
+    // An EBML (WebM) file.
+    expect(clip.bytes.slice(0, 4)).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+  });
 });
 
 test("discard leaves Undo, which brings the recording back", async ({ page }) => {

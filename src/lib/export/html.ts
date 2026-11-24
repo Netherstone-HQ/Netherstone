@@ -5,7 +5,8 @@
  */
 
 
-import { cachedBase64, toBase64, type ImageMap } from "./assets";
+import { toBase64 } from "@/lib/commands/bytes";
+import { cachedBase64, type ImageMap } from "./assets";
 import { HTML_FONT_FACES, type HtmlFontFace } from "./html-fonts";
 import { KATEX_FONT_URLS, katexCss } from "./katex-assets";
 import { mathEngine } from "./math";

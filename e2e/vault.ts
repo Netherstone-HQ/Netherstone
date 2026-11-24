@@ -12,6 +12,10 @@ import { test as base, expect, type Locator, type Page, type Route } from "@play
 
 export const VAULT_PATH = "/home/me/Vault";
 
+/** What Android's webview reports, so the app takes its phone paths. */
+export const ANDROID_PHONE =
+  "Mozilla/5.0 (Linux; Android 15; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36";
+
 /**
  * The app's own Content-Security-Policy, as Tauri serves it: the policy from
  * tauri.conf.json plus the hash of each inline script in the page.
@@ -325,6 +329,13 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
 
       type Args = Record<string, string>;
       type Options = { headers?: Record<string, string> };
+      // What the app's commands read: raw bytes, or { base64 } from Android's webview.
+      const bytesOf = (body: unknown): Uint8Array => {
+        const base64 = (body as { base64?: unknown }).base64;
+        return typeof base64 === "string"
+          ? Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+          : (body as Uint8Array);
+      };
       const handlers: Record<string, (args: Args, options?: Options) => unknown> = {
         scan_vault: ({ vaultPath }) => {
           allowFolder(vaultPath);
@@ -390,7 +401,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           allowFolder(decodeURIComponent(options!.headers!["x-vault-path"]));
           const assetPath = `_attachments/${decodeURIComponent(options!.headers!["x-file-name"])}`;
           binaries[assetPath] = btoa(
-            String.fromCharCode(...(bytes as unknown as Uint8Array)),
+            String.fromCharCode(...bytesOf(bytes)),
           );
           return {
             assetPath,
@@ -404,7 +415,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           return { syncLimitBytes: 20 * 1024 * 1024 };
         },
         voice_note_append: (bytes) => {
-          window.__voiceNote?.push(...(bytes as unknown as Uint8Array));
+          window.__voiceNote?.push(...bytesOf(bytes));
           return null;
         },
         voice_note_save: (head, options) => {
@@ -413,7 +424,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
           const name = decodeURIComponent(headers["x-file-name"]);
           const assetPath = `_attachments/${name}`;
           const rest = (window.__voiceNote ?? []).slice(Number(headers["x-head-replaces"]));
-          const file = [...(head as unknown as Uint8Array), ...rest];
+          const file = [...bytesOf(head), ...rest];
           let text = "";
           for (const byte of file) text += String.fromCharCode(byte);
           binaries[assetPath] = btoa(text);
@@ -443,7 +454,7 @@ export async function mockVault(page: Page, options: MockVaultOptions) {
         choose_export_path: ({ defaultName, format }) =>
           `/home/me/${defaultName}.${format}`,
         write_export_file: (bytes) => {
-          const head = (bytes as unknown as Uint8Array).subarray(0, 16);
+          const head = bytesOf(bytes).subarray(0, 16);
           window.__exports.push(String.fromCharCode(...head));
           return null;
         },

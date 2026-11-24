@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import {
+  ANDROID_PHONE,
   caretAfter,
   editor,
   expect,
@@ -18,13 +19,15 @@ import {
  * tablet-wide so the desktop sidebars leave the shard room.
  */
 test.use({
-  userAgent:
-    "Mozilla/5.0 (Linux; Android 15; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36",
+  userAgent: ANDROID_PHONE,
   hasTouch: true,
   viewport: { width: 1024, height: 900 },
 });
 
 const KEYBOARD = 300;
+/** A one-pixel PNG. */
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
 const FILES = {
   "Note.md":
@@ -295,4 +298,28 @@ test("a keyboard correction aimed outside the editor replaces the typed word", a
 
   await expect.poll(() => lastSave(page, "Note.md")).toContain("This is rather");
   expect(await lastSave(page, "Note.md")).not.toContain("ratherather");
+});
+
+test("a picture pasted on Android is added to the vault", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { isTauri: boolean }).isTauri = true;
+  });
+  await mockVault(page, { files: FILES, open: "Note.md" });
+  await typeAt(page, "First line.");
+  await page.keyboard.press("Enter");
+
+  // As a keyboard's clipboard pastes it: a file in the paste's data.
+  await editor(page).evaluate((element, base64) => {
+    const transfer = new DataTransfer();
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    transfer.items.add(new File([bytes], "pasted.png", { type: "image/png" }));
+    element.dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }),
+    );
+  }, PNG);
+
+  await expect
+    .poll(() => page.evaluate(() => window.__binaries["_attachments/pasted.png"]))
+    .toBe(PNG);
+  await expect.poll(() => lastSave(page, "Note.md")).toContain("_attachments/pasted.png");
 });

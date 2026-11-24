@@ -4,6 +4,7 @@
  * computer, images on the web and inline data URLs.
  */
 
+import { toBase64 } from "@/lib/commands/bytes";
 import {
   getFilesystemPathFromMediaSource,
   isDataMediaSource,
@@ -238,16 +239,6 @@ export function createBrowserAssetIO(
       }
     },
   };
-}
-
-/** Base64 of `bytes`, in chunks so large images don't overflow the stack. */
-export function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
-  }
-  return btoa(binary);
 }
 
 const base64Cache = new WeakMap<Uint8Array, string>();

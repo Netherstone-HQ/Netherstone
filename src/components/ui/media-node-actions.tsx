@@ -10,6 +10,7 @@ import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
 import {
   confirmAttachmentCopies,
   openMediaFilesDialog,
+  persistAttachmentBytes,
   persistAttachmentFile,
   type MediaDialogKind,
   type PersistedAttachment,
@@ -19,6 +20,8 @@ import {
   normalizeMediaSourceValue,
   resolveMediaRenderUrl,
 } from "@/lib/media-source";
+import { pickFiles } from "@/lib/pick-files";
+import { IS_ANDROID } from "@/lib/platform";
 import { useEditorStore, useVaultStore } from "@/store";
 
 import type { PersistedMediaElementBase } from "./media-types";
@@ -161,6 +164,39 @@ async function buildVaultImportPatch(
   vaultPath: string,
 ): Promise<{ patch: MediaNodeActionPatch; attachment: PersistedAttachment }> {
   const persisted = await persistAttachmentFile(sourcePath, vaultPath);
+  return vaultPatch(element, persisted, sourcePath, vaultPath);
+}
+
+/**
+ * On Android, a file of `kind` picked from the phone, copied into the vault
+ * as it is: the phone's files have no path to link to.
+ */
+async function pickIntoVault(
+  element: PersistedMediaElement,
+  kind: MediaDialogKind,
+  vaultPath: string,
+): Promise<{
+  patch: MediaNodeActionPatch;
+  attachment: PersistedAttachment;
+  name: string;
+} | null> {
+  const [file] = await pickFiles(kind);
+  if (!file) return null;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const persisted = await persistAttachmentBytes(file.name, bytes, vaultPath);
+  return {
+    ...vaultPatch(element, persisted, file.name, vaultPath),
+    name: file.name,
+  };
+}
+
+/** The block's fields for a file now stored in the vault. */
+function vaultPatch(
+  element: PersistedMediaElement,
+  persisted: PersistedAttachment,
+  sourcePath: string,
+  vaultPath: string,
+): { patch: MediaNodeActionPatch; attachment: PersistedAttachment } {
   const namePatch = shouldPersistName(element)
     ? { name: getPathBaseName(sourcePath) }
     : {};
@@ -267,6 +303,21 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
           throw new Error("Open a shard before relinking vault attachments.");
         }
 
+        if (sourcePath === null && IS_ANDROID) {
+          const picked = await pickIntoVault(
+            element,
+            effectiveMediaKind,
+            currentVaultPath,
+          );
+          if (!picked) return;
+          updateCurrentNode(picked.patch);
+          notifyAttachmentSyncStatus([picked.attachment]);
+          toast.success(getReplacementSuccessLabel(element), {
+            description: picked.name,
+          });
+          return;
+        }
+
         const replacementPath =
           sourcePath ?? (await pickSingleMediaPath(effectiveMediaKind));
         if (!replacementPath) return;
@@ -310,6 +361,20 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
       }
 
       const existingLocalPath = getAbsoluteLocalSourceCandidate(element);
+      if (!existingLocalPath && IS_ANDROID) {
+        const picked = await pickIntoVault(
+          element,
+          effectiveMediaKind,
+          currentVaultPath,
+        );
+        if (!picked) return;
+        updateCurrentNode(picked.patch);
+        notifyAttachmentSyncStatus([picked.attachment]);
+        toast.success(getImportSuccessLabel(element), {
+          description: picked.name,
+        });
+        return;
+      }
       if (
         existingLocalPath &&
         !(await confirmAttachmentCopies([existingLocalPath]))
@@ -366,7 +431,8 @@ export function useMediaNodeActions<TElement extends PersistedMediaElement>({
     (!!normalizeMediaSourceValue(element.netherstoneOriginalPath) ||
       !!getAbsoluteLocalSourceCandidate(element) ||
       !!currentFilePath);
-  const canRelinkLocalFile = !readOnly;
+  // A phone's files have no path to link to; they're copied in instead.
+  const canRelinkLocalFile = !readOnly && !IS_ANDROID;
   const canRelinkVaultAttachment =
     !readOnly && !!currentVaultPath && !!currentFilePath;
 

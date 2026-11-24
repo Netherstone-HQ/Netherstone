@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { FontColorToolbarButton } from "@/components/ui/font-color-toolbar-button";
 import { insertGroups } from "@/components/ui/insert-toolbar-button";
+import { phoneMediaGroup } from "./insert-media";
 import { Toolbar } from "@/components/ui/toolbar";
 import { hasInlineAsk, openInlineAsk } from "@/lib/inline-ask";
 import { useKeyboard } from "@/lib/system-insets";
@@ -291,7 +292,15 @@ function StylePanel({ height }: { height: number }) {
   );
 }
 
-/** Everything the desktop Insert menu offers, as a sheet. */
+/**
+ * What the desktop Insert menu offers, with media picked from the phone or
+ * taken with its camera.
+ */
+const phoneInsertGroups = insertGroups.map((group) =>
+  group.group === phoneMediaGroup.group ? phoneMediaGroup : group,
+);
+
+/** Everything Insert offers on a phone, as a sheet. */
 function InsertSheet({
   open,
   onOpenChange,
@@ -311,7 +320,7 @@ function InsertSheet({
         editor.tf.focus();
       }}
     >
-      {insertGroups.map(({ group, items }, index) => (
+      {phoneInsertGroups.map(({ group, items }, index) => (
         <div key={group} role="group" aria-label={group}>
           {index > 0 && <BottomSheetSeparator />}
           {items.map(({ icon, label, value, onSelect }) => (

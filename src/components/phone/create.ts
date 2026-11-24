@@ -1,6 +1,21 @@
+import { KEYS, createSlateEditor } from "platejs";
 import { toast } from "sonner";
+import { managedMediaNode } from "@/components/editor/lib/media-insert";
+import { SerializationKit } from "@/components/editor/serialization-kit";
+import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
+import {
+  fileExists,
+  persistAttachmentBytes,
+} from "@/lib/commands/attachments";
+import { serializeEditorMarkdown } from "@/lib/editor-markdown";
 import { createDrawing } from "@/lib/open-vault-file";
-import { createFolder, createShardFile } from "@/lib/commands/shards";
+import {
+  appendMarkdownToFile,
+  createFolder,
+  createShardFile,
+  renameFile,
+} from "@/lib/commands/shards";
+import { pickFiles } from "@/lib/pick-files";
 import {
   createEmptyVault,
   vaultErrorText,
@@ -52,6 +67,61 @@ export async function createFolderIn(
   } catch (error) {
     return message(error);
   }
+}
+
+/** Today as a shard's title says it: "24 Nov". */
+function today() {
+  return new Date().toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/** `title`, or "`title` 2" and so on, whichever is free in `folder`. */
+async function freeTitle(folder: string, title: string) {
+  for (let count = 1; ; count += 1) {
+    const candidate = count === 1 ? title : `${title} ${count}`;
+    if (!(await fileExists(joinPath(folder, `${candidate}.md`))))
+      return candidate;
+  }
+}
+
+/**
+ * Takes a picture with the camera app and makes a shard of it in `folder`,
+ * titled with today's date ("Photo, 24 Nov"), then opens it. Nothing is
+ * made when the camera is closed without a picture.
+ */
+export async function createPhotoShard(vaultPath: string, folder: string) {
+  const [photo] = await pickFiles("image", { camera: true });
+  if (!photo) return;
+  let filePath: string;
+  try {
+    const persisted = await persistAttachmentBytes(
+      photo.name,
+      new Uint8Array(await photo.arrayBuffer()),
+      vaultPath,
+    );
+    const title = await freeTitle(folder, `Photo, ${today()}`);
+    filePath = await renameFile(await createShardFile(folder), title);
+    const editor = createSlateEditor({
+      plugins: SerializationKit,
+      value: [
+        { type: KEYS.h1, children: [{ text: title }] },
+        managedMediaNode(persisted, KEYS.img, photo.name),
+      ],
+    });
+    await appendMarkdownToFile(
+      filePath,
+      serializeEditorMarkdown(editor, { filePath }),
+    );
+    notifyAttachmentSyncStatus([persisted]);
+  } catch (error) {
+    toast.error("Couldn't save the photo", { description: message(error) });
+    return;
+  }
+  await openFileScreen(filePath);
+  await refreshTree(vaultPath);
+  await indexVault(vaultPath);
 }
 
 /** Makes an untitled drawing in `folder` and opens it. */

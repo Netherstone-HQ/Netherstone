@@ -227,6 +227,17 @@ try {
       await expect.poll(appInFront, { message: "the app back in front" }).toBe(true);
     });
   }
+
+  await step("print-pdf", async () => {
+    // A PDF goes through Android's print screen, which saves it as a PDF.
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+    await page.getByRole("button", { name: "PDF", exact: true }).click();
+    await expect.poll(screenText, { message: "the print screen with a page" }).toMatch(/Paper size:[\s\S]*1\/1/);
+    await shell("input keyevent KEYCODE_BACK");
+    await expect.poll(appInFront, { message: "the app back in front" }).toBe(true);
+    await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
+  });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));
   try {

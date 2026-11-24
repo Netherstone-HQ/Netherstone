@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import {
   FileCodeIcon,
+  FileTextIcon,
   FileTypeIcon,
   FolderInputIcon,
   ClockIcon,
@@ -38,6 +39,7 @@ type Part = "menu" | "outline" | "links" | "rename" | "export";
 
 /** What a shard can be shared as from a phone. */
 const SHARED_FORMATS: { format: ExportFormat; label: string; icon: ReactNode }[] = [
+  { format: "pdf", label: "PDF", icon: <FileTextIcon /> },
   { format: "docx", label: "Word document", icon: <FileTypeIcon /> },
   { format: "html", label: "Web page", icon: <FileCodeIcon /> },
 ];

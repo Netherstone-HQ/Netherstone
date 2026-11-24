@@ -3,9 +3,15 @@ name: Android
 # Builds the Android app on request (Actions > Android > Run workflow): the
 # arm64 APK is checked against the size budget, and an x86_64 build is driven
 # on an emulator (scripts/android-ui-check.mjs). Run it on a branch before a
-# build goes to a phone.
+# build goes to a phone. With "Report only", failed checks show in the run's
+# summary and artifacts but don't fail the run.
 on:
   workflow_dispatch:
+    inputs:
+      report:
+        description: Report only
+        type: boolean
+        default: false
 
 concurrency:
   group: android-${{ github.ref }}
@@ -122,6 +128,7 @@ jobs:
         with:
           name: apk-x86_64
       - uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: ${{ inputs.report }}
         with:
           api-level: 35
           target: google_apis
@@ -160,6 +167,7 @@ jobs:
           name: apk-x86_64
       # With sound on, the emulator has a microphone for the voice note steps.
       - uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: ${{ inputs.report }}
         with:
           api-level: 35
           target: google_apis

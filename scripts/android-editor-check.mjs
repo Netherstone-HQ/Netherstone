@@ -14,7 +14,9 @@
 // behave as on a phone; where to tap is found once by tapping and reading
 // back where the page saw it. Every wait has a limit. When a step fails, the
 // output folder gets the page and the whole screen as pictures, the page's
-// text, and the device log.
+// text, where focus and the caret were, and the device log. A failed step
+// doesn't stop the check: the steps that don't build on it still run, so one
+// run shows every failure. The check fails if any step did.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -168,17 +170,29 @@ const keyboardInset = () =>
 // ---- Steps ----
 
 const steps = [];
-async function step(name, run) {
+/**
+ * Runs a step. Steps of the setup stop the check when they fail; any other
+ * step is skipped when a step it `needs` didn't pass.
+ */
+async function step(name, run, { needs = [], setup = false } = {}) {
   const label = `${String(steps.length + 1).padStart(2, "0")}-${name}`;
+  const missing = needs.filter((need) => !steps.some((s) => s.name === need && s.ok));
+  if (missing.length) {
+    log("== skip", name, "(needs", missing.join(", ") + ")");
+    steps.push({ name, ok: false, skipped: true, error: `Needs ${missing.join(", ")}` });
+    return;
+  }
   log("==", name);
   try {
     await run();
     steps.push({ name, ok: true });
     await device.screenshot({ path: path.join(OUT, `${label}.png`) });
   } catch (error) {
+    log("failed:", name, String(error?.message ?? error).split("\n")[0]);
     steps.push({ name, ok: false, error: String(error?.stack ?? error) });
     await saveFailure(`${label}-failed`);
-    throw error;
+    if (setup) throw error;
+    await recover();
   }
 }
 
@@ -194,13 +208,69 @@ async function saveFailure(label) {
   await save("the page text", async () =>
     fs.writeFileSync(path.join(OUT, `${label}.txt`), await page.locator("body").innerText()),
   );
+  await save("where focus and the caret were", async () =>
+    fs.writeFileSync(path.join(OUT, `${label}-focus.json`), JSON.stringify(await focusState(), null, 1)),
+  );
   await save("the screen picture", () => device.screenshot({ path: path.join(OUT, `${label}-screen.png`) }));
+}
+
+/** What has focus, where the page's caret is, and whether the keyboard is up. */
+async function focusState() {
+  const keyboardShown = /mInputShown=true/.test(await shell("dumpsys input_method"));
+  const inPage = await page.evaluate(() => {
+    const describe = (node) => {
+      if (!node) return null;
+      const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+      return {
+        node: node.nodeName,
+        text: node.nodeType === Node.TEXT_NODE ? node.textContent.slice(0, 80) : undefined,
+        element: element?.outerHTML.slice(0, 200),
+        inEditor: !!element?.closest("[data-slate-editor]"),
+      };
+    };
+    const selection = getSelection();
+    return {
+      active: describe(document.activeElement),
+      anchor: describe(selection.anchorNode),
+      anchorOffset: selection.anchorOffset,
+      ranges: selection.rangeCount,
+      keyboardInset: getComputedStyle(document.documentElement).getPropertyValue("--keyboard-inset"),
+    };
+  });
+  return { keyboardShown, ...inPage };
+}
+
+/** After a failed step: closes whatever menu or sheet it left open. */
+async function recover() {
+  try {
+    for (let i = 0; i < 2; i++) await page.keyboard.press("Escape");
+  } catch (error) {
+    log("couldn't recover:", error.message);
+  }
+}
+
+/** Waits until `read` gives what's expected, up to the wait limit. */
+const poll = (read, message) => expect.poll(read, { timeout: WAIT_LIMIT_MS, message });
+/** Waits for the shard's file on disk to be as expected. */
+const onDisk = () => poll(() => readAppFile(shardFile));
+
+/** Puts the caret at the end of the shard's title, with the keyboard up. */
+async function typeAfterTitle() {
+  await tap(block(SHARD), 0.98);
+  await expect(editor()).toBeFocused();
+  await poll(keyboardInset, "--keyboard-inset").toBeGreaterThan(0);
+  await shell("input keyevent KEYCODE_MOVE_END");
+}
+
+/** Starts a new line after the shard's title, ready to type on. */
+async function newLine() {
+  await typeAfterTitle();
+  await shell("input keyevent KEYCODE_ENTER");
 }
 
 /** Asks for a voice note from the / menu, on a new line. */
 async function startVoiceNote() {
-  await shell("input keyevent KEYCODE_MOVE_END");
-  await shell("input keyevent KEYCODE_ENTER");
+  await newLine();
   await typeKeys("/voice");
   await tap(page.getByRole("option", { name: "Voice note" }));
 }
@@ -240,119 +310,155 @@ try {
   await shell("wm dismiss-keyguard");
   adb("logcat", "-c");
 
-  await step("welcome-tour", async () => {
-    await launch();
-    await page.getByRole("button", { name: "Get started" }).click();
-    await page.getByRole("button", { name: /^Create a new vault/ }).click();
-    await page.getByRole("button", { name: "Create vault", exact: true }).click();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Take your vault everywhere" })).toBeVisible();
-  });
+  const setup = { setup: true };
+  await step(
+    "welcome-tour",
+    async () => {
+      await launch();
+      await page.getByRole("button", { name: "Get started" }).click();
+      await page.getByRole("button", { name: /^Create a new vault/ }).click();
+      await page.getByRole("button", { name: "Create vault", exact: true }).click();
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Take your vault everywhere" })).toBeVisible();
+    },
+    setup,
+  );
 
   await step("github-sign-in", async () => {
     // GitHub gives a code (so the app reached it), and the phone's browser
     // opens on GitHub's page for it. The sign-in itself needs an account.
     await page.getByRole("button", { name: "Connect GitHub" }).click();
-    await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
-    await page.getByRole("button", { name: "Copy code and open GitHub" }).click();
-    const inFront = () => shell("dumpsys activity activities | grep -m1 topResumedActivity");
-    await expect.poll(inFront, { message: "another app in front" }).not.toContain(PACKAGE);
-    // Closing the browser brings the app back: starting the app again can
-    // leave the browser's first-run screen in front.
-    const browser = (await inFront()).match(/ u0 ([\w.]+)\//)[1];
-    await shell(`am force-stop ${browser}`);
-    await expect.poll(inFront, { message: "the app back in front" }).toContain(PACKAGE);
-    // Still waiting: a poll that failed while the app was in the background
-    // doesn't end the sign-in.
-    await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel" }).click();
+    try {
+      await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
+      await page.getByRole("button", { name: "Copy code and open GitHub" }).click();
+      const inFront = () => shell("dumpsys activity activities | grep -m1 topResumedActivity");
+      await poll(inFront, "another app in front").not.toContain(PACKAGE);
+      // Closing the browser brings the app back: starting the app again can
+      // leave the browser's first-run screen in front.
+      const browser = (await inFront()).match(/ u0 ([\w.]+)\//)[1];
+      await shell(`am force-stop ${browser}`);
+      await poll(inFront, "the app back in front").toContain(PACKAGE);
+      // Still waiting: a poll that failed while the app was in the background
+      // doesn't end the sign-in.
+      await expect(page.getByText("Waiting for you to approve on GitHub")).toBeVisible();
+    } finally {
+      // Back to where the tour goes on, whatever happened.
+      const cancel = page.getByRole("button", { name: "Cancel" });
+      if (await cancel.isVisible()) await cancel.click();
+    }
     await expect(page.getByRole("button", { name: "Connect GitHub" })).toBeVisible();
   });
 
-  await step("welcome-tour-end", async () => {
-    await page.getByRole("button", { name: "Skip for now" }).click();
-    await page.getByRole("button", { name: "Skip for now" }).click();
-    await page.getByRole("button", { name: "Open Netherstone" }).click();
-    await expect(sidebar()).toBeVisible();
-    vault = await page.evaluate(
-      () => JSON.parse(localStorage.getItem("netherstone-vault")).state.currentVaultPath,
-    );
-    log("vault", vault);
-  });
+  await step(
+    "welcome-tour-end",
+    async () => {
+      await page.getByRole("button", { name: "Skip for now" }).click();
+      await page.getByRole("button", { name: "Skip for now" }).click();
+      await page.getByRole("button", { name: "Open Netherstone" }).click();
+      await expect(sidebar()).toBeVisible();
+      vault = await page.evaluate(
+        () => JSON.parse(localStorage.getItem("netherstone-vault")).state.currentVaultPath,
+      );
+      log("vault", vault);
+    },
+    setup,
+  );
 
-  await step("sample-vault", async () => {
-    // A copy, owned by the app as if it had written it.
-    adb("push", VAULT, "/data/local/tmp/sample-vault");
-    const owner = await su(`stat -c %u:%g '${vault}'`);
-    await su(`cp -r /data/local/tmp/sample-vault/. '${vault}/' && chown -R ${owner} '${vault}'`);
-    await launch();
-    await calibrate(sidebar().getByText("Files", { exact: true }).first());
-    await expect(sidebar().getByText("Start here", { exact: true }).first()).toBeVisible();
-  });
+  await step(
+    "sample-vault",
+    async () => {
+      // A copy, owned by the app as if it had written it.
+      adb("push", VAULT, "/data/local/tmp/sample-vault");
+      const owner = await su(`stat -c %u:%g '${vault}'`);
+      await su(`cp -r /data/local/tmp/sample-vault/. '${vault}/' && chown -R ${owner} '${vault}'`);
+      await launch();
+      await calibrate(sidebar().getByText("Files", { exact: true }).first());
+      await expect(sidebar().getByText("Start here", { exact: true }).first()).toBeVisible();
+    },
+    setup,
+  );
 
-  await step("create-shard", async () => {
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    await page.getByRole("menuitem", { name: "New shard" }).click();
-    const name = page.locator("#shard-name");
-    await expect(name).toBeFocused();
-    await page.keyboard.type(SHARD);
-    await page.getByRole("button", { name: "Create shard" }).click();
-    await expect(name).toBeHidden();
-    shardFile = `${vault}/${SHARD}.md`;
-    await expect.poll(() => readAppFile(shardFile)).toContain(`# ${SHARD}`);
-    await roomForTheShard();
-  });
+  await step(
+    "create-shard",
+    async () => {
+      await page.getByRole("button", { name: "New", exact: true }).click();
+      await page.getByRole("menuitem", { name: "New shard" }).click();
+      const name = page.locator("#shard-name");
+      await expect(name).toBeFocused();
+      await page.keyboard.type(SHARD);
+      await page.getByRole("button", { name: "Create shard" }).click();
+      await expect(name).toBeHidden();
+      shardFile = `${vault}/${SHARD}.md`;
+      await onDisk().toContain(`# ${SHARD}`);
+      await roomForTheShard();
+    },
+    setup,
+  );
 
-  await step("keyboard-up", async () => {
-    // A tap at the end of the title puts the caret there and brings up the
-    // system keyboard, with the bar above it.
-    await tap(block(SHARD), 0.98);
-    await expect.poll(keyboardInset, { message: "--keyboard-inset" }).toBeGreaterThan(0);
-    await expect(bar()).toBeVisible();
-    // The page ends above the keyboard, so the bar sits on it.
-    const barBox = await bar().boundingBox();
-    const height = await page.evaluate(() => window.innerHeight);
-    expect(Math.abs(barBox.y + barBox.height - height)).toBeLessThan(2);
-  });
+  await step(
+    "keyboard-up",
+    async () => {
+      // A tap at the end of the title puts the caret there and brings up the
+      // system keyboard, with the bar above it.
+      await tap(block(SHARD), 0.98);
+      await poll(keyboardInset, "--keyboard-inset").toBeGreaterThan(0);
+      await expect(bar()).toBeVisible();
+      // The page ends above the keyboard, so the bar sits on it.
+      const barBox = await bar().boundingBox();
+      const height = await page.evaluate(() => window.innerHeight);
+      expect(Math.abs(barBox.y + barBox.height - height)).toBeLessThan(2);
+    },
+    setup,
+  );
 
+  // Each step that types starts its own line under the shard's title.
   await step("type-and-save", async () => {
-    await shell("input keyevent KEYCODE_MOVE_END");
-    await shell("input keyevent KEYCODE_ENTER");
+    await newLine();
     await typeKeys("typed with the keyboard");
     await expect(editor()).toContainText("typed with the keyboard");
-    await expect.poll(() => readAppFile(shardFile)).toContain("typed with the keyboard");
+    await onDisk().toContain("typed with the keyboard");
     // The caret stays above the bar.
     const caretBottom = await page.evaluate(() => getSelection().getRangeAt(0).getBoundingClientRect().bottom);
     expect(caretBottom).toBeLessThanOrEqual((await bar().boundingBox()).y);
   });
 
-  await step("bar-list", async () => {
-    await tap(bar().getByRole("button", { name: "Bulleted list" }));
-    await expect.poll(() => readAppFile(shardFile)).toContain("- typed with the keyboard");
-    await expect(editor()).toBeFocused();
-    await expect.poll(keyboardInset).toBeGreaterThan(0);
-    await tap(bar().getByRole("button", { name: "Undo" }));
-    await expect.poll(() => readAppFile(shardFile)).not.toContain("- typed");
-  });
+  const typed = { needs: ["type-and-save"] };
+  await step(
+    "bar-list",
+    async () => {
+      await tap(block("typed with the keyboard"), 0.98);
+      await tap(bar().getByRole("button", { name: "Bulleted list" }));
+      await onDisk().toContain("- typed with the keyboard");
+      await expect(editor()).toBeFocused();
+      await poll(keyboardInset).toBeGreaterThan(0);
+      await tap(bar().getByRole("button", { name: "Undo" }));
+      await onDisk().not.toContain("- typed");
+    },
+    typed,
+  );
 
-  await step("style-panel", async () => {
-    await tap(bar().getByRole("button", { name: "Text style" }));
-    const panel = page.getByRole("group", { name: "Text style" });
-    await expect(panel).toBeVisible();
-    // The keyboard makes way for the panel, and the caret stays.
-    await expect.poll(keyboardInset).toBe(0);
-    await expect(editor()).toBeFocused();
-    await tap(panel.getByRole("button", { name: "H2" }));
-    await expect.poll(() => readAppFile(shardFile)).toContain("## typed with the keyboard");
-    // Back to the keyboard.
-    await tap(bar().getByRole("button", { name: "Text style" }));
-    await expect(panel).toBeHidden();
-    await expect.poll(keyboardInset).toBeGreaterThan(0);
-  });
+  await step(
+    "style-panel",
+    async () => {
+      await tap(block("typed with the keyboard"), 0.98);
+      await tap(bar().getByRole("button", { name: "Text style" }));
+      const panel = page.getByRole("group", { name: "Text style" });
+      await expect(panel).toBeVisible();
+      // The keyboard makes way for the panel, and the caret stays.
+      await poll(keyboardInset).toBe(0);
+      await expect(editor()).toBeFocused();
+      await tap(panel.getByRole("button", { name: "H2" }));
+      await onDisk().toContain("## typed with the keyboard");
+      // Back to the keyboard.
+      await tap(bar().getByRole("button", { name: "Text style" }));
+      await expect(panel).toBeHidden();
+      await poll(keyboardInset).toBeGreaterThan(0);
+    },
+    typed,
+  );
 
   await step("slash-menu", async () => {
-    await shell("input keyevent KEYCODE_MOVE_END");
-    await shell("input keyevent KEYCODE_ENTER");
+    await newLine();
     await typeKeys("/quote");
     const option = page.getByRole("option", { name: "Blockquote" });
     await expect(option).toBeVisible();
@@ -360,7 +466,8 @@ try {
     // The menu gives focus back to the shard; then the keyboard types there.
     await expect(editor()).toBeFocused();
     await typeKeys("quoted line");
-    await expect.poll(() => readAppFile(shardFile)).toContain("> quoted line");
+    await expect(editor()).toContainText("quoted line");
+    await onDisk().toContain("> quoted line");
   });
 
   await step("voice-note-refused", async () => {
@@ -372,6 +479,7 @@ try {
   });
 
   await step("voice-note-allowed", async () => {
+    // Refused once, Android asks again the next time.
     await startVoiceNote();
     await within(
       device.tap({ res: `${PERMISSIONS}:id/permission_allow_foreground_only_button` }),
@@ -379,27 +487,30 @@ try {
     );
     await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
     await tap(page.getByRole("button", { name: "Save" }));
-    await expect.poll(() => readAppFile(shardFile)).toContain(".webm");
+    await onDisk().toContain(".webm");
   });
 
   await step("hide-keyboard", async () => {
-    await tap(block("quoted line"), 0.98);
+    await tap(block(SHARD), 0.98);
     await expect(bar()).toBeVisible();
     await tap(bar().getByRole("button", { name: "Hide keyboard" }));
-    await expect.poll(keyboardInset).toBe(0);
+    await poll(keyboardInset).toBe(0);
     await expect(bar()).toBeHidden();
   });
 
-  await step("block-menu", async () => {
-    await longPress(block("quoted line"));
-    const sheet = page.getByRole("dialog", { name: "Quote" });
-    await expect(sheet).toBeVisible();
-    await tap(sheet.getByRole("button", { name: "Move up" }));
-    await expect(sheet).toBeHidden();
-    await expect
-      .poll(() => readAppFile(shardFile))
-      .toMatch(/> quoted line\s+## typed with the keyboard/);
-  });
+  await step(
+    "block-menu",
+    async () => {
+      // The title moves down below the line that follows it.
+      await longPress(block(SHARD));
+      const sheet = page.getByRole("dialog", { name: "Heading 1" });
+      await expect(sheet).toBeVisible();
+      await tap(sheet.getByRole("button", { name: "Move down" }));
+      await expect(sheet).toBeHidden();
+      await onDisk().toMatch(/^.+\s+# touch-check/);
+    },
+    { needs: ["hide-keyboard"] },
+  );
 
   await step("link-tap", async () => {
     await openFromSidebar("Start here");
@@ -407,18 +518,31 @@ try {
     await expect(editor()).toContainText("Every heading level");
   });
 
-  await step("reopen", async () => {
-    await launch();
-    await openFromSidebar(SHARD);
-    await expect(editor()).toContainText("quoted line");
-  });
+  await step(
+    "reopen",
+    async () => {
+      await launch();
+      await openFromSidebar(SHARD);
+      await expect(editor()).toContainText("typed with the keyboard");
+    },
+    typed,
+  );
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));
+  const summary = steps.map((s) => `${s.ok ? "pass" : s.skipped ? "skip" : "FAIL"} ${s.name}`).join("\n");
+  log("steps:\n" + summary);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Android editor\n\n\`\`\`\n${summary}\n\`\`\`\n`);
+  }
   try {
     fs.writeFileSync(path.join(OUT, "logcat.txt"), adb("logcat", "-d", "-v", "time"));
   } catch (error) {
     log("couldn't save the device log:", error.message);
   }
   await device.close();
+}
+if (steps.some((s) => !s.ok)) {
+  log("some steps failed");
+  process.exit(1);
 }
 log("all steps passed");

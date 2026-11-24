@@ -119,6 +119,12 @@ async function launch() {
   ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
+  // What the app reports as going wrong, such as a file it couldn't read,
+  // which its toast shows only for a few seconds.
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      log(`page ${message.type()}:`, message.text());
+  });
 }
 
 /** The package of the app in front, or "" while none is. */
@@ -643,10 +649,28 @@ try {
         ),
       "the gallery to know the picture's size",
     ).toContain(`_size=${size}`);
+    // What the page's file input gets back from the picker, so a failure
+    // says whether the pick reached the page at all.
+    await page.evaluate(() => {
+      window.__picked = null;
+      // The app's file input may not be in the page, so its own events are
+      // listened to, from when it opens the picker.
+      const click = HTMLInputElement.prototype.click;
+      HTMLInputElement.prototype.click = function () {
+        if (this.type === "file")
+          for (const type of ["change", "cancel"])
+            this.addEventListener(type, () => {
+              window.__picked = { type, files: [...(this.files ?? [])].map((f) => `${f.name} ${f.size}`) };
+            });
+        return click.call(this);
+      };
+    });
     await insertFromBar("Picture");
     await tapSystemButton(/^Photo taken on/);
     await tapSystemButton(/^Add \(1\)$/);
     await poll(appInFront, "the app back in front").toBe(PACKAGE);
+    await poll(() => page.evaluate(() => window.__picked), "the pick to reach the page").not.toBeNull();
+    log("picked:", JSON.stringify(await page.evaluate(() => window.__picked)));
     // The picker names it by its number; the app gives it a word instead.
     await onDisk().toContain("_attachments/picture.png");
     await poll(() => su(`base64 '${vault}/_attachments/picture.png' | tr -d '\\n'`)).toBe(

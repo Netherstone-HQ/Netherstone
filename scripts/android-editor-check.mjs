@@ -308,6 +308,9 @@ try {
   // No permissions given up front: the microphone is asked for as on a phone.
   adb("install", APK);
   await shell("wm dismiss-keyguard");
+  // A slow emulator can say another app "isn't responding" in a dialog over
+  // this one, which would take the check's taps.
+  await shell("settings put global hide_error_dialogs 1");
   adb("logcat", "-c");
 
   const setup = { setup: true };

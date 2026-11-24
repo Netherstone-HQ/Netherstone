@@ -167,6 +167,9 @@ try {
   log("install", APK);
   adb("install", "-g", APK);
   await shell("wm dismiss-keyguard");
+  // A slow emulator can say another app "isn't responding" in a dialog over
+  // this one, which would take the check's taps and Back presses.
+  await shell("settings put global hide_error_dialogs 1");
   adb("logcat", "-c");
 
   await step("app-loads", async () => {

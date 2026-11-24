@@ -7,6 +7,15 @@ import { expect } from "@playwright/test";
 /** Where the app's own page is served from inside its WebView. */
 const APP_ORIGIN = "http://tauri.localhost";
 
+/** The origin of `url`, or null when it isn't one. */
+function originOf(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 const adb = (...args) => execFileSync("adb", args, { encoding: "utf8" }).trim();
 
 /**
@@ -22,7 +31,7 @@ async function appPageLoaded(pid, timeout) {
     const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
       .then((response) => response.json())
       .catch(() => []);
-    return targets.some((target) => target.type === "page" && target.url.startsWith(APP_ORIGIN));
+    return targets.some((target) => target.type === "page" && originOf(target.url) === APP_ORIGIN);
   };
   try {
     await expect.poll(shown, { message: "the app's page to load", timeout }).toBe(true);

@@ -23,6 +23,7 @@ export const copy = {
   vault: {
     title: "Where should your knowledge live?",
     body: "A vault is a folder on your computer. Each shard in it is a document, saved as a Markdown file that any app can open.",
+    phoneBody: "A vault is a folder of shards. Each shard is a document, saved as a Markdown file.",
 
     keep: {
       title: (name: string) => `Keep using ${name}`,
@@ -31,6 +32,7 @@ export const copy = {
     create: {
       title: "Create a new vault",
       description: "Start fresh in a new folder.",
+      phoneDescription: "Start fresh in a new folder on this phone.",
       nameLabel: "Name",
       defaultName: "My Vault",
       locationLabel: "Location",

@@ -104,6 +104,23 @@ export async function getFileMetadata(
   return invoke<FileMetadata | null>("get_file_metadata", { filePath });
 }
 
+/** What a list of shards shows under each name. */
+export interface ShardPreview {
+  path: string;
+  /** Seconds since 1970, or null when the file can't be read. */
+  lastModified: number | null;
+  /** The first text that isn't a heading; null for a drawing. */
+  preview: string | null;
+}
+
+/** Previews of the shards and drawings at `paths`, in the same order. */
+export async function getShardPreviews(
+  paths: string[],
+): Promise<ShardPreview[]> {
+  assertTauri();
+  return invoke<ShardPreview[]>("get_shard_previews", { paths });
+}
+
 /** The shards that link to `filePath`. */
 export async function getBacklinks(filePath: string): Promise<Backlink[]> {
   assertTauri();

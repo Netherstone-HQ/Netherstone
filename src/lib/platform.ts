@@ -110,3 +110,14 @@ export function keysText(keys: string): string {
 export function withShortcut(label: string, keys: string | null): string {
   return keys ? `${label} (${keysText(keys)})` : label;
 }
+
+/** Android, where the app runs in the system WebView. */
+export const IS_ANDROID =
+  typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+
+/** A phone or tablet build: Android, or iOS (iPadOS reports itself as a Mac with touch). */
+export const IS_MOBILE =
+  IS_ANDROID ||
+  (typeof navigator !== "undefined" &&
+    (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1)));

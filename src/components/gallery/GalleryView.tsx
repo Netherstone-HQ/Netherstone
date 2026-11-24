@@ -54,7 +54,7 @@ function usedIn(file: GalleryFile) {
  * Whether `ref` is within a screen of view. Tiles further away let go of
  * their pictures, so a long scroll doesn't keep every picture in memory.
  */
-function useNearView(
+export function useNearView(
   ref: React.RefObject<HTMLElement | null>,
   scrollRoot: React.RefObject<HTMLDivElement | null>,
 ) {
@@ -72,7 +72,7 @@ function useNearView(
   return isNear;
 }
 
-function Thumbnail({
+export function Thumbnail({
   file,
   vaultPath,
   isNear,

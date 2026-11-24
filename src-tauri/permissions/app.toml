@@ -157,6 +157,7 @@ commands.allow = [
   "get_broken_links",
   "get_charts",
   "get_file_metadata",
+  "get_shard_previews",
   "get_backlinks",
   "rename_file",
   "move_file",

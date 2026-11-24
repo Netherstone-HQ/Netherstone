@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Drives the Android app on an emulator the way a person would: goes through
-// the welcome tour, creates a shard, types into it, checks the file on disk,
-// then restarts the app, opens the shard and checks the text is back.
+// the welcome tour, creates a shard from home, types into it, checks the
+// file on disk, goes back home with the system Back key, then restarts the
+// app, opens the shard from Recent and checks the text is back.
 //
 //   APK=app.apk node scripts/android-ui-check.mjs out
 //
@@ -22,7 +23,7 @@ const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-ui-check";
 const APK = process.env.APK;
-// What New shard names the first shard of a vault.
+// What + calls a new shard in a vault that has none by that name.
 const SHARD = "Untitled";
 const TYPED = "typed on the emulator";
 
@@ -153,7 +154,8 @@ try {
     await expect(page.getByRole("heading", { name: "You're all set" })).toBeVisible();
     await page.getByRole("button", { name: "Open Netherstone" }).click();
 
-    await expect(page.locator('[data-sidebar="sidebar"]')).toBeVisible();
+    // The phone layout opens on the vault's home.
+    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
     vault = await page.evaluate(
       () => JSON.parse(localStorage.getItem("netherstone-vault")).state.currentVaultPath,
     );
@@ -161,32 +163,37 @@ try {
   });
 
   await step("create-shard", async () => {
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    await page.getByRole("menuitem", { name: "New shard" }).click();
-    await expect(page.locator("[data-slate-editor]")).toBeFocused();
-
+    // + makes an empty "Untitled" shard and opens it to type in.
+    await page.getByRole("button", { name: "New shard", exact: true }).click();
+    await expect(page.locator("[data-slate-editor]")).toBeVisible();
     shardFile = `${vault}/${SHARD}.md`;
-    await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toBe("");
   });
 
   await step("type-and-save", async () => {
     const editor = page.locator("[data-slate-editor]");
-    // Until the app has a phone layout, both sidebars leave the shard no
-    // room on a phone screen, so close them as a person would.
-    await page.getByRole("button", { name: "Hide left sidebar" }).click();
-    await page.getByRole("button", { name: "Hide right sidebar" }).click();
     await editor.locator("[data-slate-node=element]").last().click();
     await page.keyboard.type(TYPED);
     await expect(editor).toContainText(TYPED);
     await expect.poll(() => readAppFile(shardFile), { message: `${shardFile} on disk` }).toContain(TYPED);
   });
 
+  await step("system-back", async () => {
+    // Android's own Back key, as a thumb would press it. While the keyboard
+    // is up, the first press only puts it away.
+    const keyboardUp = async () =>
+      /mInputShown=true/.test(await shell("dumpsys input_method"));
+    if (await keyboardUp()) {
+      await shell("input keyevent KEYCODE_BACK");
+      await expect.poll(keyboardUp, { message: "the keyboard to go away" }).toBe(false);
+    }
+    await shell("input keyevent KEYCODE_BACK");
+    await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+  });
+
   await step("reopen", async () => {
     await launch();
-    // The left sidebar comes back as it was left: closed.
-    await page.getByRole("button", { name: "Show left sidebar" }).click();
-    const sidebar = page.locator('[data-sidebar="sidebar"]');
-    await sidebar.getByText(SHARD, { exact: true }).first().click();
+    const recent = page.getByRole("region", { name: "Recent" });
+    await recent.getByRole("button", { name: new RegExp(`^${SHARD}`) }).click();
     await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
   });
 } finally {

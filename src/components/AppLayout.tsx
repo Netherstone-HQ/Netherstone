@@ -54,7 +54,7 @@ const MainEditorContent = React.memo(function MainEditorContent() {
  * out underneath, keeping its scroll position, undo history and unsaved
  * edits for when the version or the change closes.
  */
-function EditorOrVersion({ children }: { children?: React.ReactNode }) {
+export function EditorOrVersion({ children }: { children?: React.ReactNode }) {
   const version = useShownVersion("notes");
   const change = usePreviewedChange();
   const openPath = useEditorStore((s) => s.currentFilePath);

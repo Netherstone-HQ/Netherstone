@@ -32,15 +32,10 @@ import {
   hasSomethingToAdd,
 } from "@/components/canvas/AddToShardDialog";
 import { DrawingIcon } from "@/components/icons";
+import { deleteItem, moveItem, renameItem } from "@/components/vault/item-actions";
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import type { RowAction } from "@/components/vault/RowActions";
-import { flushPendingAutosave, writeLeftShardCaches } from "@/hooks/useAutosave";
-import {
-  finishPathChange,
-  flushDrawingAffectedBy,
-  persistOpenFileBeforePathChange,
-  suppressPathChange,
-} from "@/components/vault/path-change";
+import { flushDrawingAffectedBy } from "@/components/vault/path-change";
 import {
   readDrawingScene,
   type ExportableScene,
@@ -48,10 +43,8 @@ import {
 import {
   getVaultFileDisplayName,
   isDrawingPath,
-  isPathWithin,
   isSamePath,
 } from "@/lib/drawing-files";
-import { deleteVaultPath, moveFile, renameFile } from "@/lib/commands/shards";
 import { openExportDialog } from "@/lib/export";
 import { openImportDialog } from "@/lib/import";
 import {
@@ -60,15 +53,12 @@ import {
   openFileHistory,
   openVaultFile,
 } from "@/lib/open-vault-file";
-import { refreshVault } from "@/lib/refresh-vault";
 import {
-  useEditorStore,
   useSettingsStore,
   useUIStore,
   useVaultStore,
 } from "@/store";
 import type { FileTreeNode } from "@/store";
-import { useHistoryStore } from "@/store/history";
 
 function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -115,13 +105,6 @@ export function useVaultItem(
   // again. The second call would rename a path that no longer exists.
   const isRenameSubmittingRef = useRef(false);
 
-  const currentFilePath = useEditorStore((s) => s.currentFilePath);
-  const markdownContent = useEditorStore((s) => s.markdownContent);
-  const plateEditor = useEditorStore((s) => s.plateEditor);
-  const markSaved = useEditorStore((s) => s.markSaved);
-  const closeFile = useEditorStore((s) => s.closeFile);
-  const remapRememberedPaths = useUIStore((s) => s.remapRememberedPaths);
-  const forgetRememberedPaths = useUIStore((s) => s.forgetRememberedPaths);
   const togglePinnedFile = useUIStore((s) => s.togglePinnedFile);
   const isPinned = useUIStore((s) =>
     s.pinnedFiles.some((entry) => isSamePath(entry.path, node.path)),
@@ -131,8 +114,6 @@ export function useVaultItem(
   const setNewFolderParent = useVaultStore((s) => s.setNewFolderParent);
 
   const displayName = getDisplayName(node);
-  const editor = { currentFilePath, markdownContent, plateEditor, markSaved };
-  const followers = { plateEditor, remapRememberedPaths, currentVaultPath };
 
   const open = async () => {
     if (node.kind !== "file") return;
@@ -159,6 +140,9 @@ export function useVaultItem(
     setIsRenaming(false);
     setNewName(getDisplayName(node));
   };
+  /** Renames the item to `name`; throws when that fails. */
+  const renameTo = (name: string) => renameItem(node, name);
+
   const handleRename = async () => {
     if (isRenameSubmittingRef.current) return;
 
@@ -172,53 +156,19 @@ export function useVaultItem(
     isRenameSubmittingRef.current = true;
 
     try {
-      const persistedOpenFile = await persistOpenFileBeforePathChange(node, "rename", editor);
-      await flushDrawingAffectedBy(node.path);
-      suppressPathChange(node, null);
-      useHistoryStore.getState().startPathChange(node.path);
-
-      const newPath = await renameFile(node.path, trimmedName);
-
-      await finishPathChange(node, newPath, persistedOpenFile, "rename", followers);
-      cancelRename();
+      await renameTo(trimmedName);
     } catch (error) {
-      console.error("Failed to rename:", error);
-      useHistoryStore.getState().endPathChange();
       alert(error instanceof Error ? error.message : String(error));
-      cancelRename();
     } finally {
+      cancelRename();
       isRenameSubmittingRef.current = false;
     }
   };
 
   const handleDelete = async () => {
-    const deletesOpenFile =
-      !!currentFilePath && isPathWithin(currentFilePath, node.path);
-
     try {
-      await flushDrawingAffectedBy(node.path);
-      // Let a save that is already running finish first, so it can't write
-      // the shard back after it has gone to the trash.
-      if (deletesOpenFile) await flushPendingAutosave();
-      // So the cache rows go with it, not land after.
-      await writeLeftShardCaches(node.path);
-
-      await deleteVaultPath(node.path);
-
-      const { activeDrawingPath, openDrawing } = useUIStore.getState();
-      if (activeDrawingPath && isPathWithin(activeDrawingPath, node.path)) {
-        openDrawing(null);
-      }
-
-      forgetRememberedPaths(node.path);
-
-      if (deletesOpenFile) {
-        closeFile();
-      }
-
-      await refreshVault(currentVaultPath);
+      await deleteItem(node);
     } catch (error) {
-      console.error("Failed to delete:", error);
       alert(error instanceof Error ? error.message : String(error));
     }
   };
@@ -234,17 +184,8 @@ export function useVaultItem(
 
   const moveToFolder = async (destinationPath: string) => {
     try {
-      const persistedOpenFile = await persistOpenFileBeforePathChange(node, "move", editor);
-      await flushDrawingAffectedBy(node.path);
-      suppressPathChange(node, null);
-      useHistoryStore.getState().startPathChange(node.path);
-
-      const newPath = await moveFile(node.path, destinationPath);
-
-      await finishPathChange(node, newPath, persistedOpenFile, "move", followers);
+      await moveItem(node, destinationPath);
     } catch (error) {
-      console.error("Failed to move:", error);
-      useHistoryStore.getState().endPathChange();
       alert(error instanceof Error ? error.message : String(error));
       throw error;
     }
@@ -452,6 +393,11 @@ export function useVaultItem(
     open,
     isRenaming,
     renameInputProps,
+    renameTo,
+    startMove: () => setIsMoving(true),
+    trash: handleTrash,
+    isPinned,
+    togglePin: () => togglePinnedFile({ name: node.name, path: node.path }),
     moveToFolder,
     dialogs,
   };

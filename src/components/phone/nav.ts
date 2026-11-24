@@ -1,4 +1,5 @@
 import { exit, onBackButtonPress } from "@tauri-apps/api/app";
+import { useState } from "react";
 import { create } from "zustand";
 import type { SettingsCategory } from "@/store/ui";
 
@@ -19,7 +20,9 @@ export type PhoneScreen =
   /** Search, in one folder when `folder` is set. */
   | { kind: "search"; folder?: string; filter?: SearchFilter }
   | { kind: "tags" }
-  | { kind: "settings"; category: SettingsCategory | null };
+  | { kind: "settings"; category: SettingsCategory | null }
+  /** What was deleted from the open vault, to restore or delete for good. */
+  | { kind: "trash" };
 
 /** A sheet or menu over the screen under it. */
 export type PhoneOverlay =
@@ -40,7 +43,11 @@ export type PhoneOverlay =
   | { kind: "move"; paths: string[] }
   | { kind: "confirm-trash"; paths: string[] }
   /** Picking shards to pin, move or delete together. */
-  | { kind: "select" };
+  | { kind: "select" }
+  /** A trash item's menu: Restore or Delete forever. */
+  | { kind: "trash-item"; id: string }
+  | { kind: "confirm-delete-forever"; id: string }
+  | { kind: "confirm-empty-trash" };
 
 type Entry = PhoneScreen | PhoneOverlay;
 
@@ -51,6 +58,7 @@ const SCREEN_KINDS = new Set<string>([
   "search",
   "tags",
   "settings",
+  "trash",
 ]);
 
 function isScreen(entry: Entry): entry is PhoneScreen {
@@ -169,4 +177,27 @@ export function usePhoneOverlay(): PhoneOverlay | null {
 /** Whether shards are being picked to act on together. */
 export function useSelecting(): boolean {
   return usePhoneNav((s) => s.entries.some((entry) => entry.kind === "select"));
+}
+
+type OverlayOf<K extends PhoneOverlay["kind"]> = Extract<PhoneOverlay, { kind: K }>;
+
+/**
+ * The overlay of `kind` while it's open, and the last one after it closes,
+ * so its sheet can slide away showing what it showed.
+ */
+export function useLast<K extends PhoneOverlay["kind"]>(kind: K) {
+  const overlay = usePhoneOverlay();
+  const [last, setLast] = useState<OverlayOf<K> | null>(null);
+  const current = overlay?.kind === kind ? (overlay as OverlayOf<K>) : null;
+  if (current && current !== last) setLast(current);
+  return { open: current !== null, overlay: current ?? last };
+}
+
+/** Closes `kind` when its sheet or dialog asks to, unless it's gone already. */
+export function closer(kind: PhoneOverlay["kind"]) {
+  return (open: boolean) => {
+    if (open) return;
+    const { entries, back } = usePhoneNav.getState();
+    if (entries[entries.length - 1]?.kind === kind) back();
+  };
 }

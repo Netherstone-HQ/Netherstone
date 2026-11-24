@@ -29,8 +29,11 @@ const OUT = process.argv[2] ?? "android-editor-check";
 const APK = process.env.APK;
 const VAULT = process.env.VAULT ?? smallVault();
 const SHARD = "touch-check";
-// Android's own permission prompt.
-const PERMISSIONS = "com.android.permissioncontroller";
+// Android's own permission prompt (Google's build of it on Google images)
+// and its buttons, by what they say.
+const PERMISSIONS = /permissioncontroller$/;
+const DENY = /^Don.t allow$/;
+const ALLOW = "While using the app";
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
 // stuck step reaches it.
@@ -256,9 +259,14 @@ async function focusState() {
   return { keyboardShown, ...inPage };
 }
 
-/** After a failed step: closes whatever menu or sheet it left open. */
+/**
+ * After a failed step: closes whatever system window, menu or sheet it left
+ * open.
+ */
 async function recover() {
   try {
+    if ((await appInFront()) !== PACKAGE) await shell("input keyevent KEYCODE_BACK");
+    await bringAppBack();
     for (let i = 0; i < 2; i++) await page.keyboard.press("Escape");
   } catch (error) {
     log("couldn't recover:", error.message);
@@ -491,7 +499,7 @@ try {
 
   await step("voice-note-refused", async () => {
     await startVoiceNote();
-    await within(device.tap({ res: `${PERMISSIONS}:id/permission_deny_button` }), "the microphone prompt");
+    await within(device.tap({ pkg: PERMISSIONS, text: DENY }), "the microphone prompt");
     await expect(page.getByText("Microphone access is off for Netherstone")).toBeVisible();
     await expect(page.getByRole("button", { name: "Open system settings" })).toBeVisible();
     await tap(page.getByRole("button", { name: "Discard" }));
@@ -500,10 +508,7 @@ try {
   await step("voice-note-allowed", async () => {
     // Refused once, Android asks again the next time.
     await startVoiceNote();
-    await within(
-      device.tap({ res: `${PERMISSIONS}:id/permission_allow_foreground_only_button` }),
-      "the microphone prompt",
-    );
+    await within(device.tap({ pkg: PERMISSIONS, text: ALLOW }), "the microphone prompt");
     await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
     await tap(page.getByRole("button", { name: "Save" }));
     await onDisk().toContain(".webm");

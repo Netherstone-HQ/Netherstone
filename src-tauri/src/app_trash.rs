@@ -264,30 +264,6 @@ fn parse_id(id: &str) -> Result<(&str, &str), String> {
     }
 }
 
-/// A free path for `wanted`: itself, or with " 2", " 3" and so on before
-/// its extension while that name is taken.
-fn free_path(wanted: &Path) -> PathBuf {
-    if !wanted.exists() {
-        return wanted.to_path_buf();
-    }
-    let parent = wanted.parent().unwrap_or(Path::new(""));
-    let stem = wanted
-        .file_stem()
-        .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
-    let extension = wanted
-        .extension()
-        .map(|extension| format!(".{}", extension.to_string_lossy()));
-    (2..)
-        .map(|count| {
-            parent.join(format!(
-                "{stem} {count}{}",
-                extension.as_deref().unwrap_or("")
-            ))
-        })
-        .find(|candidate| !candidate.exists())
-        .expect("some count is free")
-}
-
 /// Puts the item `id` back where it was, under a free name if that one has
 /// been taken since, and returns where it went. `allowed` says whether a
 /// path may be restored to.
@@ -309,7 +285,7 @@ fn restore(
         .ok_or_else(|| format!("{} has no folder to go back to", from.display()))?;
     std::fs::create_dir_all(parent)
         .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-    let to = free_path(&from);
+    let to = crate::vault::free_path(&from);
     move_path(&trash.join(batch).join(name), &to)?;
     record.from.remove(name);
     forget_batch_if_empty(trash, batch, &record)?;

@@ -428,13 +428,31 @@ const NEW_SHARD_NAME: &str = "Untitled";
 /// Returns a free path in `dir` for a new shard: `Untitled.md`, then
 /// `Untitled 2.md`, `Untitled 3.md` and so on.
 pub fn untitled_shard_path(dir: &Path) -> PathBuf {
-    let mut candidate = dir.join(format!("{}.md", NEW_SHARD_NAME));
-    let mut counter: u32 = 2;
-    while candidate.exists() {
-        candidate = dir.join(format!("{} {}.md", NEW_SHARD_NAME, counter));
-        counter += 1;
+    free_path(&dir.join(format!("{NEW_SHARD_NAME}.md")))
+}
+
+/// A free path for `wanted`: itself, or with " 2", " 3" and so on before
+/// its extension while that name is taken.
+pub fn free_path(wanted: &Path) -> PathBuf {
+    if !wanted.exists() {
+        return wanted.to_path_buf();
     }
-    candidate
+    let parent = wanted.parent().unwrap_or(Path::new(""));
+    let stem = wanted
+        .file_stem()
+        .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
+    let extension = wanted
+        .extension()
+        .map(|extension| format!(".{}", extension.to_string_lossy()));
+    (2..)
+        .map(|count| {
+            parent.join(format!(
+                "{stem} {count}{}",
+                extension.as_deref().unwrap_or("")
+            ))
+        })
+        .find(|candidate| !candidate.exists())
+        .expect("some count is free")
 }
 
 /// Why a new vault folder couldn't be made. The app turns each into its own

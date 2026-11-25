@@ -1,10 +1,6 @@
-//! Deleting files: the OS trash on desktop. Phones have none, so there a
-//! deleted file moves to a trash folder in the app's data, where it can be
-//! brought back.
-//!
-//! Each delete gets its own folder in the trash, `trash/<batch>/`, holding
-//! what was deleted under its own name. Beside it, `trash/<batch>.json`
-//! records where each one came from, so it can go back there.
+//! Deleting files: the OS trash on desktop. Phones have none, so there each
+//! delete moves to `trash/<batch>/` in the app's data, with
+//! `trash/<batch>.json` recording where it came from.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -93,10 +89,8 @@ fn write_record(trash: &Path, batch: &str, record: &Record) -> Result<(), String
     std::fs::write(&path, text).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
-/// Moves `path` into `trash/<batch>/`, keeping its name, and records where
-/// it came from. Returns its id in the trash. A vault on another storage
-/// volume than the app's data can't be renamed across, so it is copied and
-/// then removed.
+/// Moves `path` into `trash/<batch>/` and returns its id. Across storage
+/// volumes it's copied, then removed.
 #[cfg(any(mobile, test))]
 fn move_to_trash(trash: &Path, path: &Path, batch: &str) -> Result<String, String> {
     let name = path
@@ -264,9 +258,8 @@ fn parse_id(id: &str) -> Result<(&str, &str), String> {
     }
 }
 
-/// Puts the item `id` back where it was, under a free name if that one has
-/// been taken since, and returns where it went. `allowed` says whether a
-/// path may be restored to.
+/// Puts the item `id` back where it was, under a free name if needed, and
+/// returns where it went. `allowed` checks the path.
 fn restore(
     trash: &Path,
     id: &str,

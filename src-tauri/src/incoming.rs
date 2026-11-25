@@ -1,13 +1,7 @@
-//! What other apps hand Netherstone on a phone: a file opened with it (Open
-//! with) or text, links and files shared with it (Share).
-//!
-//! Android's MainActivity copies each arrival into the app's cache, as
-//! `incoming/opened/<time>/` or `incoming/shared/<time>/`, and renames it
-//! there from `<time>.part` once complete (see Incoming.kt). Taking one moves
-//! it to `incoming/taken/`, which the app clears when it next starts.
-//!
-//! Only the system puts files there: no command writes to that folder, so
-//! the files the page may then read are ones a person handed over.
+//! What other apps hand Netherstone on a phone (Open with, Share). Incoming.kt
+//! copies each into `incoming/<kind>/<time>/` in the cache; taking one moves
+//! it to `incoming/taken/`. No command writes there, so the page only reads
+//! what a person handed over.
 
 use serde::{Deserialize, Serialize};
 use std::fs;

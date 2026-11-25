@@ -1,9 +1,6 @@
-//! Updates for the Android app downloaded from GitHub, which no app store
-//! updates. The same commands as updater.rs, so the window needs nothing
-//! else: the channel file lists each release's APK by architecture with its
-//! SHA-256 (scripts/updater-json.mjs), the APK downloads into the app's cache, and MainActivity.kt hands
-//! it to Android's installer, which only takes an APK signed with the same
-//! key as the app on the phone.
+//! Updates for the Android app from GitHub, with updater.rs's commands. The
+//! channel file lists each APK and its SHA-256 (scripts/updater-json.mjs);
+//! MainActivity.kt hands the download to the installer.
 
 use serde::Deserialize;
 use std::collections::HashMap;

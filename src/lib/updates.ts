@@ -1,6 +1,6 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IS_ANDROID } from "@/lib/platform";
+import { backInFront } from "@/lib/back-in-front";
 
 export interface AvailableUpdate {
   version: string;
@@ -39,21 +39,6 @@ export function downloadUpdate(
 
 /** The label of the button that installs a downloaded update. */
 export const INSTALL_LABEL = IS_ANDROID ? "Install update" : "Restart to update";
-
-/** Resolves once the window is in front again, after a settings screen. */
-async function backInFront(): Promise<void> {
-  let stop: (() => void) | undefined;
-  await new Promise<void>((resolve) => {
-    void getCurrentWindow()
-      .onFocusChanged(({ payload: focused }) => {
-        if (focused) resolve();
-      })
-      .then((unlisten) => {
-        stop = unlisten;
-      });
-  });
-  stop?.();
-}
 
 /**
  * Installs the downloaded update and restarts the app. On Android it's

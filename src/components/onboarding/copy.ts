@@ -45,6 +45,11 @@ export const copy = {
       title: "Open a folder you already have",
       description: "Your files stay exactly where they are.",
     },
+    sharedFolder: {
+      title: "Use a folder other apps can open",
+      description:
+        "Keep the vault in your phone's storage, such as Documents. Your phone will ask for access.",
+    },
     restore: {
       title: "Restore a synced vault",
       description: "Bring back a vault you synced on another device.",

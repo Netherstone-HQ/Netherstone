@@ -39,6 +39,12 @@ declare global {
       openInApp(url: string): void;
       /** Hands the downloaded update to the installer; false when it can't yet. */
       installUpdate(): boolean;
+      /** Whether vaults may live in the phone's shared storage. */
+      hasAllFilesAccess(): boolean;
+      /** Asks for that access, in its settings screen or a prompt. */
+      askAllFilesAccess(): void;
+      /** Shows the folder picker; the page hears `folderpicked`. */
+      pickFolder(): void;
     };
   }
 }

@@ -95,6 +95,37 @@ fn opened_in(incoming: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+#[cfg(any(mobile, test))]
+const FOLDERS: &str = "folder";
+
+/// Takes the folder last picked for a vault in shared storage (see
+/// SharedFolders.kt), if one was picked since the last take and is there.
+#[cfg(mobile)]
+pub fn take_picked_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
+    picked_folder_in(&incoming_folder(app)?)
+}
+
+#[cfg(any(mobile, test))]
+fn picked_folder_in(incoming: &Path) -> Option<PathBuf> {
+    let folder = incoming.join(FOLDERS);
+    let mut picks: Vec<(u128, PathBuf)> = fs::read_dir(&folder)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter_map(|path| {
+            let time = path.file_name()?.to_str()?.parse().ok()?;
+            Some((time, path))
+        })
+        .collect();
+    picks.sort();
+    let latest = picks.last()?.1.clone();
+    let picked = fs::read_to_string(&latest).ok().map(PathBuf::from);
+    for (_, pick) in &picks {
+        let _ = fs::remove_file(pick);
+    }
+    picked.filter(|path| path.is_absolute() && path.is_dir())
+}
+
 /// What was shared with the app, for the page to save in a shard.
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -201,6 +232,25 @@ mod tests {
             incoming.join(OPENED).join("300.part").exists(),
             "still copying"
         );
+    }
+
+    #[test]
+    fn takes_the_last_folder_picked_once() {
+        let incoming = temp_dir("incoming-folder");
+        let vault = incoming.join("Documents").join("Notes");
+        fs::create_dir_all(&vault).unwrap();
+        let picks = incoming.join(FOLDERS);
+        fs::create_dir_all(&picks).unwrap();
+        fs::write(
+            picks.join("100"),
+            incoming.join("gone").to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+        fs::write(picks.join("200"), vault.to_string_lossy().as_bytes()).unwrap();
+        fs::write(picks.join("300.part"), "half").unwrap();
+
+        assert_eq!(picked_folder_in(&incoming), Some(vault));
+        assert_eq!(picked_folder_in(&incoming), None, "taken already");
     }
 
     #[test]

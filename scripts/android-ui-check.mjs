@@ -38,6 +38,10 @@ const OPENED_NOTE = "opened-note.md";
 const OPENED_TEXT = "opened from another app";
 // How long a finger takes to drag out a shape, in ms.
 const DRAG_MS = 400;
+// A vault in a folder other apps can open, and a shard already in it.
+const SHARED_VAULT = "Netherstone check";
+const SHARED_VAULT_DIR = `/sdcard/Documents/${SHARED_VAULT}`;
+const SHARED_SHARD = "Kept in Documents";
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
 // stuck step reaches it.
@@ -172,6 +176,30 @@ async function providedFile(name, file) {
   adb("push", file, `/data/local/tmp/${name}`);
   await shell(`su 0 sh -c "mkdir -p ${folder} && cp /data/local/tmp/${name} ${folder}/${name} && chown -R ${owner} ${folder}"`);
   return `content://${PACKAGE}.fileprovider/my_cache_images/shared/${name}`;
+}
+
+/**
+ * Taps the text `label` in a system window, such as the folder picker,
+ * found in the screen's layout as Android describes it.
+ */
+async function tapSystemText(label) {
+  const layout = "/data/local/tmp/layout.xml";
+  let bounds = null;
+  await expect
+    .poll(
+      async () => {
+        const xml = await shell(`rm -f ${layout}; uiautomator dump ${layout} > /dev/null 2>&1; cat ${layout}`);
+        const found = [...xml.matchAll(/text="([^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g)].find(
+          ([, text]) => label.test(text),
+        );
+        bounds = found ? found.slice(2).map(Number) : null;
+        return bounds !== null;
+      },
+      { message: `${label} on screen` },
+    )
+    .toBe(true);
+  const [x1, y1, x2, y2] = bounds;
+  await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
 /** The sheet a share from another app opens in. */
@@ -439,6 +467,37 @@ try {
     await page.getByRole("button", { name: "Done", exact: true }).click();
     await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Drawing tools" })).toBeHidden();
+  });
+  // A folder in Documents, picked with the system's picker, opens as a vault
+  // whose shards stay in that folder.
+  await step("vault-in-shared-folder", async () => {
+    await shell(`appops set ${PACKAGE} MANAGE_EXTERNAL_STORAGE allow`);
+    await shell(`mkdir -p '${SHARED_VAULT_DIR}' && echo '# ${SHARED_SHARD}' > '${SHARED_VAULT_DIR}/${SHARED_SHARD}.md'`);
+    // The drawing step leaves its drawing on screen.
+    const home = page.getByRole("button", { name: "Search this vault" });
+    await expect
+      .poll(async () => {
+        if (await home.isVisible()) return true;
+        await page.getByRole("button", { name: "Back", exact: true }).first().click();
+        return false;
+      }, { message: "home" })
+      .toBe(true);
+    await page.getByRole("button", { name: /^My Vault/ }).click();
+    await page.getByRole("button", { name: "Open a folder", exact: true }).click();
+    await tapSystemText(new RegExp(`^${SHARED_VAULT}$`));
+    await tapSystemText(/^use this folder$/i);
+    await tapSystemText(/^allow$/i);
+    await expect(page.getByRole("region", { name: "Files" }).getByRole("button", { name: new RegExp(`^${SHARED_SHARD}`) })).toBeVisible();
+    await page.getByRole("button", { name: new RegExp(`^${SHARED_VAULT}`) }).first().click();
+    await expect(page.getByText(`In Documents/${SHARED_VAULT}`)).toBeVisible();
+    await pressBack();
+    await page.getByRole("button", { name: "New shard", exact: true }).click();
+    const editor = page.locator("[data-slate-editor]");
+    await editor.locator("[data-slate-node=element]").last().click();
+    await page.keyboard.type(TYPED);
+    await expect
+      .poll(() => shell(`cat '${SHARED_VAULT_DIR}/${SHARD}.md'`), { message: "the shard in Documents" })
+      .toContain(TYPED);
   });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));

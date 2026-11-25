@@ -1,13 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { FileTreeNode } from "@/store";
+import { pickSharedFolder } from "@/lib/shared-folder";
 import { assertTauri } from "./tauri";
 
 /**
  * Opens the native OS folder picker dialog.
  * Returns the selected folder path, or null if the user cancelled.
+ * On Android the phone's own picker runs first (see `pickSharedFolder`).
  */
 export async function openVaultDialog(): Promise<string | null> {
   assertTauri();
+  if (!(await pickSharedFolder())) return null;
   return invoke<string | null>("open_vault_dialog");
 }
 

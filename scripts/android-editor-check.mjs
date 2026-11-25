@@ -724,12 +724,17 @@ try {
   });
 
   await step("web-link-tap", async () => {
-    // Phones have no browser panel yet: the page opens in the system's browser.
+    // A web page opens over the app in the browser's custom tab, and Back
+    // closes it, back to the shard.
     try {
       await openFromHome("Start here");
       await tap(editor().getByText("Links", { exact: true }).first());
       await tap(editor().getByText("The website", { exact: true }).first());
-      await poll(appInFront, "the system's browser in front").not.toMatch(new RegExp(`^(${PACKAGE})?$`));
+      const front = () => shell("dumpsys activity activities | grep -m1 topResumedActivity");
+      await poll(front, "the page in a custom tab").toMatch(/CustomTab/);
+      await shell("input keyevent KEYCODE_BACK");
+      await poll(appInFront, "the app back in front").toBe(PACKAGE);
+      await expect(editor()).toBeVisible();
     } finally {
       await bringAppBack();
     }

@@ -80,7 +80,7 @@ export function today() {
 }
 
 /** `title`, or "`title` 2" and so on, whichever is free in `folder`. */
-export async function freeTitle(folder: string, title: string) {
+async function freeTitle(folder: string, title: string) {
   for (let count = 1; ; count += 1) {
     const candidate = count === 1 ? title : `${title} ${count}`;
     if (!(await fileExists(joinPath(folder, `${candidate}.md`))))
@@ -88,20 +88,29 @@ export async function freeTitle(folder: string, title: string) {
   }
 }
 
+/** `blocks` as Markdown for the shard at `filePath`. */
+export function markdownOf(blocks: TElement[], filePath: string) {
+  const editor = createSlateEditor({ plugins: SerializationKit, value: blocks });
+  return serializeEditorMarkdown(editor, { filePath });
+}
+
 /**
- * Makes a shard in `folder` called `base` and today's date ("Photo, 24
- * Nov", or "… 2" when that's taken), with that title and then `body`.
- * Returns its path.
+ * Makes a shard in `folder` called `title` ("… 2" when that's taken), with
+ * that title and then `body`. Returns its path.
  */
-async function createDatedShard(folder: string, base: string, body: TElement[]) {
-  const title = await freeTitle(folder, `${base}, ${today()}`);
-  const filePath = await renameFile(await createShardFile(folder), title);
-  const editor = createSlateEditor({
-    plugins: SerializationKit,
-    value: [{ type: KEYS.h1, children: [{ text: title }] }, ...body],
-  });
-  await appendMarkdownToFile(filePath, serializeEditorMarkdown(editor, { filePath }));
+export async function createTitledShard(folder: string, title: string, body: TElement[]) {
+  const name = await freeTitle(folder, title);
+  const filePath = await renameFile(await createShardFile(folder), name);
+  await appendMarkdownToFile(
+    filePath,
+    markdownOf([{ type: KEYS.h1, children: [{ text: name }] }, ...body], filePath),
+  );
   return filePath;
+}
+
+/** A shard called `base` and today's date, as in "Photo, 24 Nov". */
+function createDatedShard(folder: string, base: string, body: TElement[]) {
+  return createTitledShard(folder, `${base}, ${today()}`, body);
 }
 
 /**

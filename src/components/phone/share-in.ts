@@ -1,21 +1,15 @@
-import { KEYS, createSlateEditor, type TElement } from "platejs";
+import { KEYS, type TElement } from "platejs";
 import { create } from "zustand";
 import { managedMediaNode } from "@/components/editor/lib/media-insert";
-import { SerializationKit } from "@/components/editor/serialization-kit";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
 import type { PersistedAttachment } from "@/lib/commands/attachments";
 import { saveSharedFile, takeShared, type Shared, type SharedFile } from "@/lib/commands/incoming";
-import {
-  appendMarkdownToFile,
-  createShardFile,
-  renameFile,
-} from "@/lib/commands/shards";
-import { serializeEditorMarkdown } from "@/lib/editor-markdown";
+import { appendMarkdownToFile } from "@/lib/commands/shards";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
-import { freeTitle, today } from "./create";
+import { createTitledShard, markdownOf, today } from "./create";
 import { usePhoneNav } from "./nav";
 
 /** Sent by Android's MainActivity when another app shared something with this one. */
@@ -159,11 +153,6 @@ async function blocksOf(content: ShareContent, vaultPath: string) {
   return { blocks, saved };
 }
 
-function markdownOf(blocks: TElement[], filePath: string) {
-  const editor = createSlateEditor({ plugins: SerializationKit, value: blocks });
-  return serializeEditorMarkdown(editor, { filePath });
-}
-
 /** Where a share goes: a new shard in a folder, or the end of a shard. */
 export type ShareTarget =
   | { kind: "new"; folder: string }
@@ -181,12 +170,7 @@ export async function saveShare(
   const { blocks, saved } = await blocksOf(content, vaultPath);
   let shard: string;
   if (target.kind === "new") {
-    const title = await freeTitle(target.folder, shareTitle(content));
-    shard = await renameFile(await createShardFile(target.folder), title);
-    await appendMarkdownToFile(
-      shard,
-      markdownOf([{ type: KEYS.h1, children: [{ text: title }] }, ...blocks], shard),
-    );
+    shard = await createTitledShard(target.folder, shareTitle(content), blocks);
   } else {
     shard = target.shard;
     // The open shard's edits are saved first, so they're kept.

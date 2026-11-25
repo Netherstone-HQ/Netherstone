@@ -93,15 +93,22 @@ export function pinChunkHeightsAbove(el: HTMLElement) {
 }
 
 /**
- * Lays out `chunk` for one read and pins its real height as its intrinsic
- * size, which it keeps while `content-visibility: auto` skips it. Returns
- * the height.
+ * Pins `chunk`'s real height as its intrinsic size, which it keeps while
+ * `content-visibility: auto` skips it. Returns the height.
+ *
+ * A chunk the browser skips is laid out for the read. One it draws (on
+ * screen) is read as it is: setting `content-visibility` back to `auto`
+ * skips it until the next frame, and a click in that frame put the caret
+ * at the top of the shard.
  */
 export function pinChunkHeight(chunk: HTMLElement) {
   pinnedChunks.add(chunk);
-  chunk.style.contentVisibility = "visible";
+  const skipped = !chunk.firstElementChild?.checkVisibility?.({
+    contentVisibilityAuto: true,
+  });
+  if (skipped) chunk.style.contentVisibility = "visible";
   const height = Math.round(chunk.getBoundingClientRect().height);
   chunk.style.containIntrinsicSize = `auto ${height}px`;
-  chunk.style.contentVisibility = "auto";
+  if (skipped) chunk.style.contentVisibility = "auto";
   return height;
 }

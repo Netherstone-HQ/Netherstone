@@ -736,7 +736,7 @@ try {
       await tap(editor().getByText("The website", { exact: true }).first());
       const front = () => shell("dumpsys activity activities | grep -m1 topResumedActivity");
       await poll(front, "the page in a custom tab").toMatch(/CustomTab/);
-      await shell("input keyevent KEYCODE_BACK");
+      await pressKey("KEYCODE_BACK");
       await poll(appInFront, "the app back in front").toBe(PACKAGE);
       await expect(editor()).toBeVisible();
     } finally {

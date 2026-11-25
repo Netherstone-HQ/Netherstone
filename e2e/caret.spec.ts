@@ -955,6 +955,53 @@ test.describe("in a long shard", () => {
   });
 });
 
+// Each part of a shard is measured in a quiet moment after it opens. A part
+// on screen measured that way was skipped by the browser until the next
+// frame, and a click in that frame put the caret at the top of the shard.
+test("the parts of a shard on screen stay drawn while they're measured", async ({ page }) => {
+  await page.addInitScript(() => {
+    const held: [number, IdleRequestCallback][] = [];
+    let holding = true;
+    let nextId = 1;
+    const request = window.requestIdleCallback.bind(window);
+    const cancel = window.cancelIdleCallback.bind(window);
+    window.requestIdleCallback = (callback, options) => {
+      if (!holding) return request(callback, options);
+      const id = -nextId++;
+      held.push([id, callback]);
+      return id;
+    };
+    window.cancelIdleCallback = (id) => {
+      if (id >= 0) return cancel(id);
+      const at = held.findIndex(([heldId]) => heldId === id);
+      if (at >= 0) held.splice(at, 1);
+    };
+    (window as unknown as { runIdleWork: () => void }).runIdleWork = () => {
+      holding = false;
+      for (let next = held.shift(); next; next = held.shift()) {
+        next[1]({ didTimeout: false, timeRemaining: () => 50 });
+      }
+    };
+  });
+  let note = "Top\n\n";
+  for (let i = 0; i < 30; i += 1) note += `Line ${i}\n\n`;
+  await mockVault(page, { files: { "Note.md": note }, open: "Note.md" });
+  await expect(editor(page)).toContainText("Line 29");
+
+  const measured = await editor(page).evaluate((root) => {
+    (window as unknown as { runIdleWork: () => void }).runIdleWork();
+    const line = [...root.querySelectorAll("[data-slate-node='element']")].find(
+      (element) => element.textContent === "Line 3",
+    )!;
+    const chunk = line.closest<HTMLElement>("[data-slate-chunk]")!;
+    return {
+      drawn: line.checkVisibility({ contentVisibilityAuto: true }),
+      pinned: chunk.style.containIntrinsicSize === `auto ${Math.round(chunk.getBoundingClientRect().height)}px`,
+    };
+  });
+  expect(measured).toEqual({ drawn: true, pinned: true });
+});
+
 test.describe("other text boxes keep their caret", () => {
   const NOTE = "Top\n\nalpha\n\n![x](_attachments/a.png)\n\n";
   const READY = {

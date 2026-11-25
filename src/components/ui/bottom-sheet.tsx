@@ -14,8 +14,61 @@ const HEIGHTS: Record<BottomSheetHeight, string> = {
 
 /**
  * A panel that slides up from the bottom of a phone screen over a dimmed
- * backdrop. A tap on the backdrop, Back or Esc closes it.
+ * backdrop, holding only its handle. A tap on the backdrop, Back or Esc
+ * closes it.
  */
+export function BottomSheetFrame({
+  open,
+  onOpenChange,
+  className,
+  children,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  className?: string;
+  children: React.ReactNode;
+  onOpenAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: (event: Event) => void;
+}) {
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          data-slot="bottom-sheet-overlay"
+          className="fixed inset-0 z-50 bg-black/55 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
+        />
+        <DialogPrimitive.Content
+          data-slot="bottom-sheet"
+          aria-describedby={undefined}
+          onOpenAutoFocus={onOpenAutoFocus}
+          onCloseAutoFocus={onCloseAutoFocus}
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[20px] border-t border-border bg-popover text-popover-foreground outline-none",
+            "pb-[var(--safe-area-bottom,env(safe-area-inset-bottom))]",
+            "duration-200 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom",
+            className,
+          )}
+        >
+          {children}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+
+/** The bar at the top of a sheet that shows it can be pulled. */
+export function BottomSheetHandle({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn("mx-auto mt-3 mb-2 h-1 w-8 shrink-0 rounded-full bg-input", className)}
+    />
+  );
+}
+
+/** A sheet with a title row and a scrolling body. */
 export function BottomSheet({
   open,
   onOpenChange,
@@ -38,40 +91,23 @@ export function BottomSheet({
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          data-slot="bottom-sheet-overlay"
-          className="fixed inset-0 z-50 bg-black/55 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
-        />
-        <DialogPrimitive.Content
-          data-slot="bottom-sheet"
-          aria-describedby={undefined}
-          onCloseAutoFocus={onCloseAutoFocus}
-          className={cn(
-            "fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[20px] border-t border-border bg-popover text-popover-foreground outline-none",
-            "pb-[var(--safe-area-bottom,env(safe-area-inset-bottom))]",
-            "duration-200 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom",
-            HEIGHTS[height],
-            className,
-          )}
-        >
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-3 mb-2 h-1 w-8 shrink-0 rounded-full bg-input"
-          />
-          <div className="flex min-h-11 shrink-0 items-center gap-2 pr-1 pl-4">
-            <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
-              {title}
-            </DialogPrimitive.Title>
-            {actions}
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {children}
-          </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+    <BottomSheetFrame
+      open={open}
+      onOpenChange={onOpenChange}
+      onCloseAutoFocus={onCloseAutoFocus}
+      className={cn(HEIGHTS[height], className)}
+    >
+      <BottomSheetHandle />
+      <div className="flex min-h-11 shrink-0 items-center gap-2 pr-1 pl-4">
+        <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
+          {title}
+        </DialogPrimitive.Title>
+        {actions}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {children}
+      </div>
+    </BottomSheetFrame>
   );
 }
 

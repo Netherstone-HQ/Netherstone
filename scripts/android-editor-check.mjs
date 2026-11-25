@@ -157,23 +157,43 @@ async function calibrate(target) {
   // The listener is in place before the tap: a tap that lands first is
   // never seen.
   await page.evaluate(() => {
-    window.__calibrationTap = new Promise((resolve) =>
-      window.addEventListener("pointerdown", (e) => resolve({ x: e.clientX, y: e.clientY }), {
-        once: true,
-        capture: true,
-      }),
+    window.__calibrationTap = null;
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        window.__calibrationTap = { x: e.clientX, y: e.clientY };
+      },
+      { once: true, capture: true },
     );
   });
   screen = { scale, x: 0, y: 0 };
   await expect(target).toBeVisible();
   const at = await pointOn(target);
+  await closeNotResponding();
   await shell(`input tap ${at.x} ${at.y}`);
-  const client = await within(
-    page.evaluate(() => window.__calibrationTap),
-    "the calibration tap",
-  );
+  const seen = () => page.evaluate(() => window.__calibrationTap);
+  // A dialog that came up over the app took the tap: it goes, and the tap
+  // is made again.
+  await poll(async () => {
+    if (!(await seen()) && (await closeNotResponding())) await shell(`input tap ${at.x} ${at.y}`);
+    return seen();
+  }, "the calibration tap").not.toBeNull();
+  const client = await seen();
   screen = { scale, x: at.x - client.x * scale, y: at.y - client.y * scale };
   log("screen", screen);
+}
+
+/**
+ * Closes the dialog a slow emulator shows when another app "isn't
+ * responding" (hide_error_dialogs doesn't keep it away), choosing Wait.
+ * Returns whether there was one.
+ */
+async function closeNotResponding() {
+  const dialog = await shell("dumpsys window windows | grep -m1 'Application Not Responding' || true");
+  if (!dialog) return false;
+  log("closing:", dialog.trim());
+  await tapSystemButton(/^Wait$/);
+  return true;
 }
 
 /** The screen point at `fx`, `fy` (0 to 1) across an element. */
@@ -190,12 +210,14 @@ async function pointOn(locator, fx = 0.5, fy = 0.5) {
 /** A finger tap. */
 async function tap(locator, fx, fy) {
   const { x, y } = await pointOn(locator, fx, fy);
+  await closeNotResponding();
   await shell(`input tap ${x} ${y}`);
 }
 
 /** A finger held still on an element. */
 async function longPress(locator) {
   const { x, y } = await pointOn(locator, 0.3);
+  await closeNotResponding();
   await shell(`input swipe ${x} ${y} ${x} ${y} ${LONG_PRESS_MS}`);
 }
 
@@ -220,9 +242,17 @@ async function tapSystemButton(label) {
   await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
-/** Text typed on the keyboard, one key at a time. */
+/**
+ * Text typed on the keyboard, one key at a time, each sent on its own as a
+ * finger would. One `input text` for the whole text sends the keys within
+ * a millisecond or so, faster than any typing: right after a / menu turned
+ * the line into a quote, 2 lines in 25 then came out with two letters
+ * swapped ("quotedl ine"), and none in 25 typed key by key.
+ */
 async function typeKeys(text) {
-  await shell(`input text '${text.replaceAll(" ", "%s")}'`);
+  for (const key of text) {
+    await shell(key === " " ? "input keyevent KEYCODE_SPACE" : `input text '${key}'`);
+  }
 }
 
 const keyboardInset = () =>
@@ -605,6 +635,18 @@ try {
     const inGallery = `/sdcard/Pictures/netherstone-check-${Date.now()}.png`;
     adb("push", GALLERY_PICTURE, inGallery);
     await shell("content call --method scan_volume --uri content://media --arg external_primary");
+    // The picker hands on the size the gallery has for the file, and the
+    // app's read of it fails unless that's the size on disk: wait until
+    // the gallery has it right.
+    const size = fs.statSync(GALLERY_PICTURE).size;
+    const name = path.posix.basename(inGallery);
+    await poll(
+      () =>
+        shell(
+          `content query --uri content://media/external/images/media --projection _size --where "_display_name='${name}'"`,
+        ),
+      "the gallery to know the picture's size",
+    ).toContain(`_size=${size}`);
     await insertFromBar("Picture");
     await tapSystemButton(/^Photo taken on/);
     await tapSystemButton(/^Add \(1\)$/);

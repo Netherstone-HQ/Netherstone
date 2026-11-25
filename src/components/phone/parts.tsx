@@ -66,6 +66,38 @@ export function PhoneTopBar({
   );
 }
 
+/** A word button in a top bar, such as Select. */
+export function PhoneTextButton({
+  className,
+  ...props
+}: React.ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "h-12 shrink-0 rounded-full px-3 font-medium outline-none active:bg-accent",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** The bar at the bottom of a screen, above the system's own bar. */
+export function PhoneBottomBar({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
+      <div className={cn("flex", className)}>{children}</div>
+    </div>
+  );
+}
+
 /** Back to the screen this one was opened from. */
 export function PhoneBackButton() {
   const back = usePhoneNav((s) => s.back);

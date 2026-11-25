@@ -28,8 +28,10 @@ import { useVaultStore } from "@/store";
 import { closer, useLast, usePhoneNav, useSelecting } from "./nav";
 import {
   PhoneBackButton,
+  PhoneBottomBar,
   PhoneFrame,
   PhoneSection,
+  PhoneTextButton,
   PhoneTitle,
   PhoneTopBar,
 } from "./parts";
@@ -128,13 +130,9 @@ export function TrashScreen() {
           <PhoneBackButton />
           <PhoneTitle>Trash</PhoneTitle>
           {items.length > 0 ? (
-            <button
-              type="button"
-              className="h-12 shrink-0 rounded-full px-3 font-medium outline-none active:bg-accent"
-              onClick={() => push({ kind: "select" })}
-            >
+            <PhoneTextButton onClick={() => push({ kind: "select" })}>
               Select
-            </button>
+            </PhoneTextButton>
           ) : null}
         </PhoneTopBar>
       )}
@@ -167,18 +165,16 @@ export function TrashScreen() {
           {selecting ? (
             <TrashSelectBar />
           ) : items.length > 0 ? (
-            <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
-              <div className="flex px-4 py-3">
-                <button
-                  type="button"
-                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border border-input font-medium outline-none active:bg-accent [&_svg]:size-5"
-                  onClick={() => push({ kind: "confirm-empty-trash" })}
-                >
-                  <Trash2Icon />
-                  Empty Trash
-                </button>
-              </div>
-            </div>
+            <PhoneBottomBar className="px-4 py-3">
+              <button
+                type="button"
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border border-input font-medium outline-none active:bg-accent [&_svg]:size-5"
+                onClick={() => push({ kind: "confirm-empty-trash" })}
+              >
+                <Trash2Icon />
+                Empty Trash
+              </button>
+            </PhoneBottomBar>
           ) : null}
         </>
       )}
@@ -229,25 +225,23 @@ function TrashSelectBar() {
   const push = usePhoneNav((s) => s.push);
   const none = ids.length === 0;
   return (
-    <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
-      <div className="flex h-20 items-center justify-around">
-        <BarButton
-          label="Restore"
-          icon={<RotateCcwIcon />}
-          disabled={none}
-          onClick={() => {
-            void restoreTrashed(ids);
-            stopSelecting();
-          }}
-        />
-        <BarButton
-          label="Delete forever"
-          icon={<Trash2Icon />}
-          disabled={none}
-          onClick={() => push({ kind: "confirm-delete-forever", ids })}
-        />
-      </div>
-    </div>
+    <PhoneBottomBar className="h-20 items-center justify-around">
+      <BarButton
+        label="Restore"
+        icon={<RotateCcwIcon />}
+        disabled={none}
+        onClick={() => {
+          void restoreTrashed(ids);
+          stopSelecting();
+        }}
+      />
+      <BarButton
+        label="Delete forever"
+        icon={<Trash2Icon />}
+        disabled={none}
+        onClick={() => push({ kind: "confirm-delete-forever", ids })}
+      />
+    </PhoneBottomBar>
   );
 }
 

@@ -9,7 +9,13 @@ import type { ReactNode } from "react";
 import { useUIStore } from "@/store";
 import { allPinned, pinAll, trashAll } from "./item-batch";
 import { usePhoneNav } from "./nav";
-import { PhoneIconButton, PhoneTitle, PhoneTopBar } from "./parts";
+import {
+  PhoneBottomBar,
+  PhoneIconButton,
+  PhoneTextButton,
+  PhoneTitle,
+  PhoneTopBar,
+} from "./parts";
 import { usePhoneSelection } from "./selection";
 
 /** The top bar while picking shards: close, how many, and Select all. */
@@ -26,13 +32,9 @@ export function SelectTopBar({ shown }: { shown: string[] }) {
         <XIcon />
       </PhoneIconButton>
       <PhoneTitle>{count} selected</PhoneTitle>
-      <button
-        type="button"
-        className="h-12 shrink-0 rounded-full px-3 font-medium outline-none active:bg-accent"
-        onClick={() => setPaths([...new Set(shown)])}
-      >
+      <PhoneTextButton onClick={() => setPaths([...new Set(shown)])}>
         Select all
-      </button>
+      </PhoneTextButton>
     </PhoneTopBar>
   );
 }
@@ -44,28 +46,26 @@ export function SelectActionBar() {
   const push = usePhoneNav((s) => s.push);
   const none = paths.length === 0;
   return (
-    <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
-      <div className="flex h-20 items-center justify-around">
-        <BarButton
-          label={unpin ? "Unpin" : "Pin"}
-          icon={unpin ? <PinOffIcon /> : <PinIcon />}
-          disabled={none}
-          onClick={() => pinAll(paths)}
-        />
-        <BarButton
-          label="Move"
-          icon={<FolderInputIcon />}
-          disabled={none}
-          onClick={() => push({ kind: "move", paths })}
-        />
-        <BarButton
-          label="Delete"
-          icon={<TrashIcon />}
-          disabled={none}
-          onClick={() => trashAll(paths)}
-        />
-      </div>
-    </div>
+    <PhoneBottomBar className="h-20 items-center justify-around">
+      <BarButton
+        label={unpin ? "Unpin" : "Pin"}
+        icon={unpin ? <PinOffIcon /> : <PinIcon />}
+        disabled={none}
+        onClick={() => pinAll(paths)}
+      />
+      <BarButton
+        label="Move"
+        icon={<FolderInputIcon />}
+        disabled={none}
+        onClick={() => push({ kind: "move", paths })}
+      />
+      <BarButton
+        label="Delete"
+        icon={<TrashIcon />}
+        disabled={none}
+        onClick={() => trashAll(paths)}
+      />
+    </PhoneBottomBar>
   );
 }
 

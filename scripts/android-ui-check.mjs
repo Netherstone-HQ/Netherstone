@@ -135,7 +135,16 @@ async function backToHome() {
     await expect.poll(keyboardUp, { message: "the keyboard to go away" }).toBe(false);
   }
   await pressBack();
-  await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+  // A dialog that came up just after the press took it: the press is made
+  // again once the dialog is gone.
+  const home = page.getByRole("button", { name: "Search this vault" });
+  await expect
+    .poll(async () => {
+      if (await home.isVisible()) return true;
+      if (await closeNotResponding(shell)) await shell("input keyevent KEYCODE_BACK");
+      return false;
+    }, { message: "home" })
+    .toBe(true);
 }
 
 /** The shard's row in the Files list on home. */

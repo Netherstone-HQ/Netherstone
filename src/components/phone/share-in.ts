@@ -1,6 +1,6 @@
 import { KEYS, type TElement } from "platejs";
 import { create } from "zustand";
-import { managedMediaNode } from "@/components/editor/lib/media-insert";
+import { managedMediaNode, mediaNodeTypeForMime } from "@/components/editor/lib/media-insert";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
 import type { PersistedAttachment } from "@/lib/commands/attachments";
@@ -118,14 +118,6 @@ export function shareTitle(content: ShareContent) {
   return asTitle(from) || `Shared, ${today()}`;
 }
 
-/** The block a shared file of `type` becomes. */
-function mediaKind(type: string) {
-  if (type.startsWith("image/")) return KEYS.img;
-  if (type.startsWith("video/")) return KEYS.video;
-  if (type.startsWith("audio/")) return KEYS.audio;
-  return KEYS.file;
-}
-
 /** The blocks `content` becomes, its files copied into the vault. */
 async function blocksOf(content: ShareContent, vaultPath: string) {
   const blocks: TElement[] = [];
@@ -148,7 +140,7 @@ async function blocksOf(content: ShareContent, vaultPath: string) {
   for (const file of content.files) {
     const persisted = await saveSharedFile(file.path, vaultPath);
     saved.push(persisted);
-    blocks.push(managedMediaNode(persisted, mediaKind(file.type), file.name));
+    blocks.push(managedMediaNode(persisted, mediaNodeTypeForMime(file.type), file.name));
   }
   return { blocks, saved };
 }

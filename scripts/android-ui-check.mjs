@@ -407,6 +407,14 @@ try {
       .toContain(OPENED_TEXT);
   });
 
+  // Back from the imported shard shows the shard it was opened over again.
+  await step("back-to-previous-file", async () => {
+    await page.getByRole("button", { name: "Back", exact: true }).first().click();
+    const editor = page.locator("[data-slate-editor]");
+    await expect(editor).toContainText(SHARED_TITLE);
+    await expect(editor).not.toContainText(OPENED_TEXT);
+  });
+
   // A new drawing opens ready to draw: a rectangle dragged out with a finger
   // is saved, and Done leaves it to look at.
   await step("draw-on-touch", async () => {

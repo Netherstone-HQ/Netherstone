@@ -74,18 +74,23 @@ export function openDeletedShardHistory(filePath: string) {
 
 /**
  * Creates an untitled drawing in `folder` (the vault's root by default) and
- * opens it, saying so if that fails.
+ * opens it, saying so if that fails. Returns its path, or null then.
  */
-export async function createDrawing(vaultPath: string, folder = vaultPath) {
+export async function createDrawing(
+  vaultPath: string,
+  folder = vaultPath,
+): Promise<string | null> {
   try {
     const filePath = await createDrawingFile(folder, "Untitled");
     await openDrawingFile(filePath);
     useVaultStore.getState().setFileTree(await scanVault(vaultPath));
+    return filePath;
   } catch (error) {
     console.error("[Netherstone] Failed to create drawing:", error);
     toast.error("Couldn't create drawing", {
       description: error instanceof Error ? error.message : String(error),
     });
+    return null;
   }
 }
 

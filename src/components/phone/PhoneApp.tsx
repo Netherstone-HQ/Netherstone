@@ -18,13 +18,13 @@ import { HomeScreen } from "./HomeScreen";
 import { MoreMenu } from "./MoreMenu";
 import { NameSheet } from "./NameSheet";
 import {
+  closer,
   followBrowserHistory,
   followSystemBack,
   usePhoneNav,
   usePhoneOverlay,
   usePhoneScreen,
   useSelecting,
-  type PhoneOverlay,
 } from "./nav";
 import { AssistantSheet } from "./AssistantSheet";
 import { HistorySheet } from "./HistorySheet";
@@ -38,18 +38,6 @@ import { TrashScreen } from "./TrashScreen";
 import { usePhoneSelection } from "./selection";
 import { ShardMenuSheet } from "./ShardMenuSheet";
 import { VaultMenuSheet } from "./VaultMenuSheet";
-
-/**
- * Closes `kind` when its sheet or menu asks to: steps back, unless a tap in
- * it already put something else on top.
- */
-function useCloser(kind: PhoneOverlay["kind"]) {
-  return (open: boolean) => {
-    if (open) return;
-    const { entries, back } = usePhoneNav.getState();
-    if (entries[entries.length - 1]?.kind === kind) back();
-  };
-}
 
 /** The app on a phone: one screen at a time, with sheets over it. */
 export function PhoneApp() {
@@ -89,13 +77,13 @@ export function PhoneApp() {
     if (!selecting) usePhoneSelection.getState().set([]);
   }, [selecting]);
 
-  const closeVaultMenu = useCloser("vault-menu");
-  const closeMoreMenu = useCloser("more-menu");
-  const closeNewFolder = useCloser("new-folder");
-  const closeNewVault = useCloser("new-vault");
-  const closeShardMenu = useCloser("shard-menu");
-  const closeHistorySheet = useCloser("history");
-  const closeAssistant = useCloser("assistant");
+  const closeVaultMenu = closer("vault-menu");
+  const closeMoreMenu = closer("more-menu");
+  const closeNewFolder = closer("new-folder");
+  const closeNewVault = closer("new-vault");
+  const closeShardMenu = closer("shard-menu");
+  const closeHistorySheet = closer("history");
+  const closeAssistant = closer("assistant");
   useSheetsFollowNav();
 
   return (

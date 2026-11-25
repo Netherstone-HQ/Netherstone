@@ -26,7 +26,6 @@ import {
   useShardLinks,
 } from "@/components/sidebar/right-sidebar/useShardInfo";
 import { useVaultItem } from "@/components/vault/useVaultItem";
-import { openFileHistory } from "@/lib/open-vault-file";
 import type { ExportFormat } from "@/lib/export";
 import { isSamePath } from "@/lib/drawing-files";
 import { shareExport } from "@/lib/export/share";
@@ -34,7 +33,7 @@ import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { reportFailure } from "./toasts";
-import { usePhoneNav } from "./nav";
+import { openHistoryScreen } from "./open-file";
 import { errorText } from "@/lib/utils";
 
 type Part = "menu" | "outline" | "links" | "rename" | "export";
@@ -83,7 +82,6 @@ export function ShardMenuSheet({
   const item = useVaultItem({ name, path, kind: "file" });
   const links = useShardLinks(open);
   const indexed = useIndexedShard(open);
-  const replace = usePhoneNav((s) => s.replace);
 
   const close = (next: boolean) => {
     if (!next) setPart("menu");
@@ -112,12 +110,7 @@ export function ShardMenuSheet({
         </BottomSheetItem>
         <BottomSheetItem
           icon={<ClockIcon />}
-          onClick={() => {
-            replace({ kind: "history" });
-            void openFileHistory(path).catch((error: unknown) =>
-              console.error("[Netherstone] Couldn't show history:", error),
-            );
-          }}
+          onClick={() => openHistoryScreen(path, true)}
         >
           Show history
         </BottomSheetItem>

@@ -19,12 +19,12 @@ import { useThemeMode } from "@/components/theme/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
-import { openFileHistory } from "@/lib/open-vault-file";
 import { folderName } from "@/lib/open-vault";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
 import { useShownVersion } from "@/store/history";
 import { usePhoneNav } from "./nav";
+import { openHistoryScreen } from "./open-file";
 import { PhoneBackButton, PhoneFrame, PhoneIconButton, PhoneTopBar } from "./parts";
 
 const ExcalidrawCanvas = lazy(() =>
@@ -138,12 +138,7 @@ export function DrawingScreen() {
         ) : drawingPath ? (
           <PhoneIconButton
             label="History"
-            onClick={() => {
-              push({ kind: "history" });
-              void openFileHistory(drawingPath).catch((error: unknown) =>
-                console.error("[Netherstone] Couldn't show history:", error),
-              );
-            }}
+            onClick={() => openHistoryScreen(drawingPath)}
           >
             <HistoryIcon />
           </PhoneIconButton>

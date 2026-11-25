@@ -1,4 +1,4 @@
-import { openVaultFile } from "@/lib/open-vault-file";
+import { openFileHistory, openVaultFile } from "@/lib/open-vault-file";
 import { useEditorStore, type PendingReveal } from "@/store/editor";
 import { usePhoneNav } from "./nav";
 
@@ -23,4 +23,17 @@ export async function openFileScreenAt(reveal: PendingReveal) {
     setPendingLinkReveal(null);
     throw error;
   }
+}
+
+/**
+ * Shows the history of `path`. With `replace`, it takes the place of the
+ * sheet it was opened from.
+ */
+export function openHistoryScreen(path: string, replace = false) {
+  const nav = usePhoneNav.getState();
+  if (replace) nav.replace({ kind: "history" });
+  else nav.push({ kind: "history" });
+  void openFileHistory(path).catch((error: unknown) =>
+    console.error("[Netherstone] Couldn't show history:", error),
+  );
 }

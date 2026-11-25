@@ -13,11 +13,10 @@ import {
   BottomSheetSeparator,
 } from "@/components/ui/bottom-sheet";
 import { getVaultFileDisplayName, isSamePath } from "@/lib/drawing-files";
-import { openFileHistory } from "@/lib/open-vault-file";
 import { useUIStore, useVaultStore } from "@/store";
 import { pinAll, trashAll } from "./item-batch";
 import { usePhoneNav } from "./nav";
-import { openFileScreen } from "./open-file";
+import { openFileScreen, openHistoryScreen } from "./open-file";
 import { usePhoneSelection } from "./selection";
 import { findNode } from "./vault-tree";
 
@@ -35,16 +34,13 @@ export function RowMenuSheet({
   const isPinned = useUIStore((s) =>
     s.pinnedFiles.some((entry) => isSamePath(entry.path, path)),
   );
-  const { replace, push } = usePhoneNav.getState();
+  const { replace } = usePhoneNav.getState();
   if (!node) return null;
   const isFile = node.kind === "file";
 
   const showHistory = async () => {
     await openFileScreen(path, true);
-    push({ kind: "history" });
-    await openFileHistory(path).catch((error: unknown) =>
-      console.error("[Netherstone] Couldn't show history:", error),
-    );
+    openHistoryScreen(path);
   };
 
   return (

@@ -252,9 +252,17 @@ async function tapSystemButton(label) {
   await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
-/** Text typed on the keyboard, one key at a time. */
+/**
+ * Text typed on the keyboard, one key at a time, each sent on its own as a
+ * finger would. One `input text` for the whole text sends the keys within
+ * a millisecond or so, faster than any typing: right after a / menu turned
+ * the line into a quote, 2 lines in 25 then came out with two letters
+ * swapped ("quotedl ine"), and none in 25 typed key by key.
+ */
 async function typeKeys(text) {
-  await shell(`input text '${text.replaceAll(" ", "%s")}'`);
+  for (const key of text) {
+    await shell(key === " " ? "input keyevent KEYCODE_SPACE" : `input text '${key}'`);
+  }
 }
 
 const keyboardInset = () =>
@@ -754,6 +762,27 @@ try {
     typed,
   );
 
+  await step(
+    "voice-note-shard",
+    async () => {
+      // Home's microphone makes a shard named for today and records in it.
+      await openFromHome(SHARD);
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(home()).toBeVisible();
+      await page.getByRole("button", { name: "Record a voice note" }).click();
+      await expect(page.getByRole("heading", { name: /^Voice note, / })).toBeVisible();
+      await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
+      // Out of sight, Android may stop the app at any time: the recording
+      // is saved as it goes.
+      await shell("input keyevent KEYCODE_HOME");
+      await poll(appInFront, "the launcher in front").not.toBe(PACKAGE);
+      const saved = () => su(`cat "$(find '${vault}' -maxdepth 1 -name 'Voice note, *.md' | head -1)"`);
+      await poll(saved, "the recording saved into its shard").toMatch(/_attachments\/[^)"]+\.webm/);
+      await bringAppBack();
+      await expect(page.getByRole("group", { name: "Audio" })).toBeVisible();
+    },
+    { needs: ["voice-note-allowed"] },
+  );
   await step("photo-shard", async () => {
     // The camera on home's bar makes a shard of the photo, named for today.
     await openFromHome(SHARD);

@@ -196,13 +196,7 @@ function SyncButton({ vaultPath }: { vaultPath: string | null }) {
 }
 
 /** Looks like a search field; opens Search. */
-function SearchField({
-  onOpen,
-  label = "Search this vault",
-}: {
-  onOpen: () => void;
-  label?: string;
-}) {
+function SearchField({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -210,7 +204,7 @@ function SearchField({
       onClick={onOpen}
     >
       <SearchIcon className="size-5 shrink-0" />
-      <span className="truncate">{label}</span>
+      <span className="truncate">Search this vault</span>
     </button>
   );
 }

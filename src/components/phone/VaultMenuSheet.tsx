@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   CheckIcon,
   CloudIcon,
+  FolderOpenIcon,
   PlusIcon,
   SettingsIcon,
   TrashIcon,
@@ -12,9 +13,11 @@ import {
   BottomSheetItem,
   BottomSheetSeparator,
 } from "@/components/ui/bottom-sheet";
-import { defaultVaultLocation } from "@/lib/commands/vault";
+import { defaultVaultLocation, openVaultDialog } from "@/lib/commands/vault";
 import { isPathWithin, isSamePath } from "@/lib/drawing-files";
+import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, openVault } from "@/lib/open-vault";
+import { IS_ANDROID } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useVaultStore } from "@/store";
 import { useSyncStore } from "@/store/sync";
@@ -22,12 +25,18 @@ import { usePhoneNav } from "./nav";
 import { syncStatusLabel, useSyncProblem } from "./SyncStrip";
 import { useAppTrash } from "./trash";
 
+/** The start of a path in the phone's shared storage, such as Documents. */
+const SHARED_STORAGE = /^\/storage\/emulated\/\d+\//;
+
 /**
  * Where a vault lives, as its row says it: in the app's own storage, or
  * the folder holding it.
  */
 function vaultPlace(path: string, appStorage: string | null) {
   if (appStorage && isPathWithin(path, appStorage)) return "On this phone";
+  // In the phone's shared storage, as its Files app names the folder.
+  const shared = SHARED_STORAGE.exec(path);
+  if (shared) return `In ${path.slice(shared[0].length)}`;
   const parent = path.replace(/[\\/][^\\/]*[\\/]?$/, "");
   return `In ${parent}`;
 }
@@ -69,6 +78,14 @@ export function VaultMenuSheet({
     }
   }
 
+  /** A folder in the phone's storage, picked and opened as a vault. */
+  async function openFolder() {
+    onOpenChange(false);
+    const picked = await openVaultDialog();
+    const path = picked && (await chooseVaultFolder(picked, "open"));
+    if (path) await switchTo(path);
+  }
+
   const status = syncStatusLabel(syncOn, problem);
 
   return (
@@ -106,6 +123,11 @@ export function VaultMenuSheet({
       >
         New vault
       </BottomSheetItem>
+      {IS_ANDROID ? (
+        <BottomSheetItem icon={<FolderOpenIcon />} onClick={() => void openFolder()}>
+          Open a folder
+        </BottomSheetItem>
+      ) : null}
       <BottomSheetSeparator />
       <BottomSheetItem
         icon={<CloudIcon />}

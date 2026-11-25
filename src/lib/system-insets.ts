@@ -35,6 +35,12 @@ declare global {
       shareFile(path: string, mimeType: string): void;
       /** Opens the print screen with an export's print page; geometry is JSON. */
       printPage(html: string, jobName: string, geometry: string): void;
+      /** Whether vaults may live in the phone's shared storage. */
+      hasAllFilesAccess(): boolean;
+      /** Asks for that access, in its settings screen or a prompt. */
+      askAllFilesAccess(): void;
+      /** Shows the folder picker; the page hears `folderpicked`. */
+      pickFolder(): void;
     };
   }
 }

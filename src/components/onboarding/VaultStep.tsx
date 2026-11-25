@@ -10,6 +10,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 
 import { IS_PHONE } from "@/components/phone/phone-shell";
+import { IS_ANDROID } from "@/lib/platform";
 import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNotice";
 import { GitHubSignIn } from "@/components/settings/GitHubSignIn";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,14 @@ export function VaultStep({
       .catch(() => {});
   }, []);
 
+  async function openExisting() {
+    const picked = await openVaultDialog();
+    const path = picked && (await chooseVaultFolder(picked, "open"));
+    if (!path) return;
+    await openVault(path);
+    onChoose({ path, kind: "opened" });
+  }
+
   if (IS_PHONE) {
     return option === "create" ? (
       <PhoneCreateVault
@@ -90,18 +99,19 @@ export function VaultStep({
             description={copy.vault.create.phoneDescription}
             onClick={() => setOption("create")}
           />
+          {IS_ANDROID ? (
+            <ChoiceCard
+              icon={<FolderOpenIcon />}
+              title={copy.vault.sharedFolder.title}
+              description={copy.vault.sharedFolder.description}
+              onClick={() => void openExisting()}
+            />
+          ) : null}
         </div>
       </Step>
     );
   }
 
-  async function openExisting() {
-    const picked = await openVaultDialog();
-    const path = picked && (await chooseVaultFolder(picked, "open"));
-    if (!path) return;
-    await openVault(path);
-    onChoose({ path, kind: "opened" });
-  }
 
   return (
     <Step title={copy.vault.title} body={copy.vault.body} onBack={onBack}>

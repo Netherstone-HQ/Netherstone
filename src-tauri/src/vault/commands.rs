@@ -17,10 +17,11 @@ fn pick_folder(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     app.dialog().file().blocking_pick_folder()?.into_path().ok()
 }
 
-/// Phones have no folder picker: vaults live in the app's storage.
+/// On a phone the system's folder picker runs before this is called (see
+/// src/lib/commands/vault.ts), and the folder it picked is taken here.
 #[cfg(mobile)]
-fn pick_folder(_app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
-    None
+fn pick_folder(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    crate::incoming::take_picked_folder(app)
 }
 
 /// Makes `vault_path` the open vault, the only folder the other commands

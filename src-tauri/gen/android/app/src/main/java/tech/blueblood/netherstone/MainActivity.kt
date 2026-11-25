@@ -137,6 +137,23 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  /**
+   * The folder picker for a vault in shared storage. What it picked is left
+   * for src-tauri (see SharedFolders.kt), and the page hears `folderpicked`,
+   * its `detail` "picked", "cancelled", or "unusable" for a folder with no
+   * path, such as a cloud app's.
+   */
+  private val folderPicker =
+    registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+      val path = tree?.let { SharedFolders.pathOf(it) }
+      if (path != null) SharedFolders.keep(cacheDir, path)
+      val outcome = if (tree == null) "cancelled" else if (path == null) "unusable" else "picked"
+      page?.evaluateJavascript(
+        "window.dispatchEvent(new CustomEvent('folderpicked',{detail:'$outcome'}))",
+        null,
+      )
+    }
+
   /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */
   @Volatile private var insetsJson = "{}"
 
@@ -188,6 +205,21 @@ class MainActivity : TauriActivity() {
     }
 
     /** Shows or hides the keyboard, leaving focus and the caret where they are. */
+    /** Whether vaults may live in shared storage: "All files access". */
+    @JavascriptInterface fun hasAllFilesAccess(): Boolean = SharedFolders.hasAccess(this@MainActivity)
+
+    /** The settings screen where "All files access" is given. */
+    @JavascriptInterface
+    fun askAllFilesAccess() {
+      runOnUiThread { SharedFolders.askAccess(this@MainActivity) }
+    }
+
+    /** Shows the system's folder picker, in Documents; see `folderPicker`. */
+    @JavascriptInterface
+    fun pickFolder() {
+      runOnUiThread { folderPicker.launch(SharedFolders.DOCUMENTS) }
+    }
+
     @JavascriptInterface
     fun setKeyboard(shown: Boolean) {
       runOnUiThread {

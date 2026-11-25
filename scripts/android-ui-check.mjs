@@ -36,6 +36,8 @@ const SHARED_PICTURE = "shared-picture.png";
 const PICTURE_FILE = "src-tauri/icons/32x32.png";
 const OPENED_NOTE = "opened-note.md";
 const OPENED_TEXT = "opened from another app";
+// How long a finger takes to drag out a shape, in ms.
+const DRAG_MS = 400;
 
 // How long one wait may take. Far above any step on a CI emulator, so only a
 // stuck step reaches it.
@@ -383,6 +385,32 @@ try {
     await expect
       .poll(() => readAppFile(`${vault}/${OPENED_NOTE}`), { message: "the imported shard" })
       .toContain(OPENED_TEXT);
+  });
+
+  // A new drawing opens ready to draw: a rectangle dragged out with a finger
+  // is saved, and Done leaves it to look at.
+  await step("draw-on-touch", async () => {
+    // Home is a few shards back, after the shares and the import.
+    const home = page.getByRole("button", { name: "Search this vault" });
+    await expect
+      .poll(async () => {
+        if (await home.isVisible()) return true;
+        await page.getByRole("button", { name: "Back", exact: true }).first().click();
+        return false;
+      }, { message: "home" })
+      .toBe(true);
+    await page.getByRole("button", { name: "New drawing", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Drawing tools" })).toBeVisible();
+    await page.getByRole("button", { name: "Rectangle", exact: true }).click();
+    const [width, height] = (await shell("wm size")).match(/(\d+)x(\d+)/).slice(1).map(Number);
+    const at = (fx, fy) => `${Math.round(width * fx)} ${Math.round(height * fy)}`;
+    await shell(`input swipe ${at(0.3, 0.4)} ${at(0.7, 0.55)} ${DRAG_MS}`);
+    const name = await page.getByRole("heading", { level: 1 }).innerText();
+    const drawing = `${vault}/${name}.excalidraw`;
+    await expect.poll(() => readAppFile(drawing), { message: "the rectangle saved" }).toContain('"type": "rectangle"');
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Drawing tools" })).toBeHidden();
   });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));

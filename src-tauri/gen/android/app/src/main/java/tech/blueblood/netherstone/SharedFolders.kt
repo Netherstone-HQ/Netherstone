@@ -41,7 +41,7 @@ object SharedFolders {
   fun askAccess(activity: Activity) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       activity.startActivity(
-        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.fromParts("package", activity.packageName, null)),
+        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, activity.packageUri()),
       )
     } else {
       activity.requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), ACCESS_REQUEST)
@@ -70,11 +70,6 @@ object SharedFolders {
 
   /** Leaves `path` for incoming.rs, whole or not at all. */
   fun keep(cache: File, path: String) {
-    val folder = File(cache, FOLDER)
-    folder.mkdirs()
-    val stamp = System.currentTimeMillis().toString()
-    val part = File(folder, "$stamp.part")
-    part.writeText(path)
-    part.renameTo(File(folder, stamp))
+    writeWhole(File(cache, FOLDER)) { part -> part.writeText(path) }
   }
 }

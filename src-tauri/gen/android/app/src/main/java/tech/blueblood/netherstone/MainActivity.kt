@@ -18,7 +18,6 @@ import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
-import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -54,7 +53,7 @@ class MainActivity : TauriActivity() {
     super.onCreate(savedInstanceState)
     if (savedInstanceState == null) {
       // What the page took in the app's last run has been imported or saved.
-      File(cacheDir, "${Incoming.FOLDER}/taken").deleteRecursively()
+      File(cacheDir, "${Incoming.FOLDER}/${Incoming.TAKEN}").deleteRecursively()
       takeIn(intent)
     }
   }
@@ -75,7 +74,7 @@ class MainActivity : TauriActivity() {
     Thread {
       incoming.saveTo(cacheDir, contentResolver)
       runOnUiThread {
-        page?.evaluateJavascript("window.dispatchEvent(new Event('${incoming.kind}'))", null)
+        page?.dispatch(incoming.kind)
       }
     }.start()
   }
@@ -93,7 +92,7 @@ class MainActivity : TauriActivity() {
    * saves then.
    */
   override fun onStop() {
-    page?.evaluateJavascript("window.dispatchEvent(new Event('apphidden'))", null)
+    page?.dispatch("apphidden")
     super.onStop()
   }
 
@@ -153,10 +152,7 @@ class MainActivity : TauriActivity() {
       val path = tree?.let { SharedFolders.pathOf(it) }
       if (path != null) SharedFolders.keep(cacheDir, path)
       val outcome = if (tree == null) "cancelled" else if (path == null) "unusable" else "picked"
-      page?.evaluateJavascript(
-        "window.dispatchEvent(new CustomEvent('folderpicked',{detail:'$outcome'}))",
-        null,
-      )
+      page?.dispatch("folderpicked", "'$outcome'")
     }
 
   /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */
@@ -171,7 +167,7 @@ class MainActivity : TauriActivity() {
     fun openAppSettings() {
       runOnUiThread {
         startActivity(
-          Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+          Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri()),
         )
       }
     }
@@ -189,7 +185,7 @@ class MainActivity : TauriActivity() {
         Log.w("Netherstone", "Not shared: $path isn't an export to share")
         return
       }
-      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", file)
+      val uri = providedUri(file)
       val send = Intent(Intent.ACTION_SEND).apply {
         type = mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -238,13 +234,13 @@ class MainActivity : TauriActivity() {
     fun installUpdate(): Boolean {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
         runOnUiThread {
-          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.fromParts("package", packageName, null)))
+          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri()))
         }
         return false
       }
       val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
       if (!apk.isFile) return false
-      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", apk)
+      val uri = providedUri(apk)
       val install = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "application/vnd.android.package-archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -326,10 +322,7 @@ class MainActivity : TauriActivity() {
           "\"bottom\":${if (keyboard > 0) 0 else Math.round(bars.bottom / density)}}"
       if (json != insetsJson) {
         insetsJson = json
-        webView.evaluateJavascript(
-          "window.dispatchEvent(new CustomEvent('systeminsets',{detail:$json}))",
-          null,
-        )
+        webView.dispatch("systeminsets", json)
       }
       insets
     }

@@ -1,9 +1,10 @@
-import { CameraIcon, PlusIcon } from "lucide-react";
+import { CameraIcon, MicIcon, PlusIcon } from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
 import { PhoneIconButton } from "./parts";
 import {
   createDrawingIn,
   createPhotoShard,
+  createVoiceNoteShard,
   createUntitledShard,
 } from "./create";
 
@@ -21,6 +22,12 @@ export function CaptureBar({
   return (
     <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
       <div className="flex h-20 items-center pr-4 pl-1">
+        <PhoneIconButton
+          label="Record a voice note"
+          onClick={() => void createVoiceNoteShard(vaultPath, folder)}
+        >
+          <MicIcon />
+        </PhoneIconButton>
         <PhoneIconButton
           label="Take a photo"
           onClick={() => void createPhotoShard(vaultPath, folder)}

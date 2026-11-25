@@ -25,7 +25,22 @@ class MainActivity : TauriActivity() {
     super.onCreate(savedInstanceState)
   }
 
+  /** The app's page, told when the app goes out of sight. */
+  private var page: WebView? = null
+
+  /**
+   * The WebView keeps its page "visible" while the app is in the background,
+   * so the page is told itself: an `apphidden` event once the app is out of
+   * sight, when Android may stop it at any time. src/hooks/useAutosave.ts
+   * saves then.
+   */
+  override fun onStop() {
+    page?.evaluateJavascript("window.dispatchEvent(new Event('apphidden'))", null)
+    super.onStop()
+  }
+
   override fun onWebViewCreate(webView: WebView) {
+    page = webView
     if (BuildConfig.INSPECTABLE) {
       WebView.setWebContentsDebuggingEnabled(true)
       // scripts/android-ui-check.mjs waits for this line.

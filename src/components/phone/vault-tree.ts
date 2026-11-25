@@ -15,6 +15,16 @@ export function findNode(
   return null;
 }
 
+/** The files and folders at `paths` in `tree`, leaving out those gone. */
+export function findNodes(
+  tree: FileTreeNode[],
+  paths: string[],
+): FileTreeNode[] {
+  return paths
+    .map((path) => findNode(tree, path))
+    .filter((node): node is FileTreeNode => node !== null);
+}
+
 /** The folder at `path` in `tree`, or null when it's gone. */
 export function findFolder(
   tree: FileTreeNode[],

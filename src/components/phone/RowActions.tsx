@@ -15,7 +15,7 @@ import { closeActions, moveAll, runTrash } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { closer, useLast } from "./nav";
 import { RowMenuSheet } from "./RowMenuSheet";
-import { findNode } from "./vault-tree";
+import { findNode, findNodes } from "./vault-tree";
 
 function displayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -36,14 +36,10 @@ export function RowActions() {
   const move = useLast("move");
   const trash = useLast("confirm-trash");
 
-  const nodesOf = (paths: string[]) =>
-    paths
-      .map((path) => findNode(fileTree, path))
-      .filter((node): node is FileTreeNode => node !== null);
   const renaming = rename.overlay
     ? findNode(fileTree, rename.overlay.path)
     : null;
-  const moving = nodesOf(move.overlay?.paths ?? []);
+  const moving = findNodes(fileTree, move.overlay?.paths ?? []);
   const trashing = trash.overlay?.paths ?? [];
 
   return (

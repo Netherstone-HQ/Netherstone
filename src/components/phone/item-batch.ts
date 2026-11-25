@@ -5,16 +5,13 @@ import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import { usePhoneNav } from "./nav";
 import { rememberedOf, showMovedToTrash } from "./trash";
-import { findNode } from "./vault-tree";
+import { findNodes } from "./vault-tree";
 
 // Pin, move and trash for one row or several picked shards. Each closes
 // select mode (or the row's menu) when it's done.
 
 function nodesOf(paths: string[]): FileTreeNode[] {
-  const tree = useVaultStore.getState().fileTree;
-  return paths
-    .map((path) => findNode(tree, path))
-    .filter((node): node is FileTreeNode => node !== null);
+  return findNodes(useVaultStore.getState().fileTree, paths);
 }
 
 /** The overlays a row action can open, closed together when it's done. */

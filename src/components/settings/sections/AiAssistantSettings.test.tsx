@@ -11,6 +11,14 @@ import { AiAssistantSettings } from "./AiAssistantSettings";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
+const platform = vi.hoisted(() => ({ IS_MOBILE: false }));
+vi.mock("@/lib/platform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/platform")>()),
+  get IS_MOBILE() {
+    return platform.IS_MOBILE;
+  },
+}));
+
 function provider(
   id: string,
   name: string,
@@ -58,7 +66,10 @@ const MODEL = {
 
 describe("AiAssistantSettings", () => {
   beforeEach(() => vi.mocked(invoke).mockReset());
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    platform.IS_MOBILE = false;
+  });
 
   it("shows saved keys with their model count, and never asks for a key back", async () => {
     vi.mocked(invoke).mockImplementation(async (command: string) => {
@@ -192,5 +203,19 @@ describe("AiAssistantSettings", () => {
         "Use an https address to send a key to another computer",
       ),
     ).toBeTruthy();
+  });
+
+  it("offers no local server on a phone, only Custom", async () => {
+    platform.IS_MOBILE = true;
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "assistant_status") return status();
+      if (command === "assistant_models") return [MODEL];
+      return undefined;
+    });
+    render(<AiAssistantSettings />);
+    expect(await screen.findByText("Custom")).toBeTruthy();
+    expect(screen.queryByText("Local server")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Find" })).toBeNull();
+    expect(screen.queryByText("local server")).toBeNull();
   });
 });

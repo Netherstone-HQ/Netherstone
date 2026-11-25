@@ -2,6 +2,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import links from "@/data/links.json";
 import type { AssistantStatus } from "@/lib/commands/assistant";
+import { IS_MOBILE } from "@/lib/platform";
 import { CustomRow } from "./CustomRow";
 import { KeyRow } from "./KeyRow";
 import { LocalRow } from "./LocalRow";
@@ -9,7 +10,8 @@ import { type ProviderSetup, showError } from "./useProviderSetup";
 
 /**
  * The provider rows: the key providers in one card, the local server (and
- * Custom, when `custom`) in another.
+ * Custom, when `custom`) in another. A phone runs no local server, so it
+ * isn't offered there; one on a computer nearby is a Custom provider.
  */
 export function ProviderCards({
   setup,
@@ -23,7 +25,7 @@ export function ProviderCards({
   const { models, loadModels, remove, saved } = setup;
   const keyProviders = status.providers.filter((p) => p.setup === "key");
   const otherProviders = status.providers.filter(
-    (p) => p.setup === "local" || (custom && p.setup === "custom"),
+    (p) => (p.setup === "local" && !IS_MOBILE) || (custom && p.setup === "custom"),
   );
 
   return (
@@ -41,6 +43,7 @@ export function ProviderCards({
           />
         ))}
       </div>
+      {otherProviders.length > 0 ? (
       <div className="rounded-xl border bg-card shadow-xs">
         {otherProviders.map((provider) =>
           provider.setup === "local" ? (
@@ -72,6 +75,7 @@ export function ProviderCards({
           ),
         )}
       </div>
+      ) : null}
     </>
   );
 }
@@ -102,14 +106,19 @@ export function FreeWaysToStart({ sentences = false }: { sentences?: boolean }) 
         <ExternalLink href={links.googleKeys}>
           Gemini key
         </ExternalLink>
-        ,{" "}
+        {IS_MOBILE ? " or " : ", "}
         <ExternalLink href={links.openrouterFreeModels}>
           OpenRouter's free models
-        </ExternalLink>{" "}
-        or a{" "}
-        <ExternalLink href={links.ollamaDownload}>
-          local server
         </ExternalLink>
+        {IS_MOBILE ? null : (
+          <>
+            {" "}
+            or a{" "}
+            <ExternalLink href={links.ollamaDownload}>
+              local server
+            </ExternalLink>
+          </>
+        )}
         {end}
       </span>
       {sentences ? " " : null}

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { EllipsisVerticalIcon, SearchIcon, SparkleIcon } from "lucide-react";
 import { EditorOrVersion } from "@/components/AppLayout";
-import { ExcalidrawView } from "@/components/ExcalidrawView";
 import { loadAssistantEnabled } from "@/lib/assistant";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { formatVersionTitle } from "@/lib/history";
@@ -9,12 +8,12 @@ import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store";
 import { useAssistantStore } from "@/store/assistant";
+import { DrawingScreen } from "./DrawingScreen";
 import { usePhoneNav } from "./nav";
 import {
   PhoneBackButton,
   PhoneFrame,
   PhoneIconButton,
-  PhoneTitle,
   PhoneTopBar,
 } from "./parts";
 
@@ -24,7 +23,6 @@ import {
  */
 export function FileScreen() {
   const appMode = useUIStore((s) => s.appMode);
-  const drawingPath = useUIStore((s) => s.activeDrawingPath);
   const push = usePhoneNav((s) => s.push);
   const assistantOn = useAssistantStore((s) => s.enabled);
   const openPath = useEditorStore((s) => s.currentFilePath);
@@ -41,23 +39,7 @@ export function FileScreen() {
     }
   }, []);
 
-  if (appMode === "canvas") {
-    return (
-      <PhoneFrame>
-        <PhoneTopBar>
-          <PhoneBackButton />
-          <PhoneTitle>
-            {drawingPath
-              ? getVaultFileDisplayName(drawingPath.split(/[\\/]/).pop() ?? "")
-              : null}
-          </PhoneTitle>
-        </PhoneTopBar>
-        <main className="min-h-0 flex-1">
-          <ExcalidrawView />
-        </main>
-      </PhoneFrame>
-    );
-  }
+  if (appMode === "canvas") return <DrawingScreen />;
 
   if (showsVersion && version && openPath) {
     return (

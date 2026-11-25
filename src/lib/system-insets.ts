@@ -35,6 +35,8 @@ declare global {
       shareFile(path: string, mimeType: string): void;
       /** Opens the print screen with an export's print page; geometry is JSON. */
       printPage(html: string, jobName: string, geometry: string): void;
+      /** Shows a web page over the app, in the browser's custom tab. */
+      openInApp(url: string): void;
       /** Hands the downloaded update to the installer; false when it can't yet. */
       installUpdate(): boolean;
     };

@@ -771,3 +771,19 @@
 @utility pb-safe-bottom {
     padding-bottom: var(--safe-area-bottom, env(safe-area-inset-bottom));
 }
+
+/* A drawing on a phone (components/phone/DrawingScreen.tsx) brings its own
+   tools and bars, so Excalidraw's are hidden, its hints too, which speak of
+   clicks. Its canvas, text editing and the Undo button the screen presses
+   stay. */
+.phone-drawing .excalidraw .App-toolbar-container,
+.phone-drawing .excalidraw .App-bottom-bar,
+.phone-drawing .excalidraw .App-menu_top,
+.phone-drawing .excalidraw .layer-ui__wrapper__footer,
+.phone-drawing .excalidraw .layer-ui__wrapper__top-right,
+.phone-drawing .excalidraw .mobile-misc-tools-container,
+.phone-drawing .excalidraw .main-menu-trigger,
+.phone-drawing .excalidraw .sidebar-trigger,
+.phone-drawing .excalidraw .HintViewer {
+  display: none;
+}

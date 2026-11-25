@@ -1,4 +1,6 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { IS_ANDROID } from "@/lib/platform";
 
 export interface AvailableUpdate {
   version: string;
@@ -35,7 +37,37 @@ export function downloadUpdate(
   return invoke("updater_download", { onProgress: channel });
 }
 
-/** Installs the downloaded update and restarts the app. */
-export function installUpdate(): Promise<void> {
-  return invoke("updater_install");
+/** The label of the button that installs a downloaded update. */
+export const INSTALL_LABEL = IS_ANDROID ? "Install update" : "Restart to update";
+
+/** Resolves once the window is in front again, after a settings screen. */
+async function backInFront(): Promise<void> {
+  let stop: (() => void) | undefined;
+  await new Promise<void>((resolve) => {
+    void getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused) resolve();
+      })
+      .then((unlisten) => {
+        stop = unlisten;
+      });
+  });
+  stop?.();
+}
+
+/**
+ * Installs the downloaded update and restarts the app. On Android it's
+ * handed to the system's installer, once Netherstone may install apps: the
+ * first time, Android's setting for that opens, and the install goes on
+ * when the person comes back.
+ */
+export async function installUpdate(): Promise<void> {
+  await invoke("updater_install");
+  const android = IS_ANDROID ? window.NetherstoneAndroid : undefined;
+  if (!android) return;
+  if (android.installUpdate()) return;
+  await backInFront();
+  if (!android.installUpdate()) {
+    throw new Error("Allow Netherstone to install apps, then try again.");
+  }
 }

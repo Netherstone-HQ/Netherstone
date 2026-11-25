@@ -14,6 +14,20 @@ const release = {
 const signatures = Object.fromEntries(names.map((name) => [`${name}.sig`, `sig of ${name}`]));
 
 describe("updaterJson", () => {
+  it("lists the Android APKs apart, with their SHA-256, when the release has them", () => {
+    const apk = `Netherstone_${version}_android-aarch64.apk`;
+    const withApk = { ...release, assets: [...release.assets, { name: apk, digest: "sha256:abc" }] };
+    const json = updaterJson(withApk, signatures, "2026-11-04T21:00:00.000Z");
+    expect(json.android).toEqual({
+      aarch64: {
+        url: `https://github.com/Netherstone-HQ/Netherstone/releases/download/${tag}/${apk}`,
+        sha256: "abc",
+      },
+    });
+    expect(Object.keys(json.platforms).some((key) => key.startsWith("android"))).toBe(false);
+    expect(updaterJson(release, signatures, "2026-11-04T21:00:00.000Z").android).toBeUndefined();
+  });
+
   it("lists every platform with its signature and tagged link", () => {
     const json = updaterJson(release, signatures, "2026-11-04T21:00:00.000Z");
     expect(json.version).toBe(version);

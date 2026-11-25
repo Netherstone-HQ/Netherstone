@@ -37,6 +37,8 @@ declare global {
       printPage(html: string, jobName: string, geometry: string): void;
       /** Shows a web page over the app, in the browser's custom tab. */
       openInApp(url: string): void;
+      /** Hands the downloaded update to the installer; false when it can't yet. */
+      installUpdate(): boolean;
     };
   }
 }

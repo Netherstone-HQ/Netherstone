@@ -3,6 +3,15 @@ import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 import { type LinkOpener, useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 
+/** The site of `url` without "www.", or the URL when it has none. */
+export function siteOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 /** An http(s) page, not one of the app's own asset or file URLs. */
 export function isWebPageUrl(href: string) {
   try {

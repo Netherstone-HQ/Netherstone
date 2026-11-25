@@ -11,6 +11,7 @@ import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
 import { createTitledShard, markdownOf, today } from "./create";
 import { usePhoneNav } from "./nav";
+import { siteOf } from "@/lib/open-web-link";
 
 /** Sent by Android's MainActivity when another app shared something with this one. */
 const SHARED_EVENT = "shared";
@@ -66,15 +67,6 @@ export function followShares() {
 }
 
 const URL_PATTERN = /https?:\/\/[^\s<>"]+/g;
-
-/** The site of `url` without "www.", or the URL when it has none. */
-function siteOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
 
 /**
  * What a share is. Text holding one link and at most a line besides, as

@@ -93,13 +93,9 @@ export function pinChunkHeightsAbove(el: HTMLElement) {
 }
 
 /**
- * Pins `chunk`'s real height as its intrinsic size, which it keeps while
- * `content-visibility: auto` skips it. Returns the height.
- *
- * A chunk the browser skips is laid out for the read. One it draws (on
- * screen) is read as it is: setting `content-visibility` back to `auto`
- * skips it until the next frame, and a click in that frame put the caret
- * at the top of the shard.
+ * Pins `chunk`'s real height as its intrinsic size and returns it. A chunk
+ * on screen is read as it is: resetting it would skip it for a frame, and a
+ * click then put the caret at the top of the shard.
  */
 export function pinChunkHeight(chunk: HTMLElement) {
   pinnedChunks.add(chunk);

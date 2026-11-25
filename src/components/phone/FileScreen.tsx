@@ -17,10 +17,7 @@ import {
   PhoneTopBar,
 } from "./parts";
 
-/**
- * The open shard under a thin top bar (Back, Search, Assistant, More), or
- * the open drawing when Canvas is the mode.
- */
+/** The open shard, or the open drawing in Canvas mode. */
 export function FileScreen() {
   const appMode = useUIStore((s) => s.appMode);
   const push = usePhoneNav((s) => s.push);

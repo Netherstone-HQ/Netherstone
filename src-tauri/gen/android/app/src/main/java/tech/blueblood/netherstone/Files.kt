@@ -31,7 +31,7 @@ internal fun freeName(name: String, taken: Set<String>): String {
   return "${name.substring(0, dot)} $count${name.substring(dot)}"
 }
 
-/** Writes a time-named entry in `folder` as `.part`, then renames it, so it's never read half-written. */
+/** Writes a time-named entry in `folder` as `.part`, then renames it once whole. */
 internal fun writeWhole(folder: File, write: (File) -> Unit) {
   folder.mkdirs()
   val stamp = System.currentTimeMillis().toString()

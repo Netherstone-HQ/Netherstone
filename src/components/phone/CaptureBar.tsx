@@ -8,10 +8,7 @@ import {
   createUntitledShard,
 } from "./create";
 
-/**
- * The bar along the bottom of home and folders: ways to capture on the
- * left, and + for a new shard, in `folder`.
- */
+/** The bottom bar of home and folders: capture buttons, and + for a new shard. */
 export function CaptureBar({
   vaultPath,
   folder,

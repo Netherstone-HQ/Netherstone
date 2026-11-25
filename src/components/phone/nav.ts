@@ -129,7 +129,7 @@ export const usePhoneNav = create<PhoneNavState>((set, get) => ({
     ),
 }));
 
-/** Lets the browser's history, and so Back and the edge swipe, step back through the phone layout. */
+/** Lets Back and the edge swipe step back through the phone layout. */
 export function followBrowserHistory(): () => void {
   history.replaceState({ [DEPTH_KEY]: 0 }, "");
   const onPop = (event: PopStateEvent) => {

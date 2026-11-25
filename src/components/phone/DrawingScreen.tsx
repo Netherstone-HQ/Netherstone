@@ -59,11 +59,7 @@ function folderOf(path: string) {
   return folderName(getParentFolder(path));
 }
 
-/**
- * A drawing on a phone: looked at first, moved and zoomed with the fingers,
- * then edited after Edit, with a bar of tools under it. A new, empty
- * drawing opens ready to draw.
- */
+/** A drawing on a phone: viewed first, edited after Edit. A new one opens ready to draw. */
 export function DrawingScreen() {
   const drawingPath = useUIStore((s) => s.activeDrawingPath);
   const sessionKey = useUIStore((s) => s.drawingSessionKey);

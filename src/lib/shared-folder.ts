@@ -8,11 +8,9 @@ const FOLDER_PICKED_EVENT = "folderpicked";
 type FolderPick = "picked" | "cancelled" | "unusable";
 
 /**
- * On Android, lets the person pick a folder in the phone's storage for a
- * vault, first asking for the access a vault there needs ("All files
- * access"). Resolves with whether a folder was picked; Rust then takes it
- * (`open_vault_dialog`), so the page never names the folder itself.
- * Elsewhere there's nothing to do first: true.
+ * On Android, asks for "All files access" and picks a folder for a vault.
+ * Resolves with whether one was picked; Rust takes it, so the page never
+ * names it. Elsewhere, true.
  */
 export async function pickSharedFolder(): Promise<boolean> {
   const android = androidBridge();

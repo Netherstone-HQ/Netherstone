@@ -5,10 +5,7 @@ import { BottomSheetFrame, BottomSheetHandle } from "@/components/ui/bottom-shee
 /** Tall enough for a chat, low enough that the shard's top stays in view. */
 const SHEET_HEIGHT = "h-[65dvh]";
 
-/**
- * The assistant in a sheet over the open shard. Its own header (chats, new
- * chat, close) takes the sheet's title row.
- */
+/** The assistant in a sheet; its own header takes the title row's place. */
 export function AssistantSheet({
   open,
   onOpenChange,

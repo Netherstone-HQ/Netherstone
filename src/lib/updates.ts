@@ -42,10 +42,8 @@ export function downloadUpdate(
 export const INSTALL_LABEL = IS_ANDROID ? "Install update" : "Restart to update";
 
 /**
- * Installs the downloaded update and restarts the app. On Android it's
- * handed to the system's installer, once Netherstone may install apps: the
- * first time, Android's setting for that opens, and the install goes on
- * when the person comes back.
+ * Installs the downloaded update and restarts. On Android the installer
+ * takes it, after the "install apps" setting the first time.
  */
 export async function installUpdate(): Promise<void> {
   await invoke("updater_install");

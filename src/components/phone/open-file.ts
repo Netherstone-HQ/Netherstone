@@ -2,10 +2,7 @@ import { openFileHistory, openVaultFile } from "@/lib/open-vault-file";
 import { useEditorStore, type PendingReveal } from "@/store/editor";
 import { usePhoneNav } from "./nav";
 
-/**
- * Opens a shard or drawing on its own screen. With `replace`, the screen
- * takes the place of the sheet it was made from.
- */
+/** Opens a shard or drawing on its own screen, in place of the sheet with `replace`. */
 export async function openFileScreen(path: string, replace = false) {
   await openVaultFile(path);
   const nav = usePhoneNav.getState();

@@ -190,7 +190,7 @@ class MainActivity : TauriActivity() {
       }
     }
 
-    /** Offers an export to other apps; only files in the share folder, so a page script can't send others. */
+    /** Offers an export to other apps. Only the share folder's files, so a page can't send others. */
     @JavascriptInterface
     fun shareFile(path: String, mimeType: String) {
       val shared = File(cacheDir, SHARE_FOLDER).canonicalFile

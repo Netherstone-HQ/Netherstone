@@ -68,10 +68,7 @@ interface ExcalidrawCanvasProps {
   /** Receives Excalidraw's API once it's ready, and null when it's gone. */
   onExcalidrawAPI: (api: ExcalidrawImperativeAPI | null) => void;
   onSaveStateChange: (state: SaveState) => void;
-  /**
-   * On a phone: the drawing's own screen brings the tools, so Excalidraw's
-   * are hidden, and it only takes edits while `editing`.
-   */
+  /** On a phone, Excalidraw's tools are hidden and it takes edits only while `editing`. */
   phone?: { editing: boolean };
 }
 

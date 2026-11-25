@@ -366,11 +366,7 @@ export function CreateVaultForm({
   );
 }
 
-/**
- * Brings a synced vault down from GitHub into `location`. On a phone, with
- * no `onLocationChange`, it goes in the app's own storage like a new vault,
- * and where isn't asked.
- */
+/** Brings a synced vault down from GitHub; on a phone, into app storage. */
 function RestoreVault({
   location,
   onLocationChange,

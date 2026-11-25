@@ -20,10 +20,7 @@ import { usePhoneNav } from "./nav";
 import { PhoneBackButton, PhoneFrame, PhoneTitle, PhoneTopBar } from "./parts";
 import { syncStatusLabel, useSyncProblem } from "./SyncStrip";
 
-/**
- * The phone's settings, in groups. Shortcuts need a keyboard and AI apps
- * aren't on phones, so neither is listed.
- */
+/** The phone's settings groups, without Shortcuts and AI apps. */
 const PHONE_GROUPS: { id: SettingsCategory; icon: LucideIcon }[][] = [
   [
     { id: "general", icon: SlidersHorizontalIcon },

@@ -124,10 +124,7 @@ function focusWhenShown(filePath: string) {
   });
 }
 
-/**
- * Creates an empty "Untitled" shard in `folder` and opens it ready to type,
- * saying so if that fails. Without `folder`, Settings decides where it goes.
- */
+/** Creates and opens an "Untitled" shard; without `folder`, Settings says where. */
 export async function createShard(vaultPath: string, folder?: string) {
   try {
     const filePath = await createShardFile(folder ?? newShardFolder(vaultPath));

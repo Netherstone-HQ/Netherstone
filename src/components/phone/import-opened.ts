@@ -12,11 +12,7 @@ import { reportFailure, UNDO_TOAST_MS } from "./toasts";
 
 const IMPORT_TOAST_ID = "imported";
 
-/**
- * On a phone, files opened with Netherstone from another app (Open with)
- * are imported into the vault's top folder and the first one opens, with
- * Undo in a toast. There's no import window to show on a phone.
- */
+/** Imports files opened with Netherstone (Open with) and opens the first, with Undo. */
 export async function importOpened(vaultPath: string, paths: string[]) {
   const names = waitingText(paths.map(fileName));
   const since = Math.floor(Date.now() / 1000);

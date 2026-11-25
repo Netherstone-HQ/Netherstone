@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 
-/**
- * A sheet asking for a name: a title, the Name field, Cancel and Create
- * (or another `submitLabel`).
- * `onCreate` returns an error to show, or null once it's done.
- */
+/** A sheet asking for a name. `onCreate` returns an error to show, or null. */
 export function NameSheet({
   open,
   onOpenChange,

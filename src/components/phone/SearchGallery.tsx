@@ -47,10 +47,7 @@ function open(file: GalleryFile, shardPath: string) {
   );
 }
 
-/**
- * Tiles three across. A file one shard uses opens that shard at it; one
- * several shards use lists them to pick from.
- */
+/** Tiles three across. A file several shards use lists them to pick from. */
 export function GalleryGrid({ files }: { files: GalleryFile[] }) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const scrollRef = useRef<HTMLDivElement>(null);

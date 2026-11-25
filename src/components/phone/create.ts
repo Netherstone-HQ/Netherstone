@@ -166,7 +166,7 @@ export async function createDrawingIn(vaultPath: string, folder: string) {
   if (path) usePhoneNav.getState().push({ kind: "file", path });
 }
 
-/** Makes the vault `name`, switches to it and opens its Start here guide. Returns the error, or null. */
+/** Makes the vault `name` and opens its Start here guide. Returns the error, or null. */
 export async function createVaultNamed(name: string): Promise<string | null> {
   try {
     const location = await defaultVaultLocation();

@@ -109,10 +109,7 @@ function Starters({ onAsk }: { onAsk: (text: string) => void }) {
   );
 }
 
-/**
- * The assistant, in the right sidebar's place: one chat at a time. A phone
- * shows it in a sheet, which `onHide` closes.
- */
+/** The assistant, one chat at a time, in the right sidebar or a phone's sheet. */
 export function AssistantPanel({
   onHide = closeAssistant,
   className,

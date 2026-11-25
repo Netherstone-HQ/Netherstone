@@ -62,7 +62,7 @@ export function followShares() {
 
 const URL_PATTERN = /https?:\/\/[^\s<>"]+/g;
 
-/** One link with at most a line of text (how browsers share a page) is a link; other text is text. */
+/** One link with at most a line of text, as browsers share a page, is a link. */
 export function shareContent(shared: Shared): ShareContent {
   const text = shared.text?.trim() ?? "";
   const urls = text.match(URL_PATTERN) ?? [];

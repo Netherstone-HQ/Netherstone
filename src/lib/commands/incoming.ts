@@ -16,10 +16,7 @@ export interface Shared {
   files: SharedFile[];
 }
 
-/**
- * Takes the latest share from another app, if one came since the last
- * take. Its files may then be saved into a vault with `saveSharedFile`.
- */
+/** The latest share since the last take; its files can then go to `saveSharedFile`. */
 export async function takeShared(): Promise<Shared | null> {
   assertTauri();
   return invoke<Shared | null>("take_shared");

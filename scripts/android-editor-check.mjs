@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { _android as android, expect as baseExpect } from "@playwright/test";
-import { startAndAttach } from "./android-webview.mjs";
+import { closeNotResponding as closeNotRespondingDialog, startAndAttach } from "./android-webview.mjs";
 
 const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
@@ -193,17 +193,17 @@ async function calibrate(target) {
   log("screen", screen);
 }
 
+/** Closes an "isn't responding" dialog over the app; see android-webview.mjs. */
+const closeNotResponding = () => closeNotRespondingDialog(shell);
+
 /**
- * Closes the dialog a slow emulator shows when another app "isn't
- * responding" (hide_error_dialogs doesn't keep it away), choosing Wait.
- * Returns whether there was one.
+ * An Android key such as Back or Home. A dialog over the app that took it
+ * is closed and the key pressed again.
  */
-async function closeNotResponding() {
-  const dialog = await shell("dumpsys window windows | grep -m1 'Application Not Responding' || true");
-  if (!dialog) return false;
-  log("closing:", dialog.trim());
-  await tapSystemButton(/^Wait$/);
-  return true;
+async function pressKey(key) {
+  await closeNotResponding();
+  await shell(`input keyevent ${key}`);
+  if (await closeNotResponding()) await shell(`input keyevent ${key}`);
 }
 
 /** The screen point at `fx`, `fy` (0 to 1) across an element. */
@@ -349,7 +349,7 @@ async function focusState() {
  */
 async function recover() {
   try {
-    if ((await appInFront()) !== PACKAGE) await shell("input keyevent KEYCODE_BACK");
+    if ((await appInFront()) !== PACKAGE) await pressKey("KEYCODE_BACK");
     await bringAppBack();
     for (let i = 0; i < 2; i++) await page.keyboard.press("Escape");
   } catch (error) {
@@ -745,10 +745,10 @@ try {
       "history before Back:",
       await page.evaluate(() => ({ length: history.length, index: navigation.currentEntry?.index })),
     );
-    await shell("input keyevent KEYCODE_BACK");
+    await pressKey("KEYCODE_BACK");
     await poll(keyboardInset).toBe(0);
     await expect(editor()).toBeVisible();
-    await shell("input keyevent KEYCODE_BACK");
+    await pressKey("KEYCODE_BACK");
     await expect(home()).toBeVisible();
   });
 
@@ -774,7 +774,7 @@ try {
       await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
       // Out of sight, Android may stop the app at any time: the recording
       // is saved as it goes.
-      await shell("input keyevent KEYCODE_HOME");
+      await pressKey("KEYCODE_HOME");
       await poll(appInFront, "the launcher in front").not.toBe(PACKAGE);
       const saved = () => su(`cat "$(find '${vault}' -maxdepth 1 -name 'Voice note, *.md' | head -1)"`);
       await poll(saved, "the recording saved into its shard").toMatch(/_attachments\/[^)"]+\.webm/);

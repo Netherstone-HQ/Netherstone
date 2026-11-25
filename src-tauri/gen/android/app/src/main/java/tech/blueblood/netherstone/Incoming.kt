@@ -9,13 +9,9 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * What another app hands Netherstone: a file to open (Open with) or text,
- * links and files to save (Share). It's copied into the app's cache, where
- * src-tauri/src/incoming.rs takes it for the page, since the content links
- * Android gives are only readable here, and only for a while.
- *
- * Each arrival is a folder of its own, written under a `.part` name and
- * renamed once complete, so a half-copied one is never taken.
+ * What another app hands Netherstone (Open with, Share), copied into the
+ * cache for incoming.rs: Android's content links are only readable here,
+ * and only for a while.
  */
 class Incoming private constructor(
   /** `opened` or `shared`, the folder it goes in and the event the page hears. */
@@ -65,10 +61,7 @@ class Incoming private constructor(
       else getParcelableArrayListExtra(Intent.EXTRA_STREAM))?.filterNotNull() ?: emptyList()
   }
 
-  /**
-   * Copies it into `cache`/incoming/<kind>/<time>. Files that can't be read
-   * are left out; the page says so when nothing came.
-   */
+  /** Copies it into `cache`/incoming/<kind>/<time>, leaving out files that can't be read. */
   fun saveTo(cache: File, resolver: ContentResolver) {
     writeWhole(File(cache, "$FOLDER/$kind")) { part ->
       part.mkdirs()

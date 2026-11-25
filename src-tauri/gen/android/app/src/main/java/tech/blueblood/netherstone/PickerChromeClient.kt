@@ -20,14 +20,9 @@ import java.io.File
 private const val PICKED_FOLDER = "picked"
 
 /**
- * Wry's chrome client, except for files picked from the phone (not taken
- * with the camera). Those are copied into the app's cache as soon as the
- * picker returns, and the page gets the copies.
- *
- * Handed the picker's own links, the WebView reads a file later, against
- * what it noted of it when picked; on a slow phone that note can be out of
- * date by then, and the read fails ("could not be read"). Copies the app
- * owns don't change.
+ * Wry's chrome client, except that picked files are copied into the cache
+ * and the page gets the copies. With the picker's own links, a slow phone's
+ * WebView can fail to read the file later ("could not be read").
  */
 class PickerChromeClient(
   private val wry: WebChromeClient,
@@ -61,10 +56,7 @@ class PickerChromeClient(
     return true
   }
 
-  /**
-   * Copies `picked` into a new folder of the cache, the last pick's copies
-   * cleared out, and returns the file provider's links to the copies.
-   */
+  /** Copies `picked` into the cache, clearing the last pick's, and returns links to the copies. */
   private fun copyForPage(picked: List<Uri>): List<Uri> {
     val all = File(activity.cacheDir, PICKED_FOLDER)
     all.deleteRecursively()

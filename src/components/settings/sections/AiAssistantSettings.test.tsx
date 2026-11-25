@@ -71,20 +71,6 @@ describe("AiAssistantSettings", () => {
     platform.IS_MOBILE = false;
   });
 
-  it("offers no local server on a phone, only Custom", async () => {
-    platform.IS_MOBILE = true;
-    vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === "assistant_status") return status();
-      if (command === "assistant_models") return [MODEL];
-      return undefined;
-    });
-    render(<AiAssistantSettings />);
-    expect(await screen.findByText("Custom")).toBeTruthy();
-    expect(screen.queryByText("Local server")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Find" })).toBeNull();
-    expect(screen.queryByText("local server")).toBeNull();
-  });
-
   it("shows saved keys with their model count, and never asks for a key back", async () => {
     vi.mocked(invoke).mockImplementation(async (command: string) => {
       if (command === "assistant_status") return status();
@@ -217,5 +203,19 @@ describe("AiAssistantSettings", () => {
         "Use an https address to send a key to another computer",
       ),
     ).toBeTruthy();
+  });
+
+  it("offers no local server on a phone, only Custom", async () => {
+    platform.IS_MOBILE = true;
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "assistant_status") return status();
+      if (command === "assistant_models") return [MODEL];
+      return undefined;
+    });
+    render(<AiAssistantSettings />);
+    expect(await screen.findByText("Custom")).toBeTruthy();
+    expect(screen.queryByText("Local server")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Find" })).toBeNull();
+    expect(screen.queryByText("local server")).toBeNull();
   });
 });

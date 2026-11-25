@@ -20,7 +20,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { _android as android, expect as baseExpect } from "@playwright/test";
-import { startAndAttach } from "./android-webview.mjs";
+import { closeNotResponding, startAndAttach } from "./android-webview.mjs";
 
 const PACKAGE = "tech.blueblood.netherstone";
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
@@ -115,15 +115,26 @@ const appFileExists = async (file) =>
 const keyboardUp = async () => /mInputShown=true/.test(await shell("dumpsys input_method"));
 
 /**
+ * Android's Back key. An "isn't responding" dialog over the app would take
+ * it, and would also take one pressed while it comes up: it's closed first,
+ * and closed again and the key pressed again when it took the press.
+ */
+async function pressBack() {
+  await closeNotResponding(shell);
+  await shell("input keyevent KEYCODE_BACK");
+  if (await closeNotResponding(shell)) await shell("input keyevent KEYCODE_BACK");
+}
+
+/**
  * Android's own Back key, as a thumb would press it, from a shard to home.
  * While the keyboard is up, the first press only puts it away.
  */
 async function backToHome() {
   if (await keyboardUp()) {
-    await shell("input keyevent KEYCODE_BACK");
+    await pressBack();
     await expect.poll(keyboardUp, { message: "the keyboard to go away" }).toBe(false);
   }
-  await shell("input keyevent KEYCODE_BACK");
+  await pressBack();
   await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
 }
 
@@ -280,7 +291,7 @@ try {
       expect(shared.startsWith(starts)).toBe(true);
       if (extension === "html") expect(shared).toContain(TYPED);
       // Back closes the share sheet, back to the shard.
-      await shell("input keyevent KEYCODE_BACK");
+      await pressBack();
       await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
       await expect.poll(appInFront, { message: "the app back in front" }).toBe(true);
     });
@@ -292,7 +303,7 @@ try {
     await page.getByRole("button", { name: "Export", exact: true }).click();
     await page.getByRole("button", { name: "PDF", exact: true }).click();
     await expect.poll(screenText, { message: "the print screen with a page" }).toMatch(/Paper size:[\s\S]*1\/1/);
-    await shell("input keyevent KEYCODE_BACK");
+    await pressBack();
     await expect.poll(appInFront, { message: "the app back in front" }).toBe(true);
     await expect(page.locator("[data-slate-editor]")).toContainText(TYPED);
   });
@@ -318,7 +329,7 @@ try {
   });
 
   await step("select-and-restore", async () => {
-    await shell("input keyevent KEYCODE_BACK");
+    await pressBack();
     await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
     await trashFromHome();
     await openTrash();
@@ -330,7 +341,7 @@ try {
     await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} restored` }).toBe(true);
   });
   await step("empty-trash", async () => {
-    await shell("input keyevent KEYCODE_BACK");
+    await pressBack();
     await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
     await trashFromHome();
     await openTrash();
@@ -343,7 +354,7 @@ try {
 
   // Another app shares a page: it's saved as a new shard, named for it.
   await step("share-in-link", async () => {
-    await shell("input keyevent KEYCODE_BACK");
+    await pressBack();
     await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
     await shell(
       `am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT '${SHARED_LINK}' --es android.intent.extra.SUBJECT '${SHARED_TITLE}' -n ${ACTIVITY}`,

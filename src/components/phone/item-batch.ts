@@ -6,6 +6,7 @@ import type { FileTreeNode } from "@/store";
 import { usePhoneNav } from "./nav";
 import { rememberedOf, showMovedToTrash } from "./trash";
 import { findNodes } from "./vault-tree";
+import { errorText } from "@/lib/utils";
 
 // Pin, move and trash for one row or several picked shards. Each closes
 // select mode (or the row's menu) when it's done.
@@ -33,7 +34,7 @@ export function closeActions() {
 
 function reportFailure(what: string, error: unknown) {
   toast.error(what, {
-    description: error instanceof Error ? error.message : String(error),
+    description: errorText(error),
   });
 }
 

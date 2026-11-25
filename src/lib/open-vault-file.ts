@@ -15,6 +15,7 @@ import { useHistoryStore } from "@/store/history";
 import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 /** Opens a `.excalidraw` drawing in Canvas. */
 export async function openDrawingFile(filePath: string) {
@@ -88,7 +89,7 @@ export async function createDrawing(
   } catch (error) {
     console.error("[Netherstone] Failed to create drawing:", error);
     toast.error("Couldn't create drawing", {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
     return null;
   }
@@ -142,7 +143,7 @@ export async function createShard(vaultPath: string, folder?: string) {
   } catch (error) {
     console.error("[Netherstone] Failed to create shard:", error);
     toast.error("Couldn't create shard", {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
   }
 }

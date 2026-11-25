@@ -27,12 +27,9 @@ import { useEditorStore } from "@/store/editor";
 import { type HistoryPlace, useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 type Version = { blob: string; time: number };
-
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Puts `version` back in the open shard or drawing and shows it as it is

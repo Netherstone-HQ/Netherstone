@@ -28,7 +28,7 @@ import {
 import { missingFileRows, type BrokenLink } from "@/lib/data";
 import { getVaultFileDisplayName } from "@/lib/drawing-files";
 import { replaceAttachmentPath, rewriteShards } from "@/lib/shard-rewrite";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 import { useAttachmentReportStore } from "@/store";
 import {
   Card,
@@ -187,7 +187,7 @@ function UnusedFiles({
     } catch (error) {
       console.error("[Netherstone] Attachment cleanup failed:", error);
       toast.error("Couldn't clean up attachments", {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setIsCleaning(false);

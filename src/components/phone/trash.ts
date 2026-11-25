@@ -10,6 +10,7 @@ import { isPathWithin } from "@/lib/drawing-files";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useUIStore, useVaultStore } from "@/store";
 import type { RecentFileEntry } from "@/store/ui";
+import { errorText } from "@/lib/utils";
 
 // The app's trash on a phone: what's in it from the open vault, and
 // bringing things back or deleting them for good.
@@ -37,7 +38,7 @@ export const useAppTrash = create<TrashState>((set) => ({
 
 function reportFailure(what: string, error: unknown) {
   toast.error(what, {
-    description: error instanceof Error ? error.message : String(error),
+    description: errorText(error),
   });
 }
 

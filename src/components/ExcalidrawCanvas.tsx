@@ -45,7 +45,7 @@ import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
 
 import "@excalidraw/excalidraw/index.css";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 
 const DRAWING_SAVE_DELAY_MS = 1000;
 
@@ -194,7 +194,7 @@ function useDrawingPersistence(
 
         console.error("[Netherstone] Failed to open drawing:", error);
         toast.error(`Couldn't open ${getShardName(initialPath)}`, {
-          description: error instanceof Error ? error.message : String(error),
+          description: errorText(error),
         });
         // Fall back to a scratch canvas. Never autosave over a file that
         // failed to load.
@@ -412,7 +412,7 @@ function useDrawingPersistence(
           error,
         );
         toast.error("Couldn't update the drawing in your shards", {
-          description: error instanceof Error ? error.message : String(error),
+          description: errorText(error),
         });
       }
     });

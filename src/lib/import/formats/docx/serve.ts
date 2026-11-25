@@ -6,6 +6,7 @@ import { serializeMarkdownValue } from "@/lib/editor-markdown";
 import { ImportError } from "../../types";
 import { readWordPackage } from "./package";
 import type { WorkerScope } from "./protocol";
+import { errorText } from "@/lib/utils";
 
 /**
  * Reads the Word file the window sends, asking it for what only the import
@@ -43,7 +44,7 @@ export function serve(scope: WorkerScope) {
     } catch (error) {
       scope.postMessage({
         type: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: errorText(error),
         readable: error instanceof ImportError,
       });
     }

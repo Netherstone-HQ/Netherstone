@@ -20,7 +20,7 @@ import {
   isSamePath,
 } from "@/lib/drawing-files";
 import { folderName } from "@/lib/open-vault";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 import { useEditorStore, useUIStore, useVaultStore, type FileTreeNode } from "@/store";
 import { usePhoneNav, usePhoneScreen } from "./nav";
 import { openFileScreen } from "./open-file";
@@ -167,7 +167,7 @@ function ShareForm({
       else await openFileScreen(saved, true);
     } catch (error) {
       toast.error("Couldn't save what was shared", {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setSaving(false);

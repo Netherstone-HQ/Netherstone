@@ -27,11 +27,12 @@ import {
 import { toVaultRelativePath } from "@/lib/drawing-files";
 import { importLinkedFile, rewriteShards } from "@/lib/shard-rewrite";
 import { useAttachmentReportStore } from "@/store";
+import { errorText } from "@/lib/utils";
 
 function showError(message: string, error: unknown) {
   console.error(`[Netherstone] ${message}:`, error);
   toast.error(message, {
-    description: error instanceof Error ? error.message : String(error),
+    description: errorText(error),
   });
 }
 

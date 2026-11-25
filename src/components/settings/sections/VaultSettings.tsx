@@ -23,6 +23,7 @@ import { IS_MOBILE, REVEAL_LABEL } from "@/lib/platform";
 import { indexVault } from "@/lib/refresh-vault";
 import { renameVault } from "@/lib/rename-vault";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 export function VaultSettings() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
@@ -99,7 +100,7 @@ const RENAME_ERRORS = {
 } satisfies Record<RenameVaultError, string>;
 
 function renameErrorText(error: unknown) {
-  const code = error instanceof Error ? error.message : String(error);
+  const code = errorText(error);
   return code in RENAME_ERRORS
     ? RENAME_ERRORS[code as RenameVaultError]
     : code;
@@ -255,5 +256,5 @@ function vaultName(path: string) {
 }
 
 function showError(error: unknown) {
-  toast.error(error instanceof Error ? error.message : String(error));
+  toast.error(errorText(error));
 }

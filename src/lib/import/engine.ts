@@ -12,6 +12,7 @@ import {
   type PlateNode,
 } from "./types";
 import { openArchives } from "./zip";
+import { errorText } from "@/lib/utils";
 
 /** A file the person picked, as the backend lists it. */
 export interface ImportSource {
@@ -163,7 +164,7 @@ function decode(target: string) {
 /** The people-facing message for an error thrown while importing a file. */
 function describeError(error: unknown) {
   if (error instanceof ImportError) return error.message;
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorText(error);
   return message || "Something went wrong reading this file.";
 }
 

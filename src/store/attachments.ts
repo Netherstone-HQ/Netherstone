@@ -4,6 +4,7 @@ import {
   reconcileAttachments,
   type AttachmentReport,
 } from "@/lib/commands/attachments";
+import { errorText } from "@/lib/utils";
 
 interface AttachmentReportState {
   /** The vault the report describes. */
@@ -43,7 +44,7 @@ export const useAttachmentReportStore = create<AttachmentReportState>(
         if (get().vaultPath === vaultPath) {
           set({
             isChecking: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorText(error),
           });
         }
         return null;

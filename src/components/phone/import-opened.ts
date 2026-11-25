@@ -8,6 +8,7 @@ import { useEditorStore } from "@/store";
 import { usePhoneNav } from "./nav";
 import { openFileScreen } from "./open-file";
 import { UNDO_TOAST_MS } from "./trash";
+import { errorText } from "@/lib/utils";
 
 const IMPORT_TOAST_ID = "imported";
 
@@ -32,7 +33,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
     });
   } catch (error) {
     toast.error(`Couldn't import ${names}`, {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
     return;
   }
@@ -52,7 +53,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
         );
       } catch (error) {
         toast.error("Couldn't undo the import", {
-          description: error instanceof Error ? error.message : String(error),
+          description: errorText(error),
         });
         return;
       }

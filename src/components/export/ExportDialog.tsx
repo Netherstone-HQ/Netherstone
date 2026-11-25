@@ -24,7 +24,7 @@ import {
 } from "@/lib/export/options";
 import { prepareExport, previewLook, renderPreview, type PreparedExport } from "@/lib/export/pipeline";
 import { saveExport } from "@/lib/export/save";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 import { useEditorStore, useSettingsStore, useVaultStore } from "@/store";
 
 const FORMATS = EXPORT_CHOICES.format.map(({ value }) => value);
@@ -146,7 +146,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
       .then((result) => !cancelled && setPrepared(result))
       .catch((error) => {
         console.error("[Netherstone] Couldn't prepare export:", error);
-        if (!cancelled) setPrepareError(error instanceof Error ? error.message : String(error));
+        if (!cancelled) setPrepareError(errorText(error));
       });
 
     return () => {
@@ -209,7 +209,7 @@ function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => 
     } catch (error) {
       console.error("[Netherstone] Export failed:", error);
       toast.error(`Couldn't export ${shardName}`, {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setIsExporting(false);

@@ -16,6 +16,7 @@ import { NameSheet } from "./NameSheet";
 import { closer, useLast } from "./nav";
 import { RowMenuSheet } from "./RowMenuSheet";
 import { findNode, findNodes } from "./vault-tree";
+import { errorText } from "@/lib/utils";
 
 function displayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -67,7 +68,7 @@ export function RowActions() {
               closeActions();
               return null;
             } catch (error) {
-              return error instanceof Error ? error.message : String(error);
+              return errorText(error);
             }
           }}
         />

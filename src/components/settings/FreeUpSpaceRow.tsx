@@ -25,6 +25,7 @@ import {
   type OldAttachment,
 } from "@/lib/history";
 import { useSyncStore } from "@/store/sync";
+import { errorText } from "@/lib/utils";
 
 function sumBytes(files: OldAttachment[]) {
   return files.reduce((sum, file) => sum + file.sizeBytes, 0);
@@ -89,7 +90,7 @@ export function FreeUpSpaceRow({ vaultPath }: { vaultPath: string }) {
     } catch (error) {
       console.error("[Netherstone] Free up space failed:", error);
       toast.error("Couldn't free up space", {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setIsFreeing(false);

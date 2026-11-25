@@ -13,6 +13,7 @@ import { insertManagedMediaFiles } from "@/components/editor/lib/media-insert";
 import type { InsertGroup } from "@/components/ui/insert-toolbar-button";
 import { insertBlock } from "@/components/transforms";
 import { pickFiles, type PickKind } from "@/lib/pick-files";
+import { errorText } from "@/lib/utils";
 
 const NODE_TYPE: Record<PickKind, string> = {
   image: KEYS.img,
@@ -42,7 +43,7 @@ async function insertPickedMedia(
     });
   } catch (error) {
     toast.error("Couldn't add it to the shard", {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
   }
 }

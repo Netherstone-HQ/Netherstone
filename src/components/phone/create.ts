@@ -27,13 +27,14 @@ import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore, useVaultStore } from "@/store";
 import { openFileScreen } from "./open-file";
 import { usePhoneNav } from "./nav";
+import { errorText } from "@/lib/utils";
 
 async function refreshTree(vaultPath: string) {
   useVaultStore.getState().setFileTree(await scanVault(vaultPath));
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
 
 /**

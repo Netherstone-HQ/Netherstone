@@ -35,6 +35,7 @@ import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { usePhoneNav } from "./nav";
+import { errorText } from "@/lib/utils";
 
 type Part = "menu" | "outline" | "links" | "rename" | "export";
 
@@ -64,7 +65,7 @@ async function share(path: string, name: string, format: ExportFormat) {
     );
   } catch (error) {
     toast.error(`Couldn't export ${name}`, {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
   }
 }
@@ -214,7 +215,7 @@ export function ShardMenuSheet({
             close(false);
             return null;
           } catch (error) {
-            return error instanceof Error ? error.message : String(error);
+            return errorText(error);
           }
         }}
       />

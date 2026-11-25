@@ -21,6 +21,7 @@ import {
   listGoneVaultHistories,
   type GoneVaultHistory,
 } from "@/lib/gone-vaults";
+import { errorText } from "@/lib/utils";
 
 function sumBytes(histories: GoneVaultHistory[]) {
   return histories.reduce((sum, history) => sum + history.sizeBytes, 0);
@@ -91,7 +92,7 @@ export function GoneVaultsRow({
     } catch (error) {
       console.error("[Netherstone] Deleting a vault's history failed:", error);
       toast.error("Couldn't delete history", {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setIsDeleting(false);

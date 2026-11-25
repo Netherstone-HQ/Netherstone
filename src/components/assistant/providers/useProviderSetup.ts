@@ -11,9 +11,10 @@ import {
   removeAssistantProvider,
   setAssistantModel,
 } from "@/lib/commands/assistant";
+import { errorText } from "@/lib/utils";
 
 export function showError(error: unknown) {
-  toast.error(error instanceof Error ? error.message : String(error));
+  toast.error(errorText(error));
 }
 
 /** A provider just set up, with the models it offers. */

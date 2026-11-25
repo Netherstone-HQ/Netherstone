@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ComponentType, type ReactNode } from "react";
 import {
   FileTextIcon,
   FolderIcon,
@@ -59,25 +59,30 @@ function itemPlace(item: TrashedItem, vault: string) {
     : folderOf(item.from, vault);
 }
 
+type ItemKind = "history" | "folder" | "drawing" | "shard";
+
+function kindOf(item: TrashedItem): ItemKind {
+  if (item.historyOf !== null) return "history";
+  if (item.isFolder) return "folder";
+  return isDrawingPath(item.name) ? "drawing" : "shard";
+}
+
+const ICONS: Record<ItemKind, ComponentType<{ className?: string }>> = {
+  history: HistoryIcon,
+  folder: FolderIcon,
+  drawing: DrawingIcon,
+  shard: FileTextIcon,
+};
+
 function ItemIcon({ item }: { item: TrashedItem }) {
-  const Icon =
-    item.historyOf !== null
-      ? HistoryIcon
-      : item.isFolder
-        ? FolderIcon
-        : isDrawingPath(item.name)
-          ? DrawingIcon
-          : FileTextIcon;
+  const Icon = ICONS[kindOf(item)];
   return <Icon className="size-5 shrink-0 text-muted-foreground" />;
 }
 
 /** "this shard", "this drawing", "this folder" or "3 items". */
 function whatLabel(items: TrashedItem[]) {
   if (items.length !== 1) return itemsLabel(items.length);
-  const [item] = items;
-  if (item.historyOf !== null) return "this history";
-  if (item.isFolder) return "this folder";
-  return isDrawingPath(item.name) ? "this drawing" : "this shard";
+  return `this ${kindOf(items[0])}`;
 }
 
 function itemsLabel(count: number) {

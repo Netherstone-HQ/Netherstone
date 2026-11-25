@@ -12,6 +12,7 @@ import { defaultExportOptions, loadExportOptions } from "./options";
 import { prepareExport, writeExport, type ExportSource } from "./pipeline";
 import { renderPrintPage } from "./render";
 import { pageGeometry } from "./theme";
+import { androidBridge } from "@/lib/android-bridge";
 
 /** What each format's file is, for the apps that receive it. */
 const MIME_TYPES: Record<ExportFormat, string> = {
@@ -25,7 +26,7 @@ const MIME_TYPES: Record<ExportFormat, string> = {
  * the share sheet with it. Throws if the export failed.
  */
 export async function shareExport(source: ExportSource, format: ExportFormat) {
-  const bridge = window.NetherstoneAndroid;
+  const bridge = androidBridge();
   if (!bridge) throw new Error("Sharing works on Android only.");
   const { readingFont, textSize } = useSettingsStore.getState();
   const options = {

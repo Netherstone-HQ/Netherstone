@@ -1,7 +1,8 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
+import { IS_MOBILE } from "@/lib/platform";
 import { type LinkOpener, useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
+import { androidBridge } from "@/lib/android-bridge";
 
 /** The site of `url` without "www.", or the URL when it has none. */
 export function siteOf(url: string) {
@@ -37,7 +38,7 @@ export async function openWebLink(
   openIn: LinkOpener = useSettingsStore.getState().openLinksIn,
 ) {
   const inApp = openIn === "browser-panel" && isWebPageUrl(href);
-  const android = IS_ANDROID ? window.NetherstoneAndroid : undefined;
+  const android = androidBridge();
   if (inApp && android) {
     android.openInApp(href);
     return;

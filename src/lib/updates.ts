@@ -1,6 +1,7 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { IS_ANDROID } from "@/lib/platform";
 import { backInFront } from "@/lib/back-in-front";
+import { androidBridge } from "@/lib/android-bridge";
 
 export interface AvailableUpdate {
   version: string;
@@ -48,7 +49,7 @@ export const INSTALL_LABEL = IS_ANDROID ? "Install update" : "Restart to update"
  */
 export async function installUpdate(): Promise<void> {
   await invoke("updater_install");
-  const android = IS_ANDROID ? window.NetherstoneAndroid : undefined;
+  const android = androidBridge();
   if (!android) return;
   if (android.installUpdate()) return;
   await backInFront();

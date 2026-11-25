@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 
+import { androidBridge } from "@/lib/android-bridge";
 import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 
 /**
@@ -22,32 +23,6 @@ export type KeyboardState = {
 };
 
 type Reported = { keyboard?: number; top?: number; bottom?: number };
-
-declare global {
-  interface Window {
-    /** Set by MainActivity.kt on Android. */
-    NetherstoneAndroid?: {
-      insets(): string;
-      openAppSettings(): void;
-      /** Shows or hides the keyboard; focus and the caret stay. */
-      setKeyboard(shown: boolean): void;
-      /** Offers an export to share (see `shareExportPath`) to other apps. */
-      shareFile(path: string, mimeType: string): void;
-      /** Opens the print screen with an export's print page; geometry is JSON. */
-      printPage(html: string, jobName: string, geometry: string): void;
-      /** Shows a web page over the app, in the browser's custom tab. */
-      openInApp(url: string): void;
-      /** Hands the downloaded update to the installer; false when it can't yet. */
-      installUpdate(): boolean;
-      /** Whether vaults may live in the phone's shared storage. */
-      hasAllFilesAccess(): boolean;
-      /** Asks for that access, in its settings screen or a prompt. */
-      askAllFilesAccess(): void;
-      /** Shows the folder picker; the page hears `folderpicked`. */
-      pickFolder(): void;
-    };
-  }
-}
 
 let state: KeyboardState = {
   inset: 0,
@@ -93,7 +68,7 @@ if (typeof window !== "undefined") {
       apply((event as CustomEvent<Reported>).detail ?? {}),
     );
     try {
-      const reported = window.NetherstoneAndroid?.insets();
+      const reported = androidBridge()?.insets();
       if (reported) apply(JSON.parse(reported) as Reported);
     } catch {
       // An app built before the insets were reported: CSS falls back to env().

@@ -62,6 +62,7 @@ import { hasInlineAsk, openInlineAsk } from "@/lib/inline-ask";
 import { useKeyboard } from "@/lib/system-insets";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
+import { androidBridge } from "@/lib/android-bridge";
 
 const BULLETS = [
   ListStyleType.Disc,
@@ -347,8 +348,9 @@ function InsertSheet({
  * editor's `inputmode`.
  */
 function setKeyboard(editor: PlateEditor, shown: boolean) {
-  if (window.NetherstoneAndroid) {
-    window.NetherstoneAndroid.setKeyboard(shown);
+  const android = androidBridge();
+  if (android) {
+    android.setKeyboard(shown);
     return;
   }
   editor.api.toDOMNode(editor)?.blur();

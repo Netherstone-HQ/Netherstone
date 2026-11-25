@@ -1,6 +1,6 @@
 import { toast } from "sonner";
-import { IS_ANDROID } from "@/lib/platform";
 import { backInFront } from "@/lib/back-in-front";
+import { androidBridge } from "@/lib/android-bridge";
 
 /** Sent by MainActivity.kt when the folder picker closes, saying how. */
 const FOLDER_PICKED_EVENT = "folderpicked";
@@ -15,7 +15,7 @@ type FolderPick = "picked" | "cancelled" | "unusable";
  * Elsewhere there's nothing to do first: true.
  */
 export async function pickSharedFolder(): Promise<boolean> {
-  const android = IS_ANDROID ? window.NetherstoneAndroid : undefined;
+  const android = androidBridge();
   if (!android) return true;
   if (!android.hasAllFilesAccess()) {
     android.askAllFilesAccess();

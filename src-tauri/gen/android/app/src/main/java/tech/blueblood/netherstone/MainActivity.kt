@@ -47,9 +47,38 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    if (savedInstanceState == null) {
+      // What the page took in the app's last run has been imported or saved.
+      File(cacheDir, "${Incoming.FOLDER}/taken").deleteRecursively()
+      takeIn(intent)
+    }
   }
 
-  /** The app's page, told when the app goes out of sight. */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    takeIn(intent)
+  }
+
+  /**
+   * Copies what another app opened or shared with Netherstone into the
+   * cache, then tells the page with an `opened` or `shared` event. A page
+   * that starts later looks for it itself.
+   */
+  private fun takeIn(intent: Intent?) {
+    val incoming = intent?.let { Incoming.of(it) } ?: return
+    Thread {
+      incoming.saveTo(cacheDir, contentResolver)
+      runOnUiThread {
+        page?.evaluateJavascript("window.dispatchEvent(new Event('${incoming.kind}'))", null)
+      }
+    }.start()
+  }
+
+  /**
+   * The app's page, once there is one, told when the app goes out of sight
+   * and when something comes in from another app.
+   */
   private var page: WebView? = null
 
   /**

@@ -9,6 +9,7 @@ import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useEditorStore, useVaultStore } from "@/store";
 import { createFolderIn, createVaultNamed } from "./create";
+import { importOpened } from "./import-opened";
 import { FileScreen } from "./FileScreen";
 import { FolderScreen } from "./FolderScreen";
 import { HomeScreen } from "./HomeScreen";
@@ -28,6 +29,8 @@ import { HistorySheet } from "./HistorySheet";
 import { RowActions } from "./RowActions";
 import { SearchScreen } from "./SearchScreen";
 import { SettingsScreen } from "./SettingsScreen";
+import { followShares } from "./share-in";
+import { ShareInSheet } from "./ShareInSheet";
 import { TagsScreen } from "./TagsScreen";
 import { TrashScreen } from "./TrashScreen";
 import { usePhoneSelection } from "./selection";
@@ -52,10 +55,11 @@ export function PhoneApp() {
   const overlay = usePhoneOverlay();
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
-  useLaunches();
+  useLaunches(importOpened);
 
   useEffect(() => followBrowserHistory(), []);
   useEffect(() => (IS_ANDROID ? followSystemBack() : undefined), []);
+  useEffect(() => (IS_ANDROID ? followShares() : undefined), []);
   useEffect(() => (IS_ANDROID ? saveWhenHidden() : undefined), []);
   useEffect(() => followSettingsRequests(), []);
 
@@ -99,6 +103,7 @@ export function PhoneApp() {
         submitLabel={copy.vault.create.submit}
         onCreate={createVaultNamed}
       />
+      <ShareInSheet />
       <VaultMenuSheet
         open={overlay?.kind === "vault-menu"}
         onOpenChange={closeVaultMenu}

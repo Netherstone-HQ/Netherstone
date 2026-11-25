@@ -47,7 +47,11 @@ export type PhoneOverlay =
   /** A trash item's menu: Restore or Delete forever. */
   | { kind: "trash-item"; id: string }
   | { kind: "confirm-delete-forever"; ids: string[] }
-  | { kind: "confirm-empty-trash" };
+  | { kind: "confirm-empty-trash" }
+  /** What another app shared, to save in a new shard or add to one. */
+  | { kind: "share-in" }
+  /** Picking the folder or shard a share goes in, over its sheet. */
+  | { kind: "share-place"; choose: "folder" | "shard" };
 
 type Entry = PhoneScreen | PhoneOverlay;
 

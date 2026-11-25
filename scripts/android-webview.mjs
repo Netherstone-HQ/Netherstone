@@ -63,6 +63,11 @@ export async function startAndAttach({ device, pkg, activity, shell, within, tim
   return { webView, page };
 }
 
+/** The window of an "isn't responding" dialog, or nothing while there's none. */
+const NOT_RESPONDING_WINDOW = "dumpsys window windows | grep -m1 'Application Not Responding' || true";
+/** How long the dialog may take to go once Wait is tapped, in ms. */
+const DIALOG_GONE_MS = 10_000;
+
 /**
  * Closes the dialog a slow emulator shows when another app, often the
  * launcher, "isn't responding" (hide_error_dialogs doesn't keep it away),
@@ -70,7 +75,7 @@ export async function startAndAttach({ device, pkg, activity, shell, within, tim
  * Returns whether there was one.
  */
 export async function closeNotResponding(shell) {
-  const dialog = await shell("dumpsys window windows | grep -m1 'Application Not Responding' || true");
+  const dialog = await shell(NOT_RESPONDING_WINDOW);
   if (!dialog) return false;
   console.log("closing:", dialog.trim());
   const layout = "/data/local/tmp/not-responding.xml";
@@ -80,5 +85,9 @@ export async function closeNotResponding(shell) {
     const [x1, y1, x2, y2] = bounds.slice(1).map(Number);
     await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
   }
+  // A key or tap sent while the dialog is still going takes its place.
+  await expect
+    .poll(() => shell(NOT_RESPONDING_WINDOW), { message: "the dialog to go", timeout: DIALOG_GONE_MS })
+    .toBe("");
   return true;
 }

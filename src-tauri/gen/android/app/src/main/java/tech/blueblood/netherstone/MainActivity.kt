@@ -5,7 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
+import android.print.PageRange
 import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
 import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
@@ -45,6 +49,34 @@ private fun printAttributes(geometry: JSONObject): PrintAttributes {
   val size = if (geometry.getString("pageSize") == "letter") PrintAttributes.MediaSize.NA_LETTER else PrintAttributes.MediaSize.ISO_A4
   val margins = PrintAttributes.Margins(mils("marginLeftMm"), mils("marginTopMm"), mils("marginRightMm"), mils("marginBottomMm"))
   return PrintAttributes.Builder().setMediaSize(size).setMinMargins(margins).build()
+}
+
+/** `adapter`, calling `finished` once printing ends. */
+private class ReleasingAdapter(
+  private val adapter: PrintDocumentAdapter,
+  private val finished: () -> Unit,
+) : PrintDocumentAdapter() {
+  override fun onStart() = adapter.onStart()
+
+  override fun onLayout(
+    old: PrintAttributes?,
+    new: PrintAttributes,
+    cancel: CancellationSignal?,
+    callback: LayoutResultCallback,
+    extras: Bundle?,
+  ) = adapter.onLayout(old, new, cancel, callback, extras)
+
+  override fun onWrite(
+    pages: Array<out PageRange>,
+    destination: ParcelFileDescriptor,
+    cancel: CancellationSignal?,
+    callback: WriteResultCallback,
+  ) = adapter.onWrite(pages, destination, cancel, callback)
+
+  override fun onFinish() {
+    adapter.onFinish()
+    finished()
+  }
 }
 
 class MainActivity : TauriActivity() {
@@ -274,7 +306,7 @@ class MainActivity : TauriActivity() {
     }
   }
 
-  /** The page being printed, kept until the print screen has it. */
+  /** The page being printed, kept until printing ends. */
   private var printView: WebView? = null
 
   /**
@@ -291,7 +323,8 @@ class MainActivity : TauriActivity() {
         if (request.url.toString() != "$PRINT_ORIGIN/ready") return null
         runOnUiThread {
           val manager = getSystemService(PRINT_SERVICE) as PrintManager
-          manager.print(jobName, page.createPrintDocumentAdapter(jobName), printAttributes(geometry))
+          val adapter = ReleasingAdapter(page.createPrintDocumentAdapter(jobName)) { printView = null }
+          manager.print(jobName, adapter, printAttributes(geometry))
         }
         return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
       }

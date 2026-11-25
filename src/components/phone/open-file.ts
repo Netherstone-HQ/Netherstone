@@ -9,8 +9,8 @@ import { usePhoneNav } from "./nav";
 export async function openFileScreen(path: string, replace = false) {
   await openVaultFile(path);
   const nav = usePhoneNav.getState();
-  if (replace) nav.replace({ kind: "file" });
-  else nav.push({ kind: "file" });
+  if (replace) nav.replace({ kind: "file", path });
+  else nav.push({ kind: "file", path });
 }
 
 /** Opens a shard on its own screen, scrolled to what `reveal` names. */

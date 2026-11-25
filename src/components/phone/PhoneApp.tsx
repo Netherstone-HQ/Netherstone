@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { IS_ANDROID } from "@/lib/platform";
 import { copy } from "@/components/onboarding/copy";
+import { isSamePath } from "@/lib/drawing-files";
 import { useLaunches } from "@/lib/launch";
+import { openVaultFile } from "@/lib/open-vault-file";
 import { saveWhenHidden } from "@/hooks/useAutosave";
 import { usePreviewedChange } from "@/lib/assistant-changes";
 import { useAssistantStore } from "@/store/assistant";
@@ -62,6 +64,21 @@ export function PhoneApp() {
   useEffect(() => (IS_ANDROID ? followShares() : undefined), []);
   useEffect(() => (IS_ANDROID ? saveWhenHidden() : undefined), []);
   useEffect(() => followSettingsRequests(), []);
+
+  // Back from another file's screen shows this screen's file again.
+  useEffect(() => {
+    if (screen.kind !== "file" || !screen.path) return;
+    const { appMode, activeDrawingPath } = useUIStore.getState();
+    const shown =
+      appMode === "canvas"
+        ? activeDrawingPath
+        : useEditorStore.getState().currentFilePath;
+    if (shown && isSamePath(shown, screen.path)) return;
+    openVaultFile(screen.path).catch((error: unknown) => {
+      console.error("[Netherstone] Couldn't open the file again:", error);
+      usePhoneNav.getState().back();
+    });
+  }, [screen]);
 
   const selecting = useSelecting();
   useEffect(() => {

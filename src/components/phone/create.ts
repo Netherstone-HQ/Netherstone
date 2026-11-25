@@ -172,8 +172,8 @@ export async function createVoiceNoteShard(vaultPath: string, folder: string) {
 }
 /** Makes an untitled drawing in `folder` and opens it. */
 export async function createDrawingIn(vaultPath: string, folder: string) {
-  await createDrawing(vaultPath, folder);
-  usePhoneNav.getState().push({ kind: "file" });
+  const path = await createDrawing(vaultPath, folder);
+  if (path) usePhoneNav.getState().push({ kind: "file", path });
 }
 
 /**

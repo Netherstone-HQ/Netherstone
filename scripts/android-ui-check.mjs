@@ -384,6 +384,14 @@ try {
       .poll(() => readAppFile(`${vault}/${OPENED_NOTE}`), { message: "the imported shard" })
       .toContain(OPENED_TEXT);
   });
+
+  // Back from the imported shard shows the shard it was opened over again.
+  await step("back-to-previous-file", async () => {
+    await page.getByRole("button", { name: "Back", exact: true }).first().click();
+    const editor = page.locator("[data-slate-editor]");
+    await expect(editor).toContainText(SHARED_TITLE);
+    await expect(editor).not.toContainText(OPENED_TEXT);
+  });
 } finally {
   fs.writeFileSync(path.join(OUT, "steps.json"), JSON.stringify(steps, null, 1));
   try {

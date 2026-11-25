@@ -1,4 +1,4 @@
-import { KEYS, createSlateEditor } from "platejs";
+import { KEYS, createSlateEditor, type TElement } from "platejs";
 import { toast } from "sonner";
 import { managedMediaNode } from "@/components/editor/lib/media-insert";
 import { SerializationKit } from "@/components/editor/serialization-kit";
@@ -15,7 +15,10 @@ import {
   createShardFile,
   renameFile,
 } from "@/lib/commands/shards";
+import { isSamePath } from "@/lib/drawing-files";
 import { pickFiles } from "@/lib/pick-files";
+import { startVoiceNote } from "@/lib/voice/voice-note";
+import type { PlateEditor } from "platejs/react";
 import {
   createEmptyVault,
   vaultErrorText,
@@ -24,7 +27,7 @@ import { defaultVaultLocation, scanVault } from "@/lib/commands/vault";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { joinPath, openVault } from "@/lib/open-vault";
 import { indexVault } from "@/lib/refresh-vault";
-import { useVaultStore } from "@/store";
+import { useEditorStore, useVaultStore } from "@/store";
 import { openFileScreen } from "./open-file";
 import { usePhoneNav } from "./nav";
 
@@ -87,6 +90,22 @@ export async function freeTitle(folder: string, title: string) {
 }
 
 /**
+ * Makes a shard in `folder` called `base` and today's date ("Photo, 24
+ * Nov", or "… 2" when that's taken), with that title and then `body`.
+ * Returns its path.
+ */
+async function createDatedShard(folder: string, base: string, body: TElement[]) {
+  const title = await freeTitle(folder, `${base}, ${today()}`);
+  const filePath = await renameFile(await createShardFile(folder), title);
+  const editor = createSlateEditor({
+    plugins: SerializationKit,
+    value: [{ type: KEYS.h1, children: [{ text: title }] }, ...body],
+  });
+  await appendMarkdownToFile(filePath, serializeEditorMarkdown(editor, { filePath }));
+  return filePath;
+}
+
+/**
  * Takes a picture with the camera app and makes a shard of it in `folder`,
  * titled with today's date ("Photo, 24 Nov"), then opens it. Nothing is
  * made when the camera is closed without a picture.
@@ -101,19 +120,9 @@ export async function createPhotoShard(vaultPath: string, folder: string) {
       new Uint8Array(await photo.arrayBuffer()),
       vaultPath,
     );
-    const title = await freeTitle(folder, `Photo, ${today()}`);
-    filePath = await renameFile(await createShardFile(folder), title);
-    const editor = createSlateEditor({
-      plugins: SerializationKit,
-      value: [
-        { type: KEYS.h1, children: [{ text: title }] },
-        managedMediaNode(persisted, KEYS.img, photo.name),
-      ],
-    });
-    await appendMarkdownToFile(
-      filePath,
-      serializeEditorMarkdown(editor, { filePath }),
-    );
+    filePath = await createDatedShard(folder, "Photo", [
+      managedMediaNode(persisted, KEYS.img, photo.name),
+    ]);
     notifyAttachmentSyncStatus([persisted]);
   } catch (error) {
     toast.error("Couldn't save the photo", { description: message(error) });
@@ -124,6 +133,43 @@ export async function createPhotoShard(vaultPath: string, folder: string) {
   await indexVault(vaultPath);
 }
 
+/** The shard's editor once it shows `filePath`. */
+function editorShowing(filePath: string): Promise<PlateEditor> {
+  const showing = () => {
+    const { plateEditor, currentFilePath } = useEditorStore.getState();
+    return plateEditor && currentFilePath && isSamePath(currentFilePath, filePath)
+      ? (plateEditor as PlateEditor)
+      : null;
+  };
+  return new Promise((resolve) => {
+    const now = showing();
+    if (now) return resolve(now);
+    const stop = useEditorStore.subscribe(() => {
+      const editor = showing();
+      if (!editor) return;
+      stop();
+      resolve(editor);
+    });
+  });
+}
+
+/**
+ * Makes a shard in `folder` titled with today's date ("Voice note, 24 Nov"),
+ * opens it and starts recording a voice note in it.
+ */
+export async function createVoiceNoteShard(vaultPath: string, folder: string) {
+  let filePath: string;
+  try {
+    filePath = await createDatedShard(folder, "Voice note", []);
+  } catch (error) {
+    toast.error("Couldn't make the shard", { description: message(error) });
+    return;
+  }
+  await openFileScreen(filePath);
+  await startVoiceNote(await editorShowing(filePath));
+  await refreshTree(vaultPath);
+  await indexVault(vaultPath);
+}
 /** Makes an untitled drawing in `folder` and opens it. */
 export async function createDrawingIn(vaultPath: string, folder: string) {
   await createDrawing(vaultPath, folder);

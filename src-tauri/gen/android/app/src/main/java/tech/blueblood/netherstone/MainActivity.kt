@@ -36,9 +36,6 @@ class MainActivity : TauriActivity() {
     takeIn(intent)
   }
 
-  /** The page's view, once there is one, to tell it what came in. */
-  private var page: WebView? = null
-
   /**
    * Copies what another app opened or shared with Netherstone into the
    * cache, then tells the page with an `opened` or `shared` event. A page
@@ -54,7 +51,25 @@ class MainActivity : TauriActivity() {
     }.start()
   }
 
+  /**
+   * The app's page, once there is one, told when the app goes out of sight
+   * and when something comes in from another app.
+   */
+  private var page: WebView? = null
+
+  /**
+   * The WebView keeps its page "visible" while the app is in the background,
+   * so the page is told itself: an `apphidden` event once the app is out of
+   * sight, when Android may stop it at any time. src/hooks/useAutosave.ts
+   * saves then.
+   */
+  override fun onStop() {
+    page?.evaluateJavascript("window.dispatchEvent(new Event('apphidden'))", null)
+    super.onStop()
+  }
+
   override fun onWebViewCreate(webView: WebView) {
+    page = webView
     if (BuildConfig.INSPECTABLE) {
       WebView.setWebContentsDebuggingEnabled(true)
       // scripts/android-ui-check.mjs waits for this line.
@@ -62,7 +77,6 @@ class MainActivity : TauriActivity() {
     }
     webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
     fitAboveKeyboard(webView)
-    page = webView
   }
 
   /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */

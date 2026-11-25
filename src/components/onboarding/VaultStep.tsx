@@ -76,6 +76,13 @@ export function VaultStep({
   }
 
   if (IS_PHONE) {
+    if (option === "restore") {
+      return (
+        <Step title={copy.vault.restore.title} onBack={() => setOption(null)}>
+          <RestoreVault location={location} onRestored={onChoose} />
+        </Step>
+      );
+    }
     return option === "create" ? (
       <PhoneCreateVault
         location={location}
@@ -98,6 +105,12 @@ export function VaultStep({
             title={copy.vault.create.title}
             description={copy.vault.create.phoneDescription}
             onClick={() => setOption("create")}
+          />
+          <ChoiceCard
+            icon={<RotateCcwIcon />}
+            title={copy.vault.restore.title}
+            description={copy.vault.restore.description}
+            onClick={() => setOption("restore")}
           />
           {IS_ANDROID ? (
             <ChoiceCard
@@ -378,13 +391,18 @@ export function CreateVaultForm({
   );
 }
 
+/**
+ * Brings a synced vault down from GitHub into `location`. On a phone, with
+ * no `onLocationChange`, it goes in the app's own storage like a new vault,
+ * and where isn't asked.
+ */
 function RestoreVault({
   location,
   onLocationChange,
   onRestored,
 }: {
   location: string | null;
-  onLocationChange: (location: string) => void;
+  onLocationChange?: (location: string) => void;
   onRestored: (choice: VaultChoice) => void;
 }) {
   const account = useGitHubStore((s) => s.account);
@@ -535,15 +553,17 @@ function RestoreVault({
 
       {chosen ? (
         <>
-          <LocationRow
-            label={copy.vault.restore.locationLabel}
-            location={location}
-            onChange={(next) => {
-              onLocationChange(next);
-              setRestorePath(null);
-              setError(null);
-            }}
-          />
+          {onLocationChange ? (
+            <LocationRow
+              label={copy.vault.restore.locationLabel}
+              location={location}
+              onChange={(next) => {
+                onLocationChange(next);
+                setRestorePath(null);
+                setError(null);
+              }}
+            />
+          ) : null}
           {error ? <Hint tone="error">{error}</Hint> : null}
           <Button
             className="self-start"

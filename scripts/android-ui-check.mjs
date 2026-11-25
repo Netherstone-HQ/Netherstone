@@ -265,6 +265,11 @@ try {
   await step("welcome-tour", async () => {
     await page.getByRole("button", { name: "Get started" }).click();
 
+    // Restoring a synced vault asks for GitHub first; Back returns to the choices.
+    await page.getByRole("button", { name: /^Restore a synced vault/ }).click();
+    await expect(page.getByText("Connect the GitHub account you synced with.")).toBeVisible();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+
     // A new vault in the default place, the app's own storage.
     await page.getByRole("button", { name: /^Create a new vault/ }).click();
     await page.getByRole("button", { name: "Create vault", exact: true }).click();

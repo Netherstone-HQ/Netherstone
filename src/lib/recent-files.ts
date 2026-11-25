@@ -2,6 +2,7 @@ import { toast } from "sonner";
 
 import { fileExists } from "@/lib/commands/attachments";
 import {
+  fileName,
   getVaultFileDisplayName,
   isPathWithin,
   isSamePath,
@@ -32,7 +33,7 @@ export function shownRecentFiles(
 export async function openRecentFile(path: string): Promise<boolean> {
   if (!(await fileExists(path))) {
     useUIStore.getState().dropRecentFile(path);
-    const name = path.split(/[\\/]/).pop() ?? path;
+    const name = fileName(path);
     toast.error(`Couldn't find ${getVaultFileDisplayName(name)}`, {
       description: "It's no longer in this vault, so Recent doesn't list it.",
     });

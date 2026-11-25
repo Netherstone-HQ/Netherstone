@@ -20,6 +20,7 @@ import { folderName } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store";
 import { errorText } from "@/lib/utils";
+import { fileName } from "@/lib/drawing-files";
 
 type Step = { kind: "pick" } | ImportStep;
 
@@ -345,8 +346,4 @@ function Row({ name, notes, children }: { name: string; notes: string[]; childre
 
 function isCurrentVault(vaultPath: string) {
   return useVaultStore.getState().currentVaultPath === vaultPath;
-}
-
-function fileName(path: string) {
-  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }

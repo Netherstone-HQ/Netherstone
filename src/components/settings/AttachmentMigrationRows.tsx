@@ -14,17 +14,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  formatBytes,
-  getFileName,
-  plural,
-} from "@/components/settings/attachment-format";
+import { formatBytes, plural } from "@/components/settings/attachment-format";
 import {
   confirmAttachmentCopies,
   persistAttachmentFile,
   type ExternalFile,
 } from "@/lib/commands/attachments";
-import { toVaultRelativePath } from "@/lib/drawing-files";
+import { fileName, toVaultRelativePath } from "@/lib/drawing-files";
 import { importLinkedFile, rewriteShards } from "@/lib/shard-rewrite";
 import { useAttachmentReportStore } from "@/store";
 import { errorText } from "@/lib/utils";
@@ -177,7 +173,7 @@ export function ExternalFilesRow({
                     }}
                   />
                   <span className="min-w-0 flex-1 truncate">
-                    {getFileName(file.absolutePath)}
+                    {fileName(file.absolutePath)}
                     <span className="ml-1.5 text-muted-foreground">
                       {getLocationLabel(file, vaultPath)}
                     </span>

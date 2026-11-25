@@ -59,6 +59,11 @@ function normalizePath(filePath: string) {
   return filePath.replace(/\\/g, "/");
 }
 
+/** `Folder/Note.md` → `Note.md`. */
+export function fileName(path: string) {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
 /** The folder holding `path`, or "" when it has none. */
 export function getParentFolder(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");

@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import {
+  fileName,
   finishDrawingSession,
   getParentFolder,
   isDrawingPath,
@@ -30,7 +31,7 @@ export async function openDrawingFile(filePath: string) {
   ui.openMode("canvas");
   ui.pushRecentFile({
     path: filePath,
-    name: filePath.split(/[\\/]/).pop() ?? filePath,
+    name: fileName(filePath),
   });
 }
 

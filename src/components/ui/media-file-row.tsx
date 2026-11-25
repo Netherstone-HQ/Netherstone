@@ -27,7 +27,7 @@ import {
   describeMissingAttachment,
   type MissingAttachmentInfo,
 } from "@/lib/commands/attachments";
-import { toVaultRelativePath } from "@/lib/drawing-files";
+import { fileName, toVaultRelativePath } from "@/lib/drawing-files";
 import { isVaultAttachmentReference } from "@/lib/media-source";
 import { REVEAL_LABEL } from "@/lib/platform";
 import { formatBytes } from "@/lib/sync";
@@ -266,10 +266,6 @@ export function LinkedFileDetails() {
   );
 }
 
-function getFileName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
-}
-
 /**
  * Looks up what the database knows about a missing attachment: the name it
  * was imported under, and a file with the same content if it was renamed.
@@ -359,7 +355,7 @@ export function MissingVaultFileRow({
       action={
         foundPath && onRelinkTo
           ? {
-              label: `Use ${getFileName(foundPath)}`,
+              label: `Use ${fileName(foundPath)}`,
               onSelect: () => onRelinkTo(foundPath),
             }
           : findFile
@@ -389,7 +385,7 @@ export function MissingLinkedFileRow({
   return (
     <MediaFileRow
       warning
-      name={name?.trim() || (path ? getFileName(path) : "Linked file")}
+      name={name?.trim() || (path ? fileName(path) : "Linked file")}
       nameHint={path}
       details={
         <NotFound hint="It was moved, renamed or deleted on this computer." />

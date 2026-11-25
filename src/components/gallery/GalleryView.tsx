@@ -5,7 +5,7 @@ import { FileTextIcon, ImagesIcon } from "lucide-react";
 import { NextPageTrigger } from "@/components/NextPageTrigger";
 import { LeftSidebarToggle } from "@/components/PanelToggles";
 import { openShardAt } from "@/components/data/rows";
-import { formatBytes, getFileName } from "@/components/settings/attachment-format";
+import { formatBytes } from "@/components/settings/attachment-format";
 import { useThemeMode } from "@/components/theme/theme-provider";
 import { Dot } from "@/components/ui/dot";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import {
+  fileName,
   getVaultFileDisplayName,
   resolveVaultRelativePath,
 } from "@/lib/drawing-files";
@@ -40,7 +41,7 @@ const OPENABLE_TILE_CLASS = cn(
 );
 
 function shardName(shardPath: string) {
-  return getVaultFileDisplayName(getFileName(shardPath));
+  return getVaultFileDisplayName(fileName(shardPath));
 }
 
 function usedIn(file: GalleryFile) {

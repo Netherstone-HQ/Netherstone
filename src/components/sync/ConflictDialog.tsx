@@ -18,13 +18,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { isMarkdownPath, resolveVaultRelativePath } from "@/lib/drawing-files";
+import { fileName, isMarkdownPath, resolveVaultRelativePath } from "@/lib/drawing-files";
 import { errorMessage } from "@/lib/github-account";
 import { diffShardValues, sideOf } from "@/lib/history-diff";
 import {
   type ConflictChoice,
   type ConflictVersions,
-  fileName,
   formatBytes,
   getConflictVersions,
 } from "@/lib/sync";

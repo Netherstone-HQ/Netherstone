@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 
 import {
+  fileName,
   getVaultFileDisplayName,
   resolveVaultRelativePath,
 } from "@/lib/drawing-files";
@@ -10,16 +11,15 @@ import {
   type BackupSummary,
   type ConflictChoice,
   connectBackup,
-  fileName,
   getVaultSyncRecord,
   isOfflineError,
   listBackups,
   planVaultSync,
   resolveConflict,
   type SyncConflict,
+  syncNow,
   type SyncPlanSummary,
   type SyncReport,
-  syncNow,
   turnOffBackup,
   turnOnBackup,
   type VaultSyncRecord,

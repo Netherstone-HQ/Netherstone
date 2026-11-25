@@ -13,11 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  formatBytes,
-  getAssetLabel,
-  getFileName,
-} from "@/components/settings/attachment-format";
+import { formatBytes, getAssetLabel } from "@/components/settings/attachment-format";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import {
   CLEANUP_GRACE_DAYS,
@@ -26,7 +22,7 @@ import {
   type UnusedAttachment,
 } from "@/lib/commands/attachments";
 import { missingFileRows, type BrokenLink } from "@/lib/data";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { replaceAttachmentPath, rewriteShards } from "@/lib/shard-rewrite";
 import { cn, errorText } from "@/lib/utils";
 import { useAttachmentReportStore } from "@/store";
@@ -44,7 +40,7 @@ const DAY_SECONDS = 24 * 60 * 60;
 const ROW_BUTTON_CLASS = "h-7 shrink-0 text-ui-sm";
 
 function shardName(shardPath: string) {
-  return getVaultFileDisplayName(getFileName(shardPath));
+  return getVaultFileDisplayName(fileName(shardPath));
 }
 
 /**
@@ -76,7 +72,7 @@ function MissingFileRow({
       await rewriteShards(shardPaths, (markdown) =>
         replaceAttachmentPath(markdown, assetPath, found),
       );
-      toast.success(`Relinked to ${getFileName(found)}`);
+      toast.success(`Relinked to ${fileName(found)}`);
       await check(vaultPath);
     } catch (error) {
       console.error("[Netherstone] Relink failed:", error);

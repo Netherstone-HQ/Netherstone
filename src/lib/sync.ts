@@ -128,11 +128,6 @@ export function isOfflineError(message: string) {
   return message.startsWith("Couldn't reach GitHub");
 }
 
-/** `Folder/Note.md` → `Note.md`. */
-export function fileName(path: string) {
-  return path.split(/[\\/]/).pop() ?? path;
-}
-
 type VaultSnapshotResult = { commit: unknown | null };
 
 /** Tells an open history panel when a version was saved. */

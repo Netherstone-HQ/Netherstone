@@ -29,6 +29,7 @@ import {
   releaseMicrophone,
   VoiceCapture,
 } from "./capture";
+import { fileName } from "@/lib/drawing-files";
 
 /** The block that stands for a recording while it runs. Never saved. */
 export const VOICE_RECORDING_TYPE = "voice_recording";
@@ -171,7 +172,7 @@ function insertBlock(editor: PlateEditor, at?: Path) {
 }
 
 function shardName(path: string): string {
-  const file = path.split(/[\\/]/).pop() ?? path;
+  const file = fileName(path);
   return file.replace(/\.md$/i, "");
 }
 

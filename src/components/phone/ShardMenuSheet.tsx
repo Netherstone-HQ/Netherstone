@@ -27,7 +27,7 @@ import {
 } from "@/components/sidebar/right-sidebar/useShardInfo";
 import { useVaultItem } from "@/components/vault/useVaultItem";
 import type { ExportFormat } from "@/lib/export";
-import { isSamePath } from "@/lib/drawing-files";
+import { fileName, isSamePath } from "@/lib/drawing-files";
 import { shareExport } from "@/lib/export/share";
 import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
@@ -78,7 +78,7 @@ export function ShardMenuSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const [part, setPart] = useState<Part>("menu");
-  const name = path.split(/[\\/]/).pop() ?? path;
+  const name = fileName(path);
   const item = useVaultItem({ name, path, kind: "file" });
   const links = useShardLinks(open);
   const indexed = useIndexedShard(open);

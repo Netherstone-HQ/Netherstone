@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { FileTextIcon } from "lucide-react";
 import { Thumbnail, useNearView } from "@/components/gallery/GalleryView";
-import { getFileName } from "@/components/settings/attachment-format";
 import { BottomSheet, BottomSheetItem } from "@/components/ui/bottom-sheet";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
 import {
   matchesFileFilter,
   type GalleryFile,
@@ -42,7 +41,7 @@ export function useGalleryFiles(
 }
 
 function shardName(path: string) {
-  return getVaultFileDisplayName(getFileName(path));
+  return getVaultFileDisplayName(fileName(path));
 }
 
 function open(file: GalleryFile, shardPath: string) {

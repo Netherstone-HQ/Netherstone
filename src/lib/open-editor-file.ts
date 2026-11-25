@@ -14,6 +14,7 @@ import { useEditorStore, type OpenEditorFilePayload } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
 import type { Descendant } from "platejs";
+import { fileName } from "@/lib/drawing-files";
 
 function toOpenEditorFilePayload(
   result: OpenMarkdownFileResult,
@@ -71,8 +72,7 @@ async function saveOpenShard(): Promise<boolean> {
   const { isDirty, currentFilePath } = useEditorStore.getState();
   if (!isDirty || !currentFilePath) return true;
 
-  const fileName = currentFilePath.split(/[\\/]/).pop() ?? currentFilePath;
-  toast.error(`Couldn't save ${fileName}`, {
+  toast.error(`Couldn't save ${fileName(currentFilePath)}`, {
     description: "Your changes are still open. Try again in a moment.",
   });
   return false;
@@ -97,7 +97,7 @@ async function readAndOpenFile(
   useEditorStore.getState().openFile(toOpenEditorFilePayload(result, unsavedValue));
   useUIStore.getState().pushRecentFile({
     path: result.filePath,
-    name: result.filePath.split(/[\\/]/).pop() ?? result.filePath,
+    name: fileName(result.filePath),
   });
 
   const vaultPath = useVaultStore.getState().currentVaultPath;

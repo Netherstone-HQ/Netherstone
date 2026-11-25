@@ -6,11 +6,10 @@ import {
   keepUnsavedEdits,
   readUnsavedEdits,
 } from "@/lib/commands/shards";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
-import { fileName } from "@/lib/sync";
 import { useEditorStore } from "@/store/editor";
 import { useVaultStore } from "@/store/vault";
 

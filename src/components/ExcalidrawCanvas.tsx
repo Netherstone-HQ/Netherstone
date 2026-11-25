@@ -33,6 +33,7 @@ import {
   refreshLinkedDrawingImages,
 } from "@/lib/drawing-exports";
 import {
+  fileName,
   getVaultFileDisplayName,
   registerDrawingSaver,
 } from "@/lib/drawing-files";
@@ -76,10 +77,6 @@ interface ExcalidrawCanvasProps {
    * are hidden, and it only takes edits while `editing`.
    */
   phone?: { editing: boolean };
-}
-
-function getShardName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
 /**
@@ -193,7 +190,7 @@ function useDrawingPersistence(
         if (cancelled) return;
 
         console.error("[Netherstone] Failed to open drawing:", error);
-        toast.error(`Couldn't open ${getShardName(initialPath)}`, {
+        toast.error(`Couldn't open ${fileName(initialPath)}`, {
           description: errorText(error),
         });
         // Fall back to a scratch canvas. Never autosave over a file that
@@ -277,7 +274,7 @@ function useDrawingPersistence(
 
     if (merged.conflicted) {
       toast.info(
-        `${getVaultFileDisplayName(getShardName(path))} changed in two places`,
+        `${getVaultFileDisplayName(fileName(path))} changed in two places`,
         {
           description:
             "Current version was kept. The other version is in History.",
@@ -308,7 +305,7 @@ function useDrawingPersistence(
         setActiveDrawingPath(path);
         useUIStore
           .getState()
-          .pushRecentFile({ path, name: getShardName(path) });
+          .pushRecentFile({ path, name: fileName(path) });
         // The watcher event for the new file is suppressed with the save
         // below, so refresh the tree here.
         void scanVault(vaultPathRef.current!)

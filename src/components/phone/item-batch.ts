@@ -1,12 +1,11 @@
-import { toast } from "sonner";
 import { deleteItem, moveItem } from "@/components/vault/item-actions";
 import { isSamePath } from "@/lib/drawing-files";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import { usePhoneNav } from "./nav";
+import { reportFailure } from "./toasts";
 import { rememberedOf, showMovedToTrash } from "./trash";
 import { findNodes } from "./vault-tree";
-import { errorText } from "@/lib/utils";
 
 // Pin, move and trash for one row or several picked shards. Each closes
 // select mode (or the row's menu) when it's done.
@@ -30,12 +29,6 @@ export function closeActions() {
   const { entries, closeFrom } = usePhoneNav.getState();
   const first = entries.find((entry) => ACTION_KINDS.has(entry.kind));
   if (first) closeFrom(first.kind);
-}
-
-function reportFailure(what: string, error: unknown) {
-  toast.error(what, {
-    description: errorText(error),
-  });
 }
 
 /** Whether every one of `paths` is pinned. */

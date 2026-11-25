@@ -13,7 +13,6 @@ import {
   ShareIcon,
   TrashIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   BottomSheet,
   BottomSheetItem,
@@ -34,6 +33,7 @@ import { shareExport } from "@/lib/export/share";
 import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
+import { reportFailure } from "./toasts";
 import { usePhoneNav } from "./nav";
 import { errorText } from "@/lib/utils";
 
@@ -64,9 +64,7 @@ async function share(path: string, name: string, format: ExportFormat) {
       format,
     );
   } catch (error) {
-    toast.error(`Couldn't export ${name}`, {
-      description: errorText(error),
-    });
+    reportFailure(`Couldn't export ${name}`, error);
   }
 }
 

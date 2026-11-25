@@ -10,7 +10,7 @@ import { isPathWithin } from "@/lib/drawing-files";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useUIStore, useVaultStore } from "@/store";
 import type { RecentFileEntry } from "@/store/ui";
-import { errorText } from "@/lib/utils";
+import { reportFailure, UNDO_TOAST_MS } from "./toasts";
 
 // The app's trash on a phone: what's in it from the open vault, and
 // bringing things back or deleting them for good.
@@ -35,12 +35,6 @@ export const useAppTrash = create<TrashState>((set) => ({
     }
   },
 }));
-
-function reportFailure(what: string, error: unknown) {
-  toast.error(what, {
-    description: errorText(error),
-  });
-}
 
 /** Puts `ids` back in the vault, then shows them there. Returns where they went. */
 export async function restoreTrashed(ids: string[]): Promise<string[]> {
@@ -102,8 +96,6 @@ export async function deleteTrashedForever(ids: string[]) {
   await useAppTrash.getState().load();
 }
 
-/** How long a toast offering Undo stays, in ms. */
-export const UNDO_TOAST_MS = 8000;
 /** One "Moved to Trash" toast at a time: the newest delete's. */
 const UNDO_TOAST_ID = "moved-to-trash";
 

@@ -9,7 +9,6 @@ import {
   LinkIcon,
   SearchIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
@@ -20,8 +19,9 @@ import {
   isSamePath,
 } from "@/lib/drawing-files";
 import { folderName } from "@/lib/open-vault";
-import { cn, errorText } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useEditorStore, useUIStore, useVaultStore, type FileTreeNode } from "@/store";
+import { reportFailure } from "./toasts";
 import { usePhoneNav, usePhoneScreen } from "./nav";
 import { openFileScreen } from "./open-file";
 import {
@@ -166,9 +166,7 @@ function ShareForm({
       if (onScreen) closeShareIn();
       else await openFileScreen(saved, true);
     } catch (error) {
-      toast.error("Couldn't save what was shared", {
-        description: errorText(error),
-      });
+      reportFailure("Couldn't save what was shared", error);
     } finally {
       setSaving(false);
     }

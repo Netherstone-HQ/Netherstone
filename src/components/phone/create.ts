@@ -1,5 +1,4 @@
 import { KEYS, createSlateEditor, type TElement } from "platejs";
-import { toast } from "sonner";
 import { managedMediaNode } from "@/components/editor/lib/media-insert";
 import { SerializationKit } from "@/components/editor/serialization-kit";
 import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
@@ -27,14 +26,11 @@ import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore, useVaultStore } from "@/store";
 import { openFileScreen } from "./open-file";
 import { usePhoneNav } from "./nav";
+import { reportFailure } from "./toasts";
 import { errorText } from "@/lib/utils";
 
 async function refreshTree(vaultPath: string) {
   useVaultStore.getState().setFileTree(await scanVault(vaultPath));
-}
-
-function message(error: unknown) {
-  return errorText(error);
 }
 
 /**
@@ -46,7 +42,7 @@ export async function createUntitledShard(vaultPath: string, folder: string) {
   try {
     filePath = await createShardFile(folder);
   } catch (error) {
-    toast.error("Couldn't make the shard", { description: message(error) });
+    reportFailure("Couldn't make the shard", error);
     return;
   }
   await openFileScreen(filePath);
@@ -65,7 +61,7 @@ export async function createFolderIn(
     usePhoneNav.getState().replace({ kind: "folder", path });
     return null;
   } catch (error) {
-    return message(error);
+    return errorText(error);
   }
 }
 
@@ -131,7 +127,7 @@ export async function createPhotoShard(vaultPath: string, folder: string) {
     ]);
     notifyAttachmentSyncStatus([persisted]);
   } catch (error) {
-    toast.error("Couldn't save the photo", { description: message(error) });
+    reportFailure("Couldn't save the photo", error);
     return;
   }
   await openFileScreen(filePath);
@@ -172,7 +168,7 @@ export async function createVoiceNoteShard(vaultPath: string, folder: string) {
   try {
     filePath = await createDatedShard(folder, "Voice note", []);
   } catch (error) {
-    toast.error("Couldn't make the shard", { description: message(error) });
+    reportFailure("Couldn't make the shard", error);
     return;
   }
   await openFileScreen(filePath);

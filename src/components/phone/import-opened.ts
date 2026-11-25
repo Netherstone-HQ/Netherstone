@@ -7,8 +7,7 @@ import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
 import { usePhoneNav } from "./nav";
 import { openFileScreen } from "./open-file";
-import { UNDO_TOAST_MS } from "./trash";
-import { errorText } from "@/lib/utils";
+import { reportFailure, UNDO_TOAST_MS } from "./toasts";
 
 const IMPORT_TOAST_ID = "imported";
 
@@ -32,9 +31,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
       io: appImportIO(vaultPath),
     });
   } catch (error) {
-    toast.error(`Couldn't import ${names}`, {
-      description: errorText(error),
-    });
+    reportFailure(`Couldn't import ${names}`, error);
     return;
   }
 
@@ -52,9 +49,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
           since,
         );
       } catch (error) {
-        toast.error("Couldn't undo the import", {
-          description: errorText(error),
-        });
+        reportFailure("Couldn't undo the import", error);
         return;
       }
       const shown = useEditorStore.getState().currentFilePath;

@@ -18,7 +18,7 @@ import type { SaveState } from "@/components/SaveStatus";
 import { useThemeMode } from "@/components/theme/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
-import { getParentFolder, getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf, getParentFolder } from "@/lib/drawing-files";
 import { folderName } from "@/lib/open-vault";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
@@ -87,7 +87,7 @@ export function DrawingScreen() {
   }, [api]);
 
   const name = drawingPath
-    ? getVaultFileDisplayName(drawingPath.split(/[\\/]/).pop() ?? "")
+    ? displayNameOf(drawingPath)
     : "";
 
   /** Excalidraw's own Undo, hidden with the rest of its tools. */

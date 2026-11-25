@@ -12,8 +12,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { isSamePath } from "@/lib/drawing-files";
-import { shardNameOf, useExportDialogStore, type ExportFormat } from "@/lib/export";
+import { displayNameOf, isSamePath } from "@/lib/drawing-files";
+import { useExportDialogStore, type ExportFormat } from "@/lib/export";
 import {
   defaultExportOptions,
   EXPORT_CHOICES,
@@ -106,7 +106,7 @@ export function ExportDialog() {
 }
 
 function ExportWindow({ filePath, onClose }: { filePath: string; onClose: () => void }) {
-  const shardName = shardNameOf(filePath);
+  const shardName = displayNameOf(filePath);
   const [options, setOptions] = useState<ExportOptions>(() => {
     const { readingFont, textSize } = useSettingsStore.getState();
     return loadExportOptions(defaultExportOptions({ readingFont, textSize }));

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { FileTextIcon } from "lucide-react";
 import { Thumbnail, useNearView } from "@/components/gallery/GalleryView";
 import { BottomSheet, BottomSheetItem } from "@/components/ui/bottom-sheet";
-import { fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf } from "@/lib/drawing-files";
 import {
   matchesFileFilter,
   type GalleryFile,
@@ -38,10 +38,6 @@ export function useGalleryFiles(
         (!unusedOnly || file.shardPaths.length === 0),
     ),
   };
-}
-
-function shardName(path: string) {
-  return getVaultFileDisplayName(fileName(path));
 }
 
 function open(file: GalleryFile, shardPath: string) {
@@ -95,7 +91,7 @@ export function GalleryGrid({ files }: { files: GalleryFile[] }) {
               open(picking, path);
             }}
           >
-            {shardName(path)}
+            {displayNameOf(path)}
           </BottomSheetItem>
         ))}
       </BottomSheet>

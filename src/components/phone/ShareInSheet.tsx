@@ -13,6 +13,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
 import {
+  displayNameOf,
   getVaultFileDisplayName,
   isMarkdownPath,
   isPathWithin,
@@ -199,7 +200,7 @@ function ShareForm({
 
   const shown = preview(content);
   const shardName = shard
-    ? getVaultFileDisplayName(shard.split(/[\\/]/).pop() ?? shard)
+    ? displayNameOf(shard)
     : null;
 
   return (

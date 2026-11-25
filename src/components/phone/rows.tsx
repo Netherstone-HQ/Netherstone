@@ -11,11 +11,7 @@ import {
 import { DrawingIcon } from "@/components/icons";
 import { Dot } from "@/components/ui/dot";
 import type { ShardPreview } from "@/lib/commands/shards";
-import {
-  getVaultFileDisplayName,
-  isDrawingPath,
-  isSamePath,
-} from "@/lib/drawing-files";
+import { displayNameOf, isDrawingPath, isSamePath } from "@/lib/drawing-files";
 import { formatModified } from "@/lib/tags";
 import { cn } from "@/lib/utils";
 import { useUIStore, type FileTreeNode } from "@/store";
@@ -27,10 +23,6 @@ import { countFiles, fileKindLabel } from "./vault-tree";
 
 /** How far a finger moves sideways before a row follows it, in px. */
 const DRAG_SLOP_PX = 8;
-
-function fileName(path: string) {
-  return getVaultFileDisplayName(path.split(/[\\/]/).pop() ?? path);
-}
 
 /** The row whose swipe actions are showing; one at a time. */
 const useOpenSwipe = create<{
@@ -233,7 +225,7 @@ export function FileRow({
           <Icon className="size-5 shrink-0 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium">
-          {fileName(path)}
+          {displayNameOf(path)}
         </span>
       </span>
       {date || second ? (

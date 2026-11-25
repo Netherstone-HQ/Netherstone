@@ -22,7 +22,7 @@ import {
   type UnusedAttachment,
 } from "@/lib/commands/attachments";
 import { missingFileRows, type BrokenLink } from "@/lib/data";
-import { fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf, fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { replaceAttachmentPath, rewriteShards } from "@/lib/shard-rewrite";
 import { cn, errorText } from "@/lib/utils";
 import { useAttachmentReportStore } from "@/store";
@@ -38,10 +38,6 @@ import {
 const DAY_SECONDS = 24 * 60 * 60;
 /** Fits a button in a row without making it taller. */
 const ROW_BUTTON_CLASS = "h-7 shrink-0 text-ui-sm";
-
-function shardName(shardPath: string) {
-  return getVaultFileDisplayName(fileName(shardPath));
-}
 
 /**
  * A file a shard embeds that isn't in the vault. Relink points every shard
@@ -92,7 +88,7 @@ function MissingFileRow({
       >
         <span className="min-w-0 truncate">{name}</span>
         <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-          in {shardName(shardPath)}
+          in {displayNameOf(shardPath)}
         </span>
       </button>
       {foundAssetPath ? (

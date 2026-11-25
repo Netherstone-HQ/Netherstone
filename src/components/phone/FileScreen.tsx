@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { EllipsisVerticalIcon, SearchIcon, SparkleIcon } from "lucide-react";
 import { EditorOrVersion } from "@/components/AppLayout";
 import { loadAssistantEnabled } from "@/lib/assistant";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf } from "@/lib/drawing-files";
 import { formatVersionTitle } from "@/lib/history";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
@@ -48,7 +48,7 @@ export function FileScreen() {
           <PhoneBackButton />
           <div className="flex min-w-0 flex-1 flex-col pl-1">
             <h1 className="truncate font-semibold">
-              {getVaultFileDisplayName(openPath.split(/[\\/]/).pop() ?? "")}
+              {displayNameOf(openPath)}
             </h1>
             <p className="truncate text-sm text-muted-foreground">
               {formatVersionTitle(version.time)}

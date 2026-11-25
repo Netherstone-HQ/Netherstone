@@ -19,10 +19,9 @@ import {
 } from "@/lib/commands/shards";
 import {
   buildDrawingImageTag,
-  fileName,
+  displayNameOf,
   getDrawingLinkNeedles,
   getLinkedDrawingSources,
-  getVaultFileDisplayName,
   relinkDrawingImages,
   replaceLinkedDrawingImages,
   resolveVaultRelativePath,
@@ -161,7 +160,7 @@ async function exportDrawingImages(
 
 /** Alt text for an image exported from `drawingPath`. */
 export function getDrawingAltText(drawingPath: string) {
-  return getVaultFileDisplayName(fileName(drawingPath));
+  return displayNameOf(drawingPath);
 }
 
 /**

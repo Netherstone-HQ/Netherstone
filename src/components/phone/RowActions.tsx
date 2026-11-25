@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import { renameItem } from "@/components/vault/item-actions";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { useVaultStore, type FileTreeNode } from "@/store";
 import { closeActions, moveAll, runTrash } from "./item-batch";
 import { NameSheet } from "./NameSheet";
@@ -25,7 +25,7 @@ function displayName(node: FileTreeNode) {
 /** "“Overview”", or "3 items" for several. */
 function describe(paths: string[]) {
   if (paths.length !== 1) return `${paths.length} items`;
-  return `“${getVaultFileDisplayName(paths[0].split(/[\\/]/).pop() ?? paths[0])}”`;
+  return `“${displayNameOf(paths[0])}”`;
 }
 
 /** The menu, sheets and dialogs that rows and select mode open. */

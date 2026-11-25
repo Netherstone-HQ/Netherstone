@@ -64,6 +64,11 @@ export function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
+/** The name a file at `path` shows under: "Note" for `Folder/Note.md`. */
+export function displayNameOf(path: string) {
+  return getVaultFileDisplayName(fileName(path));
+}
+
 /** The folder holding `path`, or "" when it has none. */
 export function getParentFolder(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");

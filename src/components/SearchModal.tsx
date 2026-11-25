@@ -19,7 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
 import {
-  fileName,
+  displayNameOf,
   getFolderInVault,
   getVaultFileDisplayName,
   isDrawingPath,
@@ -416,7 +416,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
           const selected = !askSelected && index === selectedIndex;
           // For "Show history", the file it's for.
           const folder = row.isHistory
-            ? getVaultFileDisplayName(fileName(row.path))
+            ? displayNameOf(row.path)
             : currentVaultPath
               ? getFolderInVault(row.path, currentVaultPath)
               : "";

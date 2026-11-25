@@ -16,11 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import {
-  fileName,
-  getVaultFileDisplayName,
-  resolveVaultRelativePath,
-} from "@/lib/drawing-files";
+import { displayNameOf, resolveVaultRelativePath } from "@/lib/drawing-files";
 import {
   filesInRow,
   galleryThumbnail,
@@ -40,14 +36,10 @@ const OPENABLE_TILE_CLASS = cn(
   "hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/40",
 );
 
-function shardName(shardPath: string) {
-  return getVaultFileDisplayName(fileName(shardPath));
-}
-
 function usedIn(file: GalleryFile) {
   const count = file.shardPaths.length;
   if (count === 0) return "Not used";
-  if (count === 1) return `in ${shardName(file.shardPaths[0])}`;
+  if (count === 1) return `in ${displayNameOf(file.shardPaths[0])}`;
   return `in ${count} shards`;
 }
 
@@ -222,7 +214,7 @@ function Tile({
               onSelect={() => void openShardAt({ path: shardPath, assetPath })}
             >
               <FileTextIcon className="text-muted-foreground" />
-              <span className="min-w-0 truncate">{shardName(shardPath)}</span>
+              <span className="min-w-0 truncate">{displayNameOf(shardPath)}</span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

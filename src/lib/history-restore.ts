@@ -6,11 +6,7 @@ import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { fileExists } from "@/lib/commands/attachments";
 import { saveDrawingFile } from "@/lib/commands/drawings";
 import { saveMarkdownFile } from "@/lib/commands/shards";
-import {
-  finishDrawingSession,
-  getVaultFileDisplayName,
-  isDrawingPath,
-} from "@/lib/drawing-files";
+import { displayNameOf, finishDrawingSession, isDrawingPath } from "@/lib/drawing-files";
 import {
   parseDrawing,
   refreshLinkedDrawingImages,
@@ -216,7 +212,7 @@ export async function saveVersionCopy(filePath: string, content: string) {
     if (isDrawingPath(filePath)) await saveDrawingFile(path, content);
     else await saveMarkdownFile(path, content);
     toast.success(
-      `Saved ${getVaultFileDisplayName(path.split(/[\\/]/).pop() ?? path)}`,
+      `Saved ${displayNameOf(path)}`,
     );
   } catch (error) {
     console.error("[Netherstone] Couldn't save a copy of a version:", error);

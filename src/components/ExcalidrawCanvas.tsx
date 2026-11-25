@@ -32,11 +32,7 @@ import {
   parseDrawing,
   refreshLinkedDrawingImages,
 } from "@/lib/drawing-exports";
-import {
-  fileName,
-  getVaultFileDisplayName,
-  registerDrawingSaver,
-} from "@/lib/drawing-files";
+import { displayNameOf, fileName, registerDrawingSaver } from "@/lib/drawing-files";
 import { isChangedOnDiskError } from "@/lib/outside-changes";
 import { useShortcutKeys } from "@/hooks/useShortcut";
 import { keysText } from "@/lib/platform";
@@ -274,7 +270,7 @@ function useDrawingPersistence(
 
     if (merged.conflicted) {
       toast.info(
-        `${getVaultFileDisplayName(fileName(path))} changed in two places`,
+        `${displayNameOf(path)} changed in two places`,
         {
           description:
             "Current version was kept. The other version is in History.",

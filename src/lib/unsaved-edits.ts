@@ -6,7 +6,7 @@ import {
   keepUnsavedEdits,
   readUnsavedEdits,
 } from "@/lib/commands/shards";
-import { fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf } from "@/lib/drawing-files";
 import { getSaveMarkdownContent } from "@/lib/editor-markdown";
 import { serializeMarkdownInWorker } from "@/lib/editor-markdown-worker";
 import { openEditorFile } from "@/lib/open-editor-file";
@@ -115,7 +115,7 @@ export function offerCrashedEdits(): () => void {
       (copy) => {
         if (copy === null || withdrawn) return;
         toast(
-          `Unsaved edits to ${getVaultFileDisplayName(fileName(currentFilePath))} were kept`,
+          `Unsaved edits to ${displayNameOf(currentFilePath)} were kept`,
           {
             id: toastId,
             duration: Infinity,

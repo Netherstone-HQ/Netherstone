@@ -430,6 +430,10 @@ try {
   // A slow emulator can say another app "isn't responding" in a dialog over
   // this one, which would take the check's taps.
   await shell("settings put global hide_error_dialogs 1");
+  // Chrome, where web pages open over the app, skips its welcome screens,
+  // which a fresh emulator would otherwise show in their place.
+  await su(`echo 'chrome --disable-fre --no-default-browser-check --no-first-run' > /data/local/tmp/chrome-command-line && chmod 644 /data/local/tmp/chrome-command-line`);
+  await shell("am set-debug-app --persistent com.android.chrome");
   adb("logcat", "-c");
 
   const setup = { setup: true };

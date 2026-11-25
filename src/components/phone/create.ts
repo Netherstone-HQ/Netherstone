@@ -26,7 +26,7 @@ import {
 import { defaultVaultLocation, scanVault } from "@/lib/commands/vault";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { joinPath, openVault } from "@/lib/open-vault";
-import { indexVault } from "@/lib/refresh-vault";
+import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore, useVaultStore } from "@/store";
 import { openFileScreen } from "./open-file";
 import { usePhoneNav } from "./nav";
@@ -52,8 +52,7 @@ export async function createUntitledShard(vaultPath: string, folder: string) {
     return;
   }
   await openFileScreen(filePath);
-  await refreshTree(vaultPath);
-  await indexVault(vaultPath);
+  await refreshVault(vaultPath);
 }
 
 /** Makes the folder `name` in `parent` and opens it in place of the sheet. */
@@ -129,8 +128,7 @@ export async function createPhotoShard(vaultPath: string, folder: string) {
     return;
   }
   await openFileScreen(filePath);
-  await refreshTree(vaultPath);
-  await indexVault(vaultPath);
+  await refreshVault(vaultPath);
 }
 
 /**
@@ -173,8 +171,7 @@ export async function createVoiceNoteShard(vaultPath: string, folder: string) {
   await openFileScreen(filePath);
   const editor = await editorShowing(filePath);
   if (editor) await startVoiceNote(editor);
-  await refreshTree(vaultPath);
-  await indexVault(vaultPath);
+  await refreshVault(vaultPath);
 }
 /** Makes an untitled drawing in `folder` and opens it. */
 export async function createDrawingIn(vaultPath: string, folder: string) {

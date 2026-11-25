@@ -105,11 +105,24 @@ jobs:
           name: apk-${{ matrix.target }}
           path: netherstone-${{ matrix.target }}.apk
 
-  emulator:
-    name: Android emulator
+  # The app driven on an emulator (scripts/android-ui-check.mjs), and the
+  # editor with the system keyboard (scripts/android-editor-check.mjs).
+  # The editor check has sound on, for a microphone, and a back camera.
+  check:
+    name: Android ${{ matrix.name }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: emulator
+            script: android-ui-check
+            options: -no-audio -camera-back none
+          - name: editor
+            script: android-editor-check
+            options: -camera-back emulated
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6.1.0
@@ -117,7 +130,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      # The check drives the app with Playwright's Android support.
+      # The checks drive the app with Playwright's Android support.
       - run: pnpm install --frozen-lockfile
       - name: Allow the emulator to use KVM
         run: |
@@ -135,50 +148,10 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-audio -camera-back none
-          script: APK=netherstone-x86_64.apk node scripts/android-ui-check.mjs android-ui-check
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim ${{ matrix.options }}
+          script: APK=netherstone-x86_64.apk node scripts/${{ matrix.script }}.mjs ${{ matrix.script }}
       - if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: android-ui-check
-          path: android-ui-check
-
-  # The editor with the system keyboard (scripts/android-editor-check.mjs).
-  editor:
-    name: Android editor
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Allow the emulator to use KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - uses: actions/download-artifact@v4
-        with:
-          name: apk-x86_64
-      # With sound on, the emulator has a microphone for the voice note steps,
-      # and with a back camera, the camera app takes the photo steps' pictures.
-      - uses: reactivecircus/android-emulator-runner@v2
-        continue-on-error: ${{ inputs.report }}
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back emulated
-          script: APK=netherstone-x86_64.apk node scripts/android-editor-check.mjs android-editor-check
-      - if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-editor-check
-          path: android-editor-check
+          name: ${{ matrix.script }}
+          path: ${{ matrix.script }}

@@ -11,12 +11,12 @@ import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import { renameItem } from "@/components/vault/item-actions";
 import { displayNameOf, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { useVaultStore, type FileTreeNode } from "@/store";
+import { errorText } from "@/lib/utils";
 import { closeActions, moveAll, runTrash } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { closer, useLast } from "./nav";
 import { RowMenuSheet } from "./RowMenuSheet";
 import { findNode, findNodes } from "./vault-tree";
-import { errorText } from "@/lib/utils";
 
 function displayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;

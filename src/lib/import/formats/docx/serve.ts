@@ -2,11 +2,11 @@ import { createSlateEditor } from "platejs";
 
 import { SerializationKit } from "@/components/editor/serialization-kit";
 import { serializeMarkdownValue } from "@/lib/editor-markdown";
+import { errorText } from "@/lib/utils";
 
 import { ImportError } from "../../types";
 import { readWordPackage } from "./package";
 import type { WorkerScope } from "./protocol";
-import { errorText } from "@/lib/utils";
 
 /**
  * Reads the Word file the window sends, asking it for what only the import

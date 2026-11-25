@@ -21,6 +21,7 @@ import {
 import { useEditorStore } from "@/store/editor";
 import { useSettingsStore } from "@/store/settings";
 import { useVaultStore } from "@/store/vault";
+import { fileName } from "@/lib/drawing-files";
 
 import {
   type FinishedHead,
@@ -29,7 +30,6 @@ import {
   releaseMicrophone,
   VoiceCapture,
 } from "./capture";
-import { fileName } from "@/lib/drawing-files";
 
 /** The block that stands for a recording while it runs. Never saved. */
 export const VOICE_RECORDING_TYPE = "voice_recording";

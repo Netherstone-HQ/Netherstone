@@ -2,6 +2,7 @@ import {
   encodeShardLinkPath,
   relativePath,
 } from "@/lib/markdown-shard-links";
+import { errorText } from "@/lib/utils";
 
 import { importerFor } from "./registry";
 import {
@@ -12,7 +13,6 @@ import {
   type PlateNode,
 } from "./types";
 import { openArchives } from "./zip";
-import { errorText } from "@/lib/utils";
 
 /** A file the person picked, as the backend lists it. */
 export interface ImportSource {

@@ -9,9 +9,9 @@ import { appendMarkdownToFile } from "@/lib/commands/shards";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
+import { siteOf } from "@/lib/open-web-link";
 import { createTitledShard, markdownOf, today } from "./create";
 import { usePhoneNav } from "./nav";
-import { siteOf } from "@/lib/open-web-link";
 
 /** Sent by Android's MainActivity when another app shared something with this one. */
 const SHARED_EVENT = "shared";

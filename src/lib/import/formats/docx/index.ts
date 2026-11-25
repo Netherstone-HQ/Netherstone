@@ -1,7 +1,7 @@
+import { errorText } from "@/lib/utils";
 import { ImportError, type Importer } from "../../types";
 import { IMPORT_FORMATS } from "../list";
 import type { FromWorker, ToWorker } from "./protocol";
-import { errorText } from "@/lib/utils";
 
 /** How often a cancel is looked for while the worker reads. */
 const CANCEL_CHECK_MS = 100;

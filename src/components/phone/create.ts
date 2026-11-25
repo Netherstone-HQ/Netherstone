@@ -24,10 +24,10 @@ import { chooseVaultFolder } from "@/lib/nested-vault";
 import { joinPath, openVault } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore, useVaultStore } from "@/store";
+import { errorText } from "@/lib/utils";
 import { openFileScreen } from "./open-file";
 import { usePhoneNav } from "./nav";
 import { reportFailure } from "./toasts";
-import { errorText } from "@/lib/utils";
 
 async function refreshTree(vaultPath: string) {
   useVaultStore.getState().setFileTree(await scanVault(vaultPath));

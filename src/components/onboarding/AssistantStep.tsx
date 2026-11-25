@@ -18,9 +18,9 @@ import {
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import { folderName } from "@/lib/open-vault";
 import { useAssistantStore } from "@/store/assistant";
+import { errorText } from "@/lib/utils";
 import { copy } from "./copy";
 import { Hint, Step } from "./StepLayout";
-import { errorText } from "@/lib/utils";
 
 async function turnAssistant(enabled: boolean) {
   await setAssistantEnabled(enabled);

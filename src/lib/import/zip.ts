@@ -1,6 +1,6 @@
+import { errorText } from "@/lib/utils";
 import type { ImportIO, ImportSource } from "./engine";
 import { ImportError } from "./types";
-import { errorText } from "@/lib/utils";
 
 /**
  * Zip files picked or dropped for import are opened and their contents

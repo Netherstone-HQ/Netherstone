@@ -30,11 +30,11 @@ import type { ExportFormat } from "@/lib/export";
 import { fileName, isSamePath } from "@/lib/drawing-files";
 import { shareExport } from "@/lib/export/share";
 import { useEditorStore, useVaultStore } from "@/store";
+import { errorText } from "@/lib/utils";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { reportFailure } from "./toasts";
 import { openHistoryScreen } from "./open-file";
-import { errorText } from "@/lib/utils";
 
 type Part = "menu" | "outline" | "links" | "rename" | "export";
 

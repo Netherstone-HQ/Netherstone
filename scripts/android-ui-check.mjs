@@ -1,20 +1,10 @@
 #!/usr/bin/env node
-// Drives the Android app on an emulator the way a person would: goes through
-// the welcome tour, creates a shard from home, types into it, checks the
-// file on disk, goes back home with the system Back key, then restarts the
-// app, opens the shard from Recent and checks the text is back. Then it
-// exports, uses the trash, saves a link and a picture another app shares,
-// and imports a document another app opens with Netherstone.
+// Drives the Android app on an emulator the way a person would, from the
+// welcome tour through shards, export, trash, shares and Open with.
 //
 //   APK=app.apk node scripts/android-ui-check.mjs out
 //
 // The APK must be built with ORG_GRADLE_PROJECT_netherstoneInspectable=true.
-// Playwright's Android support attaches to the app's WebView over DevTools:
-// elements are found by role and name, and clicks and keys are sent as input
-// events at the element, so nothing depends on screen coordinates. Every
-// wait is on a condition and has a limit. When a step fails, the output
-// folder gets the page and the whole screen as pictures, the page's text,
-// and the device log.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -92,21 +82,14 @@ const appFileExists = async (file) =>
 
 const keyboardUp = async () => /mInputShown=true/.test(await shell("dumpsys input_method"));
 
-/**
- * Android's Back key. An "isn't responding" dialog over the app would take
- * it, and would also take one pressed while it comes up: it's closed first,
- * and closed again and the key pressed again when it took the press.
- */
+/** Android's Back key, pressed again if an "isn't responding" dialog took it. */
 async function pressBack() {
   await closeNotResponding(shell);
   await shell("input keyevent KEYCODE_BACK");
   if (await closeNotResponding(shell)) await shell("input keyevent KEYCODE_BACK");
 }
 
-/**
- * Android's own Back key, as a thumb would press it, from a shard to home.
- * While the keyboard is up, the first press only puts it away.
- */
+/** Back from a shard to home; with the keyboard up, the first press only hides it. */
 async function backToHome() {
   if (await keyboardUp()) {
     await pressBack();
@@ -140,10 +123,7 @@ async function trashFromHome() {
   await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} gone` }).toBe(false);
 }
 
-/**
- * Puts `file` in the app's cache for sharing and returns the content link
- * its file provider gives it, as another app would hand over its own files.
- */
+/** Puts `file` in the app's cache and returns its content link, as another app would share it. */
 async function providedFile(name, file) {
   const folder = `/data/data/${PACKAGE}/cache/shared`;
   const owner = await shell(`su 0 stat -c %u:%g /data/data/${PACKAGE}`);
@@ -152,10 +132,7 @@ async function providedFile(name, file) {
   return `content://${PACKAGE}.fileprovider/my_cache_images/shared/${name}`;
 }
 
-/**
- * Taps the text `label` in a system window, such as the folder picker,
- * found in the screen's layout as Android describes it.
- */
+/** Taps the text `label` in a system window, such as the folder picker. */
 async function tapSystemText(label) {
   const layout = "/data/local/tmp/layout.xml";
   let bounds = null;

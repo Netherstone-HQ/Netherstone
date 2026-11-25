@@ -63,19 +63,12 @@ function originOf(url) {
   }
 }
 
-/**
- * How long one look at the page list may take. Through `adb forward`, a
- * socket the WebView hasn't opened yet takes the connection and never
- * answers, so a look that takes longer is tried again.
- */
+/** How long one look at the page list may take: a socket not open yet never answers. */
 const LOOK_LIMIT_MS = 2_000;
 
 /**
- * Waits until the WebView of process `pid` shows the app's page, as its
- * DevTools socket lists it. Attaching while the page is still blank, with
- * the app's worker starting, can leave Playwright waiting for the page
- * forever (seen in 4 of 30 restarts; none in 50 after waiting for this).
- * Waits up to `timeout` ms.
+ * Waits until the WebView of `pid` shows the app's page. Attaching to a
+ * blank page can leave Playwright waiting forever.
  */
 async function appPageLoaded(pid, timeout) {
   const port = adb("forward", "tcp:0", `localabstract:webview_devtools_remote_${pid}`);
@@ -109,12 +102,7 @@ const NOT_RESPONDING_WINDOW = "dumpsys window windows | grep -m1 'Application No
 /** How long the dialog may take to go once Wait is tapped, in ms. */
 const DIALOG_GONE_MS = 10_000;
 
-/**
- * Closes the dialog a slow emulator shows when another app, often the
- * launcher, "isn't responding" (hide_error_dialogs doesn't keep it away),
- * choosing Wait. It sits over the app and takes taps and the Back key.
- * Returns whether there was one.
- */
+/** Closes a slow emulator's "isn't responding" dialog with Wait. Returns whether there was one. */
 export async function closeNotResponding(shell) {
   const dialog = await shell(NOT_RESPONDING_WINDOW);
   if (!dialog) return false;

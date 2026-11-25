@@ -30,10 +30,8 @@ export const UPDATER_BUNDLES = [
 ];
 
 /**
- * The Android APKs, by the architecture a phone reports. They have no
- * updater signature: the phone checks the SHA-256 GitHub gives each asset,
- * and Android checks the APK's own signature. They go under `android`, not
- * `platforms`, where the desktop updater expects a signature for each.
+ * The Android APKs by architecture, under `android`: they have no updater
+ * signature, which `platforms` would need. Phones check their SHA-256.
  */
 export const ANDROID_APKS = ["aarch64", "x86_64"].map((arch) => ({
   arch,

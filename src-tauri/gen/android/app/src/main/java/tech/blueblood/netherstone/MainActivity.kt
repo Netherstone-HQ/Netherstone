@@ -1,23 +1,47 @@
 package tech.blueblood.netherstone
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import java.io.ByteArrayInputStream
 import java.io.File
+import org.json.JSONObject
 
 /** The cache folder exports to share go in, as share_export_path names it. */
 private const val SHARE_FOLDER = "shared"
+
+/** Where a page being printed seems to come from; nothing is served from it. */
+private const val PRINT_ORIGIN = "https://print.netherstone.invalid"
+
+/** Thousandths of an inch in a millimetre, as Android's print sizes count. */
+private const val MILS_PER_MM = 1000 / 25.4
+
+/** The print screen's page: the export's paper (A4 or US Letter), with its margins. */
+private fun printAttributes(geometry: JSONObject): PrintAttributes {
+  fun mils(key: String) = Math.round(geometry.getDouble(key) * MILS_PER_MM).toInt()
+  val size = if (geometry.getString("pageSize") == "letter") PrintAttributes.MediaSize.NA_LETTER else PrintAttributes.MediaSize.ISO_A4
+  val margins = PrintAttributes.Margins(mils("marginLeftMm"), mils("marginTopMm"), mils("marginRightMm"), mils("marginBottomMm"))
+  return PrintAttributes.Builder().setMediaSize(size).setMinMargins(margins).build()
+}
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,6 +72,40 @@ class MainActivity : TauriActivity() {
     }
     webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
     fitAboveKeyboard(webView)
+    // Once wry has set its chrome client, files picked for the page go
+    // through PickerChromeClient. Before Android 8 the client can't be read,
+    // so wry's stays.
+    webView.post {
+      val wry = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) webView.webChromeClient else null
+      if (wry != null && wry !is PickerChromeClient) webView.webChromeClient = PickerChromeClient(wry, this)
+    }
+  }
+
+  /** Where a pick for the page goes once the picker returns. */
+  private var onPicked: ((List<Uri>) -> Unit)? = null
+
+  private val picker =
+    registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+      val data = result.data
+      val picked =
+        when {
+          result.resultCode != RESULT_OK || data == null -> emptyList()
+          data.clipData != null -> (0 until data.clipData!!.itemCount).map { data.clipData!!.getItemAt(it).uri }
+          else -> listOfNotNull(data.data)
+        }
+      onPicked?.invoke(picked)
+      onPicked = null
+    }
+
+  /** Shows a picker for the page (`intent`); `done` gets what was picked, or nothing. */
+  fun pickForPage(intent: Intent, done: (List<Uri>) -> Unit) {
+    onPicked = done
+    try {
+      picker.launch(intent)
+    } catch (error: ActivityNotFoundException) {
+      onPicked = null
+      done(emptyList())
+    }
   }
 
   /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */
@@ -90,6 +148,16 @@ class MainActivity : TauriActivity() {
       runOnUiThread { startActivity(Intent.createChooser(send, null)) }
     }
 
+    /**
+     * Opens Android's print screen with an export's print page, where it can
+     * be printed or saved as a PDF. `geometry` is the page as the export
+     * look says it: JSON with `pageSize` (`a4` or `letter`) and the four margins.
+     */
+    @JavascriptInterface
+    fun printPage(html: String, jobName: String, geometry: String) {
+      runOnUiThread { printHtml(html, jobName, JSONObject(geometry)) }
+    }
+
     /** Shows or hides the keyboard, leaving focus and the caret where they are. */
     @JavascriptInterface
     fun setKeyboard(shown: Boolean) {
@@ -98,6 +166,32 @@ class MainActivity : TauriActivity() {
         if (shown) controller.show(WindowInsetsCompat.Type.ime()) else controller.hide(WindowInsetsCompat.Type.ime())
       }
     }
+  }
+
+  /** The page being printed, kept until the print screen has it. */
+  private var printView: WebView? = null
+
+  /**
+   * Loads `html` in a WebView of its own and, once the page says its fonts
+   * and pictures are ready (it asks for `ready`, as for the desktop's PDF),
+   * hands it to the print screen on a page of the export's size, with its
+   * margins.
+   */
+  private fun printHtml(html: String, jobName: String, geometry: JSONObject) {
+    val view = WebView(this)
+    view.settings.javaScriptEnabled = true
+    view.webViewClient = object : WebViewClient() {
+      override fun shouldInterceptRequest(page: WebView, request: WebResourceRequest): WebResourceResponse? {
+        if (request.url.toString() != "$PRINT_ORIGIN/ready") return null
+        runOnUiThread {
+          val manager = getSystemService(PRINT_SERVICE) as PrintManager
+          manager.print(jobName, page.createPrintDocumentAdapter(jobName), printAttributes(geometry))
+        }
+        return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+      }
+    }
+    printView = view
+    view.loadDataWithBaseURL("$PRINT_ORIGIN/page.html", html, "text/html", "utf-8", null)
   }
 
   /**

@@ -119,6 +119,12 @@ async function launch() {
   ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
+  // What the app reports as going wrong, such as a file it couldn't read,
+  // which its toast shows only for a few seconds.
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      log(`page ${message.type()}:`, message.text());
+  });
 }
 
 /** The package of the app in front, or "" while none is. */

@@ -1,8 +1,5 @@
-/**
- * Picking files through the WebView's own file input, for Android, where
- * the system picker hands back content links rather than file paths. The
- * files come with their names and bytes, ready to copy into the vault.
- */
+// Picking files through the WebView's file input: Android's picker gives
+// content links, not paths.
 
 /** The kinds of file a media block takes, as a file input's `accept`. */
 const ACCEPT_BY_KIND = {
@@ -25,12 +22,7 @@ const NAME_BY_KIND: Record<PickKind, string> = {
 /** What a picture or video from the camera is called. */
 const CAMERA_NAME = "photo";
 
-/**
- * `file`, or a copy with a word for a name where Android made one up: the
- * photo picker names a file by its number ("1000000018.png" becomes
- * "picture.png"), and the camera by the time ("JPEG_20261124_194322_80871.jpg"
- * becomes "photo.jpg").
- */
+/** `file`, renamed "picture.png" or "photo.jpg" where Android made up a number for a name. */
 export function named(file: File, kind: PickKind, camera = false): File {
   const extension = /(\.[^.]+)?$/.exec(file.name)?.[1] ?? "";
   const stem = file.name.slice(0, file.name.length - extension.length);
@@ -42,10 +34,7 @@ export function named(file: File, kind: PickKind, camera = false): File {
   });
 }
 
-/**
- * Lets the person pick files of `kind`, or with `camera`, take a picture or
- * a video with the camera app. Resolves with nothing when they go back.
- */
+/** Picks files of `kind`, or takes them with the camera. Empty when cancelled. */
 export function pickFiles(
   kind: PickKind,
   { multiple = false, camera = false }: { multiple?: boolean; camera?: boolean } = {},

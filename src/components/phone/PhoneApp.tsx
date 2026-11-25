@@ -158,10 +158,7 @@ export function PhoneApp() {
   );
 }
 
-/**
- * Opens the Settings screen when something asks the desktop way, such as
- * a "Set up" link in the assistant. Returns a cleanup.
- */
+/** Opens Settings when something asks the desktop way, such as the assistant's "Set up". */
 function followSettingsRequests(): () => void {
   const take = () => {
     const { activeNavItem, settingsCategory, setActiveNavItem } =
@@ -183,11 +180,7 @@ function followSettingsRequests(): () => void {
   });
 }
 
-/**
- * Keeps history and the assistant in step with Back: they're open while
- * their sheet or what it opened is, and a restored version or a settled
- * change closes the screen that showed it.
- */
+/** Keeps the history and assistant sheets in step with Back. */
 function useSheetsFollowNav() {
   const entries = usePhoneNav((s) => s.entries);
   const has = (kind: string) => entries.some((entry) => entry.kind === kind);

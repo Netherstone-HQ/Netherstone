@@ -33,10 +33,7 @@ async function refreshTree(vaultPath: string) {
   useVaultStore.getState().setFileTree(await scanVault(vaultPath));
 }
 
-/**
- * Makes an empty shard in `folder`, called "Untitled", or "Untitled 2" and
- * so on when that's taken, and opens it to type in.
- */
+/** Makes an empty "Untitled" shard in `folder` and opens it. */
 export async function createUntitledShard(vaultPath: string, folder: string) {
   let filePath: string;
   try {
@@ -88,10 +85,7 @@ export function markdownOf(blocks: TElement[], filePath: string) {
   return serializeEditorMarkdown(editor, { filePath });
 }
 
-/**
- * Makes a shard in `folder` called `title` ("… 2" when that's taken), with
- * that title and then `body`. Returns its path.
- */
+/** Makes a shard called `title` ("… 2" when taken) holding `body`, and returns its path. */
 export async function createTitledShard(folder: string, title: string, body: TElement[]) {
   const name = await freeTitle(folder, title);
   const filePath = await renameFile(await createShardFile(folder), name);
@@ -107,11 +101,7 @@ function createDatedShard(folder: string, base: string, body: TElement[]) {
   return createTitledShard(folder, `${base}, ${today()}`, body);
 }
 
-/**
- * Takes a picture with the camera app and makes a shard of it in `folder`,
- * titled with today's date ("Photo, 24 Nov"), then opens it. Nothing is
- * made when the camera is closed without a picture.
- */
+/** Takes a picture and opens it in a new "Photo, 24 Nov" shard. */
 export async function createPhotoShard(vaultPath: string, folder: string) {
   const [photo] = await pickFiles("image", { camera: true });
   if (!photo) return;
@@ -134,10 +124,7 @@ export async function createPhotoShard(vaultPath: string, folder: string) {
   await refreshVault(vaultPath);
 }
 
-/**
- * The shard's editor once it shows `filePath`, or null when another file
- * opens first.
- */
+/** The editor once it shows `filePath`, or null when another file opens first. */
 function editorShowing(filePath: string): Promise<PlateEditor | null> {
   const showing = (state: ReturnType<typeof useEditorStore.getState>) =>
     state.plateEditor &&
@@ -159,10 +146,7 @@ function editorShowing(filePath: string): Promise<PlateEditor | null> {
   });
 }
 
-/**
- * Makes a shard in `folder` titled with today's date ("Voice note, 24 Nov"),
- * opens it and starts recording a voice note in it.
- */
+/** Opens a new "Voice note, 24 Nov" shard and starts recording in it. */
 export async function createVoiceNoteShard(vaultPath: string, folder: string) {
   let filePath: string;
   try {
@@ -182,11 +166,7 @@ export async function createDrawingIn(vaultPath: string, folder: string) {
   if (path) usePhoneNav.getState().push({ kind: "file", path });
 }
 
-/**
- * Makes the vault `name` on this phone, switches to it and opens its Start
- * here guide in place of the sheet that asked. Returns what went wrong, or
- * null.
- */
+/** Makes the vault `name`, switches to it and opens its Start here guide. Returns the error, or null. */
 export async function createVaultNamed(name: string): Promise<string | null> {
   try {
     const location = await defaultVaultLocation();

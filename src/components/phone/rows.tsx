@@ -30,10 +30,7 @@ const useOpenSwipe = create<{
   setPath: (path: string | null) => void;
 }>((set) => ({ path: null, setPath: (path) => set({ path }) }));
 
-/**
- * A row that slides left under a finger to show `actions` behind it. A tap
- * on a slid row slides it back instead of opening it.
- */
+/** A row that slides left to show `actions`; a tap slides it back. */
 function SwipeRow({
   path,
   actions,
@@ -170,11 +167,7 @@ export function SelectBox({ checked }: { checked: boolean }) {
   );
 }
 
-/**
- * A shard or drawing: its name, then when it was edited and either the
- * folder it's in or its first line. Swipe left for Pin and Delete, press
- * and hold for its menu; while picking shards a tap picks it.
- */
+/** A shard or drawing. Swipe left for Pin and Delete, hold for its menu. */
 export function FileRow({
   path,
   detail,

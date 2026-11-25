@@ -94,11 +94,7 @@ function stopSelecting() {
   usePhoneNav.getState().closeFrom("select");
 }
 
-/**
- * What was deleted from the open vault, and the histories of vaults that
- * are gone: tap an item to restore it or delete it for good, select several
- * to do that together, or empty the whole trash.
- */
+/** What was deleted from this vault, and the histories of gone vaults. */
 export function TrashScreen() {
   const items = useAppTrash((s) => s.items);
   const loaded = useAppTrash((s) => s.loaded);

@@ -76,10 +76,7 @@ function closeShareIn() {
   usePhoneNav.getState().closeFrom("share-in");
 }
 
-/**
- * "Save to Netherstone": what another app shared, saved as a new shard in a
- * folder or added to the end of a shard, which then opens.
- */
+/** "Save to Netherstone": a share saved as a new shard or added to one. */
 export function ShareInSheet() {
   const top = usePhoneNav((s) => s.entries.at(-1));
   const open = top?.kind === "share-in" || top?.kind === "share-place";

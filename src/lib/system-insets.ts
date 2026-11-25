@@ -4,14 +4,9 @@ import { androidBridge } from "@/lib/android-bridge";
 import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 
 /**
- * What the phone's own screen parts cover, in CSS px. On Android the app's
- * frame shrinks above the keyboard and MainActivity.kt reports the sizes:
- * `NetherstoneAndroid.insets()` at start, a `systeminsets` event on each change.
- * Elsewhere the page stays full height and the keyboard covers the bottom of
- * the visual viewport.
- *
- * Also set on the root element for CSS: `--keyboard-inset`,
- * `--safe-area-top`, `--safe-area-bottom`.
+ * What the keyboard and system bars cover, in CSS px, also set as
+ * `--keyboard-inset`, `--safe-area-top` and `--safe-area-bottom`. Android
+ * reports them (MainActivity.kt); elsewhere the visual viewport says.
  */
 export type KeyboardState = {
   /** How much of the screen the keyboard covers now, 0 while it's down. */

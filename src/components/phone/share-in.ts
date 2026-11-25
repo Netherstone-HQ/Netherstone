@@ -40,10 +40,7 @@ export const useShareIn = create<{ shared: Shared | null; id: number }>(() => ({
   id: 0,
 }));
 
-/**
- * Takes the latest share from another app and shows it in its sheet, in
- * place of one still showing.
- */
+/** Shows the latest share in its sheet, replacing one still showing. */
 async function takeShareIn() {
   const shared = await takeShared();
   if (!shared) return;
@@ -52,10 +49,7 @@ async function takeShareIn() {
   if (!nav.entries.some((entry) => entry.kind === "share-in")) nav.push({ kind: "share-in" });
 }
 
-/**
- * Shows what other apps share with Netherstone: what came while the app
- * started, then each new share.
- */
+/** Shows what other apps share: what came at start, then each new share. */
 export function followShares() {
   const take = () =>
     void takeShareIn().catch((error) =>
@@ -68,11 +62,7 @@ export function followShares() {
 
 const URL_PATTERN = /https?:\/\/[^\s<>"]+/g;
 
-/**
- * What a share is. Text holding one link and at most a line besides, as
- * browsers and most apps share a page, is that link, called by the share's
- * subject, that line or its site. Any other text is text.
- */
+/** One link with at most a line of text (how browsers share a page) is a link; other text is text. */
 export function shareContent(shared: Shared): ShareContent {
   const text = shared.text?.trim() ?? "";
   const urls = text.match(URL_PATTERN) ?? [];
@@ -97,10 +87,7 @@ function asTitle(text: string) {
   return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
-/**
- * The title of a new shard made from `content`: the link's title, the
- * text's first line, the one file's name, or "Shared, 24 Nov".
- */
+/** The link's title, the first line, the one file's name, or "Shared, 24 Nov". */
 export function shareTitle(content: ShareContent) {
   const fileStem = (name: string) => name.replace(/\.[^.]+$/, "");
   const from =
@@ -142,10 +129,7 @@ export type ShareTarget =
   | { kind: "new"; folder: string }
   | { kind: "add"; shard: string };
 
-/**
- * Saves `content` where `target` says and returns the shard it's in. Its
- * files are copied into the vault first.
- */
+/** Saves `content` where `target` says and returns the shard it's in. */
 export async function saveShare(
   content: ShareContent,
   target: ShareTarget,

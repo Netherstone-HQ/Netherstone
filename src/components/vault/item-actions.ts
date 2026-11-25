@@ -60,10 +60,7 @@ export function moveItem(node: FileTreeNode, destination: string) {
   return changePath(node, "move", () => moveFile(node.path, destination));
 }
 
-/**
- * Moves `node` to the trash, closing it first if it's open. On a phone,
- * returns its id in the app's trash.
- */
+/** Moves `node` to the trash, closing it first. On a phone, returns its trash id. */
 export async function deleteItem(node: FileTreeNode): Promise<string | null> {
   const { currentFilePath, closeFile } = useEditorStore.getState();
   const deletesOpenFile =

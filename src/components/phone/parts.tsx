@@ -3,10 +3,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePhoneNav } from "./nav";
 
-/**
- * A full phone screen: room for the status bar on top and the system's
- * gesture or button bar below, with the screen's own parts between.
- */
+/** A full phone screen, clear of the status bar and the system's bottom bar. */
 export function PhoneFrame({
   className,
   children,

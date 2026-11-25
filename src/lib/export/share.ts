@@ -1,8 +1,5 @@
-/**
- * Shares an export from a phone: the file goes to the app's cache and
- * Android's share sheet offers it to other apps (Drive, mail, Files…). A
- * PDF goes through Android's print screen, which saves it or prints it.
- */
+// Sharing an export from a phone through Android's share sheet. A PDF goes
+// through the print screen instead.
 
 import { shareExportPath } from "@/lib/commands/export";
 import { useSettingsStore } from "@/store";
@@ -21,10 +18,7 @@ const MIME_TYPES: Record<ExportFormat, string> = {
   html: "text/html",
 };
 
-/**
- * Builds `source` as `format`, with the export look last chosen, and opens
- * the share sheet with it. Throws if the export failed.
- */
+/** Builds `source` as `format` with the last export look and shares it. */
 export async function shareExport(source: ExportSource, format: ExportFormat) {
   const bridge = androidBridge();
   if (!bridge) throw new Error("Sharing works on Android only.");

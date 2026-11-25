@@ -12,11 +12,7 @@ const HEIGHTS: Record<BottomSheetHeight, string> = {
   full: "h-[calc(100dvh-3rem)]",
 };
 
-/**
- * A panel that slides up from the bottom of a phone screen over a dimmed
- * backdrop, holding only its handle. A tap on the backdrop, Back or Esc
- * closes it.
- */
+/** A panel sliding up over a dimmed backdrop; a tap outside, Back or Esc closes it. */
 export function BottomSheetFrame({
   open,
   onOpenChange,

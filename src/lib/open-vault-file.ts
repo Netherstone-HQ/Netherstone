@@ -75,10 +75,7 @@ export function openDeletedShardHistory(filePath: string) {
   useHistoryStore.getState().openDeletedHistory(filePath);
 }
 
-/**
- * Creates an untitled drawing in `folder` (the vault's root by default) and
- * opens it, saying so if that fails. Returns its path, or null then.
- */
+/** Creates and opens an untitled drawing in `folder`. Returns its path, or null on failure. */
 export async function createDrawing(
   vaultPath: string,
   folder = vaultPath,
@@ -111,10 +108,7 @@ function newShardFolder(vaultPath: string): string {
   return folder || vaultPath;
 }
 
-/**
- * Puts the cursor in the shard at `filePath` once its editor is on screen.
- * Gives up when another shard opens first.
- */
+/** Focuses the shard at `filePath` once it shows, unless another opens first. */
 function focusWhenShown(filePath: string) {
   const shown = useEditorStore.getState().plateEditor;
   const unsubscribe = useEditorStore.subscribe((state) => {

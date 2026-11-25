@@ -65,10 +65,7 @@ export function rememberedOf(paths: string[]): Remembered {
   return { recent: within(recentFiles), pinned: within(pinnedFiles) };
 }
 
-/**
- * Puts entries of `saved` back in their places, for the files that came
- * back where they were.
- */
+/** Puts back what home remembered of the files that came back where they were. */
 function putBack(saved: Remembered, restored: string[]) {
   const back = (entry: RecentFileEntry) =>
     restored.some((path) => isPathWithin(entry.path, path));
@@ -104,10 +101,7 @@ export function dismissMovedToTrash() {
   toast.dismiss(UNDO_TOAST_ID);
 }
 
-/**
- * Says that `ids` went to the trash, with Undo to bring them back and put
- * what home remembered of them back in place.
- */
+/** Says `ids` went to the trash, with Undo. */
 export function showMovedToTrash(ids: string[], remembered: Remembered) {
   if (ids.length === 0) return;
   const undo = async () => putBack(remembered, await restoreTrashed(ids));
@@ -123,10 +117,7 @@ const DAY_MS = 86_400_000;
 /** Up to this many days ago, a deletion says how many days. */
 const DAYS_SHOWN_AS_COUNT = 6;
 
-/**
- * When an item was deleted, as its row says it: "Deleted today", "Deleted
- * yesterday", "Deleted 3 days ago", then the date.
- */
+/** "Deleted today", "Deleted yesterday", "Deleted 3 days ago", then the date. */
 export function deletedLabel(deletedAt: number, now = new Date()): string {
   const startOfDay = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -143,10 +134,7 @@ export function deletedLabel(deletedAt: number, now = new Date()): string {
   return `Deleted ${shown}`;
 }
 
-/**
- * The folder an item was in, inside `vault`, as its row shows it: the
- * vault's own name at the top.
- */
+/** The folder an item was in, with the vault's name at the top. */
 export function folderOf(from: string, vault: string): string {
   const parts = (path: string) => path.split(/[\\/]+/).filter(Boolean);
   const vaultParts = parts(vault);

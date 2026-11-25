@@ -101,8 +101,8 @@ export async function deleteTrashedForever(ids: string[]) {
   await useAppTrash.getState().load();
 }
 
-/** How long the "Moved to Trash" toast stays, in ms. */
-const UNDO_TOAST_MS = 8000;
+/** How long a toast offering Undo stays, in ms. */
+export const UNDO_TOAST_MS = 8000;
 /** One "Moved to Trash" toast at a time: the newest delete's. */
 const UNDO_TOAST_ID = "moved-to-trash";
 

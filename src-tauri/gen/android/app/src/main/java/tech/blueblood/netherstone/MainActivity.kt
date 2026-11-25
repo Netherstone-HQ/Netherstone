@@ -5,11 +5,16 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
@@ -17,18 +22,63 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import java.io.ByteArrayInputStream
 import java.io.File
+import org.json.JSONObject
 
 /** The cache folder exports to share go in, as share_export_path names it. */
 private const val SHARE_FOLDER = "shared"
+
+/** Where a page being printed seems to come from; nothing is served from it. */
+private const val PRINT_ORIGIN = "https://print.netherstone.invalid"
+
+/** Thousandths of an inch in a millimetre, as Android's print sizes count. */
+private const val MILS_PER_MM = 1000 / 25.4
+
+/** The print screen's page: the export's paper (A4 or US Letter), with its margins. */
+private fun printAttributes(geometry: JSONObject): PrintAttributes {
+  fun mils(key: String) = Math.round(geometry.getDouble(key) * MILS_PER_MM).toInt()
+  val size = if (geometry.getString("pageSize") == "letter") PrintAttributes.MediaSize.NA_LETTER else PrintAttributes.MediaSize.ISO_A4
+  val margins = PrintAttributes.Margins(mils("marginLeftMm"), mils("marginTopMm"), mils("marginRightMm"), mils("marginBottomMm"))
+  return PrintAttributes.Builder().setMediaSize(size).setMinMargins(margins).build()
+}
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    if (savedInstanceState == null) {
+      // What the page took in the app's last run has been imported or saved.
+      File(cacheDir, "${Incoming.FOLDER}/taken").deleteRecursively()
+      takeIn(intent)
+    }
   }
 
-  /** The app's page, told when the app goes out of sight. */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    takeIn(intent)
+  }
+
+  /**
+   * Copies what another app opened or shared with Netherstone into the
+   * cache, then tells the page with an `opened` or `shared` event. A page
+   * that starts later looks for it itself.
+   */
+  private fun takeIn(intent: Intent?) {
+    val incoming = intent?.let { Incoming.of(it) } ?: return
+    Thread {
+      incoming.saveTo(cacheDir, contentResolver)
+      runOnUiThread {
+        page?.evaluateJavascript("window.dispatchEvent(new Event('${incoming.kind}'))", null)
+      }
+    }.start()
+  }
+
+  /**
+   * The app's page, once there is one, told when the app goes out of sight
+   * and when something comes in from another app.
+   */
   private var page: WebView? = null
 
   /**
@@ -127,6 +177,16 @@ class MainActivity : TauriActivity() {
       runOnUiThread { startActivity(Intent.createChooser(send, null)) }
     }
 
+    /**
+     * Opens Android's print screen with an export's print page, where it can
+     * be printed or saved as a PDF. `geometry` is the page as the export
+     * look says it: JSON with `pageSize` (`a4` or `letter`) and the four margins.
+     */
+    @JavascriptInterface
+    fun printPage(html: String, jobName: String, geometry: String) {
+      runOnUiThread { printHtml(html, jobName, JSONObject(geometry)) }
+    }
+
     /** Shows or hides the keyboard, leaving focus and the caret where they are. */
     @JavascriptInterface
     fun setKeyboard(shown: Boolean) {
@@ -135,6 +195,32 @@ class MainActivity : TauriActivity() {
         if (shown) controller.show(WindowInsetsCompat.Type.ime()) else controller.hide(WindowInsetsCompat.Type.ime())
       }
     }
+  }
+
+  /** The page being printed, kept until the print screen has it. */
+  private var printView: WebView? = null
+
+  /**
+   * Loads `html` in a WebView of its own and, once the page says its fonts
+   * and pictures are ready (it asks for `ready`, as for the desktop's PDF),
+   * hands it to the print screen on a page of the export's size, with its
+   * margins.
+   */
+  private fun printHtml(html: String, jobName: String, geometry: JSONObject) {
+    val view = WebView(this)
+    view.settings.javaScriptEnabled = true
+    view.webViewClient = object : WebViewClient() {
+      override fun shouldInterceptRequest(page: WebView, request: WebResourceRequest): WebResourceResponse? {
+        if (request.url.toString() != "$PRINT_ORIGIN/ready") return null
+        runOnUiThread {
+          val manager = getSystemService(PRINT_SERVICE) as PrintManager
+          manager.print(jobName, page.createPrintDocumentAdapter(jobName), printAttributes(geometry))
+        }
+        return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+      }
+    }
+    printView = view
+    view.loadDataWithBaseURL("$PRINT_ORIGIN/page.html", html, "text/html", "utf-8", null)
   }
 
   /**

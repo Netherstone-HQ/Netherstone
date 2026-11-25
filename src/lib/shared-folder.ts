@@ -1,29 +1,11 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { toast } from "sonner";
 import { IS_ANDROID } from "@/lib/platform";
+import { backInFront } from "@/lib/back-in-front";
 
 /** Sent by MainActivity.kt when the folder picker closes, saying how. */
 const FOLDER_PICKED_EVENT = "folderpicked";
 
 type FolderPick = "picked" | "cancelled" | "unusable";
-
-/**
- * Resolves once the app is in front again, after a settings screen. The
- * WebView doesn't say so itself (its page stays "visible"), the window does.
- */
-async function backInFront(): Promise<void> {
-  let stop: (() => void) | undefined;
-  await new Promise<void>((resolve) => {
-    void getCurrentWindow()
-      .onFocusChanged(({ payload: focused }) => {
-        if (focused) resolve();
-      })
-      .then((unlisten) => {
-        stop = unlisten;
-      });
-  });
-  stop?.();
-}
 
 /**
  * On Android, lets the person pick a folder in the phone's storage for a

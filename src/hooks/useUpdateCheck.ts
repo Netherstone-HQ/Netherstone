@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import { errorMessage } from "@/lib/github-account";
-import { canUpdate } from "@/lib/updates";
+import { INSTALL_LABEL, canUpdate } from "@/lib/updates";
 import { useUpdatesStore } from "@/store/updates";
 
 const TOAST_ID = "app-update";
@@ -13,7 +13,7 @@ function showUpdateToast(version: string) {
     id: TOAST_ID,
     duration: Infinity,
     action: {
-      label: "Restart to update",
+      label: INSTALL_LABEL,
       onClick: () => void installUpdateWithToast(version),
     },
   });

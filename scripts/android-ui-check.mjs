@@ -36,6 +36,8 @@ const SHARED_PICTURE = "shared-picture.png";
 const PICTURE_FILE = "src-tauri/icons/32x32.png";
 const OPENED_NOTE = "opened-note.md";
 const OPENED_TEXT = "opened from another app";
+// How long a finger takes to drag out a shape, in ms.
+const DRAG_MS = 400;
 // A vault in a folder other apps can open, and a shard already in it.
 const SHARED_VAULT = "Netherstone check";
 const SHARED_VAULT_DIR = `/sdcard/Documents/${SHARED_VAULT}`;
@@ -137,7 +139,16 @@ async function backToHome() {
     await expect.poll(keyboardUp, { message: "the keyboard to go away" }).toBe(false);
   }
   await pressBack();
-  await expect(page.getByRole("button", { name: "Search this vault" })).toBeVisible();
+  // A dialog that came up just after the press took it: the press is made
+  // again once the dialog is gone.
+  const home = page.getByRole("button", { name: "Search this vault" });
+  await expect
+    .poll(async () => {
+      if (await home.isVisible()) return true;
+      if (await closeNotResponding(shell)) await shell("input keyevent KEYCODE_BACK");
+      return false;
+    }, { message: "home" })
+    .toBe(true);
 }
 
 /** The shard's row in the Files list on home. */
@@ -424,11 +435,45 @@ try {
       .toContain(OPENED_TEXT);
   });
 
+  // Back from the imported shard shows the shard it was opened over again.
+  await step("back-to-previous-file", async () => {
+    await page.getByRole("button", { name: "Back", exact: true }).first().click();
+    const editor = page.locator("[data-slate-editor]");
+    await expect(editor).toContainText(SHARED_TITLE);
+    await expect(editor).not.toContainText(OPENED_TEXT);
+  });
+
+  // A new drawing opens ready to draw: a rectangle dragged out with a finger
+  // is saved, and Done leaves it to look at.
+  await step("draw-on-touch", async () => {
+    // Home is a few shards back, after the shares and the import.
+    const home = page.getByRole("button", { name: "Search this vault" });
+    await expect
+      .poll(async () => {
+        if (await home.isVisible()) return true;
+        await page.getByRole("button", { name: "Back", exact: true }).first().click();
+        return false;
+      }, { message: "home" })
+      .toBe(true);
+    await page.getByRole("button", { name: "New drawing", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Drawing tools" })).toBeVisible();
+    await page.getByRole("button", { name: "Rectangle", exact: true }).click();
+    const [width, height] = (await shell("wm size")).match(/(\d+)x(\d+)/).slice(1).map(Number);
+    const at = (fx, fy) => `${Math.round(width * fx)} ${Math.round(height * fy)}`;
+    await shell(`input swipe ${at(0.3, 0.4)} ${at(0.7, 0.55)} ${DRAG_MS}`);
+    const name = await page.getByRole("heading", { level: 1 }).innerText();
+    const drawing = `${vault}/${name}.excalidraw`;
+    await expect.poll(() => readAppFile(drawing), { message: "the rectangle saved" }).toContain('"type": "rectangle"');
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Drawing tools" })).toBeHidden();
+  });
   // A folder in Documents, picked with the system's picker, opens as a vault
   // whose shards stay in that folder.
   await step("vault-in-shared-folder", async () => {
     await shell(`appops set ${PACKAGE} MANAGE_EXTERNAL_STORAGE allow`);
     await shell(`mkdir -p '${SHARED_VAULT_DIR}' && echo '# ${SHARED_SHARD}' > '${SHARED_VAULT_DIR}/${SHARED_SHARD}.md'`);
+    // The drawing step leaves its drawing on screen.
     const home = page.getByRole("button", { name: "Search this vault" });
     await expect
       .poll(async () => {

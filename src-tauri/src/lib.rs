@@ -24,6 +24,9 @@ mod mcp;
 mod microphone;
 mod open_access;
 mod open_source;
+/// Updates for the Android app; its plain parts are tested on any computer.
+#[cfg(all(feature = "updater", any(target_os = "android", test)))]
+mod phone_updater;
 mod shard_links;
 mod shards;
 mod splash;
@@ -31,8 +34,11 @@ mod sync;
 #[cfg(target_os = "android")]
 mod tls_android;
 mod tools;
-#[cfg(feature = "updater")]
+#[cfg(all(feature = "updater", desktop))]
 mod updater;
+/// A phone has no updater plugin: the same commands, for the APK.
+#[cfg(all(feature = "updater", target_os = "android"))]
+use phone_updater as updater;
 mod vault;
 mod vault_access;
 mod voice_notes;
@@ -98,10 +104,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol(export::pdf::SCHEME, export::pdf::serve);
-    #[cfg(feature = "updater")]
+    #[cfg(all(feature = "updater", desktop))]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::PendingUpdate::default());
+    #[cfg(all(feature = "updater", target_os = "android"))]
+    let builder = builder.manage(updater::PendingUpdate::default());
     builder
         .manage(browser::BrowserState::default())
         .manage(watcher::WatcherState::new())
@@ -177,11 +185,11 @@ pub fn run() {
             assistant::commands::assistant_remember,
             assistant::commands::assistant_forget,
             assistant::commands::assistant_discard_offer,
-            #[cfg(feature = "updater")]
+            #[cfg(all(feature = "updater", any(desktop, target_os = "android")))]
             updater::updater_check,
-            #[cfg(feature = "updater")]
+            #[cfg(all(feature = "updater", any(desktop, target_os = "android")))]
             updater::updater_download,
-            #[cfg(feature = "updater")]
+            #[cfg(all(feature = "updater", any(desktop, target_os = "android")))]
             updater::updater_install,
             browser::browser_reset_state,
             browser::browser_get_state,

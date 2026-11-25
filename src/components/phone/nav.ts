@@ -15,8 +15,12 @@ export type SearchFilter =
 export type PhoneScreen =
   | { kind: "home" }
   | { kind: "folder"; path: string }
-  /** The open shard, or the open drawing when Canvas is the mode. */
-  | { kind: "file" }
+  /**
+   * The open shard, or the open drawing when Canvas is the mode. `path` is
+   * the file it opened with, opened again when Back returns to it from
+   * another file's screen.
+   */
+  | { kind: "file"; path?: string }
   /** Search, in one folder when `folder` is set. */
   | { kind: "search"; folder?: string; filter?: SearchFilter }
   | { kind: "tags" }

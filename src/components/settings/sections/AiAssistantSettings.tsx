@@ -21,6 +21,7 @@ import {
   showError,
   useProviderSetup,
 } from "@/components/assistant/providers/useProviderSetup";
+import { IS_MOBILE } from "@/lib/platform";
 
 /** Where a shard's images and PDFs go with it: wherever the model runs. */
 function filesGoTo(status: AssistantStatus) {
@@ -72,7 +73,9 @@ export function AiAssistantSettings() {
           label="Turn on the assistant"
           description={
             <span className="inline-flex items-center gap-1.5">
-              Ask about your vault and change shards from a side panel
+              {IS_MOBILE
+                ? "Ask about your vault and change shards"
+                : "Ask about your vault and change shards from a side panel"}
               <HelpDialog
                 title="How the assistant uses your vault"
                 description="It only sees the vaults you turn on in AI apps"
@@ -120,7 +123,7 @@ export function AiAssistantSettings() {
       <SettingsGroup title="Chats">
         <SettingRow
           label="Saved chats"
-          description="Kept on this computer, outside your vaults and sync"
+          description={`Kept on this ${IS_MOBILE ? "device" : "computer"}, outside your vaults and sync`}
         >
           <Button
             type="button"

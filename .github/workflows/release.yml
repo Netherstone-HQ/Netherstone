@@ -162,6 +162,103 @@ jobs:
           includeUpdaterJson: false
           args: ${{ matrix.args }}
 
+  # The Android app for people who install it from GitHub, one APK per
+  # kind of phone, signed with the release key so each update installs over
+  # the last. Until the key's secrets are set (ANDROID_KEYSTORE as base64,
+  # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD),
+  # releases go out without it.
+  build-android:
+    name: Build (Android ${{ matrix.target }})
+    needs: check-version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64
+            rust: aarch64-linux-android
+            env: aarch64_linux_android
+          - target: x86_64
+            rust: x86_64-linux-android
+            env: x86_64_linux_android
+    env:
+      NDK_VERSION: 29.0.14206865
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+    steps:
+      - name: Check for the release key
+        id: key
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Android release key yet: this release has no APK." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.key.outputs.present
+      - uses: pnpm/action-setup@v6.1.0
+        if: steps.key.outputs.present
+      - uses: actions/setup-node@v7
+        if: steps.key.outputs.present
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        if: steps.key.outputs.present
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: |
+            src-tauri/gen/android/**/*.gradle*
+            src-tauri/gen/android/**/gradle-wrapper.properties
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.key.outputs.present
+        with:
+          targets: ${{ matrix.rust }}
+      # The runner's own SDK tools are too old to list the Android 37 platform.
+      - name: Android NDK and platform
+        if: steps.key.outputs.present
+        run: |
+          curl -sSLo /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/tools.zip -d /tmp/tools
+          SDKMANAGER="/tmp/tools/cmdline-tools/bin/sdkmanager --sdk_root=$ANDROID_HOME"
+          yes | $SDKMANAGER --licenses > /dev/null || true
+          $SDKMANAGER "platforms;android-37.0" "build-tools;36.0.0" "ndk;$NDK_VERSION" > /dev/null
+      - run: pnpm install --frozen-lockfile
+        if: steps.key.outputs.present
+      # keystore.properties names the key for build.gradle.kts; neither is
+      # kept past the job.
+      - name: Release key
+        if: steps.key.outputs.present
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > src-tauri/gen/android/keystore.properties
+      - name: Build and upload the APK
+        if: steps.key.outputs.present
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          # OpenSSL's build looks for ranlib and ar under the target's name.
+          export RANLIB_${{ matrix.env }}="$BIN/llvm-ranlib" AR_${{ matrix.env }}="$BIN/llvm-ar"
+          export PATH="$BIN:$PATH"
+          pnpm tauri android build --apk --target ${{ matrix.target }}
+          version=$(node scripts/channels.mjs version "$GITHUB_REF_NAME")
+          apk="Netherstone_${version}_android-${{ matrix.target }}.apk"
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk "$apk"
+          gh release upload "$GITHUB_REF_NAME" "$apk" --clobber
+
   # Package managers that update the app themselves get it without the
   # updater: the Linux .deb's files in a tarball, for channels like Snap.
   build-packages:
@@ -216,7 +313,7 @@ jobs:
   # releases without a pre-release suffix.
   publish:
     name: Publish release
-    needs: [check-version, build, build-packages]
+    needs: [check-version, build, build-packages, build-android]
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

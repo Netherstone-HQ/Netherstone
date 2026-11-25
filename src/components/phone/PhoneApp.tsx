@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { IS_ANDROID } from "@/lib/platform";
 import { copy } from "@/components/onboarding/copy";
+import { isSamePath } from "@/lib/drawing-files";
 import { useLaunches } from "@/lib/launch";
+import { openVaultFile } from "@/lib/open-vault-file";
 import { saveWhenHidden } from "@/hooks/useAutosave";
 import { usePreviewedChange } from "@/lib/assistant-changes";
 import { useAssistantStore } from "@/store/assistant";
@@ -55,6 +57,10 @@ export function PhoneApp() {
   const overlay = usePhoneOverlay();
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
+  const appMode = useUIStore((s) => s.appMode);
+  const drawingPath = useUIStore((s) => s.activeDrawingPath);
+  // The file on screen whose history the sheet shows: the shard, or the drawing.
+  const historyPath = appMode === "canvas" ? drawingPath : openPath;
   useLaunches(importOpened);
 
   useEffect(() => followBrowserHistory(), []);
@@ -62,6 +68,21 @@ export function PhoneApp() {
   useEffect(() => (IS_ANDROID ? followShares() : undefined), []);
   useEffect(() => (IS_ANDROID ? saveWhenHidden() : undefined), []);
   useEffect(() => followSettingsRequests(), []);
+
+  // Back from another file's screen shows this screen's file again.
+  useEffect(() => {
+    if (screen.kind !== "file" || !screen.path) return;
+    const { appMode, activeDrawingPath } = useUIStore.getState();
+    const shown =
+      appMode === "canvas"
+        ? activeDrawingPath
+        : useEditorStore.getState().currentFilePath;
+    if (shown && isSamePath(shown, screen.path)) return;
+    openVaultFile(screen.path).catch((error: unknown) => {
+      console.error("[Netherstone] Couldn't open the file again:", error);
+      usePhoneNav.getState().back();
+    });
+  }, [screen]);
 
   const selecting = useSelecting();
   useEffect(() => {
@@ -127,9 +148,9 @@ export function PhoneApp() {
         />
       ) : null}
       <RowActions />
-      {screen.kind === "file" && openPath ? (
+      {screen.kind === "file" && historyPath ? (
         <HistorySheet
-          filePath={openPath}
+          filePath={historyPath}
           open={overlay?.kind === "history"}
           onOpenChange={closeHistorySheet}
         />

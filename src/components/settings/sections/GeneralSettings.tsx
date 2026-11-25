@@ -26,7 +26,7 @@ import {
   type Integration,
   type Integrations,
 } from "@/lib/commands/integrations";
-import { IS_MOBILE } from "@/lib/platform";
+import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 import {
   MAX_RECENT_FILES_LIMIT,
   MIN_RECENT_FILES_LIMIT,
@@ -48,14 +48,17 @@ export function GeneralSettings() {
         <RecentShardsRows />
       </SettingsGroup>
 
-      {/* Phones have no browser panel yet. */}
-      {IS_MOBILE ? null : (
+      {/* An iPhone has no browser panel yet. */}
+      {IS_MOBILE && !IS_ANDROID ? null : (
         <SettingsGroup title="Links">
           <PreferenceSegments
             name="openLinksIn"
             label="Open links in"
             options={[
-              { value: "browser-panel", label: "Browser panel" },
+              {
+                value: "browser-panel",
+                label: IS_ANDROID ? "Netherstone" : "Browser panel",
+              },
               { value: "your-browser", label: "Your browser" },
             ]}
           />

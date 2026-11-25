@@ -17,6 +17,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -28,6 +29,10 @@ import org.json.JSONObject
 
 /** The cache folder exports to share go in, as share_export_path names it. */
 private const val SHARE_FOLDER = "shared"
+
+/** Where phone_updater.rs downloads an update, in the cache. */
+private const val UPDATE_FOLDER = "updates"
+private const val UPDATE_FILE = "Netherstone.apk"
 
 /** Where a page being printed seems to come from; nothing is served from it. */
 private const val PRINT_ORIGIN = "https://print.netherstone.invalid"
@@ -204,7 +209,50 @@ class MainActivity : TauriActivity() {
       runOnUiThread { printHtml(html, jobName, JSONObject(geometry)) }
     }
 
-    /** Shows or hides the keyboard, leaving focus and the caret where they are. */
+    /**
+     * Shows a web page over the app, in the phone's browser as a custom tab:
+     * its title and site, a Close button that comes back here, and a menu
+     * to go back, forward, reload, copy, share or open it in the browser.
+     * Only http and https pages: anything else is left alone.
+     */
+    @JavascriptInterface
+    fun openInApp(url: String) {
+      val uri = Uri.parse(url)
+      if (uri.scheme != "http" && uri.scheme != "https") return
+      runOnUiThread {
+        try {
+          CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(this@MainActivity, uri)
+        } catch (error: ActivityNotFoundException) {
+          // No browser that shows custom tabs: the page opens in any browser.
+          startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }
+      }
+    }
+
+    /**
+     * Hands the update phone_updater.rs downloaded to Android's installer.
+     * The first time, Android must let Netherstone install apps: that
+     * setting opens instead, and this returns false to try again after.
+     */
+    @JavascriptInterface
+    fun installUpdate(): Boolean {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+        runOnUiThread {
+          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.fromParts("package", packageName, null)))
+        }
+        return false
+      }
+      val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
+      if (!apk.isFile) return false
+      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", apk)
+      val install = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      runOnUiThread { startActivity(install) }
+      return true
+    }
+
     /** Whether vaults may live in shared storage: "All files access". */
     @JavascriptInterface fun hasAllFilesAccess(): Boolean = SharedFolders.hasAccess(this@MainActivity)
 
@@ -220,6 +268,7 @@ class MainActivity : TauriActivity() {
       runOnUiThread { folderPicker.launch(SharedFolders.DOCUMENTS) }
     }
 
+    /** Shows or hides the keyboard, leaving focus and the caret where they are. */
     @JavascriptInterface
     fun setKeyboard(shown: Boolean) {
       runOnUiThread {

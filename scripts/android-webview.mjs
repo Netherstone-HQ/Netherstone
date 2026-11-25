@@ -62,3 +62,23 @@ export async function startAndAttach({ device, pkg, activity, shell, within, tim
   const page = await within(webView.page(), "the app's page to attach");
   return { webView, page };
 }
+
+/**
+ * Closes the dialog a slow emulator shows when another app, often the
+ * launcher, "isn't responding" (hide_error_dialogs doesn't keep it away),
+ * choosing Wait. It sits over the app and takes taps and the Back key.
+ * Returns whether there was one.
+ */
+export async function closeNotResponding(shell) {
+  const dialog = await shell("dumpsys window windows | grep -m1 'Application Not Responding' || true");
+  if (!dialog) return false;
+  console.log("closing:", dialog.trim());
+  const layout = "/data/local/tmp/not-responding.xml";
+  const xml = await shell(`rm -f ${layout}; uiautomator dump ${layout} > /dev/null 2>&1; cat ${layout}`);
+  const bounds = /text="Wait"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/.exec(xml);
+  if (bounds) {
+    const [x1, y1, x2, y2] = bounds.slice(1).map(Number);
+    await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
+  }
+  return true;
+}

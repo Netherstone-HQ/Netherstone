@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeftRightIcon,
   ChevronsUpDownIcon,
@@ -74,16 +74,11 @@ export function LeftSidebar() {
     (path) => path !== currentVaultPath,
   );
 
-  const loadBackupState = useSyncStore((s) => s.load);
   const backupIndicator = useSyncStore((s) => {
     if (s.vaultPath !== currentVaultPath || !s.record?.syncEnabled) return null;
     if (s.error || s.record.conflicts.length > 0) return "attention";
     return s.offline ? "offline" : "ok";
   });
-
-  useEffect(() => {
-    if (currentVaultPath) void loadBackupState(currentVaultPath);
-  }, [currentVaultPath, loadBackupState]);
 
   async function switchVault(vaultPath: string) {
     try {

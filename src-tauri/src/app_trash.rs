@@ -15,7 +15,7 @@ pub use trash::{delete, delete_all};
 
 #[cfg(mobile)]
 pub fn delete(path: impl AsRef<Path>) -> Result<(), String> {
-    move_to_trash(&trash_dir()?, path.as_ref(), &unique_name()).map(|_| ())
+    delete_vault_item(path.as_ref()).map(|_| ())
 }
 
 #[cfg(mobile)]
@@ -196,6 +196,23 @@ fn history_name(trash: &Path, batch: &str, name: &str) -> Option<String> {
         })
 }
 
+/// Whether `from` is in `vault` or among the vault histories in `histories`.
+fn belongs(vault: &Path, histories: &Path, from: &Path) -> bool {
+    crate::vault_access::is_within(vault, from) || crate::vault_access::is_within(histories, from)
+}
+
+/// Whether `list` would show the item `id`.
+fn is_listed(trash: &Path, id: &str, vault: &Path, histories: &Path) -> bool {
+    let Ok((batch, name)) = parse_id(id) else {
+        return false;
+    };
+    read_record(trash, batch)
+        .and_then(|record| record.from.get(name).cloned())
+        .is_some_and(|from| {
+            trash.join(batch).join(name).exists() && belongs(vault, histories, &from)
+        })
+}
+
 /// What's in the trash from `vault`, and the vault histories kept in
 /// `histories` (they belong to no vault), most recently deleted first.
 fn list(trash: &Path, vault: &Path, histories: &Path) -> Vec<TrashedItem> {
@@ -214,11 +231,7 @@ fn list(trash: &Path, vault: &Path, histories: &Path) -> Vec<TrashedItem> {
                 (batch.clone(), name, from, kept, deleted_at)
             })
         })
-        .filter(|(_, _, from, kept, _)| {
-            kept.exists()
-                && (crate::vault_access::is_within(vault, from)
-                    || crate::vault_access::is_within(histories, from))
-        })
+        .filter(|(_, _, from, kept, _)| kept.exists() && belongs(vault, histories, from))
         .map(|(batch, name, from, kept, deleted_at)| TrashedItem {
             id: format!("{batch}/{name}"),
             is_folder: kept.is_dir(),
@@ -344,9 +357,7 @@ pub(crate) fn restore_app_trash(ids: Vec<String>) -> Result<Vec<String>, String>
     ids.iter()
         .map(|id| {
             restore(&trash, id, |path| {
-                if crate::vault_access::is_within(&vault, path)
-                    || crate::vault_access::is_within(&histories, path)
-                {
+                if belongs(&vault, &histories, path) {
                     Ok(())
                 } else {
                     Err(format!("{} isn't in the open vault", path.display()))
@@ -361,10 +372,10 @@ pub(crate) fn restore_app_trash(ids: Vec<String>) -> Result<Vec<String>, String>
 #[tauri::command(async)]
 pub(crate) fn delete_app_trash(ids: Vec<String>) -> Result<(), String> {
     let vault = crate::vault_access::get().open_vault()?;
+    let histories = crate::sync::sync_root()?;
     let trash = trash_dir()?;
-    let listed = list(&trash, &vault, &crate::sync::sync_root()?);
     ids.iter().try_for_each(|id| {
-        if !listed.iter().any(|item| &item.id == id) {
+        if !is_listed(&trash, id, &vault, &histories) {
             return Err(format!("{id} isn't in this vault's trash"));
         }
         delete_forever(&trash, id)
@@ -485,6 +496,10 @@ mod tests {
                 },
             ]
         );
+        let sync = root.join("sync");
+        assert!(is_listed(&trash, "3/new.md", &vault, &sync));
+        assert!(!is_listed(&trash, "2/elsewhere.md", &vault, &sync));
+        assert!(!is_listed(&trash, "3/gone.md", &vault, &sync));
     }
 
     #[test]

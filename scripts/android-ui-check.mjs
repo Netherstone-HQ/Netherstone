@@ -445,7 +445,7 @@ try {
     await expect(page.getByRole("region", { name: "Files" }).getByRole("button", { name: new RegExp(`^${SHARED_SHARD}`) })).toBeVisible();
     await page.getByRole("button", { name: new RegExp(`^${SHARED_VAULT}`) }).first().click();
     await expect(page.getByText(`In Documents/${SHARED_VAULT}`)).toBeVisible();
-    await shell("input keyevent KEYCODE_BACK");
+    await pressBack();
     await page.getByRole("button", { name: "New shard", exact: true }).click();
     const editor = page.locator("[data-slate-editor]");
     await editor.locator("[data-slate-node=element]").last().click();

@@ -125,7 +125,6 @@ export function VaultStep({
     );
   }
 
-
   return (
     <Step title={copy.vault.title} body={copy.vault.body} onBack={onBack}>
       <div className="flex flex-col gap-2.5">

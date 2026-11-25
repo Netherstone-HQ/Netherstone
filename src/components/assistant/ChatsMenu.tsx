@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useAssistantStore } from "@/store/assistant";
 import { useVaultStore } from "@/store/vault";
+import { IS_MOBILE } from "@/lib/platform";
 
 /** Asks before every saved chat is deleted. */
 export function DeleteAllChatsDialog({
@@ -43,7 +44,8 @@ export function DeleteAllChatsDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete all chats?</AlertDialogTitle>
           <AlertDialogDescription>
-            Chats are only on this computer, so they can't be brought back.
+            Chats are only on this {IS_MOBILE ? "device" : "computer"}, so they
+            can't be brought back.
             Your shards stay as they are.
           </AlertDialogDescription>
         </AlertDialogHeader>

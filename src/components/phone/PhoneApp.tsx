@@ -57,6 +57,10 @@ export function PhoneApp() {
   const overlay = usePhoneOverlay();
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const openPath = useEditorStore((s) => s.currentFilePath);
+  const appMode = useUIStore((s) => s.appMode);
+  const drawingPath = useUIStore((s) => s.activeDrawingPath);
+  // The file on screen whose history the sheet shows: the shard, or the drawing.
+  const historyPath = appMode === "canvas" ? drawingPath : openPath;
   useLaunches(importOpened);
 
   useEffect(() => followBrowserHistory(), []);
@@ -144,9 +148,9 @@ export function PhoneApp() {
         />
       ) : null}
       <RowActions />
-      {screen.kind === "file" && openPath ? (
+      {screen.kind === "file" && historyPath ? (
         <HistorySheet
-          filePath={openPath}
+          filePath={historyPath}
           open={overlay?.kind === "history"}
           onOpenChange={closeHistorySheet}
         />

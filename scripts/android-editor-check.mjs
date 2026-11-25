@@ -119,6 +119,12 @@ async function launch() {
   ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
+  // What the app reports as going wrong, such as a file it couldn't read,
+  // which its toast shows only for a few seconds.
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      log(`page ${message.type()}:`, message.text());
+  });
 }
 
 /** The package of the app in front, or "" while none is. */
@@ -157,23 +163,47 @@ async function calibrate(target) {
   // The listener is in place before the tap: a tap that lands first is
   // never seen.
   await page.evaluate(() => {
-    window.__calibrationTap = new Promise((resolve) =>
-      window.addEventListener("pointerdown", (e) => resolve({ x: e.clientX, y: e.clientY }), {
-        once: true,
-        capture: true,
-      }),
+    window.__calibrationTap = null;
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        window.__calibrationTap = { x: e.clientX, y: e.clientY };
+      },
+      { once: true, capture: true },
     );
   });
   screen = { scale, x: 0, y: 0 };
   await expect(target).toBeVisible();
   const at = await pointOn(target);
+  await closeNotResponding();
   await shell(`input tap ${at.x} ${at.y}`);
-  const client = await within(
-    page.evaluate(() => window.__calibrationTap),
-    "the calibration tap",
-  );
+  const seen = () => page.evaluate(() => window.__calibrationTap);
+  // A tap the page didn't see, as when a dialog came up over the app and
+  // took it, is made again, the dialog gone first. The target is plain
+  // text, so a tap too many does nothing.
+  await poll(async () => {
+    if (!(await seen())) {
+      await closeNotResponding();
+      await shell(`input tap ${at.x} ${at.y}`);
+    }
+    return seen();
+  }, "the calibration tap").not.toBeNull();
+  const client = await seen();
   screen = { scale, x: at.x - client.x * scale, y: at.y - client.y * scale };
   log("screen", screen);
+}
+
+/**
+ * Closes the dialog a slow emulator shows when another app "isn't
+ * responding" (hide_error_dialogs doesn't keep it away), choosing Wait.
+ * Returns whether there was one.
+ */
+async function closeNotResponding() {
+  const dialog = await shell("dumpsys window windows | grep -m1 'Application Not Responding' || true");
+  if (!dialog) return false;
+  log("closing:", dialog.trim());
+  await tapSystemButton(/^Wait$/);
+  return true;
 }
 
 /** The screen point at `fx`, `fy` (0 to 1) across an element. */
@@ -190,12 +220,14 @@ async function pointOn(locator, fx = 0.5, fy = 0.5) {
 /** A finger tap. */
 async function tap(locator, fx, fy) {
   const { x, y } = await pointOn(locator, fx, fy);
+  await closeNotResponding();
   await shell(`input tap ${x} ${y}`);
 }
 
 /** A finger held still on an element. */
 async function longPress(locator) {
   const { x, y } = await pointOn(locator, 0.3);
+  await closeNotResponding();
   await shell(`input swipe ${x} ${y} ${x} ${y} ${LONG_PRESS_MS}`);
 }
 
@@ -220,9 +252,17 @@ async function tapSystemButton(label) {
   await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
-/** Text typed on the keyboard, one key at a time. */
+/**
+ * Text typed on the keyboard, one key at a time, each sent on its own as a
+ * finger would. One `input text` for the whole text sends the keys within
+ * a millisecond or so, faster than any typing: right after a / menu turned
+ * the line into a quote, 2 lines in 25 then came out with two letters
+ * swapped ("quotedl ine"), and none in 25 typed key by key.
+ */
 async function typeKeys(text) {
-  await shell(`input text '${text.replaceAll(" ", "%s")}'`);
+  for (const key of text) {
+    await shell(key === " " ? "input keyevent KEYCODE_SPACE" : `input text '${key}'`);
+  }
 }
 
 const keyboardInset = () =>
@@ -605,10 +645,40 @@ try {
     const inGallery = `/sdcard/Pictures/netherstone-check-${Date.now()}.png`;
     adb("push", GALLERY_PICTURE, inGallery);
     await shell("content call --method scan_volume --uri content://media --arg external_primary");
+    // The picker hands on the size the gallery has for the file, and the
+    // app's read of it fails unless that's the size on disk: wait until
+    // the gallery has it right.
+    const size = fs.statSync(GALLERY_PICTURE).size;
+    const name = path.posix.basename(inGallery);
+    await poll(
+      () =>
+        shell(
+          `content query --uri content://media/external/images/media --projection _size --where "_display_name='${name}'"`,
+        ),
+      "the gallery to know the picture's size",
+    ).toContain(`_size=${size}`);
+    // What the page's file input gets back from the picker, so a failure
+    // says whether the pick reached the page at all.
+    await page.evaluate(() => {
+      window.__picked = null;
+      // The app's file input may not be in the page, so its own events are
+      // listened to, from when it opens the picker.
+      const click = HTMLInputElement.prototype.click;
+      HTMLInputElement.prototype.click = function () {
+        if (this.type === "file")
+          for (const type of ["change", "cancel"])
+            this.addEventListener(type, () => {
+              window.__picked = { type, files: [...(this.files ?? [])].map((f) => `${f.name} ${f.size}`) };
+            });
+        return click.call(this);
+      };
+    });
     await insertFromBar("Picture");
     await tapSystemButton(/^Photo taken on/);
     await tapSystemButton(/^Add \(1\)$/);
     await poll(appInFront, "the app back in front").toBe(PACKAGE);
+    await poll(() => page.evaluate(() => window.__picked), "the pick to reach the page").not.toBeNull();
+    log("picked:", JSON.stringify(await page.evaluate(() => window.__picked)));
     // The picker names it by its number; the app gives it a word instead.
     await onDisk().toContain("_attachments/picture.png");
     await poll(() => su(`base64 '${vault}/_attachments/picture.png' | tr -d '\\n'`)).toBe(
@@ -692,6 +762,27 @@ try {
     typed,
   );
 
+  await step(
+    "voice-note-shard",
+    async () => {
+      // Home's microphone makes a shard named for today and records in it.
+      await openFromHome(SHARD);
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(home()).toBeVisible();
+      await page.getByRole("button", { name: "Record a voice note" }).click();
+      await expect(page.getByRole("heading", { name: /^Voice note, / })).toBeVisible();
+      await expect(page.getByRole("status").filter({ hasText: "Recording" })).toBeAttached();
+      // Out of sight, Android may stop the app at any time: the recording
+      // is saved as it goes.
+      await shell("input keyevent KEYCODE_HOME");
+      await poll(appInFront, "the launcher in front").not.toBe(PACKAGE);
+      const saved = () => su(`cat "$(find '${vault}' -maxdepth 1 -name 'Voice note, *.md' | head -1)"`);
+      await poll(saved, "the recording saved into its shard").toMatch(/_attachments\/[^)"]+\.webm/);
+      await bringAppBack();
+      await expect(page.getByRole("group", { name: "Audio" })).toBeVisible();
+    },
+    { needs: ["voice-note-allowed"] },
+  );
   await step("photo-shard", async () => {
     // The camera on home's bar makes a shard of the photo, named for today.
     await openFromHome(SHARD);

@@ -33,6 +33,8 @@ declare global {
       setKeyboard(shown: boolean): void;
       /** Offers an export to share (see `shareExportPath`) to other apps. */
       shareFile(path: string, mimeType: string): void;
+      /** Opens the print screen with an export's print page; geometry is JSON. */
+      printPage(html: string, jobName: string, geometry: string): void;
     };
   }
 }

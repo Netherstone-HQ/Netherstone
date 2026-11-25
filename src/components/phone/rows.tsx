@@ -161,8 +161,8 @@ function SwipeAction({
   );
 }
 
-/** The box a row shows in its icon's place while picking shards. */
-function SelectBox({ checked }: { checked: boolean }) {
+/** The box a row shows in its icon's place while picking. */
+export function SelectBox({ checked }: { checked: boolean }) {
   return (
     <span
       aria-hidden="true"

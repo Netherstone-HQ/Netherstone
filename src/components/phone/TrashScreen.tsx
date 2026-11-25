@@ -1,6 +1,5 @@
 import { useEffect, type ReactNode } from "react";
 import {
-  CheckIcon,
   FileTextIcon,
   FolderIcon,
   HistoryIcon,
@@ -34,6 +33,7 @@ import {
   PhoneTitle,
   PhoneTopBar,
 } from "./parts";
+import { SelectBox } from "./rows";
 import { BarButton, SelectTopBar } from "./SelectBars";
 import { usePhoneSelection } from "./selection";
 import {
@@ -209,7 +209,7 @@ function TrashRow({ item, vault }: { item: TrashedItem; vault: string }) {
       }
     >
       <span className="flex w-full min-w-0 items-center gap-3">
-        {selecting ? <CheckBox checked={checked} /> : <ItemIcon item={item} />}
+        {selecting ? <SelectBox checked={checked} /> : <ItemIcon item={item} />}
         <span className="min-w-0 flex-1 truncate font-medium">
           {itemName(item)}
         </span>
@@ -220,22 +220,6 @@ function TrashRow({ item, vault }: { item: TrashedItem; vault: string }) {
         <span className="shrink-0">{deletedLabel(item.deletedAt)}</span>
       </span>
     </button>
-  );
-}
-
-function CheckBox({ checked }: { checked: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-md border-[1.5px]",
-        checked
-          ? "border-brand bg-brand text-background"
-          : "border-muted-foreground",
-      )}
-    >
-      {checked ? <CheckIcon className="size-3.5" strokeWidth={3} /> : null}
-    </span>
   );
 }
 

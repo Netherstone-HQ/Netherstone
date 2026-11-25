@@ -133,22 +133,27 @@ export async function createPhotoShard(vaultPath: string, folder: string) {
   await indexVault(vaultPath);
 }
 
-/** The shard's editor once it shows `filePath`. */
-function editorShowing(filePath: string): Promise<PlateEditor> {
-  const showing = () => {
-    const { plateEditor, currentFilePath } = useEditorStore.getState();
-    return plateEditor && currentFilePath && isSamePath(currentFilePath, filePath)
-      ? (plateEditor as PlateEditor)
+/**
+ * The shard's editor once it shows `filePath`, or null when another file
+ * opens first.
+ */
+function editorShowing(filePath: string): Promise<PlateEditor | null> {
+  const showing = (state: ReturnType<typeof useEditorStore.getState>) =>
+    state.plateEditor &&
+    state.currentFilePath &&
+    isSamePath(state.currentFilePath, filePath)
+      ? (state.plateEditor as PlateEditor)
       : null;
-  };
   return new Promise((resolve) => {
-    const now = showing();
+    const now = showing(useEditorStore.getState());
     if (now) return resolve(now);
-    const stop = useEditorStore.subscribe(() => {
-      const editor = showing();
-      if (!editor) return;
-      stop();
-      resolve(editor);
+    const stop = useEditorStore.subscribe((state) => {
+      const opening = state.openingFilePath ?? state.currentFilePath;
+      const editor = showing(state);
+      if (editor || !opening || !isSamePath(opening, filePath)) {
+        stop();
+        resolve(editor);
+      }
     });
   });
 }
@@ -166,7 +171,8 @@ export async function createVoiceNoteShard(vaultPath: string, folder: string) {
     return;
   }
   await openFileScreen(filePath);
-  await startVoiceNote(await editorShowing(filePath));
+  const editor = await editorShowing(filePath);
+  if (editor) await startVoiceNote(editor);
   await refreshTree(vaultPath);
   await indexVault(vaultPath);
 }

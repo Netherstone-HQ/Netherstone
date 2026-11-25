@@ -17,6 +17,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -188,6 +189,26 @@ class MainActivity : TauriActivity() {
     }
 
     /** Shows or hides the keyboard, leaving focus and the caret where they are. */
+    /**
+     * Shows a web page over the app, in the phone's browser as a custom tab:
+     * its title and site, a Close button that comes back here, and a menu
+     * to go back, forward, reload, copy, share or open it in the browser.
+     * Only http and https pages: anything else is left alone.
+     */
+    @JavascriptInterface
+    fun openInApp(url: String) {
+      val uri = Uri.parse(url)
+      if (uri.scheme != "http" && uri.scheme != "https") return
+      runOnUiThread {
+        try {
+          CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(this@MainActivity, uri)
+        } catch (error: ActivityNotFoundException) {
+          // No browser that shows custom tabs: the page opens in any browser.
+          startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }
+      }
+    }
+
     @JavascriptInterface
     fun setKeyboard(shown: Boolean) {
       runOnUiThread {

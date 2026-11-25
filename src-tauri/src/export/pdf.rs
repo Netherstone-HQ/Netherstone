@@ -157,7 +157,7 @@ pub async fn render<R: Runtime>(
     result
 }
 
-/// Phones print through the system's print service instead, which comes later.
+/// Phones print through Android's print screen instead (MainActivity.kt).
 #[cfg(mobile)]
 pub async fn render<R: Runtime>(
     _app: &AppHandle<R>,
@@ -165,7 +165,7 @@ pub async fn render<R: Runtime>(
     _page: PageSetup,
     _output: PathBuf,
 ) -> Result<(), String> {
-    Err("PDF export isn't available on this device yet.".to_string())
+    Err("PDF export isn't available on this device.".to_string())
 }
 
 #[cfg(test)]

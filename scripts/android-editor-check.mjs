@@ -178,10 +178,14 @@ async function calibrate(target) {
   await closeNotResponding();
   await shell(`input tap ${at.x} ${at.y}`);
   const seen = () => page.evaluate(() => window.__calibrationTap);
-  // A dialog that came up over the app took the tap: it goes, and the tap
-  // is made again.
+  // A tap the page didn't see, as when a dialog came up over the app and
+  // took it, is made again, the dialog gone first. The target is plain
+  // text, so a tap too many does nothing.
   await poll(async () => {
-    if (!(await seen()) && (await closeNotResponding())) await shell(`input tap ${at.x} ${at.y}`);
+    if (!(await seen())) {
+      await closeNotResponding();
+      await shell(`input tap ${at.x} ${at.y}`);
+    }
     return seen();
   }, "the calibration tap").not.toBeNull();
   const client = await seen();
@@ -653,10 +657,28 @@ try {
         ),
       "the gallery to know the picture's size",
     ).toContain(`_size=${size}`);
+    // What the page's file input gets back from the picker, so a failure
+    // says whether the pick reached the page at all.
+    await page.evaluate(() => {
+      window.__picked = null;
+      // The app's file input may not be in the page, so its own events are
+      // listened to, from when it opens the picker.
+      const click = HTMLInputElement.prototype.click;
+      HTMLInputElement.prototype.click = function () {
+        if (this.type === "file")
+          for (const type of ["change", "cancel"])
+            this.addEventListener(type, () => {
+              window.__picked = { type, files: [...(this.files ?? [])].map((f) => `${f.name} ${f.size}`) };
+            });
+        return click.call(this);
+      };
+    });
     await insertFromBar("Picture");
     await tapSystemButton(/^Photo taken on/);
     await tapSystemButton(/^Add \(1\)$/);
     await poll(appInFront, "the app back in front").toBe(PACKAGE);
+    await poll(() => page.evaluate(() => window.__picked), "the pick to reach the page").not.toBeNull();
+    log("picked:", JSON.stringify(await page.evaluate(() => window.__picked)));
     // The picker names it by its number; the app gives it a word instead.
     await onDisk().toContain("_attachments/picture.png");
     await poll(() => su(`base64 '${vault}/_attachments/picture.png' | tr -d '\\n'`)).toBe(

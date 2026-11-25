@@ -9,7 +9,7 @@ import { useShortcutKeys } from "@/hooks/useShortcut";
 import { keysText } from "@/lib/platform";
 import { copy } from "./copy";
 import { Step } from "./StepLayout";
-import type { VaultChoice } from "./VaultStep";
+import type { VaultChoice } from "./create-vault";
 
 export function ReadyStep({
   vault,

@@ -19,10 +19,7 @@ import { isSamePath } from "@/lib/drawing-files";
 import { pickFiles } from "@/lib/pick-files";
 import { startVoiceNote } from "@/lib/voice/voice-note";
 import type { PlateEditor } from "platejs/react";
-import {
-  createEmptyVault,
-  vaultErrorText,
-} from "@/components/onboarding/VaultStep";
+import { createEmptyVault, vaultErrorText } from "@/components/onboarding/create-vault";
 import { defaultVaultLocation, scanVault } from "@/lib/commands/vault";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { joinPath, openVault } from "@/lib/open-vault";

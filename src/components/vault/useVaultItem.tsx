@@ -395,7 +395,6 @@ export function useVaultItem(
     renameInputProps,
     renameTo,
     startMove: () => setIsMoving(true),
-    trash: handleTrash,
     isPinned,
     togglePin: () => togglePinnedFile({ name: node.name, path: node.path }),
     moveToFolder,

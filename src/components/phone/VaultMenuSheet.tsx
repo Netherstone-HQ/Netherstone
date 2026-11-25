@@ -14,7 +14,7 @@ import {
   BottomSheetSeparator,
 } from "@/components/ui/bottom-sheet";
 import { defaultVaultLocation, openVaultDialog } from "@/lib/commands/vault";
-import { isPathWithin, isSamePath } from "@/lib/drawing-files";
+import { getParentFolder, isPathWithin, isSamePath } from "@/lib/drawing-files";
 import { chooseVaultFolder } from "@/lib/nested-vault";
 import { folderName, openVault } from "@/lib/open-vault";
 import { IS_ANDROID } from "@/lib/platform";
@@ -37,8 +37,7 @@ function vaultPlace(path: string, appStorage: string | null) {
   // In the phone's shared storage, as its Files app names the folder.
   const shared = SHARED_STORAGE.exec(path);
   if (shared) return `In ${path.slice(shared[0].length)}`;
-  const parent = path.replace(/[\\/][^\\/]*[\\/]?$/, "");
-  return `In ${parent}`;
+  return `In ${getParentFolder(path)}`;
 }
 
 /** The vaults to switch between, then sync and Settings. */

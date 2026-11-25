@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import {
   finishDrawingSession,
+  getParentFolder,
   isDrawingPath,
   isPathWithin,
   isSamePath,
@@ -105,7 +106,7 @@ function newShardFolder(vaultPath: string): string {
   ) {
     return vaultPath;
   }
-  const folder = openPath.replace(/[\\/][^\\/]*$/, "");
+  const folder = getParentFolder(openPath);
   return folder || vaultPath;
 }
 

@@ -59,6 +59,13 @@ function normalizePath(filePath: string) {
   return filePath.replace(/\\/g, "/");
 }
 
+/** The folder holding `path`, or "" when it has none. */
+export function getParentFolder(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return slash === -1 ? "" : trimmed.slice(0, slash);
+}
+
 /**
  * True when both paths name the same file. Paths reach the app with either
  * separator (the tree uses the OS's, links and new shards use `/`), so plain

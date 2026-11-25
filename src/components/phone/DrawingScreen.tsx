@@ -18,7 +18,7 @@ import type { SaveState } from "@/components/SaveStatus";
 import { useThemeMode } from "@/components/theme/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { getParentFolder, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { folderName } from "@/lib/open-vault";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
@@ -56,8 +56,7 @@ const SAVE_TEXT: Record<SaveState, string> = {
 
 /** "Drawings" for a drawing in that folder: where it is, under its name. */
 function folderOf(path: string) {
-  const parent = path.replace(/[\\/][^\\/]*$/, "");
-  return folderName(parent);
+  return folderName(getParentFolder(path));
 }
 
 /**

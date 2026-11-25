@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { canMoveInto, getParentFolder } from "./tree-drag";
+import { getParentFolder } from "./drawing-files";
+import { canMoveInto } from "./tree-drag";
 
 describe("getParentFolder", () => {
   it("handles forward and back slashes", () => {

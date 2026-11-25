@@ -30,6 +30,17 @@ export const UPDATER_BUNDLES = [
 ];
 
 /**
+ * The Android APKs, by the architecture a phone reports. They have no
+ * updater signature: the phone checks the SHA-256 GitHub gives each asset,
+ * and Android checks the APK's own signature. They go under `android`, not
+ * `platforms`, where the desktop updater expects a signature for each.
+ */
+export const ANDROID_APKS = ["aarch64", "x86_64"].map((arch) => ({
+  arch,
+  name: (version) => `Netherstone_${version}_android-${arch}.apk`,
+}));
+
+/**
  * latest.json for the release, as GitHub's API returns it. `signatures` maps
  * each .sig asset's name to its text. Fails when a bundle or its signature is
  * missing, so the release stays a draft.
@@ -49,5 +60,23 @@ export function updaterJson(release, signatures, pubDate) {
     for (const key of bundle.keys) platforms[key] = { signature, url };
   }
 
-  return { version, notes: "", pub_date: pubDate, platforms };
+  // A release made before the Android release key existed has no APKs.
+  const android = {};
+  for (const apk of ANDROID_APKS) {
+    const name = apk.name(version);
+    const asset = release.assets.find((each) => each.name === name);
+    if (!asset) continue;
+    const sha256 = asset.digest?.replace(/^sha256:/, "");
+    if (!sha256) throw new Error(`${tag} has no SHA-256 for ${name}.`);
+    const url = `https://github.com/${REPOSITORY}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
+    android[apk.arch] = { url, sha256 };
+  }
+
+  return {
+    version,
+    notes: "",
+    pub_date: pubDate,
+    platforms,
+    ...(Object.keys(android).length > 0 ? { android } : {}),
+  };
 }

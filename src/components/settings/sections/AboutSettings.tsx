@@ -15,7 +15,7 @@ import links from "@/data/links.json";
 import { useKeySequence } from "@/hooks/useKeySequence";
 import { installUpdateWithToast } from "@/hooks/useUpdateCheck";
 import { bugReportUrl, versionDetails } from "@/lib/bug-report";
-import { canUpdate, isInstalledApp } from "@/lib/updates";
+import { INSTALL_LABEL, canUpdate, isInstalledApp } from "@/lib/updates";
 import { useSettingsStore } from "@/store/settings";
 import { type UpdateStatus, useUpdatesStore } from "@/store/updates";
 
@@ -197,7 +197,7 @@ function UpdateRow() {
         >
           {status.kind === "downloading"
             ? `Downloading${status.percent === null ? "…" : ` ${status.percent}%`}`
-            : "Restart to update"}
+            : INSTALL_LABEL}
         </Button>
       ) : (
         <Button

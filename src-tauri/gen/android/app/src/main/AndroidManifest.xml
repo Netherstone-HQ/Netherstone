@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- Updates for the app from GitHub (phone_updater.rs). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Take a photo: the camera app, which Android 11 and later hide from
          apps that don't say they look for it. No camera permission is
          needed, since the camera app takes the picture. -->

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { IS_ANDROID } from "@/lib/platform";
 
 import { saveBeforeQuit } from "@/hooks/useAutosave";
 import { errorMessage } from "@/lib/github-account";
@@ -118,6 +119,9 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => {
       try {
         await saveBeforeQuit();
         await installUpdate();
+        // Android's installer takes it from here; cancelled, it can be
+        // installed again.
+        if (IS_ANDROID) set({ status: { kind: "ready", update: status.update } });
       } catch (error) {
         set({
           status: {

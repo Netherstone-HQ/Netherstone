@@ -67,7 +67,7 @@ const SCREEN_KINDS = new Set<string>([
   "tags",
   "settings",
   "trash",
-]);
+] satisfies PhoneScreen["kind"][]);
 
 function isScreen(entry: Entry): entry is PhoneScreen {
   return SCREEN_KINDS.has(entry.kind);

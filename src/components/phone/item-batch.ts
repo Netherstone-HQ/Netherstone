@@ -2,7 +2,7 @@ import { deleteItem, moveItem } from "@/components/vault/item-actions";
 import { isSamePath } from "@/lib/drawing-files";
 import { useSettingsStore, useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
-import { usePhoneNav } from "./nav";
+import { usePhoneNav, type PhoneOverlay } from "./nav";
 import { reportFailure } from "./toasts";
 import { rememberedOf, showMovedToTrash } from "./trash";
 import { findNodes } from "./vault-tree";
@@ -22,7 +22,7 @@ const ACTION_KINDS = new Set<string>([
   "rename",
   "move",
   "confirm-trash",
-]);
+] satisfies PhoneOverlay["kind"][]);
 
 /** Closes select mode, or a row's menu and what it opened. */
 export function closeActions() {

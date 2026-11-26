@@ -33,7 +33,7 @@ class Incoming private constructor(
     /** What `intent` hands over, or null when it's nothing to take in. */
     fun of(intent: Intent): Incoming? =
       when (intent.action) {
-        Intent.ACTION_VIEW -> intent.data?.let { Incoming("opened", listOf(it), null, null) }
+        Intent.ACTION_VIEW -> intent.data?.takeIf { it.isContent() }?.let { Incoming("opened", listOf(it), null, null) }
         Intent.ACTION_SEND -> {
           val stream = intent.stream()
           val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
@@ -52,13 +52,16 @@ class Incoming private constructor(
 
     @Suppress("DEPRECATION")
     private fun Intent.stream(): Uri? =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-      else getParcelableExtra(Intent.EXTRA_STREAM)
+      (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+      else getParcelableExtra(Intent.EXTRA_STREAM))?.takeIf { it.isContent() }
 
     @Suppress("DEPRECATION")
     private fun Intent.streams(): List<Uri> =
       (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-      else getParcelableArrayListExtra(Intent.EXTRA_STREAM))?.filterNotNull() ?: emptyList()
+      else getParcelableArrayListExtra(Intent.EXTRA_STREAM))?.filterNotNull()?.filter { it.isContent() } ?: emptyList()
+
+    /** Only links another app grants through its content provider. */
+    private fun Uri.isContent() = scheme == ContentResolver.SCHEME_CONTENT
   }
 
   /** Copies it into `cache`/incoming/<kind>/<time>, leaving out files that can't be read. */

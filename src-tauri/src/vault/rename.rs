@@ -44,12 +44,14 @@ pub fn rename_folder(vault: &Path, renamed: &Path) -> Result<(), String> {
 }
 
 /// Points what the database keeps for the vault at `old` to `new`: its
-/// place among the vaults opened, with AI access, and its writing log. Its
-/// search index and thumbnails are made again at the new path.
+/// place among the vaults opened, with AI access, its writing log and its
+/// drawing pictures. Its search index and thumbnails are made again at the
+/// new path.
 pub fn follow_in_database(conn: &Connection, old: &Path, new: &Path) -> Result<(), String> {
     let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)
         .map_err(|e| e.to_string())?;
     db::indexer::forget_path(&tx, old, old)?;
+    db::attachments::rename_vault_drawing_pictures(&tx, old, new).map_err(|e| e.to_string())?;
     db::attachments::forget_vault_attachments(&tx, old).map_err(|e| e.to_string())?;
     db::ast_cache::prune_stale_ast_cache_for_vault(&tx, &old.to_string_lossy(), &[])?;
     db::settings::rename_vault(&tx, old, new).map_err(|e| e.to_string())?;
@@ -104,6 +106,12 @@ mod tests {
         let shard = old.join("a.md").to_string_lossy().into_owned();
         db::data::start_writing_log(&conn, &old.to_string_lossy(), "2026-11-01").unwrap();
         db::data::record_writing(&conn, "2026-11-02", &shard, "Hello there", || None).unwrap();
+        let picture = "INSERT INTO drawing_pictures (vault_path, asset_path) VALUES (?1, ?2)";
+        conn.execute(
+            picture,
+            [old.to_string_lossy(), "_attachments/d.png".into()],
+        )
+        .unwrap();
 
         rename_folder(&old, &new).unwrap();
         follow_in_database(&conn, &old, &new).unwrap();
@@ -134,5 +142,13 @@ mod tests {
             })
             .unwrap();
         assert_eq!(started, new.to_string_lossy());
+        let pictures: Vec<String> = conn
+            .prepare("SELECT vault_path FROM drawing_pictures")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(pictures, [new.to_string_lossy().into_owned()]);
     }
 }

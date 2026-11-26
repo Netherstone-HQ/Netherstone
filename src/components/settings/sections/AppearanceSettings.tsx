@@ -4,6 +4,7 @@ import {
   SettingsGroup,
 } from "@/components/settings/settings-ui";
 import { ThemePicker } from "@/components/theme/ThemePicker";
+import { IS_MOBILE } from "@/lib/platform";
 import {
   stepZoom,
   useSettingsStore,
@@ -22,9 +23,12 @@ export function AppearanceSettings() {
         />
       </SettingsGroup>
 
-      <SettingsGroup>
-        <ZoomRow />
-      </SettingsGroup>
+      {/* Tauri zooms the webview only on desktop. */}
+      {!IS_MOBILE && (
+        <SettingsGroup>
+          <ZoomRow />
+        </SettingsGroup>
+      )}
     </>
   );
 }

@@ -36,6 +36,7 @@ const GALLERY_PICTURE = "src-tauri/icons/32x32.png";
 /** A shard with a file in the vault, for Open to hand to another app. */
 const FILE_SHARD = "Attached file";
 const VAULT = process.env.VAULT ?? smallVault();
+const PUSHED_VAULT = "/data/local/tmp/sample-vault";
 const SHARD = "touch-check";
 // The buttons of Android's own permission prompt, by what they say.
 const DENY = /^Don.t allow$/;
@@ -444,9 +445,11 @@ try {
     "sample-vault",
     async () => {
       // A copy, owned by the app as if it had written it.
-      adb("push", VAULT, "/data/local/tmp/sample-vault");
+      // Into an existing folder, adb push nests the copy inside it.
+      adb("shell", "rm", "-rf", PUSHED_VAULT);
+      adb("push", VAULT, PUSHED_VAULT);
       const owner = await su(`stat -c %u:%g '${vault}'`);
-      await su(`cp -r /data/local/tmp/sample-vault/. '${vault}/' && chown -R ${owner} '${vault}'`);
+      await su(`cp -r ${PUSHED_VAULT}/. '${vault}/' && chown -R ${owner} '${vault}'`);
       // The shard the check types in.
       shardFile = `${vault}/${SHARD}.md`;
       await su(`printf '# ${SHARD}\\n' > '${shardFile}' && chown ${owner} '${shardFile}'`);

@@ -94,6 +94,24 @@ pub fn forget_vault_attachments(conn: &Connection, vault_path: &Path) -> rusqlit
         "DELETE FROM attachments WHERE vault_path = ?1",
         params![vault],
     )?;
+    conn.execute(
+        "DELETE FROM drawing_pictures WHERE vault_path = ?1",
+        params![vault],
+    )?;
+    Ok(())
+}
+
+/// Moves the vault's drawing pictures from `old` to `new`, so the unused
+/// ones still go to the Trash after a rename.
+pub fn rename_vault_drawing_pictures(
+    conn: &Connection,
+    old: &Path,
+    new: &Path,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE OR IGNORE drawing_pictures SET vault_path = ?2 WHERE vault_path = ?1",
+        params![vault_key(old), vault_key(new)],
+    )?;
     Ok(())
 }
 

@@ -41,6 +41,15 @@ function isLineEnding(code: Code): boolean {
 const baseMath = math();
 const baseMathText = baseMath.text![DOLLAR] as Construct;
 
+/**
+ * Per text and number of opening `$`s: where a try started and where it
+ * failed (the text's end, or a `$` that could open an equation). A later try
+ * starting in between fails the same way, so it fails at once, which keeps
+ * runs of prices like `$1,$2,$3` linear.
+ */
+type Unclosed = { from: number; to: number };
+const unclosed = new WeakMap<TokenizeContext, Map<number, Unclosed>>();
+
 /** micromark's inline math tokenizer, with the single `$` rules above. */
 function tokenizeMathText(
   this: TokenizeContext,
@@ -48,6 +57,8 @@ function tokenizeMathText(
   ok: State,
   nok: State,
 ): State {
+  const context = this;
+  const from = context.now().offset;
   let sizeOpen = 0;
   let size = 0;
   let sequence: Token;
@@ -55,8 +66,17 @@ function tokenizeMathText(
   let spaced = 0;
   // The last character inside the math, to tell if a `$` comes after a space.
   let previous: Code = DOLLAR;
+  // Where the `$`s after a space start.
+  let spacedAt = 0;
 
   return start;
+
+  function failAt(code: Code, to = context.now().offset): State | undefined {
+    const tries = unclosed.get(context) ?? new Map<number, Unclosed>();
+    tries.set(sizeOpen, { from, to });
+    unclosed.set(context, tries);
+    return nok(code);
+  }
 
   function start(code: Code): State | undefined {
     effects.enter("mathText");
@@ -71,12 +91,14 @@ function tokenizeMathText(
       return sequenceOpen;
     }
     if (sizeOpen === 1 && (code === null || isMathSpace(code))) return nok(code);
+    const failed = unclosed.get(context)?.get(sizeOpen);
+    if (failed && failed.from <= from && from < failed.to) return nok(code);
     effects.exit("mathTextSequence");
     return between(code);
   }
 
   function between(code: Code): State | undefined {
-    if (code === null) return nok(code);
+    if (code === null) return failAt(code);
 
     if (code === DOLLAR) {
       // A `$` after a space can't close: it's part of the math, unless it
@@ -84,6 +106,7 @@ function tokenizeMathText(
       if (sizeOpen === 1 && isMathSpace(previous)) {
         effects.enter("mathTextData");
         spaced = 0;
+        spacedAt = context.now().offset;
         return spacedDollars(code);
       }
       sequence = effects.enter("mathTextSequence");
@@ -118,7 +141,7 @@ function tokenizeMathText(
       previous = code;
       return spacedDollars;
     }
-    if (spaced === 1 && code !== null && !isMathSpace(code)) return nok(code);
+    if (spaced === 1 && code !== null && !isMathSpace(code)) return failAt(code, spacedAt);
     effects.exit("mathTextData");
     return between(code);
   }

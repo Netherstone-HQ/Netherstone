@@ -32,10 +32,16 @@ export const UPDATER_BUNDLES = [
 /**
  * The Android APKs by architecture, under `android`: they have no updater
  * signature, which `platforms` would need. Phones check their SHA-256.
+ * `arch` is the phone's architecture as Rust names it, `target` as the build
+ * names it.
  */
-export const ANDROID_APKS = ["aarch64", "x86_64"].map((arch) => ({
+export const ANDROID_APKS = [
+  { arch: "aarch64", target: "aarch64" },
+  { arch: "arm", target: "armv7" },
+  { arch: "x86_64", target: "x86_64" },
+].map(({ arch, target }) => ({
   arch,
-  name: (version) => `Netherstone_${version}_android-${arch}.apk`,
+  name: (version) => `Netherstone_${version}_android-${target}.apk`,
 }));
 
 /**

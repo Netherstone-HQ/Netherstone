@@ -176,6 +176,12 @@ jobs:
           - target: aarch64
             rust: aarch64-linux-android
             env: aarch64_linux_android
+            phone: true
+          - target: armv7
+            rust: armv7-linux-androideabi
+            env: armv7_linux_androideabi
+            phone: true
+          # For emulators and Chromebooks, so not held to the phone budget.
           - target: x86_64
             rust: x86_64-linux-android
             env: x86_64_linux_android
@@ -256,6 +262,9 @@ jobs:
           version=$(node scripts/channels.mjs version "$GITHUB_REF_NAME")
           apk="Netherstone_${version}_android-${{ matrix.target }}.apk"
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk "$apk"
+          if [ "${{ matrix.phone }}" = "true" ]; then
+            node scripts/apk-size.mjs "$apk"
+          fi
           gh release upload "$GITHUB_REF_NAME" "$apk" --clobber
 
   # Package managers that update the app themselves get it without the

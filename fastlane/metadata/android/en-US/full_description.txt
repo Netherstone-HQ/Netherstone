@@ -1,0 +1,16 @@
+Netherstone is an app for writing documents, making drawings and keeping your files together. Everything is saved on your phone, and documents are plain Markdown files. It works offline, and you don't need an account.
+
+Netherstone also runs on Windows, macOS and Linux, and can sync everything between your phone and computer.
+
+<ul>
+<li>Write in an editor that formats Markdown as you type, with buttons for headings, lists, links and pictures</li>
+<li>Add pictures, audio and video to a document, or record a voice note</li>
+<li>Sketch drawings and diagrams, on their own or inside a document</li>
+<li>Search across documents, link them together and group them with #tags</li>
+<li>Go back to an earlier version of a document</li>
+<li>Export a document as a PDF, a Word file or a web page</li>
+<li>Save text, links and files shared from other apps</li>
+<li>Ask an AI assistant about your documents (optional, disabled by default)</li>
+</ul>
+
+Runs on Android 7 and later. The code is public under GPL-3.0.

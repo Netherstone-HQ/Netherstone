@@ -1,21 +1,16 @@
-Netherstone keeps your documents, drawings and files in a folder on your phone, called a vault. Documents are saved as Markdown.
+Netherstone is an app for writing documents, making drawings and keeping your files together. Everything is saved on your phone, and documents are plain Markdown files. It works offline, and you don't need an account.
 
-The vault can live in the app's own storage or in a shared folder like Documents, where other apps can open it.
+Netherstone also runs on Windows, macOS and Linux, and can sync everything between your phone and computer.
 
 <ul>
-<li>Format text from a toolbar above the keyboard: lists, links, headings and colors</li>
-<li>Add pictures, video, audio and files, or take a photo</li>
-<li>Record voice notes</li>
-<li>Link documents together, tag them and view their outline</li>
-<li>Make drawings and diagrams, in their own file or inside a document</li>
-<li>Search the vault and filter by tags, images, drawings or voice notes</li>
-<li>Restore earlier versions and deleted documents</li>
-<li>Export as a PDF, a Word file or a web page</li>
-<li>Share text, links and files to Netherstone from other apps</li>
+<li>Write in an editor that formats Markdown as you type, with buttons for headings, lists, links and pictures</li>
+<li>Add pictures, audio and video to a document, or record a voice note</li>
+<li>Sketch drawings and diagrams, on their own or inside a document</li>
+<li>Search across documents, link them together and group them with #tags</li>
+<li>Go back to an earlier version of a document</li>
+<li>Export a document as a PDF, a Word file or a web page</li>
+<li>Save text, links and files shared from other apps</li>
+<li>Ask an AI assistant about your documents (optional, disabled by default)</li>
 </ul>
 
-Netherstone also runs on Windows, macOS and Linux, with optional sync between devices.
-
-An optional AI assistant answers questions about your documents and suggests edits for you to approve, through a cloud provider or your own server. It's disabled by default.
-
-The code is public under GPL-3.0.
+Runs on Android 7 and later. The code is public under GPL-3.0.

@@ -8,7 +8,7 @@ use crate::vault_access::open_vault_only;
 use crate::{asset_scope, db, export};
 use serde::Serialize;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -89,9 +89,7 @@ fn with_head(recording: &Path, head: &[u8], replaced: u64) -> Result<PathBuf, Wr
     let finished = recording.with_extension("finished.webm");
     let mut target = File::create(&finished)?;
     target.write_all(head)?;
-    let mut rest = Vec::new();
-    source.read_to_end(&mut rest)?;
-    target.write_all(&rest)?;
+    std::io::copy(&mut source, &mut target)?;
     target.sync_all()?;
     Ok(finished)
 }

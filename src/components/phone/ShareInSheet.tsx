@@ -9,9 +9,9 @@ import {
   LinkIcon,
   SearchIcon,
 } from "lucide-react";
+import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
-import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
 import {
   displayNameOf,
   getVaultFileDisplayName,

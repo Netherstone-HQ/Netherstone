@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { DrawingIcon } from "@/components/icons";
 import type { TextPart } from "@/components/HighlightedText";
-import { Button } from "@/components/ui/button";
 import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
+import { Button } from "@/components/ui/button";
 import type { SearchResult } from "@/lib/commands/shards";
 import { getFolderInVault, isDrawingPath } from "@/lib/drawing-files";
 import { countTags } from "@/lib/tags";

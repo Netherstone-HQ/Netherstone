@@ -12,12 +12,12 @@ import { createDrawingFile } from "@/lib/commands/drawings";
 import { createShardFile } from "@/lib/commands/shards";
 import { scanVault } from "@/lib/commands/vault";
 import { refreshVault } from "@/lib/refresh-vault";
+import { errorText } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
-import { errorText } from "@/lib/utils";
 
 /** Opens a `.excalidraw` drawing in Canvas. */
 export async function openDrawingFile(filePath: string) {

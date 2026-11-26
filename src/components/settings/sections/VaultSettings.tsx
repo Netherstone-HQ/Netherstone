@@ -22,8 +22,8 @@ import { openVault } from "@/lib/open-vault";
 import { IS_MOBILE, REVEAL_LABEL } from "@/lib/platform";
 import { indexVault } from "@/lib/refresh-vault";
 import { renameVault } from "@/lib/rename-vault";
-import { useVaultStore } from "@/store/vault";
 import { errorText } from "@/lib/utils";
+import { useVaultStore } from "@/store/vault";
 
 export function VaultSettings() {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);

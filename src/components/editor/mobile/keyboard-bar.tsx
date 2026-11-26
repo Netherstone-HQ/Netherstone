@@ -58,11 +58,11 @@ import { FontColorToolbarButton } from "@/components/ui/font-color-toolbar-butto
 import { insertGroups } from "@/components/ui/insert-toolbar-button";
 import { phoneMediaGroup } from "./insert-media";
 import { Toolbar } from "@/components/ui/toolbar";
+import { androidBridge } from "@/lib/android-bridge";
 import { hasInlineAsk, openInlineAsk } from "@/lib/inline-ask";
 import { useKeyboard } from "@/lib/system-insets";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
-import { androidBridge } from "@/lib/android-bridge";
 
 const BULLETS = [
   ListStyleType.Disc,

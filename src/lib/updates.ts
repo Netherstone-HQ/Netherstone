@@ -1,7 +1,7 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { androidBridge } from "@/lib/android-bridge";
 import { IS_ANDROID } from "@/lib/platform";
 import { backInFront } from "@/lib/back-in-front";
-import { androidBridge } from "@/lib/android-bridge";
 
 export interface AvailableUpdate {
   version: string;

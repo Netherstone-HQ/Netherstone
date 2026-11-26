@@ -7,9 +7,9 @@ import type { PersistedAttachment } from "@/lib/commands/attachments";
 import { saveSharedFile, takeShared, type Shared, type SharedFile } from "@/lib/commands/incoming";
 import { appendMarkdownToFile } from "@/lib/commands/shards";
 import { openEditorFile } from "@/lib/open-editor-file";
+import { siteOf } from "@/lib/open-web-link";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
-import { siteOf } from "@/lib/open-web-link";
 import { createTitledShard, markdownOf, today } from "./create";
 import { usePhoneNav } from "./nav";
 

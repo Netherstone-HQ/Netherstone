@@ -17,8 +17,8 @@ import {
 } from "@/lib/commands/assistant";
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import { folderName } from "@/lib/open-vault";
-import { useAssistantStore } from "@/store/assistant";
 import { errorText } from "@/lib/utils";
+import { useAssistantStore } from "@/store/assistant";
 import { copy } from "./copy";
 import { Hint, Step } from "./StepLayout";
 

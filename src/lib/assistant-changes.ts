@@ -22,13 +22,13 @@ import {
   rememberSavedValue,
   showWrittenValue,
 } from "@/lib/outside-changes";
+import { errorText } from "@/lib/utils";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useAssistantStore } from "@/store/assistant";
 import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
-import { errorText } from "@/lib/utils";
 
 const store = useAssistantStore;
 

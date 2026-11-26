@@ -1,6 +1,6 @@
 import { toast } from "sonner";
-import { backInFront } from "@/lib/back-in-front";
 import { androidBridge } from "@/lib/android-bridge";
+import { backInFront } from "@/lib/back-in-front";
 
 /** Sent by MainActivity.kt when the folder picker closes, saying how. */
 const FOLDER_PICKED_EVENT = "folderpicked";

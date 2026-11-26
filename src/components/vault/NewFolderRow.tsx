@@ -12,8 +12,8 @@ import {
 } from "@/components/vault/tree-layout";
 import { createFolder } from "@/lib/commands/shards";
 import { refreshVault } from "@/lib/refresh-vault";
-import { useVaultStore } from "@/store";
 import { errorText } from "@/lib/utils";
+import { useVaultStore } from "@/store";
 
 type NewFolderRowProps = {
   parent: string;

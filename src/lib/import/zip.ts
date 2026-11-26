@@ -3,20 +3,11 @@ import type { ImportIO, ImportSource } from "./engine";
 import { ImportError } from "./types";
 
 /**
- * Zip files picked or dropped for import are opened and their contents
- * imported like a folder with the zip file's name. When everything in it
- * sits in one folder, as when a folder was zipped, that folder is the one
- * imported. Zip files inside a zip file aren't opened.
- *
- * Nothing is unpacked to disk, and a zip file is never read whole: opening
- * one reads only its list of files, at its end, and each file is read out
- * of it when the import needs it, one at a time, and never unpacked past
- * the size the zip file gives for it. Zip files whose files share data,
- * which a well-formed one never does and zip bombs do to unpack far bigger
- * than they are, aren't opened at all. Nor are zip files that unpack bigger
- * than the free space on the vault's disk, together with the zip files
- * opened before them. Files whose names climb out of the zip file (`../`)
- * or start at a drive or the root are left out.
+ * A zip file imports like a folder with its name, or as its one top folder
+ * when everything sits in one. Zips inside it aren't opened. Its files are
+ * read one at a time, never unpacked to disk or past their stated size.
+ * Refused: zips whose files share data (zip bombs), zips bigger than the
+ * vault disk's free space, and names that climb out (`../`, a root or drive).
  */
 
 /** Paths of files inside a zip file start with this, then the zip file's number. */

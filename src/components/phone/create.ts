@@ -16,6 +16,7 @@ import {
 } from "@/lib/commands/shards";
 import { isSamePath } from "@/lib/drawing-files";
 import { pickFiles } from "@/lib/pick-files";
+import { errorText } from "@/lib/utils";
 import { startVoiceNote } from "@/lib/voice/voice-note";
 import type { PlateEditor } from "platejs/react";
 import { createEmptyVault, vaultErrorText } from "@/components/onboarding/create-vault";
@@ -24,7 +25,6 @@ import { chooseVaultFolder } from "@/lib/nested-vault";
 import { joinPath, openVault } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore, useVaultStore } from "@/store";
-import { errorText } from "@/lib/utils";
 import { openFileScreen } from "./open-file";
 import { usePhoneNav } from "./nav";
 import { reportFailure } from "./toasts";

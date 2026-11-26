@@ -24,8 +24,8 @@ import {
   listOldAttachments,
   type OldAttachment,
 } from "@/lib/history";
-import { useSyncStore } from "@/store/sync";
 import { errorText } from "@/lib/utils";
+import { useSyncStore } from "@/store/sync";
 
 function sumBytes(files: OldAttachment[]) {
   return files.reduce((sum, file) => sum + file.sizeBytes, 0);

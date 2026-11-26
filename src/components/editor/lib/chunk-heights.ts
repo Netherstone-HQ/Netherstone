@@ -6,17 +6,10 @@ const MEASURE_IDLE_TIMEOUT_MS = 1000;
 const pinnedChunks = new WeakSet<HTMLElement>();
 
 /**
- * Editor chunks render with `content-visibility: auto`, so off-screen chunks
- * skip layout and only reserve a placeholder height. When that placeholder is
- * wrong, the scrollbar jumps while scrolling as chunks lay out for real.
- *
- * This measures each chunk's real height during idle time (forcing layout of
- * one chunk at a time) and pins it as the chunk's intrinsic size, so the
- * scroll height is exact shortly after a note opens. A chunk is measured
- * once, and again only when the editor width changes, since that changes
- * how text wraps.
- *
- * Returns a function that stops measuring.
+ * Off-screen chunks (`content-visibility: auto`) reserve a placeholder
+ * height, and a wrong one makes the scrollbar jump. This measures each
+ * chunk's real height while idle and pins it, again when the editor width
+ * changes. Returns a function that stops measuring.
  */
 export function measureChunkHeightsInBackground(
   root: HTMLElement,

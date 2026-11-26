@@ -12,9 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
+import { fileName } from "@/lib/drawing-files";
 import { keepVersion, type KeptVersion } from "@/lib/outside-changes";
 import { useEditorStore } from "@/store/editor";
-import { fileName } from "@/lib/drawing-files";
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 

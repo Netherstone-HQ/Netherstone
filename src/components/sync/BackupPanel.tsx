@@ -15,6 +15,7 @@ import { GitHubAppInstallNotice } from "@/components/settings/GitHubAppInstallNo
 import { GitHubSignIn } from "@/components/settings/GitHubSignIn";
 import { Button } from "@/components/ui/button";
 import links from "@/data/links.json";
+import { fileName } from "@/lib/drawing-files";
 import {
   type BackupSummary,
   describeBackupContents,
@@ -28,7 +29,6 @@ import { leaveSettings } from "@/lib/leave-settings";
 import { cn } from "@/lib/utils";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
-import { fileName } from "@/lib/drawing-files";
 
 /** Sync status and controls for the open vault (sidebar popover, Settings). */
 export function BackupPanel({

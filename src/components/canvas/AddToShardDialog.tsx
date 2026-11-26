@@ -31,10 +31,10 @@ import {
   isSamePath,
 } from "@/lib/drawing-files";
 import { openVaultFile } from "@/lib/open-vault-file";
+import { errorText } from "@/lib/utils";
 import { useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import type { RecentFileEntry } from "@/store/ui";
-import { errorText } from "@/lib/utils";
 
 /**
  * Whether `scene` has something to add to a shard. Says so when it hasn't.

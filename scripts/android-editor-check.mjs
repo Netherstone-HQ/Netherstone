@@ -33,6 +33,8 @@ const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 /** A picture for the phone's gallery, for the photo picker to offer. */
 const GALLERY_PICTURE = "src-tauri/icons/32x32.png";
+/** A shard with a file in the vault, for Open to hand to another app. */
+const FILE_SHARD = "Attached file";
 const VAULT = process.env.VAULT ?? smallVault();
 const SHARD = "touch-check";
 // The buttons of Android's own permission prompt, by what they say.
@@ -59,6 +61,12 @@ function smallVault() {
     "# Writing basics\n\nEvery heading level, the text styles and the kinds of list. #guide\n",
   );
   fs.writeFileSync(path.join(folder, "Guide", "Links.md"), `# Links\n\n- [The website](${WEB_PAGE})\n`);
+  fs.mkdirSync(path.join(folder, "_attachments"));
+  fs.writeFileSync(path.join(folder, "_attachments", "page.html"), "<p>Opened from the vault</p>\n");
+  fs.writeFileSync(
+    path.join(folder, `${FILE_SHARD}.md`),
+    `# ${FILE_SHARD}\n\n<file name="page.html" src="_attachments/page.html" />\n`,
+  );
   return folder;
 }
 
@@ -674,6 +682,19 @@ try {
       await pressKey("KEYCODE_BACK");
       await poll(appInFront, "the app back in front").toBe(PACKAGE);
       await expect(editor()).toBeVisible();
+    } finally {
+      await bringAppBack();
+    }
+  });
+
+  await step("open-file", async () => {
+    // Open hands a web page in the vault to the browser.
+    try {
+      await openFromHome(FILE_SHARD);
+      await tap(editor().getByRole("button", { name: "Open", exact: true }));
+      const other = async () => ![PACKAGE, ""].includes(await appInFront());
+      await poll(other, "another app in front").toBe(true);
+      log("opened in:", await appInFront());
     } finally {
       await bringAppBack();
     }

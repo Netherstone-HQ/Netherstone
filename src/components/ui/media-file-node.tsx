@@ -17,6 +17,7 @@ import {
   openFileInBrowserPanel,
 } from "@/lib/browser-panel-files";
 import { openFile } from "@/lib/commands/attachments";
+import { IS_ANDROID } from "@/lib/platform";
 import {
   resolveMediaSource,
   resolveMediaSourceSync,
@@ -83,6 +84,16 @@ function getResolvedAttachmentPath(
   }
 
   return null;
+}
+
+/** Whether Open works for this file. A phone opens web links and files on it. */
+export function canOpenResolvedSource(resolved: ResolvedMediaSource) {
+  return (
+    !IS_ANDROID ||
+    resolved.kind === "remote" ||
+    resolved.kind === "vault" ||
+    resolved.kind === "local"
+  );
 }
 
 export async function openResolvedSource(
@@ -277,6 +288,16 @@ export const FileElement = withHOC(
         ]
       : [];
 
+    const canOpen = canOpenResolvedSource(resolvedSource);
+    const openActions = {
+      ...(canOpen && {
+        onOpen: () => void handleOpen(),
+        action: { label: "Open", onSelect: () => void handleOpen() },
+      }),
+      // A phone has no file manager to show a file in.
+      ...(!IS_ANDROID && { onReveal: () => void handleReveal() }),
+    };
+
     let content: React.ReactNode;
 
     if (resolvedSource.kind === "vault" && resolvedSource.isMissing) {
@@ -316,9 +337,7 @@ export const FileElement = withHOC(
           name={displayName}
           nameHint={shownPath}
           details={<VaultFileDetails metadata={props.element} />}
-          onOpen={() => void handleOpen()}
-          action={{ label: "Open", onSelect: () => void handleOpen() }}
-          onReveal={() => void handleReveal()}
+          {...openActions}
           menu={[
             ...openInPanel,
             ...(mediaActions.canLinkOriginalFile
@@ -339,9 +358,7 @@ export const FileElement = withHOC(
           name={displayName}
           nameHint={attachmentPath}
           details={<LinkedFileDetails />}
-          onOpen={() => void handleOpen()}
-          action={{ label: "Open", onSelect: () => void handleOpen() }}
-          onReveal={() => void handleReveal()}
+          {...openActions}
           menu={[
             ...openInPanel,
             ...(mediaActions.canImportToVault
@@ -387,7 +404,7 @@ export const FileElement = withHOC(
             </Hint>
           }
           action={
-            source
+            source && canOpen
               ? { label: "Open", onSelect: () => void handleOpen() }
               : undefined
           }

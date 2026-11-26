@@ -15,6 +15,7 @@ import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.webkit.MimeTypeMap
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -42,6 +43,15 @@ private const val SHARE_FOLDER = "shared"
 /** Where phone_updater.rs downloads an update, in the cache. */
 private const val UPDATE_FOLDER = "updates"
 private const val UPDATE_FILE = "Netherstone.apk"
+
+/** The folder vaults in the app's storage go in, as PHONE_VAULTS_FOLDER in vault/commands.rs. */
+private const val VAULTS_FOLDER = "Vaults"
+
+/** Shared storage, where vaults in folders other apps can open live. */
+private const val SHARED_STORAGE = "/storage"
+
+/** What Android installs apps from, which Open never hands on. */
+private const val APK_TYPE = "application/vnd.android.package-archive"
 
 /** How wry names the photos the camera takes for the page, in the pictures folder. */
 private const val CAMERA_PHOTO_PREFIX = "JPEG_"
@@ -237,6 +247,7 @@ class MainActivity : TauriActivity() {
           "shareFile" -> shareFile(args.getString(0), args.getString(1))
           "printPage" -> printHtml(args.getString(0), args.getString(1), JSONObject(args.getString(2)))
           "openInApp" -> openInApp(args.getString(0))
+          "openFile" -> answer(openFile(args.getString(0)))
           // Reading the update's signature takes a while.
           "installUpdate" -> Thread { answer(installUpdate()) }.start()
           "hasAllFilesAccess" -> answer(SharedFolders.hasAccess(this@MainActivity))
@@ -269,6 +280,33 @@ class MainActivity : TauriActivity() {
       }
       startActivity(Intent.createChooser(send, null))
     }
+
+    /**
+     * Hands a vault's file to the app that views its kind: "opened", or
+     * "no-app". A file outside the vaults, or an app to install, is
+     * "not-allowed", so a page can't hand on the app's own data.
+     */
+    private fun openFile(path: String): String {
+      val file = File(path).canonicalFile
+      if (!file.isFile || !inVaults(file)) return "not-allowed"
+      val type =
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
+          ?: "application/octet-stream"
+      if (type == APK_TYPE) return "not-allowed"
+      val view = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(providedUri(file), type)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      return try {
+        startActivity(view)
+        "opened"
+      } catch (error: ActivityNotFoundException) {
+        "no-app"
+      }
+    }
+
+    private fun inVaults(file: File): Boolean =
+      listOf(File(dataDir, VAULTS_FOLDER), File(SHARED_STORAGE)).any { file.startsWith(it.canonicalFile) }
 
     /** Shows an http(s) page over the app in a custom tab. */
     private fun openInApp(url: String) {

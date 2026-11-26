@@ -54,4 +54,13 @@ describe("androidBridge", () => {
     await expect(access).resolves.toBe(true);
     await expect(installed).resolves.toBe("not-this-app");
   });
+
+  it("sends a question's arguments with it", async () => {
+    const { port, sent, answer } = fakePort();
+    vi.stubGlobal("window", { NetherstoneAndroid: port });
+    const opened = androidBridge()?.openFile("/Vaults/Plan/_attachments/a.pdf");
+    expect(sent[0]).toMatchObject({ method: "openFile", args: ["/Vaults/Plan/_attachments/a.pdf"] });
+    answer(sent[0]?.id ?? 0, "opened");
+    await expect(opened).resolves.toBe("opened");
+  });
 });

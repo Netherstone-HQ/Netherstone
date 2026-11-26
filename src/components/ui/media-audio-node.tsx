@@ -23,7 +23,7 @@ import {
   MissingVaultFileRow,
   UnsyncedTag,
 } from "./media-file-row";
-import { openResolvedSource } from "./media-file-node";
+import { canOpenResolvedSource, openResolvedSource } from "./media-file-node";
 import { useMediaNodeActions } from "./media-node-actions";
 import type { WithPersistedMediaMetadata } from "./media-types";
 import { useMediaState } from "./use-media-state";
@@ -230,10 +230,14 @@ export const AudioElement = withHOC(
           <AudioPlayer
             key={renderUrl}
             url={renderUrl}
-            onOpen={() =>
-              void openResolvedSource(resolvedSource, source).catch((error) =>
-                console.error("[media-audio-node] Couldn't open", error),
-              )
+            onOpen={
+              canOpenResolvedSource(resolvedSource)
+                ? () =>
+                    void openResolvedSource(resolvedSource, source).catch(
+                      (error) =>
+                        console.error("[media-audio-node] Couldn't open", error),
+                    )
+                : undefined
             }
             onRemove={mediaActions.canEdit ? mediaActions.removeNode : undefined}
           />

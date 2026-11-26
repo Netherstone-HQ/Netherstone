@@ -1,39 +1,20 @@
-Netherstone keeps your notes and documents as Markdown files, and your drawings beside them, in a vault on your phone. It works offline. Keep the vault in a folder such as Documents, and other Markdown apps can open it too.
+Netherstone is an app for your documents, drawings and files. It saves them as Markdown files in a folder on your phone, called a vault.
 
-<b>Write</b>
-<ul>
-<li>A bar above the keyboard for lists, links, headings, colors and more</li>
-<li>Pictures, photos from the camera, video, sound and voice notes inside a document</li>
-<li>Tags, links between documents, and an outline of each one</li>
-</ul>
+Keep the vault in Netherstone's own storage, or in a shared folder, such as Documents, so other apps can open it too.
 
-<b>Draw</b>
 <ul>
-<li>Sketches and diagrams that sit in their own file or inside a document</li>
-</ul>
-
-<b>Find</b>
-<ul>
-<li>Search every document, and filter by tags, images, drawings and voice notes</li>
-</ul>
-
-<b>Keep it safe</b>
-<ul>
-<li>Every document and drawing keeps its earlier versions</li>
-<li>Optional backup and sync through your own GitHub account, to keep a phone and a computer in step</li>
-<li>Deleted documents go to the Trash first</li>
-</ul>
-
-<b>Share</b>
-<ul>
-<li>Export a document as a PDF, a Word document or a web page</li>
+<li>Write with a bar above the keyboard for lists, links, headings and colors</li>
+<li>Add pictures, video, sound and files, take photos and record voice notes</li>
+<li>Link documents to each other, tag them and see each one's outline</li>
+<li>Make drawings and diagrams, in their own file or inside a document</li>
+<li>Search the vault, and filter by tags, images, drawings and voice notes</li>
+<li>Go back to an earlier version of a document, and restore deleted ones from the Trash</li>
+<li>Export as a PDF, a Word file or a web page</li>
 <li>Share text, links and files to Netherstone from other apps</li>
 </ul>
 
-<b>AI assistant (optional, off until you set it up)</b>
-<ul>
-<li>Answers questions from your documents and suggests edits you check before they apply</li>
-<li>Works with a cloud AI provider's key or a server you run yourself</li>
-</ul>
+Sync is optional. It goes through your own GitHub account and keeps the vault the same on a phone and a computer. Netherstone also runs on Windows, macOS and Linux.
 
-Netherstone is free and open source under the GPL-3.0. It also runs on Windows, macOS and Linux.
+The assistant is off until you set it up. It answers questions about your documents and suggests edits that you check before they apply. It works with a key from a cloud AI provider, or with a server you run on another computer.
+
+The code is public under GPL-3.0.

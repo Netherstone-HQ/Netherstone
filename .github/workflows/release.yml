@@ -181,6 +181,7 @@ jobs:
             env: x86_64_linux_android
     env:
       NDK_VERSION: 29.0.14206865
+      SDK_TOOLS_SHA256: 7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
       KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
@@ -220,6 +221,7 @@ jobs:
         if: steps.key.outputs.present
         run: |
           curl -sSLo /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          echo "$SDK_TOOLS_SHA256  /tmp/tools.zip" | sha256sum --check
           unzip -q /tmp/tools.zip -d /tmp/tools
           SDKMANAGER="/tmp/tools/cmdline-tools/bin/sdkmanager --sdk_root=$ANDROID_HOME"
           yes | $SDKMANAGER --licenses > /dev/null || true

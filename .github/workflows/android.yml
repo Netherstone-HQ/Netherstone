@@ -20,6 +20,7 @@ permissions:
 
 env:
   NDK_VERSION: 29.0.14206865
+  SDK_TOOLS_SHA256: 7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
   # The release APK may be at most 25 MB as GitHub shows it, which is
   # 25 MiB.
   APK_BUDGET_BYTES: 26214400
@@ -72,6 +73,7 @@ jobs:
       - name: Android NDK and platform
         run: |
           curl -sSLo /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          echo "$SDK_TOOLS_SHA256  /tmp/tools.zip" | sha256sum --check
           unzip -q /tmp/tools.zip -d /tmp/tools
           SDKMANAGER="/tmp/tools/cmdline-tools/bin/sdkmanager --sdk_root=$ANDROID_HOME"
           yes | $SDKMANAGER --licenses > /dev/null || true

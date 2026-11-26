@@ -17,6 +17,7 @@ import {
   openFileInBrowserPanel,
 } from "@/lib/browser-panel-files";
 import { openFile } from "@/lib/commands/attachments";
+import { IS_ANDROID } from "@/lib/platform";
 import {
   resolveMediaSource,
   resolveMediaSourceSync,
@@ -83,6 +84,14 @@ function getResolvedAttachmentPath(
   }
 
   return null;
+}
+
+/**
+ * Whether Open can hand this file to another app. Phones have no desktop
+ * openers, so only web links open there.
+ */
+export function canOpenResolvedSource(resolved: ResolvedMediaSource) {
+  return !IS_ANDROID || resolved.kind === "remote";
 }
 
 export async function openResolvedSource(
@@ -277,6 +286,15 @@ export const FileElement = withHOC(
         ]
       : [];
 
+    const canOpen = canOpenResolvedSource(resolvedSource);
+    const openActions = canOpen
+      ? {
+          onOpen: () => void handleOpen(),
+          action: { label: "Open", onSelect: () => void handleOpen() },
+          onReveal: () => void handleReveal(),
+        }
+      : {};
+
     let content: React.ReactNode;
 
     if (resolvedSource.kind === "vault" && resolvedSource.isMissing) {
@@ -316,9 +334,7 @@ export const FileElement = withHOC(
           name={displayName}
           nameHint={shownPath}
           details={<VaultFileDetails metadata={props.element} />}
-          onOpen={() => void handleOpen()}
-          action={{ label: "Open", onSelect: () => void handleOpen() }}
-          onReveal={() => void handleReveal()}
+          {...openActions}
           menu={[
             ...openInPanel,
             ...(mediaActions.canLinkOriginalFile
@@ -339,9 +355,7 @@ export const FileElement = withHOC(
           name={displayName}
           nameHint={attachmentPath}
           details={<LinkedFileDetails />}
-          onOpen={() => void handleOpen()}
-          action={{ label: "Open", onSelect: () => void handleOpen() }}
-          onReveal={() => void handleReveal()}
+          {...openActions}
           menu={[
             ...openInPanel,
             ...(mediaActions.canImportToVault
@@ -387,7 +401,7 @@ export const FileElement = withHOC(
             </Hint>
           }
           action={
-            source
+            source && canOpen
               ? { label: "Open", onSelect: () => void handleOpen() }
               : undefined
           }

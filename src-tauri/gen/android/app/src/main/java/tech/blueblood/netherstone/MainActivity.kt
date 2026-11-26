@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.print.PageRange
 import android.print.PrintAttributes
@@ -14,7 +15,6 @@ import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
 import android.view.View
-import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -26,8 +26,14 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 import java.io.File
+import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /** The cache folder exports to share go in, as share_export_path names it. */
@@ -36,6 +42,22 @@ private const val SHARE_FOLDER = "shared"
 /** Where phone_updater.rs downloads an update, in the cache. */
 private const val UPDATE_FOLDER = "updates"
 private const val UPDATE_FILE = "Netherstone.apk"
+
+/** How wry names the photos the camera takes for the page, in the pictures folder. */
+private const val CAMERA_PHOTO_PREFIX = "JPEG_"
+private const val CAMERA_PHOTO_SUFFIX = ".jpg"
+
+/** The page's name for PageBridge: `window.NetherstoneAndroid`. */
+private const val PAGE_BRIDGE = "NetherstoneAndroid"
+
+/** Where Tauri serves the app's page on Android. */
+private const val APP_HOST = "tauri.localhost"
+
+/** Whether `origin` is the app's page, as `is_app_page` in microphone.rs decides. */
+private fun isAppPage(origin: Uri): Boolean {
+  if (BuildConfig.DEBUG && origin.scheme == "http" && origin.host == "localhost") return true
+  return (origin.scheme == "http" || origin.scheme == "https") && origin.host == APP_HOST
+}
 
 /** Where a page being printed seems to come from; nothing is served from it. */
 private const val PRINT_ORIGIN = "https://print.netherstone.invalid"
@@ -86,8 +108,16 @@ class MainActivity : TauriActivity() {
     if (savedInstanceState == null) {
       // What the page took in the app's last run has been imported or saved.
       File(cacheDir, "${Incoming.FOLDER}/${Incoming.TAKEN}").deleteRecursively()
+      removeCameraPhotos()
       takeIn(intent)
     }
+  }
+
+  /** The camera's photos from earlier runs: the page saved each where it belongs. */
+  private fun removeCameraPhotos() {
+    getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+      ?.listFiles { file -> file.isFile && file.name.startsWith(CAMERA_PHOTO_PREFIX) && file.name.endsWith(CAMERA_PHOTO_SUFFIX) }
+      ?.forEach { it.delete() }
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -124,7 +154,9 @@ class MainActivity : TauriActivity() {
       // scripts/android-ui-check.mjs waits for this line.
       Log.i("Netherstone", "WebView inspectable")
     }
-    webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
+    // A page opens a window only on a tap; see phone_navigation.rs.
+    webView.settings.javaScriptCanOpenWindowsAutomatically = false
+    PageBridge(webView).listen()
     fitAboveKeyboard(webView)
     // Picked files go through PickerChromeClient. Before Android 8 wry's
     // client can't be read, so it stays.
@@ -173,26 +205,55 @@ class MainActivity : TauriActivity() {
       page?.dispatch("folderpicked", "'$outcome'")
     }
 
-  /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */
-  @Volatile private var insetsJson = "{}"
+  /** The latest system insets, as the page's `insets()` gets them. */
+  private var insetsJson = "{}"
 
-  /** What the page can ask of Android, as `window.NetherstoneAndroid`. */
+  /**
+   * What the app's page can ask of Android, through `window.NetherstoneAndroid`
+   * (android-bridge.ts). Pages in embeds get no answer.
+   */
   private inner class PageBridge(private val webView: WebView) {
-    @JavascriptInterface fun insets(): String = insetsJson
+    fun listen() {
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+        WebViewCompat.addWebMessageListener(webView, PAGE_BRIDGE, setOf("*")) { _, message, origin, isMainFrame, reply ->
+          val fromAppPage = isMainFrame && isAppPage(origin)
+          if (fromAppPage && message.type == WebMessageCompat.TYPE_STRING) message.data?.let { take(it, reply) }
+        }
+      }
+    }
 
-    /** This app's page in the system settings, where its permissions are. */
-    @JavascriptInterface
-    fun openAppSettings() {
-      runOnUiThread {
-        startActivity(
-          Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri()),
-        )
+    /** Does what `call` (`{method, args}`) asks, answering it when it has an `id`. */
+    private fun take(call: String, reply: JavaScriptReplyProxy) {
+      try {
+        val json = JSONObject(call)
+        val args = json.optJSONArray("args") ?: JSONArray()
+        fun answer(result: Any) {
+          val id = json.opt("id") ?: return
+          runOnUiThread { reply.postMessage(JSONObject().put("id", id).put("result", result).toString()) }
+        }
+        when (val method = json.getString("method")) {
+          "insets" -> answer(JSONObject(insetsJson))
+          "openAppSettings" -> startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri()))
+          "shareFile" -> shareFile(args.getString(0), args.getString(1))
+          "printPage" -> printHtml(args.getString(0), args.getString(1), JSONObject(args.getString(2)))
+          "openInApp" -> openInApp(args.getString(0))
+          // Reading the update's signature takes a while.
+          "installUpdate" -> Thread { answer(installUpdate()) }.start()
+          "hasAllFilesAccess" -> answer(SharedFolders.hasAccess(this@MainActivity))
+          "askAllFilesAccess" -> SharedFolders.askAccess(this@MainActivity)
+          "pickFolder" -> folderPicker.launch(SharedFolders.DOCUMENTS)
+          "setKeyboard" -> setKeyboard(args.getBoolean(0))
+          else -> Log.w("Netherstone", "No such call on the Android bridge: $method")
+        }
+      } catch (error: JSONException) {
+        Log.w("Netherstone", "Couldn't read a call on the Android bridge", error)
+      } catch (error: ActivityNotFoundException) {
+        Log.w("Netherstone", "No app on this phone for a call on the Android bridge", error)
       }
     }
 
     /** Offers an export to other apps. Only the share folder's files, so a page can't send others. */
-    @JavascriptInterface
-    fun shareFile(path: String, mimeType: String) {
+    private fun shareFile(path: String, mimeType: String) {
       val shared = File(cacheDir, SHARE_FOLDER).canonicalFile
       val file = File(path).canonicalFile
       if (file.parentFile != shared || !file.isFile) {
@@ -206,75 +267,52 @@ class MainActivity : TauriActivity() {
         putExtra(Intent.EXTRA_TITLE, file.name)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
       }
-      runOnUiThread { startActivity(Intent.createChooser(send, null)) }
-    }
-
-    /** Opens the print screen with an export's page; `geometry` is its size and margins as JSON. */
-    @JavascriptInterface
-    fun printPage(html: String, jobName: String, geometry: String) {
-      runOnUiThread { printHtml(html, jobName, JSONObject(geometry)) }
+      startActivity(Intent.createChooser(send, null))
     }
 
     /** Shows an http(s) page over the app in a custom tab. */
-    @JavascriptInterface
-    fun openInApp(url: String) {
+    private fun openInApp(url: String) {
       val uri = Uri.parse(url)
       if (uri.scheme != "http" && uri.scheme != "https") return
-      runOnUiThread {
-        try {
-          CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(this@MainActivity, uri)
-        } catch (error: ActivityNotFoundException) {
-          // No browser that shows custom tabs: the page opens in any browser.
-          startActivity(Intent(Intent.ACTION_VIEW, uri))
-        }
+      try {
+        CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(this@MainActivity, uri)
+      } catch (error: ActivityNotFoundException) {
+        // No browser that shows custom tabs: the page opens in any browser.
+        startActivity(Intent(Intent.ACTION_VIEW, uri))
       }
     }
 
     /**
-     * Hands the downloaded update to the installer. Until Netherstone may
-     * install apps, opens that setting instead and returns false.
+     * Hands the downloaded update to the installer: "started". An update that
+     * isn't this app, signed with its key, is deleted: "not-this-app". Until
+     * Netherstone may install apps, opens that setting instead: "not-allowed".
      */
-    @JavascriptInterface
-    fun installUpdate(): Boolean {
+    private fun installUpdate(): String {
+      val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
+      if (!apk.isFile) return "missing"
+      if (!isThisApp(apk)) {
+        apk.delete()
+        return "not-this-app"
+      }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
         runOnUiThread {
           startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri()))
         }
-        return false
+        return "not-allowed"
       }
-      val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
-      if (!apk.isFile) return false
       val uri = providedUri(apk)
       val install = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "application/vnd.android.package-archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
       }
       runOnUiThread { startActivity(install) }
-      return true
-    }
-
-    /** Whether vaults may live in shared storage: "All files access". */
-    @JavascriptInterface fun hasAllFilesAccess(): Boolean = SharedFolders.hasAccess(this@MainActivity)
-
-    /** The settings screen where "All files access" is given. */
-    @JavascriptInterface
-    fun askAllFilesAccess() {
-      runOnUiThread { SharedFolders.askAccess(this@MainActivity) }
-    }
-
-    /** Shows the system's folder picker, in Documents; see `folderPicker`. */
-    @JavascriptInterface
-    fun pickFolder() {
-      runOnUiThread { folderPicker.launch(SharedFolders.DOCUMENTS) }
+      return "started"
     }
 
     /** Shows or hides the keyboard, leaving focus and the caret where they are. */
-    @JavascriptInterface
-    fun setKeyboard(shown: Boolean) {
-      runOnUiThread {
-        val controller = WindowCompat.getInsetsController(window, webView)
-        if (shown) controller.show(WindowInsetsCompat.Type.ime()) else controller.hide(WindowInsetsCompat.Type.ime())
-      }
+    private fun setKeyboard(shown: Boolean) {
+      val controller = WindowCompat.getInsetsController(window, webView)
+      if (shown) controller.show(WindowInsetsCompat.Type.ime()) else controller.hide(WindowInsetsCompat.Type.ime())
     }
   }
 

@@ -21,10 +21,14 @@
         </intent>
     </queries>
 
+    <!-- Android's backups and phone-to-phone transfers copy nothing: vaults
+         move with the GitHub backup or a shared folder. -->
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.netherstone"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:hasFragileUserData="true"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}">

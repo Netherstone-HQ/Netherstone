@@ -24,6 +24,8 @@ mod mcp;
 mod microphone;
 mod open_access;
 mod open_source;
+#[cfg(any(target_os = "android", test))]
+mod phone_navigation;
 /// Updates for the Android app; its plain parts are tested on any computer.
 #[cfg(all(feature = "updater", any(target_os = "android", test)))]
 mod phone_updater;
@@ -104,6 +106,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol(export::pdf::SCHEME, export::pdf::serve);
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(phone_navigation::plugin());
     #[cfg(all(feature = "updater", desktop))]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())

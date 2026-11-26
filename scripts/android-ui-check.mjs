@@ -129,7 +129,7 @@ async function providedFile(name, file) {
   const owner = await shell(`su 0 stat -c %u:%g /data/data/${PACKAGE}`);
   adb("push", file, `/data/local/tmp/${name}`);
   await shell(`su 0 sh -c "mkdir -p ${folder} && cp /data/local/tmp/${name} ${folder}/${name} && chown -R ${owner} ${folder}"`);
-  return `content://${PACKAGE}.fileprovider/my_cache_images/shared/${name}`;
+  return `content://${PACKAGE}.fileprovider/shared/${name}`;
 }
 
 /** Taps the text `label` in a system window, such as the folder picker. */

@@ -1,5 +1,5 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
-import { androidBridge } from "@/lib/android-bridge";
+import { type UpdateInstall, androidBridge } from "@/lib/android-bridge";
 import { IS_ANDROID } from "@/lib/platform";
 import { backInFront } from "@/lib/back-in-front";
 
@@ -41,6 +41,14 @@ export function downloadUpdate(
 /** The label of the button that installs a downloaded update. */
 export const INSTALL_LABEL = IS_ANDROID ? "Install update" : "Restart to update";
 
+/** Why Android's installer didn't get the update. */
+const NOT_INSTALLED: Record<Exclude<UpdateInstall, "started">, string> = {
+  missing: "The update hasn't finished downloading.",
+  "not-this-app":
+    "This update doesn't match the installed app, so it was deleted.",
+  "not-allowed": "Allow Netherstone to install apps, then try again.",
+};
+
 /**
  * Installs the downloaded update and restarts. On Android the installer
  * takes it, after the "install apps" setting the first time.
@@ -49,9 +57,10 @@ export async function installUpdate(): Promise<void> {
   await invoke("updater_install");
   const android = androidBridge();
   if (!android) return;
-  if (android.installUpdate()) return;
-  await backInFront();
-  if (!android.installUpdate()) {
-    throw new Error("Allow Netherstone to install apps, then try again.");
+  let outcome = await android.installUpdate();
+  if (outcome === "not-allowed") {
+    await backInFront();
+    outcome = await android.installUpdate();
   }
+  if (outcome !== "started") throw new Error(NOT_INSTALLED[outcome]);
 }

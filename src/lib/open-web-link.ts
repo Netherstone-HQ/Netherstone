@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { androidBridge } from "@/lib/android-bridge";
 import { IS_MOBILE } from "@/lib/platform";
@@ -49,4 +50,18 @@ export async function openWebLink(
   }
 
   useUIStore.getState().openInBrowserPanel(href);
+}
+
+/** Sent by Rust (phone_navigation.rs) with a web page that didn't load in the app's view. */
+const OPEN_OUTSIDE_EVENT = "phone-navigation:open-outside";
+
+/**
+ * On Android, opens where links open the web pages that would have loaded
+ * in the app's own view, such as one an embed opens on a tap.
+ */
+export function openPagesOutside() {
+  const unlisten = listen<string>(OPEN_OUTSIDE_EVENT, ({ payload }) => {
+    if (isWebPageUrl(payload)) void openWebLink(payload);
+  });
+  return () => void unlisten.then((stop) => stop());
 }

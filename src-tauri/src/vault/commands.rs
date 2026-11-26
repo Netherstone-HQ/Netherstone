@@ -45,17 +45,30 @@ pub(crate) fn open_vault(vault_path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Where new vaults go unless the user picks somewhere else: their
-/// Documents folder.
+/// Where new vaults go unless the user picks somewhere else.
 #[tauri::command]
 pub(crate) fn default_vault_location(app: tauri::AppHandle) -> Option<String> {
-    documents_folder(&app).map(|p| p.to_string_lossy().into_owned())
+    default_vault_parent(&app).map(|p| p.to_string_lossy().into_owned())
 }
 
-fn documents_folder(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+/// The user's Documents folder.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn default_vault_parent(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     use tauri::Manager;
     app.path().document_dir().ok()
 }
+
+/// On Android, a folder in the app's private storage: other apps can read
+/// its Documents folder on Android 10 and older.
+#[cfg(target_os = "android")]
+pub(crate) fn default_vault_parent(_app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    let folder = db::app_data_dir().ok()?.join(PHONE_VAULTS_FOLDER);
+    std::fs::create_dir_all(&folder).ok()?;
+    Some(folder)
+}
+
+#[cfg(target_os = "android")]
+const PHONE_VAULTS_FOLDER: &str = "Vaults";
 
 /// Makes the folder `name` in `parent` for a new vault. `parent` must be the
 /// default location or a folder the user picked.
@@ -66,7 +79,7 @@ pub(crate) fn create_vault(
     name: String,
 ) -> Result<String, String> {
     let parent = Path::new(&parent);
-    vault_access::get().check_new_vault_parent(parent, documents_folder(&app).as_deref())?;
+    vault_access::get().check_new_vault_parent(parent, default_vault_parent(&app).as_deref())?;
     let folder = vault::create_vault_folder(parent, &name)?;
     vault_access::get().allow(&folder);
     Ok(folder.to_string_lossy().into_owned())

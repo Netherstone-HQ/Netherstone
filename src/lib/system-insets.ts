@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { androidBridge } from "@/lib/android-bridge";
+import { type SystemInsets, androidBridge } from "@/lib/android-bridge";
 import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 
 /**
@@ -16,8 +16,6 @@ export type KeyboardState = {
   /** Whether the page already ends above the keyboard (Android). */
   pageAboveKeyboard: boolean;
 };
-
-type Reported = { keyboard?: number; top?: number; bottom?: number };
 
 let state: KeyboardState = {
   inset: 0,
@@ -42,7 +40,7 @@ function setKeyboardInset(inset: number) {
   for (const listener of listeners) listener();
 }
 
-function apply(reported: Reported) {
+function apply(reported: SystemInsets) {
   const root = document.documentElement.style;
   if (reported.top !== undefined)
     root.setProperty("--safe-area-top", px(reported.top));
@@ -59,15 +57,17 @@ function onViewportResize() {
 
 if (typeof window !== "undefined") {
   if (IS_ANDROID) {
-    window.addEventListener("systeminsets", (event) =>
-      apply((event as CustomEvent<Reported>).detail ?? {}),
-    );
-    try {
-      const reported = androidBridge()?.insets();
-      if (reported) apply(JSON.parse(reported) as Reported);
-    } catch {
-      // An app built before the insets were reported: CSS falls back to env().
-    }
+    // The answer is older than any change heard before it.
+    let changed = false;
+    window.addEventListener("systeminsets", (event) => {
+      changed = true;
+      apply((event as CustomEvent<SystemInsets>).detail ?? {});
+    });
+    void androidBridge()
+      ?.insets()
+      .then((reported) => {
+        if (!changed) apply(reported);
+      });
   } else if (IS_MOBILE) {
     window.visualViewport?.addEventListener("resize", onViewportResize);
   }

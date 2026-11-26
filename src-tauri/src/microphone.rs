@@ -60,7 +60,7 @@ fn decide(kind: PermissionKind, own_view: bool, app_page: bool) -> PermissionRes
 
 /// Whether `url` is the app's own page: the dev server in a debug build,
 /// else the bundled page under its custom protocol.
-fn is_app_page(url: &Url) -> bool {
+pub(crate) fn is_app_page(url: &Url) -> bool {
     if cfg!(debug_assertions) && url.scheme() == "http" && url.host_str() == Some("localhost") {
         return true;
     }

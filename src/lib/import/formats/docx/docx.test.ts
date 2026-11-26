@@ -124,7 +124,7 @@ describe("Word import", () => {
     expect(markdown).toContain('<div align="center">\n\nRead [the site](https://example.com) _now\\._\n\n</div>');
     expect(markdown).toContain("1. First\n   - Detail\n2. Second");
     expect(markdown).toContain("<!-- netherstone: widths 133 133; merge A1:B1 A2:A3; fill A1=#ffeedd -->");
-    expect(markdown).toContain("| Tall | x |\n|     | y |");
+    expect(markdown).toContain("| Tall | x |\n|      | y |");
   });
 
   it("keeps tracked insertions and leaves out deletions and hidden text", async () => {

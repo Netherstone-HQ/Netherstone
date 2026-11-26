@@ -28,7 +28,6 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
 use tauri::ipc::Channel;
 
 pub use address::Address;
@@ -296,9 +295,9 @@ pub async fn open_link_create(
     };
     let vault_error = |error: String| Refusal::Vault { error };
     let parent = Path::new(&parent);
-    let documents = app.path().document_dir().ok();
+    let default_parent = crate::vault::commands::default_vault_parent(&app);
     crate::vault_access::get()
-        .check_new_vault_parent(parent, documents.as_deref())
+        .check_new_vault_parent(parent, default_parent.as_deref())
         .map_err(vault_error)?;
     let folder = vault::check_vault_folder(parent, &name).map_err(vault_error)?;
     let scratch_root = scratch_root().ok_or(Refusal::DownloadFailed)?;

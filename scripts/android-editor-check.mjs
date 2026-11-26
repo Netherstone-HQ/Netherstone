@@ -65,8 +65,8 @@ function smallVault() {
 // ---- The app ----
 
 const { device, shell } = await connectDevice();
-/** Runs a command as root (the emulator image allows it). */
-const su = (command) => shell(`su 0 sh -c "${command.replaceAll('"', '\\"')}"`);
+/** Runs a command as root (the emulator image allows it); only root's shell expands it. */
+const su = (command) => shell(`su 0 sh -c "${command.replace(/[\\"$`]/g, "\\$&")}"`);
 const readAppFile = (file) => su(`cat '${file}'`);
 
 let webView;

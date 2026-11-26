@@ -51,16 +51,20 @@ describe("openWebLink", () => {
   it("opens a page over the app on Android, or in the browser when Settings says so", async () => {
     platform.IS_MOBILE = true;
     platform.IS_ANDROID = true;
-    const openInApp = vi.fn();
-    vi.stubGlobal("window", { NetherstoneAndroid: { openInApp } });
+    const postMessage = vi.fn();
+    vi.stubGlobal("window", {
+      NetherstoneAndroid: { postMessage, addEventListener: vi.fn() },
+    });
     try {
       await openWebLink(PAGE, "browser-panel");
-      expect(openInApp).toHaveBeenCalledWith(PAGE);
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({ method: "openInApp", args: [PAGE] }),
+      );
       expect(opener.openUrl).not.toHaveBeenCalled();
 
       await openWebLink(PAGE, "your-browser");
       await openWebLink("mailto:someone@example.com", "browser-panel");
-      expect(openInApp).toHaveBeenCalledTimes(1);
+      expect(postMessage).toHaveBeenCalledTimes(1);
       expect(opener.openUrl).toHaveBeenCalledTimes(2);
     } finally {
       vi.unstubAllGlobals();

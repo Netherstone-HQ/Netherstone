@@ -15,10 +15,10 @@ type FolderPick = "picked" | "cancelled" | "unusable";
 export async function pickSharedFolder(): Promise<boolean> {
   const android = androidBridge();
   if (!android) return true;
-  if (!android.hasAllFilesAccess()) {
+  if (!(await android.hasAllFilesAccess())) {
     android.askAllFilesAccess();
     await backInFront();
-    if (!android.hasAllFilesAccess()) {
+    if (!(await android.hasAllFilesAccess())) {
       toast("Netherstone needs access to your files to keep a vault there", {
         action: { label: "Allow", onClick: () => android.askAllFilesAccess() },
       });

@@ -57,10 +57,10 @@ export async function installUpdate(): Promise<void> {
   await invoke("updater_install");
   const android = androidBridge();
   if (!android) return;
-  let outcome = android.installUpdate();
+  let outcome = await android.installUpdate();
   if (outcome === "not-allowed") {
     await backInFront();
-    outcome = android.installUpdate();
+    outcome = await android.installUpdate();
   }
   if (outcome !== "started") throw new Error(NOT_INSTALLED[outcome]);
 }

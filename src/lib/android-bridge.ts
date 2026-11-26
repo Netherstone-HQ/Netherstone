@@ -12,7 +12,7 @@ export type UpdateInstall =
   | "not-allowed";
 
 /** How handing a vault's file to another app went. */
-export type FileOpen = "opened" | "no-app" | "not-allowed";
+type FileOpen = "opened" | "no-app" | "not-allowed";
 
 /** What the system bars and the keyboard cover, in CSS px. */
 export type SystemInsets = { keyboard?: number; top?: number; bottom?: number };

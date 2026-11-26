@@ -11,7 +11,12 @@ import {
 import { DrawingIcon } from "@/components/icons";
 import { Dot } from "@/components/ui/dot";
 import type { ShardPreview } from "@/lib/commands/shards";
-import { displayNameOf, isDrawingPath, isSamePath } from "@/lib/drawing-files";
+import {
+  displayNameOf,
+  isDrawingPath,
+  isSamePath,
+  pathKey,
+} from "@/lib/drawing-files";
 import { formatModified } from "@/lib/tags";
 import { cn } from "@/lib/utils";
 import { useUIStore, type FileTreeNode } from "@/store";
@@ -183,9 +188,7 @@ export function FileRow({
 }) {
   const push = usePhoneNav((s) => s.push);
   const selecting = useSelecting();
-  const checked = usePhoneSelection((s) =>
-    s.paths.some((p) => isSamePath(p, path)),
-  );
+  const checked = usePhoneSelection((s) => s.keys.has(pathKey(path)));
   const toggle = usePhoneSelection((s) => s.toggle);
   const isPinned = useUIStore((s) =>
     s.pinnedFiles.some((entry) => isSamePath(entry.path, path)),

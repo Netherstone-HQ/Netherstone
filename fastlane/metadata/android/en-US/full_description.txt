@@ -1,0 +1,39 @@
+Netherstone keeps your notes and documents as Markdown files, and your drawings beside them, in a vault on your phone. It works offline. Keep the vault in a folder such as Documents, and other Markdown apps can open it too.
+
+<b>Write</b>
+<ul>
+<li>A bar above the keyboard for lists, links, headings, colors and more</li>
+<li>Pictures, photos from the camera, video, sound and voice notes inside a document</li>
+<li>Tags, links between documents, and an outline of each one</li>
+</ul>
+
+<b>Draw</b>
+<ul>
+<li>Sketches and diagrams that sit in their own file or inside a document</li>
+</ul>
+
+<b>Find</b>
+<ul>
+<li>Search every document, and filter by tags, images, drawings and voice notes</li>
+</ul>
+
+<b>Keep it safe</b>
+<ul>
+<li>Every document and drawing keeps its earlier versions</li>
+<li>Optional backup and sync through your own GitHub account, to keep a phone and a computer in step</li>
+<li>Deleted documents go to the Trash first</li>
+</ul>
+
+<b>Share</b>
+<ul>
+<li>Export a document as a PDF, a Word document or a web page</li>
+<li>Share text, links and files to Netherstone from other apps</li>
+</ul>
+
+<b>AI assistant (optional, off until you set it up)</b>
+<ul>
+<li>Answers questions from your documents and suggests edits you check before they apply</li>
+<li>Works with a cloud AI provider's key or a server you run yourself</li>
+</ul>
+
+Netherstone is free and open source under the GPL-3.0. It also runs on Windows, macOS and Linux.

@@ -12,9 +12,18 @@ vi.mock("@/lib/platform", async (importOriginal) => ({
   },
 }));
 vi.mock("@tauri-apps/plugin-opener", () => opener);
+const events = vi.hoisted(
+  () => new Map<string, (event: { payload: string }) => void>(),
+);
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, handler: (event: { payload: string }) => void) => {
+    events.set(name, handler);
+    return Promise.resolve(() => events.delete(name));
+  },
+}));
 
 import { useUIStore } from "@/store/ui";
-import { openWebLink } from "./open-web-link";
+import { openPagesOutside, openWebLink } from "./open-web-link";
 
 const PAGE = "https://example.com/page";
 
@@ -57,5 +66,22 @@ describe("openWebLink", () => {
       vi.unstubAllGlobals();
       platform.IS_ANDROID = false;
     }
+  });
+});
+
+describe("openPagesOutside", () => {
+  beforeEach(() => {
+    opener.openUrl.mockClear();
+  });
+
+  it("opens web pages that didn't load in the app's view, and nothing else", () => {
+    platform.IS_MOBILE = true;
+    const stop = openPagesOutside();
+    const refused = events.get("phone-navigation:open-outside");
+    refused?.({ payload: PAGE });
+    refused?.({ payload: "http://asset.localhost/picture.png" });
+    stop();
+    expect(opener.openUrl).toHaveBeenCalledTimes(1);
+    expect(opener.openUrl).toHaveBeenCalledWith(PAGE);
   });
 });

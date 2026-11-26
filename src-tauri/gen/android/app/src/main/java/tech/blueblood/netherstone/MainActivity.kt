@@ -137,6 +137,8 @@ class MainActivity : TauriActivity() {
       // scripts/android-ui-check.mjs waits for this line.
       Log.i("Netherstone", "WebView inspectable")
     }
+    // A page opens a window only on a tap; see phone_navigation.rs.
+    webView.settings.javaScriptCanOpenWindowsAutomatically = false
     webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
     fitAboveKeyboard(webView)
     // Picked files go through PickerChromeClient. Before Android 8 wry's

@@ -23,6 +23,8 @@ import { NestedVaultDialog } from "@/components/vault/NestedVaultDialog";
 import { Toaster } from "@/components/ui/sonner";
 import { CompanionHost } from "@/components/brand/CompanionHost";
 import { preloadEditorMarkdownWorker } from "@/lib/editor-markdown-worker";
+import { openPagesOutside } from "@/lib/open-web-link";
+import { IS_ANDROID } from "@/lib/platform";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { useWelcomeTour } from "@/components/onboarding/useWelcomeTour";
 import { IS_PHONE } from "@/components/phone/phone-shell";
@@ -46,6 +48,7 @@ function App() {
   useEffect(() => {
     preloadEditorMarkdownWorker();
   }, []);
+  useEffect(() => (IS_ANDROID ? openPagesOutside() : undefined), []);
 
   return (
     <ThemeProvider>

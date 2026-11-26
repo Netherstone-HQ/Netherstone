@@ -107,8 +107,11 @@ mod tests {
         db::data::start_writing_log(&conn, &old.to_string_lossy(), "2026-11-01").unwrap();
         db::data::record_writing(&conn, "2026-11-02", &shard, "Hello there", || None).unwrap();
         let picture = "INSERT INTO drawing_pictures (vault_path, asset_path) VALUES (?1, ?2)";
-        conn.execute(picture, [old.to_string_lossy(), "_attachments/d.png".into()])
-            .unwrap();
+        conn.execute(
+            picture,
+            [old.to_string_lossy(), "_attachments/d.png".into()],
+        )
+        .unwrap();
 
         rename_folder(&old, &new).unwrap();
         follow_in_database(&conn, &old, &new).unwrap();

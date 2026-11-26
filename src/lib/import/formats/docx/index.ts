@@ -37,16 +37,7 @@ function keepWorker(worker: Worker, read: number) {
   idle.push(kept);
 }
 
-/**
- * Word documents (.docx), read straight from their XML: headings, text
- * formatting and colours, alignment and indents, numbered, bulleted and
- * to-do lists, tables with merged and shaded cells, pictures, links,
- * equations, footnotes and the table of contents.
- *
- * Files are read in a worker, so a long document doesn't freeze the window.
- * Each worker reads small files one after another; it is stopped as soon
- * as the import is cancelled.
- */
+/** Word documents (.docx), read from their XML in a worker so long ones don't freeze the window. */
 export const docxImporter: Importer = {
   ...IMPORT_FORMATS.docx,
   async convert(file, context) {

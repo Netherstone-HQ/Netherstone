@@ -253,16 +253,10 @@ fn sync_folder(path: &Path) {
 
 // ── Scanner ──────────────────────────────────────────────────────────────────
 
-/// Recursively scans `dir` and returns a sorted list of [`FileNode`]s.
-///
-/// Rules:
-/// - Hidden entries (names starting with `.`) are skipped.
-/// - Entries in [`IGNORED_NAMES`] are skipped.
-/// - Only `.md` shards and `.excalidraw` drawings are included.
-/// - A directory node is emitted if it contains at least one of those
-///   (directly or transitively), or nothing at all, so a folder just made in
-///   the app shows up while folders of only images or other files stay out.
-/// - Results are sorted: directories first, then files, both case-insensitively.
+/// Scans `dir` into sorted [`FileNode`]s: folders first, then files,
+/// case-insensitively. Hidden and [`IGNORED_NAMES`] entries are skipped and
+/// only shards and drawings are kept. A folder shows if it holds one or is
+/// empty, so a folder just made in the app shows up.
 pub fn scan_dir(dir: &Path) -> Vec<FileNode> {
     scan(dir, false)
 }

@@ -124,14 +124,10 @@ function keepBothInHistory(filePath: string, previous: string) {
 }
 
 /**
- * Loads the drawing open when the canvas mounts and autosaves changes to the
- * current `drawingPath`, which may change without a remount when the drawing
- * is renamed or moved. A scratch canvas is saved as a new "Untitled" drawing
- * in the vault as soon as something is drawn on it.
- *
- * When the drawing changes outside the app (another app, or sync), the
- * canvas shows what's on disk, merged shape by shape with unsaved changes.
- * A save never writes over a change it hasn't shown.
+ * Loads the open drawing and autosaves to `drawingPath`, which can change
+ * without a remount on rename or move. A scratch canvas becomes an
+ * "Untitled" drawing once something is drawn. Outside changes merge shape by
+ * shape with unsaved ones; a save never overwrites a change it hasn't shown.
  */
 function useDrawingPersistence(
   drawingPath: string | null,

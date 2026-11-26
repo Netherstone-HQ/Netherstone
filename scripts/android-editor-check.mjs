@@ -33,10 +33,10 @@ const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 /** A picture for the phone's gallery, for the photo picker to offer. */
 const GALLERY_PICTURE = "src-tauri/icons/32x32.png";
-const VAULT = process.env.VAULT ?? smallVault();
-const SHARD = "touch-check";
 /** A shard with a file in the vault, for Open to hand to another app. */
 const FILE_SHARD = "Attached file";
+const VAULT = process.env.VAULT ?? smallVault();
+const SHARD = "touch-check";
 // The buttons of Android's own permission prompt, by what they say.
 const DENY = /^Don.t allow$/;
 const ALLOW = /^While using the app$/;

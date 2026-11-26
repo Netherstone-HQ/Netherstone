@@ -16,6 +16,6 @@ The vault can live in the app's own storage or in a shared folder like Documents
 
 Netherstone also runs on Windows, macOS and Linux, with optional sync between devices.
 
-Netherstone has an optional AI assistant, disabled by default. It answers questions about your documents and suggests edits for you to approve, through a cloud provider or your own server.
+An optional AI assistant answers questions about your documents and suggests edits for you to approve, through a cloud provider or your own server. It's disabled by default.
 
 The code is public under GPL-3.0.

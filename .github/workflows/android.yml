@@ -1,7 +1,7 @@
 name: Android
 
-# Builds the Android app on request: arm64 against the size budget, and
-# x86_64 driven on an emulator. "Report only" keeps failed checks from
+# Builds the Android app on request: the phone APKs against the size budget,
+# and x86_64 driven on an emulator. "Report only" keeps failed checks from
 # failing the run.
 on:
   workflow_dispatch:
@@ -21,9 +21,6 @@ permissions:
 env:
   NDK_VERSION: 29.0.14206865
   SDK_TOOLS_SHA256: 7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
-  # The release APK may be at most 25 MB as GitHub shows it, which is
-  # 25 MiB.
-  APK_BUDGET_BYTES: 26214400
 
 jobs:
   build:
@@ -38,6 +35,10 @@ jobs:
           - target: aarch64
             rust: aarch64-linux-android
             env: aarch64_linux_android
+            inspectable: false
+          - target: armv7
+            rust: armv7-linux-androideabi
+            env: armv7_linux_androideabi
             inspectable: false
           # What the emulator runs: DevTools on, so the check can read the page.
           - target: x86_64
@@ -94,11 +95,8 @@ jobs:
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk netherstone-${{ matrix.target }}.apk
 
       - name: Size
-        if: matrix.target == 'aarch64'
-        run: |
-          size=$(stat -c %s netherstone-aarch64.apk)
-          echo "APK: $size bytes, budget $APK_BUDGET_BYTES" | tee -a "$GITHUB_STEP_SUMMARY"
-          [ "$size" -le "$APK_BUDGET_BYTES" ]
+        if: matrix.target != 'x86_64'
+        run: node scripts/apk-size.mjs netherstone-${{ matrix.target }}.apk
 
       - uses: actions/upload-artifact@v4
         with:

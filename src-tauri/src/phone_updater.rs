@@ -43,6 +43,16 @@ fn newer_apk(channel: &ChannelFile, arch: &str, current: &str) -> Option<Found> 
     })
 }
 
+/// Whether a downloaded APK of version `downloaded` is spent for the app at
+/// `current`: installed by now, older, or of unknown version.
+fn is_spent(downloaded: Option<&str>, current: &str) -> bool {
+    let version = |text: &str| semver::Version::parse(text.trim()).ok();
+    match (downloaded.and_then(version), version(current)) {
+        (Some(downloaded), Some(current)) => downloaded <= current,
+        _ => true,
+    }
+}
+
 /// Whole percent of `downloaded` out of `total`, when the size is known.
 fn download_percent(downloaded: u64, total: Option<u64>) -> Option<u8> {
     let total = total.filter(|total| *total > 0)?;
@@ -67,6 +77,9 @@ mod commands {
     /// cache. MainActivity.kt installs only this file.
     const UPDATE_FOLDER: &str = "updates";
     const UPDATE_FILE: &str = "Netherstone.apk";
+    /// Beside the APK: its version, so a later start can tell an installed
+    /// update from one still waiting.
+    const VERSION_FILE: &str = "version";
     /// How long connecting to GitHub may take before giving up.
     const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -150,6 +163,7 @@ mod commands {
         let path = update_file(&app)?;
         let folder = path.parent().ok_or("The update has nowhere to go.")?;
         std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(folder.join(VERSION_FILE));
 
         let mut response = client()?
             .get(&found.url)
@@ -183,7 +197,21 @@ mod commands {
             let _ = std::fs::remove_file(&part);
             return Err("The update didn't download whole. Try again.".into());
         }
-        std::fs::rename(&part, &path).map_err(|e| e.to_string())
+        std::fs::rename(&part, &path).map_err(|e| e.to_string())?;
+        let _ = std::fs::write(folder.join(VERSION_FILE), &found.version);
+        Ok(())
+    }
+
+    /// Removes a downloaded APK once it's installed, so it doesn't sit in the
+    /// cache until the next update. One still waiting to be installed stays.
+    pub fn remove_spent_download(app: &AppHandle) {
+        let Ok(file) = update_file(app) else { return };
+        let Some(folder) = file.parent() else { return };
+        let downloaded = std::fs::read_to_string(folder.join(VERSION_FILE)).ok();
+        let current = app.package_info().version.to_string();
+        if is_spent(downloaded.as_deref(), &current) {
+            let _ = std::fs::remove_dir_all(folder);
+        }
     }
 
     /// The window hands the downloaded APK to the installer itself
@@ -237,6 +265,14 @@ mod tests {
             None
         );
         assert_eq!(newer_apk(&channel("0.8.0"), "x86_64", "0.7.0-beta.3"), None);
+    }
+
+    #[test]
+    fn a_download_is_spent_once_the_app_is_as_new() {
+        assert!(is_spent(Some("0.8.0"), "0.8.0"));
+        assert!(is_spent(Some("0.8.0-beta.1"), "0.8.0"));
+        assert!(is_spent(None, "0.8.0"));
+        assert!(!is_spent(Some("0.8.1"), "0.8.0"));
     }
 
     #[test]

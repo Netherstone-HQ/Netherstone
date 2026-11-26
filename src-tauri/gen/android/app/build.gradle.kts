@@ -24,6 +24,19 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// Tauri's version code leaves out the beta number, so two betas of one
+// version would share a code and app stores couldn't order them. Here a beta
+// counts below its stable release, and the last digit is free for stores
+// that build one APK per architecture (-PnetherstoneAbi=1..4).
+fun versionCodeOf(name: String, fallback: Int): Int {
+    val match = Regex("""^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$""").matchEntire(name)
+        ?: return fallback
+    val (major, minor, patch, beta) = match.destructured
+    val release = if (beta.isEmpty()) 99 else beta.toInt().also { require(it < 99) { "Beta $it is past 98" } }
+    val abi = findProperty("netherstoneAbi")?.toString()?.toInt() ?: 0
+    return ((major.toInt() * 100 + minor.toInt()) * 100 + patch.toInt()) * 1000 + release * 10 + abi
+}
+
 android {
     compileSdk = 37
     namespace = "tech.blueblood.netherstone"
@@ -32,8 +45,11 @@ android {
         applicationId = "tech.blueblood.netherstone"
         minSdk = 24
         targetSdk = 37
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        versionCode = versionCodeOf(
+            versionName!!,
+            tauriProperties.getProperty("tauri.android.versionCode", "1").toInt(),
+        )
         // Lets the emulator checks drive the page over DevTools. Only the CI
         // test build turns it on (ORG_GRADLE_PROJECT_netherstoneInspectable).
         buildConfigField(

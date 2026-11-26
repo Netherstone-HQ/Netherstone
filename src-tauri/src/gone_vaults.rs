@@ -271,6 +271,7 @@ mod tests {
             "INSERT INTO tags (file_id, tag) SELECT id, 'tag' FROM files WHERE vault_path = ?1",
             "INSERT INTO attachments (vault_path, asset_path, hash, original_name, extension, mime_type, size_bytes, sync_status)
              VALUES (?1, '_attachments/a.png', 'h', 'a.png', 'png', 'image/png', 1, 'syncable')",
+            "INSERT INTO drawing_pictures (vault_path, asset_path) VALUES (?1, '_attachments/a.png')",
             "INSERT INTO ast_cache_index (file_path, content_hash, cache_version) VALUES (?1 || '/a.md', 'h', 1)",
             "INSERT INTO writing_log (day, file_path, start_words, end_words) VALUES ('2026-10-27', ?1 || '/a.md', 0, 5)",
         ] {
@@ -320,6 +321,7 @@ mod tests {
             "fts_search",
             "tags",
             "attachments",
+            "drawing_pictures",
             "ast_cache_index",
             "vaults",
         ] {

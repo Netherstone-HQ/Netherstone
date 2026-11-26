@@ -28,7 +28,6 @@ import {
 import { useVaultItem } from "@/components/vault/useVaultItem";
 import { fileName, isSamePath } from "@/lib/drawing-files";
 import type { ExportFormat } from "@/lib/export";
-import { shareExport } from "@/lib/export/share";
 import { errorText } from "@/lib/utils";
 import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
@@ -53,6 +52,7 @@ async function share(path: string, name: string, format: ExportFormat) {
       ? (plateEditor.children as unknown[])
       : undefined;
   try {
+    const { shareExport } = await import("@/lib/export/share");
     await shareExport(
       {
         filePath: path,

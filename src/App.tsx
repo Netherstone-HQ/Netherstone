@@ -1,5 +1,5 @@
 import "./App.css";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,7 +26,13 @@ import { preloadEditorMarkdownWorker } from "@/lib/editor-markdown-worker";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import { useWelcomeTour } from "@/components/onboarding/useWelcomeTour";
 import { IS_PHONE } from "@/components/phone/phone-shell";
-import { PhoneApp } from "@/components/phone/PhoneApp";
+
+/** Only phones load the phone app, so computers never parse it. */
+const PhoneApp = lazy(() =>
+  import("@/components/phone/PhoneApp").then((module) => ({
+    default: module.PhoneApp,
+  })),
+);
 
 function App() {
   useVaultInit();
@@ -54,7 +60,9 @@ function App() {
           {screen === "onboarding" ? (
             <Onboarding onDone={finish} onClose={close} />
           ) : IS_PHONE ? (
-            <PhoneApp />
+            <Suspense fallback={null}>
+              <PhoneApp />
+            </Suspense>
           ) : screen === "app-after-onboarding" ? (
             <div className="flex h-full w-full animate-in fade-in duration-300">
               <AppLayout />

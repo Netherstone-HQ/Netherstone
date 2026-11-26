@@ -1,6 +1,12 @@
+import { lazy, Suspense } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { BottomSheetFrame, BottomSheetHandle } from "@/components/ui/bottom-sheet";
+
+const AssistantPanel = lazy(() =>
+  import("@/components/assistant/AssistantPanel").then((module) => ({
+    default: module.AssistantPanel,
+  })),
+);
 
 /** Tall enough for a chat, low enough that the shard's top stays in view. */
 const SHEET_HEIGHT = "h-[65dvh]";
@@ -23,10 +29,12 @@ export function AssistantSheet({
     >
       <DialogPrimitive.Title className="sr-only">Assistant</DialogPrimitive.Title>
       <BottomSheetHandle className="mb-1" />
-      <AssistantPanel
-        onHide={() => onOpenChange(false)}
-        className="min-h-0 w-full flex-1 border-l-0 bg-popover text-base"
-      />
+      <Suspense fallback={null}>
+        <AssistantPanel
+          onHide={() => onOpenChange(false)}
+          className="min-h-0 w-full flex-1 border-l-0 bg-popover text-base"
+        />
+      </Suspense>
     </BottomSheetFrame>
   );
 }

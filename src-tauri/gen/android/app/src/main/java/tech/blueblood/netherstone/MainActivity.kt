@@ -246,26 +246,31 @@ class MainActivity : TauriActivity() {
     }
 
     /**
-     * Hands the downloaded update to the installer. Until Netherstone may
-     * install apps, opens that setting instead and returns false.
+     * Hands the downloaded update to the installer: "started". An update that
+     * isn't this app, signed with its key, is deleted: "not-this-app". Until
+     * Netherstone may install apps, opens that setting instead: "not-allowed".
      */
     @JavascriptInterface
-    fun installUpdate(): Boolean {
+    fun installUpdate(): String {
+      val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
+      if (!apk.isFile) return "missing"
+      if (!isThisApp(apk)) {
+        apk.delete()
+        return "not-this-app"
+      }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
         runOnUiThread {
           startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri()))
         }
-        return false
+        return "not-allowed"
       }
-      val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
-      if (!apk.isFile) return false
       val uri = providedUri(apk)
       val install = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "application/vnd.android.package-archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
       }
       runOnUiThread { startActivity(install) }
-      return true
+      return "started"
     }
 
     /** Whether vaults may live in shared storage: "All files access". */

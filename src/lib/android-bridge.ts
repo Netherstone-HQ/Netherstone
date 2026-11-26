@@ -1,5 +1,16 @@
 import { IS_ANDROID } from "@/lib/platform";
 
+/**
+ * How handing the update to the installer went: started, or the file is
+ * missing, isn't this app (and was deleted), or the app may not install
+ * apps yet (its setting is open).
+ */
+export type UpdateInstall =
+  | "started"
+  | "missing"
+  | "not-this-app"
+  | "not-allowed";
+
 /** What MainActivity.kt offers the page on Android. */
 export interface AndroidBridge {
   insets(): string;
@@ -12,8 +23,8 @@ export interface AndroidBridge {
   printPage(html: string, jobName: string, geometry: string): void;
   /** Shows a web page over the app, in the browser's custom tab. */
   openInApp(url: string): void;
-  /** Hands the downloaded update to the installer; false when it can't yet. */
-  installUpdate(): boolean;
+  /** Hands the downloaded update to the installer, or says why not. */
+  installUpdate(): UpdateInstall;
   /** Whether vaults may live in the phone's shared storage. */
   hasAllFilesAccess(): boolean;
   /** Asks for that access, in its settings screen or a prompt. */

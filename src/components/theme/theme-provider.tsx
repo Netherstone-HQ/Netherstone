@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useSyncExternalStore } from "react";
 
+import { IS_MOBILE } from "@/lib/platform";
 import { useSettingsStore } from "@/store/settings";
 import type { ThemePreference } from "@/store/settings";
 import { isNamedTheme, resolveThemeMode } from "./themes";
@@ -26,7 +27,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [readingFont, textSize, contentWidth]);
 
   useEffect(() => {
-    if (!isTauri()) return;
+    // Tauri sets the webview's zoom only on desktop.
+    if (!isTauri() || IS_MOBILE) return;
     getCurrentWebview()
       .setZoom(zoom / 100)
       .catch((error) => console.error("Failed to set zoom:", error));

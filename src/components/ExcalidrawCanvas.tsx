@@ -38,11 +38,11 @@ import { useShortcutKeys } from "@/hooks/useShortcut";
 import { keysText } from "@/lib/platform";
 import { getShortcut } from "@/lib/shortcuts";
 import { saveOutsideChangeVersion } from "@/lib/sync";
+import { cn, errorText } from "@/lib/utils";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
 
 import "@excalidraw/excalidraw/index.css";
-import { cn, errorText } from "@/lib/utils";
 
 const DRAWING_SAVE_DELAY_MS = 1000;
 

@@ -18,8 +18,8 @@ import {
   setMcpEnabled,
   setMcpVaultAllowed,
 } from "@/lib/commands/mcp";
-import { useAssistantStore } from "@/store/assistant";
 import { errorText } from "@/lib/utils";
+import { useAssistantStore } from "@/store/assistant";
 
 export function AiAppsSettings() {
   const switchId = useId();

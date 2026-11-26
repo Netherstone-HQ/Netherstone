@@ -18,12 +18,12 @@ import {
   rememberSavedValue,
   showOutsideValue,
 } from "@/lib/outside-changes";
+import { errorText } from "@/lib/utils";
 import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useEditorStore } from "@/store/editor";
 import { type HistoryPlace, useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
-import { errorText } from "@/lib/utils";
 
 type Version = { blob: string; time: number };
 

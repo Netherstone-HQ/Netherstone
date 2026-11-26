@@ -8,8 +8,8 @@ import {
   getChat,
   rememberOffer,
 } from "@/lib/commands/assistant";
-import { useAssistantStore } from "@/store/assistant";
 import { errorText } from "@/lib/utils";
+import { useAssistantStore } from "@/store/assistant";
 
 const store = useAssistantStore;
 

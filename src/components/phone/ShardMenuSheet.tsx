@@ -26,11 +26,11 @@ import {
   useShardLinks,
 } from "@/components/sidebar/right-sidebar/useShardInfo";
 import { useVaultItem } from "@/components/vault/useVaultItem";
-import type { ExportFormat } from "@/lib/export";
 import { fileName, isSamePath } from "@/lib/drawing-files";
+import type { ExportFormat } from "@/lib/export";
 import { shareExport } from "@/lib/export/share";
-import { useEditorStore, useVaultStore } from "@/store";
 import { errorText } from "@/lib/utils";
+import { useEditorStore, useVaultStore } from "@/store";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { reportFailure } from "./toasts";

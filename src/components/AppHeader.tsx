@@ -1,6 +1,6 @@
 import { Separator } from "@/components/ui/separator";
-import { closeEditorFile, saveEditorFile } from "@/lib/open-editor-file";
 import { displayNameOf } from "@/lib/drawing-files";
+import { closeEditorFile, saveEditorFile } from "@/lib/open-editor-file";
 import { useEditorStore } from "@/store";
 import { useHistoryStore } from "@/store/history";
 import { AutosaveIndicator } from "./editor/AutosaveIndicator";

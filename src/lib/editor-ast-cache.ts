@@ -3,8 +3,8 @@ import type { Descendant } from "platejs";
 import { bytesBody } from "@/lib/commands/bytes";
 import { assertTauri } from "@/lib/commands/tauri";
 import type { ShardCache } from "@/lib/editor-markdown-worker";
-import { useVaultStore } from "@/store/vault";
 import { errorText } from "@/lib/utils";
+import { useVaultStore } from "@/store/vault";
 
 type PlateAstValue = Descendant[];
 

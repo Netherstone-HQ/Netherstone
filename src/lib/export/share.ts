@@ -1,6 +1,7 @@
 // Sharing an export from a phone through Android's share sheet. A PDF goes
 // through the print screen instead.
 
+import { androidBridge } from "@/lib/android-bridge";
 import { shareExportPath } from "@/lib/commands/export";
 import { useSettingsStore } from "@/store";
 
@@ -9,7 +10,6 @@ import { defaultExportOptions, loadExportOptions } from "./options";
 import { prepareExport, writeExport, type ExportSource } from "./pipeline";
 import { renderPrintPage } from "./render";
 import { pageGeometry } from "./theme";
-import { androidBridge } from "@/lib/android-bridge";
 
 /** What each format's file is, for the apps that receive it. */
 const MIME_TYPES: Record<ExportFormat, string> = {

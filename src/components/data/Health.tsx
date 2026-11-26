@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { CircleCheckIcon, Loader2Icon } from "lucide-react";
 
+import { formatBytes, getAssetLabel } from "@/components/settings/attachment-format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +14,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { formatBytes, getAssetLabel } from "@/components/settings/attachment-format";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import {
   CLEANUP_GRACE_DAYS,

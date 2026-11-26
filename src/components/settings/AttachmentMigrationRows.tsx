@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FileInputIcon, Loader2Icon } from "lucide-react";
 
+import { formatBytes, plural } from "@/components/settings/attachment-format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { formatBytes, plural } from "@/components/settings/attachment-format";
 import {
   confirmAttachmentCopies,
   persistAttachmentFile,
@@ -22,8 +22,8 @@ import {
 } from "@/lib/commands/attachments";
 import { fileName, toVaultRelativePath } from "@/lib/drawing-files";
 import { importLinkedFile, rewriteShards } from "@/lib/shard-rewrite";
-import { useAttachmentReportStore } from "@/store";
 import { errorText } from "@/lib/utils";
+import { useAttachmentReportStore } from "@/store";
 
 function showError(message: string, error: unknown) {
   console.error(`[Netherstone] ${message}:`, error);

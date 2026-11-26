@@ -10,6 +10,7 @@ import {
   pickImportPaths,
   undoImport,
 } from "@/lib/commands/import";
+import { fileName } from "@/lib/drawing-files";
 import { useImportDialogStore, type ImportStep } from "@/lib/import";
 import { appImportIO } from "@/lib/import/app-io";
 import { carriesFiles, readDrop } from "@/lib/import/dropped";
@@ -18,9 +19,8 @@ import { IMPORTERS } from "@/lib/import/registry";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
-import { useVaultStore } from "@/store";
 import { errorText } from "@/lib/utils";
-import { fileName } from "@/lib/drawing-files";
+import { useVaultStore } from "@/store";
 
 type Step = { kind: "pick" } | ImportStep;
 

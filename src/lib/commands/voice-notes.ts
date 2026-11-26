@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { androidBridge } from "@/lib/android-bridge";
 import type { PersistedAttachment } from "./attachments";
 import { bytesBody } from "./bytes";
 import { assertTauri } from "./tauri";
-import { androidBridge } from "@/lib/android-bridge";
 
 /** Why a recording couldn't be written or saved. */
 export type VoiceNoteWriteError =

@@ -10,8 +10,8 @@ import {
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import { renameItem } from "@/components/vault/item-actions";
 import { displayNameOf, getVaultFileDisplayName } from "@/lib/drawing-files";
-import { useVaultStore, type FileTreeNode } from "@/store";
 import { errorText } from "@/lib/utils";
+import { useVaultStore, type FileTreeNode } from "@/store";
 import { closeActions, moveAll, runTrash } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { closer, useLast } from "./nav";

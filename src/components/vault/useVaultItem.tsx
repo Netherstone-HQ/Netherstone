@@ -53,13 +53,13 @@ import {
   openFileHistory,
   openVaultFile,
 } from "@/lib/open-vault-file";
+import { errorText } from "@/lib/utils";
 import {
   useSettingsStore,
   useUIStore,
   useVaultStore,
 } from "@/store";
 import type { FileTreeNode } from "@/store";
-import { errorText } from "@/lib/utils";
 
 function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;

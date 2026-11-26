@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { attachmentSyncInfo } from "./attachments";
+import { attachmentSyncInfo, openFile } from "./attachments";
+
+const phone = vi.hoisted(() => ({ openFile: vi.fn() }));
+let onPhone = false;
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@/lib/android-bridge", () => ({ androidBridge: () => (onPhone ? phone : undefined) }));
 
 const LIMIT = 20 * 1024 * 1024;
 const pdf = {
@@ -19,6 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  onPhone = false;
   vi.clearAllMocks();
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
@@ -76,5 +81,24 @@ describe("attachmentSyncInfo", () => {
     for (const ask of asks) {
       await expect(ask).rejects.toThrow("Not the open vault");
     }
+  });
+});
+
+describe("openFile", () => {
+  it("opens with the computer's app", async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    await openFile("C:/Vault/_attachments/a.pdf");
+    expect(invoke).toHaveBeenCalledWith("open_file", { path: "C:/Vault/_attachments/a.pdf" });
+  });
+
+  it("hands the file to another app on a phone, and says why it couldn't", async () => {
+    onPhone = true;
+    phone.openFile.mockResolvedValueOnce("opened");
+    await expect(openFile("/Vaults/V/a.pdf")).resolves.toBeUndefined();
+    phone.openFile.mockResolvedValueOnce("no-app");
+    await expect(openFile("/Vaults/V/a.xyz")).rejects.toThrow("No app on this phone");
+    phone.openFile.mockResolvedValueOnce("not-allowed");
+    await expect(openFile("/Vaults/V/a.apk")).rejects.toThrow("can't hand this file");
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

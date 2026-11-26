@@ -86,12 +86,14 @@ function getResolvedAttachmentPath(
   return null;
 }
 
-/**
- * Whether Open can hand this file to another app. Phones have no desktop
- * openers, so only web links open there.
- */
+/** Whether Open works for this file. A phone opens web links and files on it. */
 export function canOpenResolvedSource(resolved: ResolvedMediaSource) {
-  return !IS_ANDROID || resolved.kind === "remote";
+  return (
+    !IS_ANDROID ||
+    resolved.kind === "remote" ||
+    resolved.kind === "vault" ||
+    resolved.kind === "local"
+  );
 }
 
 export async function openResolvedSource(
@@ -287,13 +289,14 @@ export const FileElement = withHOC(
       : [];
 
     const canOpen = canOpenResolvedSource(resolvedSource);
-    const openActions = canOpen
-      ? {
-          onOpen: () => void handleOpen(),
-          action: { label: "Open", onSelect: () => void handleOpen() },
-          onReveal: () => void handleReveal(),
-        }
-      : {};
+    const openActions = {
+      ...(canOpen && {
+        onOpen: () => void handleOpen(),
+        action: { label: "Open", onSelect: () => void handleOpen() },
+      }),
+      // A phone has no file manager to show a file in.
+      ...(!IS_ANDROID && { onReveal: () => void handleReveal() }),
+    };
 
     let content: React.ReactNode;
 

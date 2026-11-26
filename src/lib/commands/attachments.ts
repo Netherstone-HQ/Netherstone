@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { androidBridge } from "@/lib/android-bridge";
 import { bytesBody } from "./bytes";
 import { assertTauri } from "./tauri";
 
@@ -253,5 +254,9 @@ export async function showLinkedFile(filePath: string): Promise<boolean> {
  */
 export async function openFile(path: string): Promise<void> {
   assertTauri();
-  return invoke<void>("open_file", { path });
+  const phone = androidBridge();
+  if (!phone) return invoke<void>("open_file", { path });
+  const opened = await phone.openFile(path);
+  if (opened === "no-app") throw new Error("No app on this phone opens this kind of file.");
+  if (opened === "not-allowed") throw new Error("Netherstone can't hand this file to another app.");
 }

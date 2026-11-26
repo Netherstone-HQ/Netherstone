@@ -5,4 +5,6 @@
   <cache-path name="picked" path="picked/" />
   <!-- Where wry puts the camera's photos. -->
   <external-files-path name="camera" path="Pictures/" />
+  <!-- Vault files that Open hands on; MainActivity.kt picks which. -->
+  <root-path name="vaults" path="." />
 </paths>

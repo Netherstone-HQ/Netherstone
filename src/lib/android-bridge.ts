@@ -11,6 +11,9 @@ export type UpdateInstall =
   | "not-this-app"
   | "not-allowed";
 
+/** How handing a vault's file to another app went. */
+export type FileOpen = "opened" | "no-app" | "not-allowed";
+
 /** What the system bars and the keyboard cover, in CSS px. */
 export type SystemInsets = { keyboard?: number; top?: number; bottom?: number };
 
@@ -26,6 +29,8 @@ export interface AndroidBridge {
   printPage(html: string, jobName: string, geometry: string): void;
   /** Shows a web page over the app, in the browser's custom tab. */
   openInApp(url: string): void;
+  /** Hands a vault's file to the app that views its kind. */
+  openFile(path: string): Promise<FileOpen>;
   /** Hands the downloaded update to the installer, or says why not. */
   installUpdate(): Promise<UpdateInstall>;
   /** Whether vaults may live in the phone's shared storage. */
@@ -82,11 +87,11 @@ function connect(port: AndroidPort): AndroidBridge {
   });
   const tell = (method: string, ...args: unknown[]) =>
     port.postMessage(JSON.stringify({ method, args }));
-  const ask = <T>(method: string) =>
+  const ask = <T>(method: string, ...args: unknown[]) =>
     new Promise<T>((resolve) => {
       lastId += 1;
       waiting.set(lastId, (result) => resolve(result as T));
-      port.postMessage(JSON.stringify({ method, args: [], id: lastId }));
+      port.postMessage(JSON.stringify({ method, args, id: lastId }));
     });
   return {
     insets: () => ask("insets"),
@@ -96,6 +101,7 @@ function connect(port: AndroidPort): AndroidBridge {
     printPage: (html, jobName, geometry) =>
       tell("printPage", html, jobName, geometry),
     openInApp: (url) => tell("openInApp", url),
+    openFile: (path) => ask("openFile", path),
     installUpdate: () => ask("installUpdate"),
     hasAllFilesAccess: () => ask("hasAllFilesAccess"),
     askAllFilesAccess: () => tell("askAllFilesAccess"),

@@ -8,9 +8,11 @@ vi.mock("@/lib/platform", async (importOriginal) => ({
 import { canOpenResolvedSource } from "./media-file-node";
 
 describe("canOpenResolvedSource on a phone", () => {
-  it("opens web links only, since phones have no desktop openers", () => {
-    expect(canOpenResolvedSource({ kind: "remote" } as never)).toBe(true);
-    for (const kind of ["vault", "local", "blob", "data", "unknown"]) {
+  it("opens web links and files on the phone", () => {
+    for (const kind of ["remote", "vault", "local"]) {
+      expect(canOpenResolvedSource({ kind } as never)).toBe(true);
+    }
+    for (const kind of ["blob", "data", "unknown"]) {
       expect(canOpenResolvedSource({ kind } as never)).toBe(false);
     }
   });

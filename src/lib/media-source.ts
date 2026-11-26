@@ -107,12 +107,25 @@ function resolveVaultAttachmentPath(
     /\/+$/,
     "",
   );
-  const attachmentPath = normalizePathSlashes(normalizedSource).replace(
-    /^\/+/,
-    "",
-  );
+  const attachmentPath = normalizePathSlashes(
+    decodePercentEscapes(normalizedSource),
+  ).replace(/^\/+/, "");
 
   return `${vaultRoot}/${attachmentPath}`;
+}
+
+/**
+ * `My%20shot.png` as `My shot.png`, as other apps write paths. A `%` that
+ * isn't an escape stays, like the Rust side reads attachment links.
+ */
+function decodePercentEscapes(path: string): string {
+  return path.replace(/(%[0-9a-f]{2})+/gi, (escapes) => {
+    try {
+      return decodeURIComponent(escapes);
+    } catch {
+      return escapes;
+    }
+  });
 }
 
 function pathFromFileUrl(source: string): string | null {

@@ -2,6 +2,7 @@ import {
   encodeShardLinkPath,
   relativePath,
 } from "@/lib/markdown-shard-links";
+import { errorText } from "@/lib/utils";
 
 import { importerFor } from "./registry";
 import {
@@ -163,7 +164,7 @@ function decode(target: string) {
 /** The people-facing message for an error thrown while importing a file. */
 function describeError(error: unknown) {
   if (error instanceof ImportError) return error.message;
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorText(error);
   return message || "Something went wrong reading this file.";
 }
 

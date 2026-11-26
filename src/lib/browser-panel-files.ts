@@ -1,4 +1,5 @@
 import { useUIStore } from "@/store/ui";
+import { fileName } from "@/lib/drawing-files";
 
 /**
  * Files a webview shows as a page: documents, pictures, text, sound, video.
@@ -31,7 +32,7 @@ const BROWSER_PANEL_EXTENSIONS = new Set([
 ]);
 
 function extensionOf(path: string) {
-  const name = path.split(/[\\/]/).pop() ?? "";
+  const name = fileName(path);
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }

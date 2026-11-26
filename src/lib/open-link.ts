@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { VaultChoice } from "@/components/onboarding/VaultStep";
+import type { VaultChoice } from "@/components/onboarding/create-vault";
 import {
   cancelLink,
   createFromLink,

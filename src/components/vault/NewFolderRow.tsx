@@ -13,6 +13,7 @@ import {
 import { createFolder } from "@/lib/commands/shards";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store";
+import { errorText } from "@/lib/utils";
 
 type NewFolderRowProps = {
   parent: string;
@@ -43,7 +44,7 @@ export function NewFolderRow({ parent, depth }: NewFolderRowProps) {
       close();
     } catch (error) {
       isCreatingRef.current = false;
-      toast.error(error instanceof Error ? error.message : String(error));
+      toast.error(errorText(error));
       if (!keepOpenOnError) close();
     }
   };

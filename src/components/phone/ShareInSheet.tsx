@@ -9,17 +9,20 @@ import {
   LinkIcon,
   SearchIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
 import {
+  displayNameOf,
   getVaultFileDisplayName,
+  isMarkdownPath,
   isPathWithin,
   isSamePath,
 } from "@/lib/drawing-files";
 import { folderName } from "@/lib/open-vault";
 import { cn } from "@/lib/utils";
 import { useEditorStore, useUIStore, useVaultStore, type FileTreeNode } from "@/store";
+import { reportFailure } from "./toasts";
 import { usePhoneNav, usePhoneScreen } from "./nav";
 import { openFileScreen } from "./open-file";
 import {
@@ -69,30 +72,11 @@ function foldersOf(tree: FileTreeNode[], depth = 0): { node: FileTreeNode; depth
     .flatMap((node) => [{ node, depth }, ...foldersOf(node.children ?? [], depth + 1)]);
 }
 
-/** Every shard in `tree`. */
-function shardsOf(tree: FileTreeNode[]): FileTreeNode[] {
-  return tree.flatMap((node) =>
-    node.kind === "directory"
-      ? shardsOf(node.children ?? [])
-      : isShard(node.path)
-        ? [node]
-        : [],
-  );
-}
-
-/** Whether `path` is a shard rather than a drawing or another file. */
-function isShard(path: string) {
-  return path.toLowerCase().endsWith(".md");
-}
-
 function closeShareIn() {
   usePhoneNav.getState().closeFrom("share-in");
 }
 
-/**
- * "Save to Netherstone": what another app shared, saved as a new shard in a
- * folder or added to the end of a shard, which then opens.
- */
+/** "Save to Netherstone": a share saved as a new shard or added to one. */
 export function ShareInSheet() {
   const top = usePhoneNav((s) => s.entries.at(-1));
   const open = top?.kind === "share-in" || top?.kind === "share-place";
@@ -152,11 +136,11 @@ function ShareForm({
   );
   const [shard, setShard] = useState(() => {
     const open = useEditorStore.getState().currentFilePath;
-    if (screen.kind === "file" && open && isShard(open)) return open;
+    if (screen.kind === "file" && open && isMarkdownPath(open)) return open;
     const recent = useUIStore
       .getState()
       .recentFiles.find(
-        (file) => !!vaultPath && isPathWithin(file.path, vaultPath) && isShard(file.path),
+        (file) => !!vaultPath && isPathWithin(file.path, vaultPath) && isMarkdownPath(file.path),
       );
     return recent?.path ?? null;
   });
@@ -180,9 +164,7 @@ function ShareForm({
       if (onScreen) closeShareIn();
       else await openFileScreen(saved, true);
     } catch (error) {
-      toast.error("Couldn't save what was shared", {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      reportFailure("Couldn't save what was shared", error);
     } finally {
       setSaving(false);
     }
@@ -215,7 +197,7 @@ function ShareForm({
 
   const shown = preview(content);
   const shardName = shard
-    ? getVaultFileDisplayName(shard.split(/[\\/]/).pop() ?? shard)
+    ? displayNameOf(shard)
     : null;
 
   return (
@@ -369,7 +351,7 @@ function ShardList({
   const recentFiles = useUIStore((s) => s.recentFiles);
   const shards = useMemo(() => {
     const order = new Map(recentFiles.map((file, index) => [file.path, index]));
-    return shardsOf(tree).sort(
+    return flattenFiles(tree).filter((file) => isMarkdownPath(file.path)).sort(
       (a, b) =>
         (order.get(a.path) ?? Infinity) - (order.get(b.path) ?? Infinity) ||
         a.name.localeCompare(b.name, undefined, { numeric: true }),

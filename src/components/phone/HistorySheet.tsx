@@ -62,10 +62,7 @@ function Row({
   );
 }
 
-/**
- * The open shard's history: now, then its earlier versions by day. Picking
- * one shows it on its own screen.
- */
+/** The open shard's versions by day; picking one shows it. */
 export function HistorySheet({
   filePath,
   open,

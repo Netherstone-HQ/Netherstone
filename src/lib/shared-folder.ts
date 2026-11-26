@@ -1,6 +1,6 @@
 import { toast } from "sonner";
-import { IS_ANDROID } from "@/lib/platform";
 import { backInFront } from "@/lib/back-in-front";
+import { androidBridge } from "@/lib/android-bridge";
 
 /** Sent by MainActivity.kt when the folder picker closes, saying how. */
 const FOLDER_PICKED_EVENT = "folderpicked";
@@ -8,14 +8,12 @@ const FOLDER_PICKED_EVENT = "folderpicked";
 type FolderPick = "picked" | "cancelled" | "unusable";
 
 /**
- * On Android, lets the person pick a folder in the phone's storage for a
- * vault, first asking for the access a vault there needs ("All files
- * access"). Resolves with whether a folder was picked; Rust then takes it
- * (`open_vault_dialog`), so the page never names the folder itself.
- * Elsewhere there's nothing to do first: true.
+ * On Android, asks for "All files access" and picks a folder for a vault.
+ * Resolves with whether one was picked; Rust takes it, so the page never
+ * names it. Elsewhere, true.
  */
 export async function pickSharedFolder(): Promise<boolean> {
-  const android = IS_ANDROID ? window.NetherstoneAndroid : undefined;
+  const android = androidBridge();
   if (!android) return true;
   if (!android.hasAllFilesAccess()) {
     android.askAllFilesAccess();

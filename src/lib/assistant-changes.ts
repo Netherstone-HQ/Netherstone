@@ -28,6 +28,7 @@ import { useEditorStore } from "@/store/editor";
 import { useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 const store = useAssistantStore;
 
@@ -76,10 +77,6 @@ export function usePreviewedChange(): ChatChange | null {
 /** Back to editing the open shard, the change waiting in its card. */
 export function setPreviewAside(change: ChatChange) {
   store.setState({ previewSetAside: change.id });
-}
-
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Reads the chat's changes again, as Apply, Undo or Discard left them. */

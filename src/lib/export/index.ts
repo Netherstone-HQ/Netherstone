@@ -6,8 +6,6 @@
 
 import { create } from "zustand";
 
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
-
 export type { ExportFormat } from "./model";
 
 interface ExportDialogState {
@@ -26,8 +24,4 @@ export const useExportDialogStore = create<ExportDialogState>((set) => ({
 /** Opens the export window for a shard. */
 export function openExportDialog(filePath: string) {
   useExportDialogStore.getState().open(filePath);
-}
-
-export function shardNameOf(filePath: string) {
-  return getVaultFileDisplayName(filePath.split(/[\\/]/).pop() ?? filePath);
 }

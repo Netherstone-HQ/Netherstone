@@ -2,6 +2,7 @@ import { createSlateEditor } from "platejs";
 
 import { SerializationKit } from "@/components/editor/serialization-kit";
 import { serializeMarkdownValue } from "@/lib/editor-markdown";
+import { errorText } from "@/lib/utils";
 
 import { ImportError } from "../../types";
 import { readWordPackage } from "./package";
@@ -43,7 +44,7 @@ export function serve(scope: WorkerScope) {
     } catch (error) {
       scope.postMessage({
         type: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: errorText(error),
         readable: error instanceof ImportError,
       });
     }

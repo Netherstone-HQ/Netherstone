@@ -10,10 +10,7 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/**
- * The body of a command that takes bytes. Android's webview can't send raw
- * bytes to the app, so there they go as base64.
- */
+/** A command's bytes body: base64 on Android, whose webview can't send raw bytes. */
 export function bytesBody(bytes: Uint8Array): Uint8Array | { base64: string } {
   return IS_ANDROID ? { base64: toBase64(bytes) } : bytes;
 }

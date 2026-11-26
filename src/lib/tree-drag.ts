@@ -1,4 +1,4 @@
-import { isPathWithin, isSamePath } from "@/lib/drawing-files";
+import { getParentFolder, isPathWithin, isSamePath } from "@/lib/drawing-files";
 
 /** react-dnd item type for a shard or folder dragged around the sidebar tree. */
 export const TREE_DRAG_TYPE = "vault-entry";
@@ -10,12 +10,6 @@ export interface TreeDragItem {
   path: string;
   /** Moves the item into `folderPath`, the same way the Move dialog does. */
   moveTo: (folderPath: string) => Promise<void>;
-}
-
-export function getParentFolder(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/, "");
-  const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  return slash === -1 ? "" : trimmed.slice(0, slash);
 }
 
 /**

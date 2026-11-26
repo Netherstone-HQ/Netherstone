@@ -19,9 +19,9 @@ import {
 } from "@/lib/commands/shards";
 import {
   buildDrawingImageTag,
+  displayNameOf,
   getDrawingLinkNeedles,
   getLinkedDrawingSources,
-  getVaultFileDisplayName,
   relinkDrawingImages,
   replaceLinkedDrawingImages,
   resolveVaultRelativePath,
@@ -39,10 +39,6 @@ export interface ExportableScene {
   elements: ExportElements;
   appState: Partial<AppState>;
   files: BinaryFiles;
-}
-
-function getFileName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
 /** Parses a `.excalidraw` file into restored scene data. */
@@ -164,7 +160,7 @@ async function exportDrawingImages(
 
 /** Alt text for an image exported from `drawingPath`. */
 export function getDrawingAltText(drawingPath: string) {
-  return getVaultFileDisplayName(getFileName(drawingPath));
+  return displayNameOf(drawingPath);
 }
 
 /**

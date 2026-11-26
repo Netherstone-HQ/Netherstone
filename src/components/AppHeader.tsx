@@ -1,6 +1,6 @@
 import { Separator } from "@/components/ui/separator";
 import { closeEditorFile, saveEditorFile } from "@/lib/open-editor-file";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf } from "@/lib/drawing-files";
 import { useEditorStore } from "@/store";
 import { useHistoryStore } from "@/store/history";
 import { AutosaveIndicator } from "./editor/AutosaveIndicator";
@@ -21,7 +21,7 @@ const closeShard = () => void closeEditorFile();
 function DeletedShardName({ path }: { path: string }) {
   return (
     <span className="min-w-0 truncate px-1.5 font-medium text-ui">
-      {getVaultFileDisplayName(path.split(/[\\/]/).pop() ?? path)}
+      {displayNameOf(path)}
     </span>
   );
 }

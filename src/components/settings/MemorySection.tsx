@@ -23,9 +23,10 @@ import {
   editMemory,
   getMemory,
 } from "@/lib/commands/assistant";
+import { errorText } from "@/lib/utils";
 
 function showError(error: unknown) {
-  toast.error(error instanceof Error ? error.message : String(error));
+  toast.error(errorText(error));
 }
 
 function DeleteAllMemoryDialog({

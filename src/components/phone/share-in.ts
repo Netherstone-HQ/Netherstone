@@ -1,21 +1,16 @@
-import { KEYS, createSlateEditor, type TElement } from "platejs";
+import { KEYS, type TElement } from "platejs";
 import { create } from "zustand";
-import { managedMediaNode } from "@/components/editor/lib/media-insert";
-import { SerializationKit } from "@/components/editor/serialization-kit";
+import { managedMediaNode, mediaNodeTypeForMime } from "@/components/editor/lib/media-insert";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { notifyAttachmentSyncStatus } from "@/lib/attachment-sync-status";
 import type { PersistedAttachment } from "@/lib/commands/attachments";
 import { saveSharedFile, takeShared, type Shared, type SharedFile } from "@/lib/commands/incoming";
-import {
-  appendMarkdownToFile,
-  createShardFile,
-  renameFile,
-} from "@/lib/commands/shards";
-import { serializeEditorMarkdown } from "@/lib/editor-markdown";
+import { appendMarkdownToFile } from "@/lib/commands/shards";
 import { openEditorFile } from "@/lib/open-editor-file";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
-import { freeTitle, today } from "./create";
+import { siteOf } from "@/lib/open-web-link";
+import { createTitledShard, markdownOf, today } from "./create";
 import { usePhoneNav } from "./nav";
 
 /** Sent by Android's MainActivity when another app shared something with this one. */
@@ -45,10 +40,7 @@ export const useShareIn = create<{ shared: Shared | null; id: number }>(() => ({
   id: 0,
 }));
 
-/**
- * Takes the latest share from another app and shows it in its sheet, in
- * place of one still showing.
- */
+/** Shows the latest share in its sheet, replacing one still showing. */
 async function takeShareIn() {
   const shared = await takeShared();
   if (!shared) return;
@@ -57,10 +49,7 @@ async function takeShareIn() {
   if (!nav.entries.some((entry) => entry.kind === "share-in")) nav.push({ kind: "share-in" });
 }
 
-/**
- * Shows what other apps share with Netherstone: what came while the app
- * started, then each new share.
- */
+/** Shows what other apps share: what came at start, then each new share. */
 export function followShares() {
   const take = () =>
     void takeShareIn().catch((error) =>
@@ -73,20 +62,7 @@ export function followShares() {
 
 const URL_PATTERN = /https?:\/\/[^\s<>"]+/g;
 
-/** The site of `url` without "www.", or the URL when it has none. */
-function siteOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-/**
- * What a share is. Text holding one link and at most a line besides, as
- * browsers and most apps share a page, is that link, called by the share's
- * subject, that line or its site. Any other text is text.
- */
+/** One link with at most a line of text, as browsers share a page, is a link. */
 export function shareContent(shared: Shared): ShareContent {
   const text = shared.text?.trim() ?? "";
   const urls = text.match(URL_PATTERN) ?? [];
@@ -111,10 +87,7 @@ function asTitle(text: string) {
   return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
-/**
- * The title of a new shard made from `content`: the link's title, the
- * text's first line, the one file's name, or "Shared, 24 Nov".
- */
+/** The link's title, the first line, the one file's name, or "Shared, 24 Nov". */
 export function shareTitle(content: ShareContent) {
   const fileStem = (name: string) => name.replace(/\.[^.]+$/, "");
   const from =
@@ -122,14 +95,6 @@ export function shareTitle(content: ShareContent) {
     content.text?.split("\n")[0] ??
     (content.files.length === 1 ? fileStem(content.files[0].name) : "");
   return asTitle(from) || `Shared, ${today()}`;
-}
-
-/** The block a shared file of `type` becomes. */
-function mediaKind(type: string) {
-  if (type.startsWith("image/")) return KEYS.img;
-  if (type.startsWith("video/")) return KEYS.video;
-  if (type.startsWith("audio/")) return KEYS.audio;
-  return KEYS.file;
 }
 
 /** The blocks `content` becomes, its files copied into the vault. */
@@ -154,14 +119,9 @@ async function blocksOf(content: ShareContent, vaultPath: string) {
   for (const file of content.files) {
     const persisted = await saveSharedFile(file.path, vaultPath);
     saved.push(persisted);
-    blocks.push(managedMediaNode(persisted, mediaKind(file.type), file.name));
+    blocks.push(managedMediaNode(persisted, mediaNodeTypeForMime(file.type), file.name));
   }
   return { blocks, saved };
-}
-
-function markdownOf(blocks: TElement[], filePath: string) {
-  const editor = createSlateEditor({ plugins: SerializationKit, value: blocks });
-  return serializeEditorMarkdown(editor, { filePath });
 }
 
 /** Where a share goes: a new shard in a folder, or the end of a shard. */
@@ -169,10 +129,7 @@ export type ShareTarget =
   | { kind: "new"; folder: string }
   | { kind: "add"; shard: string };
 
-/**
- * Saves `content` where `target` says and returns the shard it's in. Its
- * files are copied into the vault first.
- */
+/** Saves `content` where `target` says and returns the shard it's in. */
 export async function saveShare(
   content: ShareContent,
   target: ShareTarget,
@@ -181,12 +138,7 @@ export async function saveShare(
   const { blocks, saved } = await blocksOf(content, vaultPath);
   let shard: string;
   if (target.kind === "new") {
-    const title = await freeTitle(target.folder, shareTitle(content));
-    shard = await renameFile(await createShardFile(target.folder), title);
-    await appendMarkdownToFile(
-      shard,
-      markdownOf([{ type: KEYS.h1, children: [{ text: title }] }, ...blocks], shard),
-    );
+    shard = await createTitledShard(target.folder, shareTitle(content), blocks);
   } else {
     shard = target.shard;
     // The open shard's edits are saved first, so they're kept.

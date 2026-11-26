@@ -9,13 +9,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MoveFileDialog } from "@/components/vault/MoveFileDialog";
 import { renameItem } from "@/components/vault/item-actions";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { useVaultStore, type FileTreeNode } from "@/store";
+import { errorText } from "@/lib/utils";
 import { closeActions, moveAll, runTrash } from "./item-batch";
 import { NameSheet } from "./NameSheet";
 import { closer, useLast } from "./nav";
 import { RowMenuSheet } from "./RowMenuSheet";
-import { findNode } from "./vault-tree";
+import { findNode, findNodes } from "./vault-tree";
 
 function displayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -24,7 +25,7 @@ function displayName(node: FileTreeNode) {
 /** "“Overview”", or "3 items" for several. */
 function describe(paths: string[]) {
   if (paths.length !== 1) return `${paths.length} items`;
-  return `“${getVaultFileDisplayName(paths[0].split(/[\\/]/).pop() ?? paths[0])}”`;
+  return `“${displayNameOf(paths[0])}”`;
 }
 
 /** The menu, sheets and dialogs that rows and select mode open. */
@@ -36,14 +37,10 @@ export function RowActions() {
   const move = useLast("move");
   const trash = useLast("confirm-trash");
 
-  const nodesOf = (paths: string[]) =>
-    paths
-      .map((path) => findNode(fileTree, path))
-      .filter((node): node is FileTreeNode => node !== null);
   const renaming = rename.overlay
     ? findNode(fileTree, rename.overlay.path)
     : null;
-  const moving = nodesOf(move.overlay?.paths ?? []);
+  const moving = findNodes(fileTree, move.overlay?.paths ?? []);
   const trashing = trash.overlay?.paths ?? [];
 
   return (
@@ -71,7 +68,7 @@ export function RowActions() {
               closeActions();
               return null;
             } catch (error) {
-              return error instanceof Error ? error.message : String(error);
+              return errorText(error);
             }
           }}
         />

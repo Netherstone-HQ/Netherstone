@@ -13,7 +13,6 @@ import {
   ShareIcon,
   TrashIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   BottomSheet,
   BottomSheetItem,
@@ -27,14 +26,15 @@ import {
   useShardLinks,
 } from "@/components/sidebar/right-sidebar/useShardInfo";
 import { useVaultItem } from "@/components/vault/useVaultItem";
-import { openFileHistory } from "@/lib/open-vault-file";
 import type { ExportFormat } from "@/lib/export";
-import { isSamePath } from "@/lib/drawing-files";
+import { fileName, isSamePath } from "@/lib/drawing-files";
 import { shareExport } from "@/lib/export/share";
 import { useEditorStore, useVaultStore } from "@/store";
+import { errorText } from "@/lib/utils";
 import { trashAll } from "./item-batch";
 import { NameSheet } from "./NameSheet";
-import { usePhoneNav } from "./nav";
+import { reportFailure } from "./toasts";
+import { openHistoryScreen } from "./open-file";
 
 type Part = "menu" | "outline" | "links" | "rename" | "export";
 
@@ -63,9 +63,7 @@ async function share(path: string, name: string, format: ExportFormat) {
       format,
     );
   } catch (error) {
-    toast.error(`Couldn't export ${name}`, {
-      description: error instanceof Error ? error.message : String(error),
-    });
+    reportFailure(`Couldn't export ${name}`, error);
   }
 }
 
@@ -80,11 +78,10 @@ export function ShardMenuSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const [part, setPart] = useState<Part>("menu");
-  const name = path.split(/[\\/]/).pop() ?? path;
+  const name = fileName(path);
   const item = useVaultItem({ name, path, kind: "file" });
   const links = useShardLinks(open);
   const indexed = useIndexedShard(open);
-  const replace = usePhoneNav((s) => s.replace);
 
   const close = (next: boolean) => {
     if (!next) setPart("menu");
@@ -113,12 +110,7 @@ export function ShardMenuSheet({
         </BottomSheetItem>
         <BottomSheetItem
           icon={<ClockIcon />}
-          onClick={() => {
-            replace({ kind: "history" });
-            void openFileHistory(path).catch((error: unknown) =>
-              console.error("[Netherstone] Couldn't show history:", error),
-            );
-          }}
+          onClick={() => openHistoryScreen(path, true)}
         >
           Show history
         </BottomSheetItem>
@@ -214,7 +206,7 @@ export function ShardMenuSheet({
             close(false);
             return null;
           } catch (error) {
-            return error instanceof Error ? error.message : String(error);
+            return errorText(error);
           }
         }}
       />

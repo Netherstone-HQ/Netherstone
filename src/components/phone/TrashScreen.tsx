@@ -1,6 +1,5 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ComponentType, type ReactNode } from "react";
 import {
-  CheckIcon,
   FileTextIcon,
   FolderIcon,
   HistoryIcon,
@@ -29,11 +28,14 @@ import { useVaultStore } from "@/store";
 import { closer, useLast, usePhoneNav, useSelecting } from "./nav";
 import {
   PhoneBackButton,
+  PhoneBottomBar,
   PhoneFrame,
   PhoneSection,
+  PhoneTextButton,
   PhoneTitle,
   PhoneTopBar,
 } from "./parts";
+import { SelectBox } from "./rows";
 import { BarButton, SelectTopBar } from "./SelectBars";
 import { usePhoneSelection } from "./selection";
 import {
@@ -57,25 +59,30 @@ function itemPlace(item: TrashedItem, vault: string) {
     : folderOf(item.from, vault);
 }
 
+type ItemKind = "history" | "folder" | "drawing" | "shard";
+
+function kindOf(item: TrashedItem): ItemKind {
+  if (item.historyOf !== null) return "history";
+  if (item.isFolder) return "folder";
+  return isDrawingPath(item.name) ? "drawing" : "shard";
+}
+
+const ICONS: Record<ItemKind, ComponentType<{ className?: string }>> = {
+  history: HistoryIcon,
+  folder: FolderIcon,
+  drawing: DrawingIcon,
+  shard: FileTextIcon,
+};
+
 function ItemIcon({ item }: { item: TrashedItem }) {
-  const Icon =
-    item.historyOf !== null
-      ? HistoryIcon
-      : item.isFolder
-        ? FolderIcon
-        : isDrawingPath(item.name)
-          ? DrawingIcon
-          : FileTextIcon;
+  const Icon = ICONS[kindOf(item)];
   return <Icon className="size-5 shrink-0 text-muted-foreground" />;
 }
 
 /** "this shard", "this drawing", "this folder" or "3 items". */
 function whatLabel(items: TrashedItem[]) {
   if (items.length !== 1) return itemsLabel(items.length);
-  const [item] = items;
-  if (item.historyOf !== null) return "this history";
-  if (item.isFolder) return "this folder";
-  return isDrawingPath(item.name) ? "this drawing" : "this shard";
+  return `this ${kindOf(items[0])}`;
 }
 
 function itemsLabel(count: number) {
@@ -87,11 +94,7 @@ function stopSelecting() {
   usePhoneNav.getState().closeFrom("select");
 }
 
-/**
- * What was deleted from the open vault, and the histories of vaults that
- * are gone: tap an item to restore it or delete it for good, select several
- * to do that together, or empty the whole trash.
- */
+/** What was deleted from this vault, and the histories of gone vaults. */
 export function TrashScreen() {
   const items = useAppTrash((s) => s.items);
   const loaded = useAppTrash((s) => s.loaded);
@@ -128,13 +131,9 @@ export function TrashScreen() {
           <PhoneBackButton />
           <PhoneTitle>Trash</PhoneTitle>
           {items.length > 0 ? (
-            <button
-              type="button"
-              className="h-12 shrink-0 rounded-full px-3 font-medium outline-none active:bg-accent"
-              onClick={() => push({ kind: "select" })}
-            >
+            <PhoneTextButton onClick={() => push({ kind: "select" })}>
               Select
-            </button>
+            </PhoneTextButton>
           ) : null}
         </PhoneTopBar>
       )}
@@ -167,18 +166,16 @@ export function TrashScreen() {
           {selecting ? (
             <TrashSelectBar />
           ) : items.length > 0 ? (
-            <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
-              <div className="flex px-4 py-3">
-                <button
-                  type="button"
-                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border border-input font-medium outline-none active:bg-accent [&_svg]:size-5"
-                  onClick={() => push({ kind: "confirm-empty-trash" })}
-                >
-                  <Trash2Icon />
-                  Empty Trash
-                </button>
-              </div>
-            </div>
+            <PhoneBottomBar className="px-4 py-3">
+              <button
+                type="button"
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[10px] border border-input font-medium outline-none active:bg-accent [&_svg]:size-5"
+                onClick={() => push({ kind: "confirm-empty-trash" })}
+              >
+                <Trash2Icon />
+                Empty Trash
+              </button>
+            </PhoneBottomBar>
           ) : null}
         </>
       )}
@@ -209,7 +206,7 @@ function TrashRow({ item, vault }: { item: TrashedItem; vault: string }) {
       }
     >
       <span className="flex w-full min-w-0 items-center gap-3">
-        {selecting ? <CheckBox checked={checked} /> : <ItemIcon item={item} />}
+        {selecting ? <SelectBox checked={checked} /> : <ItemIcon item={item} />}
         <span className="min-w-0 flex-1 truncate font-medium">
           {itemName(item)}
         </span>
@@ -223,47 +220,29 @@ function TrashRow({ item, vault }: { item: TrashedItem; vault: string }) {
   );
 }
 
-function CheckBox({ checked }: { checked: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-md border-[1.5px]",
-        checked
-          ? "border-brand bg-brand text-background"
-          : "border-muted-foreground",
-      )}
-    >
-      {checked ? <CheckIcon className="size-3.5" strokeWidth={3} /> : null}
-    </span>
-  );
-}
-
 /** The bottom bar while selecting: Restore and Delete forever. */
 function TrashSelectBar() {
   const ids = usePhoneSelection((s) => s.paths);
   const push = usePhoneNav((s) => s.push);
   const none = ids.length === 0;
   return (
-    <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
-      <div className="flex h-20 items-center justify-around">
-        <BarButton
-          label="Restore"
-          icon={<RotateCcwIcon />}
-          disabled={none}
-          onClick={() => {
-            void restoreTrashed(ids);
-            stopSelecting();
-          }}
-        />
-        <BarButton
-          label="Delete forever"
-          icon={<Trash2Icon />}
-          disabled={none}
-          onClick={() => push({ kind: "confirm-delete-forever", ids })}
-        />
-      </div>
-    </div>
+    <PhoneBottomBar className="h-20 items-center justify-around">
+      <BarButton
+        label="Restore"
+        icon={<RotateCcwIcon />}
+        disabled={none}
+        onClick={() => {
+          void restoreTrashed(ids);
+          stopSelecting();
+        }}
+      />
+      <BarButton
+        label="Delete forever"
+        icon={<Trash2Icon />}
+        disabled={none}
+        onClick={() => push({ kind: "confirm-delete-forever", ids })}
+      />
+    </PhoneBottomBar>
   );
 }
 

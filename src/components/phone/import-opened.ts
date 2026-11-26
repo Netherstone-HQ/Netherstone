@@ -5,23 +5,16 @@ import { runImport, type ImportReport } from "@/lib/import/engine";
 import { waitingText } from "@/lib/launch";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
+import { fileName } from "@/lib/drawing-files";
 import { usePhoneNav } from "./nav";
 import { openFileScreen } from "./open-file";
-import { UNDO_TOAST_MS } from "./trash";
+import { reportFailure, UNDO_TOAST_MS } from "./toasts";
 
 const IMPORT_TOAST_ID = "imported";
 
-function nameOf(path: string) {
-  return path.split(/[\\/]/).pop() ?? path;
-}
-
-/**
- * On a phone, files opened with Netherstone from another app (Open with)
- * are imported into the vault's top folder and the first one opens, with
- * Undo in a toast. There's no import window to show on a phone.
- */
+/** Imports files opened with Netherstone (Open with) and opens the first, with Undo. */
 export async function importOpened(vaultPath: string, paths: string[]) {
-  const names = waitingText(paths.map(nameOf));
+  const names = waitingText(paths.map(fileName));
   const since = Math.floor(Date.now() / 1000);
   let report: ImportReport;
   try {
@@ -31,9 +24,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
       io: appImportIO(vaultPath),
     });
   } catch (error) {
-    toast.error(`Couldn't import ${names}`, {
-      description: error instanceof Error ? error.message : String(error),
-    });
+    reportFailure(`Couldn't import ${names}`, error);
     return;
   }
 
@@ -51,9 +42,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
           since,
         );
       } catch (error) {
-        toast.error("Couldn't undo the import", {
-          description: error instanceof Error ? error.message : String(error),
-        });
+        reportFailure("Couldn't undo the import", error);
         return;
       }
       const shown = useEditorStore.getState().currentFilePath;
@@ -61,7 +50,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
         usePhoneNav.getState().back();
       await refreshVault(vaultPath);
     };
-    toast(`Imported ${waitingText(report.created.map((shard) => nameOf(shard.source)))}`, {
+    toast(`Imported ${waitingText(report.created.map((shard) => fileName(shard.source)))}`, {
       id: IMPORT_TOAST_ID,
       duration: UNDO_TOAST_MS,
       action: { label: "Undo", onClick: () => void undo() },
@@ -74,7 +63,7 @@ export async function importOpened(vaultPath: string, paths: string[]) {
   ].filter(Boolean);
   if (failed.length || !first) {
     toast.error(
-      `Couldn't import ${failed.length ? waitingText(failed.map(nameOf)) : names}`,
+      `Couldn't import ${failed.length ? waitingText(failed.map(fileName)) : names}`,
       { description: report.failed[0]?.error },
     );
   }

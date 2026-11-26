@@ -9,7 +9,7 @@ import {
   useVaultItem,
   type VaultItemOptions,
 } from "@/components/vault/useVaultItem";
-import { toVaultRelativePath } from "@/lib/drawing-files";
+import { fileName, toVaultRelativePath } from "@/lib/drawing-files";
 import { useUIStore, useVaultStore } from "@/store";
 
 function Slash() {
@@ -40,7 +40,7 @@ export function FileBreadcrumb({
 
   if (!vaultPath) return null;
 
-  const vaultName = vaultPath.split(/[\\/]/).pop() ?? vaultPath;
+  const vaultName = fileName(vaultPath);
 
   return (
     <nav

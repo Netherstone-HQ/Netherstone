@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import { keepVersion, type KeptVersion } from "@/lib/outside-changes";
-import { fileName } from "@/lib/sync";
 import { useEditorStore } from "@/store/editor";
+import { fileName } from "@/lib/drawing-files";
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 

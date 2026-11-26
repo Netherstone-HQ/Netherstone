@@ -1,25 +1,21 @@
 import { toast } from "sonner";
 import { create } from "zustand";
 
-import {
-  getVaultFileDisplayName,
-  resolveVaultRelativePath,
-} from "@/lib/drawing-files";
+import { displayNameOf, resolveVaultRelativePath } from "@/lib/drawing-files";
 import { errorMessage } from "@/lib/github-account";
 import {
   type BackupSummary,
   type ConflictChoice,
   connectBackup,
-  fileName,
   getVaultSyncRecord,
   isOfflineError,
   listBackups,
   planVaultSync,
   resolveConflict,
   type SyncConflict,
+  syncNow,
   type SyncPlanSummary,
   type SyncReport,
-  syncNow,
   turnOffBackup,
   turnOnBackup,
   type VaultSyncRecord,
@@ -108,7 +104,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     if (conflicts.length === 0) return;
     toast.warning(
       conflicts.length === 1
-        ? `${getVaultFileDisplayName(fileName(conflicts[0].path))} changed on two devices`
+        ? `${displayNameOf(conflicts[0].path)} changed on two devices`
         : `${conflicts.length} files changed on two devices`,
       {
         duration: 10_000,

@@ -6,11 +6,7 @@ import { upsertAstCache } from "@/lib/editor-ast-cache";
 import { fileExists } from "@/lib/commands/attachments";
 import { saveDrawingFile } from "@/lib/commands/drawings";
 import { saveMarkdownFile } from "@/lib/commands/shards";
-import {
-  finishDrawingSession,
-  getVaultFileDisplayName,
-  isDrawingPath,
-} from "@/lib/drawing-files";
+import { displayNameOf, finishDrawingSession, isDrawingPath } from "@/lib/drawing-files";
 import {
   parseDrawing,
   refreshLinkedDrawingImages,
@@ -27,12 +23,9 @@ import { useEditorStore } from "@/store/editor";
 import { type HistoryPlace, useHistoryStore } from "@/store/history";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 type Version = { blob: string; time: number };
-
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Puts `version` back in the open shard or drawing and shows it as it is
@@ -219,7 +212,7 @@ export async function saveVersionCopy(filePath: string, content: string) {
     if (isDrawingPath(filePath)) await saveDrawingFile(path, content);
     else await saveMarkdownFile(path, content);
     toast.success(
-      `Saved ${getVaultFileDisplayName(path.split(/[\\/]/).pop() ?? path)}`,
+      `Saved ${displayNameOf(path)}`,
     );
   } catch (error) {
     console.error("[Netherstone] Couldn't save a copy of a version:", error);

@@ -1,31 +1,28 @@
 #!/usr/bin/env node
-// Drives the shard editor on an Android emulator the way a person would, with
-// the system's own keyboard: types into a new shard, uses the bar above the
-// keyboard and its style panel, the / menu, the long-press block menu and a
-// link, and checks each change on disk. Works on a copy of the sample vault.
+// Drives the shard editor on an Android emulator with the system keyboard,
+// checking each change on disk. Taps go through `adb shell input`, like a
+// finger. A failed step doesn't stop the steps that don't need it.
 //
 //   APK=app.apk [VAULT=path/to/sample-vault] node scripts/android-editor-check.mjs out
 //
-// Without VAULT (on CI, which has no copy of the sample vault) it writes the
-// shards of it that the check opens.
 // The APK must be built with ORG_GRADLE_PROJECT_netherstoneInspectable=true.
-// The page is read with Playwright's Android support. Taps and long presses
-// go through `adb shell input`, like a finger, so the keyboard and long-press
-// behave as on a phone; where to tap is found once by tapping and reading
-// back where the page saw it. Every wait has a limit. When a step fails, the
-// output folder gets the page and the whole screen as pictures, the page's
-// text, where focus and the caret were, and the device log. A failed step
-// doesn't stop the check: the steps that don't build on it still run, so one
-// run shows every failure. The check fails if any step did.
+// Without VAULT it writes the sample vault's shards the check opens.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { _android as android, expect as baseExpect } from "@playwright/test";
-import { closeNotResponding as closeNotRespondingDialog, startAndAttach } from "./android-webview.mjs";
+import {
+  ACTIVITY,
+  adb,
+  closeNotResponding as closeNotRespondingDialog,
+  connectDevice,
+  expect,
+  log,
+  PACKAGE,
+  startAndAttach,
+  WAIT_LIMIT_MS,
+  within,
+} from "./android-webview.mjs";
 
-const PACKAGE = "tech.blueblood.netherstone";
-const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-editor-check";
 const APK = process.env.APK;
 const LINKS = JSON.parse(fs.readFileSync("src/data/links.json", "utf8"));
@@ -41,40 +38,12 @@ const SHARD = "touch-check";
 // The buttons of Android's own permission prompt, by what they say.
 const DENY = /^Don.t allow$/;
 const ALLOW = /^While using the app$/;
-
-// How long one wait may take. Far above any step on a CI emulator, so only a
-// stuck step reaches it.
-const WAIT_LIMIT_MS = Number(process.env.WAIT_LIMIT_MS ?? 60_000);
 // A press this long is a long press on any Android version (the system's
 // own threshold is 400-500 ms).
 const LONG_PRESS_MS = 1000;
 
 if (!APK) throw new Error("Set APK to the APK to install");
 fs.mkdirSync(OUT, { recursive: true });
-// configure returns a new expect; the imported one keeps its 5 s limit.
-const expect = baseExpect.configure({ timeout: WAIT_LIMIT_MS });
-
-const log = (...parts) => console.log(new Date().toISOString().slice(11, 23), ...parts);
-function adb(...args) {
-  try {
-    return execFileSync("adb", args, { encoding: "utf8", maxBuffer: 64 << 20, timeout: WAIT_LIMIT_MS }).trim();
-  } catch (error) {
-    throw new Error(`adb ${args.join(" ")} failed: ${String(error.stderr || error.message).trim()}`);
-  }
-}
-
-/** Waits for `promise`, failing once the wait limit has passed. */
-async function within(promise, what) {
-  let timer;
-  const limit = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Waited ${WAIT_LIMIT_MS} ms for ${what}`)), WAIT_LIMIT_MS);
-  });
-  try {
-    return await Promise.race([promise, limit]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 /** The sample vault's shards that this check opens, in a new folder. */
 function smallVault() {
@@ -95,12 +64,7 @@ function smallVault() {
 
 // ---- The app ----
 
-const [device] = await android.devices({ omitDriverInstall: true });
-if (!device) throw new Error("No Android device or emulator is connected");
-device.setDefaultTimeout(WAIT_LIMIT_MS);
-
-const shell = async (command) =>
-  (await within(device.shell(command), `adb shell ${command}`)).toString().trim();
+const { device, shell } = await connectDevice();
 /** Runs a command as root (the emulator image allows it). */
 const su = (command) => shell(`su 0 sh -c "${command.replaceAll('"', '\\"')}"`);
 const readAppFile = (file) => su(`cat '${file}'`);
@@ -116,7 +80,7 @@ async function launch() {
     await shell(`am force-stop ${PACKAGE}`);
     await within(closed, "the old WebView to close");
   }
-  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
+  ({ webView, page } = await startAndAttach({ device, shell }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
   // What the app reports as going wrong, such as a file it couldn't read,
@@ -133,10 +97,7 @@ async function appInFront() {
   return line.match(/ u0 ([\w.]+)\//)?.[1] ?? "";
 }
 
-/**
- * Waits until the page's storage on disk holds `text`. Android's webview
- * writes it a few seconds late, so a restart before then loses it.
- */
+/** Waits until the page's storage on disk holds `text`; the webview writes it late. */
 async function storedOnDisk(text) {
   const folder = `/data/data/${PACKAGE}/app_webview/Default/Local Storage/leveldb`;
   const count = () => su(`cat '${folder}'/* | grep -c -a '${text}' || true`);
@@ -153,11 +114,7 @@ async function bringAppBack() {
   await poll(appInFront, "the app back in front").toBe(PACKAGE);
 }
 
-/**
- * Finds where the page sits on screen: taps `target` where it would be if
- * the page filled the screen, reads where the page saw the touch, and works
- * out the offset from that. `target` is plain text, so the tap does nothing.
- */
+/** Finds where the page sits on screen by tapping plain text `target` and reading where the page saw it. */
 async function calibrate(target) {
   const scale = await page.evaluate(() => window.devicePixelRatio);
   // The listener is in place before the tap: a tap that lands first is
@@ -196,10 +153,7 @@ async function calibrate(target) {
 /** Closes an "isn't responding" dialog over the app; see android-webview.mjs. */
 const closeNotResponding = () => closeNotRespondingDialog(shell);
 
-/**
- * An Android key such as Back or Home. A dialog over the app that took it
- * is closed and the key pressed again.
- */
+/** Presses an Android key, again after closing a dialog that took it. */
 async function pressKey(key) {
   await closeNotResponding();
   await shell(`input keyevent ${key}`);
@@ -231,11 +185,7 @@ async function longPress(locator) {
   await shell(`input swipe ${x} ${y} ${x} ${y} ${LONG_PRESS_MS}`);
 }
 
-/**
- * Taps a button of a system window (not the app's page) by what it says,
- * found in the screen's layout as Android describes it. `uiautomator dump`
- * can be killed after writing its file, so only the file is read.
- */
+/** Taps a system window's button by its text, read from the `uiautomator dump` file. */
 async function tapSystemButton(label) {
   const layout = "/data/local/tmp/layout.xml";
   const boundsOf = async () => {
@@ -252,13 +202,7 @@ async function tapSystemButton(label) {
   await shell(`input tap ${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}`);
 }
 
-/**
- * Text typed on the keyboard, one key at a time, each sent on its own as a
- * finger would. One `input text` for the whole text sends the keys within
- * a millisecond or so, faster than any typing: right after a / menu turned
- * the line into a quote, 2 lines in 25 then came out with two letters
- * swapped ("quotedl ine"), and none in 25 typed key by key.
- */
+/** Types `text` key by key: one `input text` is fast enough to swap letters after a / menu. */
 async function typeKeys(text) {
   for (const key of text) {
     await shell(key === " " ? "input keyevent KEYCODE_SPACE" : `input text '${key}'`);
@@ -273,10 +217,7 @@ const keyboardInset = () =>
 // ---- Steps ----
 
 const steps = [];
-/**
- * Runs a step. Steps of the setup stop the check when they fail; any other
- * step is skipped when a step it `needs` didn't pass.
- */
+/** Runs a step. A failed setup step stops the check; others skip when a step they `need` failed. */
 async function step(name, run, { needs = [], setup = false } = {}) {
   const label = `${String(steps.length + 1).padStart(2, "0")}-${name}`;
   const missing = needs.filter((need) => !steps.some((s) => s.name === need && s.ok));
@@ -343,10 +284,7 @@ async function focusState() {
   return { keyboardShown, ...inPage };
 }
 
-/**
- * After a failed step: closes whatever system window, menu or sheet it left
- * open.
- */
+/** After a failed step, closes what it left open. */
 async function recover() {
   try {
     if ((await appInFront()) !== PACKAGE) await pressKey("KEYCODE_BACK");
@@ -642,10 +580,7 @@ try {
   });
 
   await step("picture-from-phone", async () => {
-    // A picture in the phone's gallery, where the photo picker finds it:
-    // the app's icon, so it isn't the pasted picture the vault has already.
-    // A new name each run: the gallery keeps what it knew of an old file
-    // by its name, its size too.
+    // A new name each run: the gallery remembers an old file's size by name.
     const inGallery = `/sdcard/Pictures/netherstone-check-${Date.now()}.png`;
     adb("push", GALLERY_PICTURE, inGallery);
     await shell("content call --method scan_volume --uri content://media --arg external_primary");

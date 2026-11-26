@@ -21,7 +21,8 @@ const AssistantStep = lazy(() =>
   import("./AssistantStep").then((module) => ({ default: module.AssistantStep })),
 );
 import { SyncStep } from "./SyncStep";
-import { VaultStep, type VaultChoice } from "./VaultStep";
+import type { VaultChoice } from "./create-vault";
+import { VaultStep } from "./VaultStep";
 import { addStartHere } from "./start-here";
 import { StepProgress } from "./StepLayout";
 import { WelcomeStep } from "./WelcomeStep";

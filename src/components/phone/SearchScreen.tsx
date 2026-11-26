@@ -13,6 +13,7 @@ import {
 import { DrawingIcon } from "@/components/icons";
 import type { TextPart } from "@/components/HighlightedText";
 import { Button } from "@/components/ui/button";
+import { flattenFiles } from "@/components/sidebar/right-sidebar/link-utils";
 import type { SearchResult } from "@/lib/commands/shards";
 import { getFolderInVault, isDrawingPath } from "@/lib/drawing-files";
 import { countTags } from "@/lib/tags";
@@ -25,7 +26,6 @@ import { PhoneFrame, PhoneIconButton, PhoneSection } from "./parts";
 import { usePhonePrefs } from "./prefs";
 import { FileRow } from "./rows";
 import {
-  allFiles,
   countLine,
   inScope,
   passesFilter,
@@ -403,7 +403,7 @@ function ShardResults({
       ? pinned.map((file) => file.path)
       : filter?.kind === "tag"
         ? taggedHere.map((file) => file.path)
-        : allFiles(fileTree).map((file) => file.path)
+        : flattenFiles(fileTree).map((file) => file.path)
     : [];
   const listedPaths = listed.filter(keep);
   const previews = usePreviews(filter?.kind === "drawings" ? listedPaths : []);

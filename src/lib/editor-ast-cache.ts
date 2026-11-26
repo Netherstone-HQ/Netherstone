@@ -4,6 +4,7 @@ import { bytesBody } from "@/lib/commands/bytes";
 import { assertTauri } from "@/lib/commands/tauri";
 import type { ShardCache } from "@/lib/editor-markdown-worker";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 type PlateAstValue = Descendant[];
 
@@ -36,7 +37,7 @@ type AstCacheLogDetails = Record<string, unknown>;
 const AST_CACHE_LOG_PREFIX = "[Netherstone][AST Cache]";
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
 
 function logAstCacheError(

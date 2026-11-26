@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { FileTextIcon } from "lucide-react";
 import { Thumbnail, useNearView } from "@/components/gallery/GalleryView";
-import { getFileName } from "@/components/settings/attachment-format";
 import { BottomSheet, BottomSheetItem } from "@/components/ui/bottom-sheet";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf } from "@/lib/drawing-files";
 import {
   matchesFileFilter,
   type GalleryFile,
@@ -41,10 +40,6 @@ export function useGalleryFiles(
   };
 }
 
-function shardName(path: string) {
-  return getVaultFileDisplayName(getFileName(path));
-}
-
 function open(file: GalleryFile, shardPath: string) {
   void openFileScreenAt({ path: shardPath, assetPath: file.assetPath }).catch(
     (error: unknown) =>
@@ -52,10 +47,7 @@ function open(file: GalleryFile, shardPath: string) {
   );
 }
 
-/**
- * Tiles three across. A file one shard uses opens that shard at it; one
- * several shards use lists them to pick from.
- */
+/** Tiles three across. A file several shards use lists them to pick from. */
 export function GalleryGrid({ files }: { files: GalleryFile[] }) {
   const vaultPath = useVaultStore((s) => s.currentVaultPath);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -96,7 +88,7 @@ export function GalleryGrid({ files }: { files: GalleryFile[] }) {
               open(picking, path);
             }}
           >
-            {shardName(path)}
+            {displayNameOf(path)}
           </BottomSheetItem>
         ))}
       </BottomSheet>

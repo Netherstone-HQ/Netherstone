@@ -1,8 +1,55 @@
-// Attaching Playwright to the app's WebView on an Android device, shared by
-// the emulator checks (android-ui-check.mjs, android-editor-check.mjs).
+// What the emulator checks (android-ui-check.mjs, android-editor-check.mjs)
+// share: the device, limited waits, and attaching Playwright to the app's
+// WebView.
 
 import { execFileSync } from "node:child_process";
-import { expect } from "@playwright/test";
+import { _android as android, expect as baseExpect } from "@playwright/test";
+
+export const PACKAGE = "tech.blueblood.netherstone";
+export const ACTIVITY = `${PACKAGE}/.MainActivity`;
+
+/**
+ * How long one wait may take. Far above any step on a CI emulator, so only
+ * a stuck step reaches it.
+ */
+export const WAIT_LIMIT_MS = Number(process.env.WAIT_LIMIT_MS ?? 60_000);
+
+// configure returns a new expect; the imported one keeps its 5 s limit.
+export const expect = baseExpect.configure({ timeout: WAIT_LIMIT_MS });
+
+export const log = (...parts) => console.log(new Date().toISOString().slice(11, 23), ...parts);
+
+/** Runs adb on the computer, failing with what it said. */
+export function adb(...args) {
+  try {
+    return execFileSync("adb", args, { encoding: "utf8", maxBuffer: 64 << 20, timeout: WAIT_LIMIT_MS }).trim();
+  } catch (error) {
+    throw new Error(`adb ${args.join(" ")} failed: ${String(error.stderr || error.message).trim()}`);
+  }
+}
+
+/** Waits for `promise`, failing once the wait limit has passed. */
+export async function within(promise, what) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Waited ${WAIT_LIMIT_MS} ms for ${what}`)), WAIT_LIMIT_MS);
+  });
+  try {
+    return await Promise.race([promise, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The connected device, and `shell` to run a command on it. */
+export async function connectDevice() {
+  const [device] = await android.devices({ omitDriverInstall: true });
+  if (!device) throw new Error("No Android device or emulator is connected");
+  device.setDefaultTimeout(WAIT_LIMIT_MS);
+  const shell = async (command) =>
+    (await within(device.shell(command), `adb shell ${command}`)).toString().trim();
+  return { device, shell };
+}
 
 /** Where the app's own page is served from inside its WebView. */
 const APP_ORIGIN = "http://tauri.localhost";
@@ -16,21 +63,12 @@ function originOf(url) {
   }
 }
 
-/**
- * How long one look at the page list may take. Through `adb forward`, a
- * socket the WebView hasn't opened yet takes the connection and never
- * answers, so a look that takes longer is tried again.
- */
+/** How long one look at the page list may take: a socket not open yet never answers. */
 const LOOK_LIMIT_MS = 2_000;
 
-const adb = (...args) => execFileSync("adb", args, { encoding: "utf8" }).trim();
-
 /**
- * Waits until the WebView of process `pid` shows the app's page, as its
- * DevTools socket lists it. Attaching while the page is still blank, with
- * the app's worker starting, can leave Playwright waiting for the page
- * forever (seen in 4 of 30 restarts; none in 50 after waiting for this).
- * Waits up to `timeout` ms.
+ * Waits until the WebView of `pid` shows the app's page. Attaching to a
+ * blank page can leave Playwright waiting forever.
  */
 async function appPageLoaded(pid, timeout) {
   const port = adb("forward", "tcp:0", `localabstract:webview_devtools_remote_${pid}`);
@@ -49,15 +87,11 @@ async function appPageLoaded(pid, timeout) {
   }
 }
 
-/**
- * Starts the app (`pkg`, activity `activity`) on `device` and attaches to its
- * page. `shell` runs a device command; `within` limits a wait, and `timeout`
- * is how long the page may take to load, in ms.
- */
-export async function startAndAttach({ device, pkg, activity, shell, within, timeout }) {
-  await shell(`am start -W -n ${activity}`);
-  await appPageLoaded(await shell(`pidof ${pkg}`), timeout);
-  const webView = await device.webView({ pkg });
+/** Starts the app on `device` and attaches to its page. */
+export async function startAndAttach({ device, shell }) {
+  await shell(`am start -W -n ${ACTIVITY}`);
+  await appPageLoaded(await shell(`pidof ${PACKAGE}`), WAIT_LIMIT_MS);
+  const webView = await device.webView({ pkg: PACKAGE });
   // Playwright sets no limit on attaching to the page, so this sets one.
   const page = await within(webView.page(), "the app's page to attach");
   return { webView, page };
@@ -68,12 +102,7 @@ const NOT_RESPONDING_WINDOW = "dumpsys window windows | grep -m1 'Application No
 /** How long the dialog may take to go once Wait is tapped, in ms. */
 const DIALOG_GONE_MS = 10_000;
 
-/**
- * Closes the dialog a slow emulator shows when another app, often the
- * launcher, "isn't responding" (hide_error_dialogs doesn't keep it away),
- * choosing Wait. It sits over the app and takes taps and the Back key.
- * Returns whether there was one.
- */
+/** Closes a slow emulator's "isn't responding" dialog with Wait. Returns whether there was one. */
 export async function closeNotResponding(shell) {
   const dialog = await shell(NOT_RESPONDING_WINDOW);
   if (!dialog) return false;

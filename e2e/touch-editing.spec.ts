@@ -11,13 +11,8 @@ import {
   test,
 } from "./vault";
 
-/**
- * Editing on a phone: the bar above the keyboard, the style panel in the
- * keyboard's place, the long-press block menu and links that open on tap.
- * The page reports an Android phone; the keyboard is what the app's
- * MainActivity reports, sent here as its `systeminsets` event. The window is
- * tablet-wide so the desktop sidebars leave the shard room.
- */
+// Editing on a phone, with the keyboard sent as MainActivity's `systeminsets`.
+// Tablet-wide, so the desktop sidebars leave the shard room.
 test.use({
   userAgent: ANDROID_PHONE,
   hasTouch: true,

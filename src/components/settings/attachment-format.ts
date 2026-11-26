@@ -1,3 +1,4 @@
+import { fileName } from "@/lib/drawing-files";
 /** Formatting shared by the attachment rows in Settings and Overview. */
 
 export function formatBytes(bytes: number) {
@@ -10,13 +11,9 @@ export function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-export function getFileName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
-}
-
 /** Short label for an asset; content-hash names keep 8 characters. */
 export function getAssetLabel(assetPath: string) {
-  const name = getFileName(assetPath);
+  const name = fileName(assetPath);
   const match = /^([0-9a-f]{64})(\.[^.]+)?$/i.exec(name);
   return match ? `${match[1].slice(0, 8)}…${match[2] ?? ""}` : name;
 }

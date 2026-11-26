@@ -167,10 +167,7 @@ async function buildVaultImportPatch(
   return vaultPatch(element, persisted, sourcePath, vaultPath);
 }
 
-/**
- * On Android, a file of `kind` picked from the phone, copied into the vault
- * as it is: the phone's files have no path to link to.
- */
+/** On Android, picked files are copied into the vault: they have no path to link to. */
 async function pickIntoVault(
   element: PersistedMediaElement,
   kind: MediaDialogKind,

@@ -7,6 +7,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 
 import { chooseExportPath } from "@/lib/commands/export";
+import { getParentFolder } from "@/lib/drawing-files";
 
 import type { ExportOptions } from "./options";
 import { writeExport, type PreparedExport } from "./pipeline";
@@ -23,7 +24,7 @@ function readLastDirectory() {
 
 function rememberDirectory(filePath: string) {
   try {
-    localStorage.setItem(LAST_DIRECTORY_KEY, filePath.replace(/[\\/][^\\/]*$/, ""));
+    localStorage.setItem(LAST_DIRECTORY_KEY, getParentFolder(filePath));
   } catch {
     // Only a convenience; the dialog falls back to its own default.
   }

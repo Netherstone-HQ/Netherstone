@@ -15,11 +15,7 @@ export type SearchFilter =
 export type PhoneScreen =
   | { kind: "home" }
   | { kind: "folder"; path: string }
-  /**
-   * The open shard, or the open drawing when Canvas is the mode. `path` is
-   * the file it opened with, opened again when Back returns to it from
-   * another file's screen.
-   */
+  /** The open shard or drawing; `path` is reopened when Back returns here. */
   | { kind: "file"; path?: string }
   /** Search, in one folder when `folder` is set. */
   | { kind: "search"; folder?: string; filter?: SearchFilter }
@@ -67,7 +63,7 @@ const SCREEN_KINDS = new Set<string>([
   "tags",
   "settings",
   "trash",
-]);
+] satisfies PhoneScreen["kind"][]);
 
 function isScreen(entry: Entry): entry is PhoneScreen {
   return SCREEN_KINDS.has(entry.kind);
@@ -133,10 +129,7 @@ export const usePhoneNav = create<PhoneNavState>((set, get) => ({
     ),
 }));
 
-/**
- * Follows the browser's history, so the system Back (Android) and the edge
- * swipe (iPhone) step back through the phone layout. Returns a cleanup.
- */
+/** Lets Back and the edge swipe step back through the phone layout. */
 export function followBrowserHistory(): () => void {
   history.replaceState({ [DEPTH_KEY]: 0 }, "");
   const onPop = (event: PopStateEvent) => {
@@ -148,9 +141,8 @@ export function followBrowserHistory(): () => void {
 }
 
 /**
- * Has Android's Back close the top sheet or screen, and close the app from
- * home. The app decides rather than the webview, whose Back can skip
- * history entries that were added without a tap. Returns a cleanup.
+ * Android's Back closes the top sheet or screen, or the app from home. The
+ * webview's own Back can skip entries added without a tap.
  */
 export function followSystemBack(): () => void {
   const listening = onBackButtonPress(() => {
@@ -189,10 +181,7 @@ export function useSelecting(): boolean {
 
 type OverlayOf<K extends PhoneOverlay["kind"]> = Extract<PhoneOverlay, { kind: K }>;
 
-/**
- * The overlay of `kind` while it's open, and the last one after it closes,
- * so its sheet can slide away showing what it showed.
- */
+/** The overlay of `kind`, kept after it closes so its sheet can slide away. */
 export function useLast<K extends PhoneOverlay["kind"]>(kind: K) {
   const overlay = usePhoneOverlay();
   const [last, setLast] = useState<OverlayOf<K> | null>(null);

@@ -1,13 +1,7 @@
-//! What other apps hand Netherstone on a phone: a file opened with it (Open
-//! with) or text, links and files shared with it (Share).
-//!
-//! Android's MainActivity copies each arrival into the app's cache, as
-//! `incoming/opened/<time>/` or `incoming/shared/<time>/`, and renames it
-//! there from `<time>.part` once complete (see Incoming.kt). Taking one moves
-//! it to `incoming/taken/`, which the app clears when it next starts.
-//!
-//! Only the system puts files there: no command writes to that folder, so
-//! the files the page may then read are ones a person handed over.
+//! What other apps hand Netherstone on a phone (Open with, Share). Incoming.kt
+//! copies each into `incoming/<kind>/<time>/` in the cache; taking one moves
+//! it to `incoming/taken/`. No command writes there, so the page only reads
+//! what a person handed over.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -20,8 +14,6 @@ const SHARED: &str = "shared";
 const TAKEN: &str = "taken";
 /// A share's text, subject and files, beside the files.
 const ABOUT: &str = "share.json";
-/// The ending of an arrival still being copied.
-const PART: &str = "part";
 
 /// The cache folder arrivals wait in.
 fn incoming_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
@@ -32,15 +24,15 @@ fn incoming_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
         .map(|cache| cache.join(FOLDER))
 }
 
-/// The complete arrivals of `kind`, oldest first.
-fn arrivals(incoming: &Path, kind: &str) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(incoming.join(kind)) else {
+/// The entries of `folder` named by when they came, oldest first. One still
+/// being written ends in `.part`, which isn't a time, so it's left out.
+fn by_time(folder: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(folder) else {
         return Vec::new();
     };
     let mut found: Vec<(u128, PathBuf)> = entries
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| path.is_dir() && path.extension().is_none_or(|ending| ending != PART))
         .filter_map(|path| {
             let time = path.file_name()?.to_str()?.parse().ok()?;
             Some((time, path))
@@ -48,6 +40,14 @@ fn arrivals(incoming: &Path, kind: &str) -> Vec<PathBuf> {
         .collect();
     found.sort();
     found.into_iter().map(|(_, path)| path).collect()
+}
+
+/// The complete arrivals of `kind`, oldest first.
+fn arrivals(incoming: &Path, kind: &str) -> Vec<PathBuf> {
+    by_time(&incoming.join(kind))
+        .into_iter()
+        .filter(|path| path.is_dir())
+        .collect()
 }
 
 /// Moves `arrival` of `kind` to the taken folder and returns where it is now.
@@ -95,8 +95,9 @@ fn opened_in(incoming: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Where SharedFolders.kt leaves the folders picked for vaults.
 #[cfg(any(mobile, test))]
-const FOLDERS: &str = "folder";
+const PICKED: &str = "folder";
 
 /// Takes the folder last picked for a vault in shared storage (see
 /// SharedFolders.kt), if one was picked since the last take and is there.
@@ -107,20 +108,9 @@ pub fn take_picked_folder(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 #[cfg(any(mobile, test))]
 fn picked_folder_in(incoming: &Path) -> Option<PathBuf> {
-    let folder = incoming.join(FOLDERS);
-    let mut picks: Vec<(u128, PathBuf)> = fs::read_dir(&folder)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter_map(|path| {
-            let time = path.file_name()?.to_str()?.parse().ok()?;
-            Some((time, path))
-        })
-        .collect();
-    picks.sort();
-    let latest = picks.last()?.1.clone();
-    let picked = fs::read_to_string(&latest).ok().map(PathBuf::from);
-    for (_, pick) in &picks {
+    let picks = by_time(&incoming.join(PICKED));
+    let picked = fs::read_to_string(picks.last()?).ok().map(PathBuf::from);
+    for pick in &picks {
         let _ = fs::remove_file(pick);
     }
     picked.filter(|path| path.is_absolute() && path.is_dir())
@@ -164,12 +154,13 @@ fn shared_in(incoming: &Path) -> Option<Shared> {
     let about = fs::read_to_string(latest.join(ABOUT)).unwrap_or_default();
     let mut shared: Shared = serde_json::from_str(&about).unwrap_or_default();
     // Only files in the share's own folder, named as the folder has them.
-    shared.files.retain_mut(|file| {
-        let path = latest.join(&file.name);
+    shared.files.retain(|file| {
         let own = Path::new(&file.name).file_name() == Some(file.name.as_ref());
-        file.path = path.to_string_lossy().into_owned();
-        own && file.name != ABOUT && path.is_file()
+        own && file.name != ABOUT && latest.join(&file.name).is_file()
     });
+    for file in &mut shared.files {
+        file.path = latest.join(&file.name).to_string_lossy().into_owned();
+    }
     Some(shared)
 }
 
@@ -239,7 +230,7 @@ mod tests {
         let incoming = temp_dir("incoming-folder");
         let vault = incoming.join("Documents").join("Notes");
         fs::create_dir_all(&vault).unwrap();
-        let picks = incoming.join(FOLDERS);
+        let picks = incoming.join(PICKED);
         fs::create_dir_all(&picks).unwrap();
         fs::write(
             picks.join("100"),

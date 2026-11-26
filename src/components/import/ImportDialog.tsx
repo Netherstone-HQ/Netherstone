@@ -19,6 +19,8 @@ import { openEditorFile } from "@/lib/open-editor-file";
 import { folderName } from "@/lib/open-vault";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useVaultStore } from "@/store";
+import { errorText } from "@/lib/utils";
+import { fileName } from "@/lib/drawing-files";
 
 type Step = { kind: "pick" } | ImportStep;
 
@@ -121,7 +123,7 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
         created: [],
         attachments: [],
         skipped: [],
-        failed: [{ source: "", error: error instanceof Error ? error.message : String(error) }],
+        failed: [{ source: "", error: errorText(error) }],
         cancelled: false,
       };
     }
@@ -148,7 +150,7 @@ function ImportWindow({ targetDir, onClose }: { targetDir: string; onClose: () =
       );
     } catch (error) {
       console.error("[Netherstone] Couldn't undo the import:", error);
-      alert(error instanceof Error ? error.message : String(error));
+      alert(errorText(error));
     }
     if (isCurrentVault(vaultPath)) {
       await refreshVault(vaultPath).catch((error) =>
@@ -344,8 +346,4 @@ function Row({ name, notes, children }: { name: string; notes: string[]; childre
 
 function isCurrentVault(vaultPath: string) {
   return useVaultStore.getState().currentVaultPath === vaultPath;
-}
-
-function fileName(path: string) {
-  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }

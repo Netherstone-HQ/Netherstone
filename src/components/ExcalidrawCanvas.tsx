@@ -32,10 +32,7 @@ import {
   parseDrawing,
   refreshLinkedDrawingImages,
 } from "@/lib/drawing-exports";
-import {
-  getVaultFileDisplayName,
-  registerDrawingSaver,
-} from "@/lib/drawing-files";
+import { displayNameOf, fileName, registerDrawingSaver } from "@/lib/drawing-files";
 import { isChangedOnDiskError } from "@/lib/outside-changes";
 import { useShortcutKeys } from "@/hooks/useShortcut";
 import { keysText } from "@/lib/platform";
@@ -45,7 +42,7 @@ import { suppressVaultChangePath } from "@/lib/vault-change-suppression";
 import { useUIStore, useVaultStore } from "@/store";
 
 import "@excalidraw/excalidraw/index.css";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 
 const DRAWING_SAVE_DELAY_MS = 1000;
 
@@ -71,15 +68,8 @@ interface ExcalidrawCanvasProps {
   /** Receives Excalidraw's API once it's ready, and null when it's gone. */
   onExcalidrawAPI: (api: ExcalidrawImperativeAPI | null) => void;
   onSaveStateChange: (state: SaveState) => void;
-  /**
-   * On a phone: the drawing's own screen brings the tools, so Excalidraw's
-   * are hidden, and it only takes edits while `editing`.
-   */
+  /** On a phone, Excalidraw's tools are hidden and it takes edits only while `editing`. */
   phone?: { editing: boolean };
-}
-
-function getShardName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
 /**
@@ -193,8 +183,8 @@ function useDrawingPersistence(
         if (cancelled) return;
 
         console.error("[Netherstone] Failed to open drawing:", error);
-        toast.error(`Couldn't open ${getShardName(initialPath)}`, {
-          description: error instanceof Error ? error.message : String(error),
+        toast.error(`Couldn't open ${fileName(initialPath)}`, {
+          description: errorText(error),
         });
         // Fall back to a scratch canvas. Never autosave over a file that
         // failed to load.
@@ -277,7 +267,7 @@ function useDrawingPersistence(
 
     if (merged.conflicted) {
       toast.info(
-        `${getVaultFileDisplayName(getShardName(path))} changed in two places`,
+        `${displayNameOf(path)} changed in two places`,
         {
           description:
             "Current version was kept. The other version is in History.",
@@ -308,7 +298,7 @@ function useDrawingPersistence(
         setActiveDrawingPath(path);
         useUIStore
           .getState()
-          .pushRecentFile({ path, name: getShardName(path) });
+          .pushRecentFile({ path, name: fileName(path) });
         // The watcher event for the new file is suppressed with the save
         // below, so refresh the tree here.
         void scanVault(vaultPathRef.current!)
@@ -412,7 +402,7 @@ function useDrawingPersistence(
           error,
         );
         toast.error("Couldn't update the drawing in your shards", {
-          description: error instanceof Error ? error.message : String(error),
+          description: errorText(error),
         });
       }
     });

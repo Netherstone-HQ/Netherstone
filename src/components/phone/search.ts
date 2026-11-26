@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { searchFiles, type SearchResult } from "@/lib/commands/shards";
 import { isDrawingPath, isPathWithin, isSamePath } from "@/lib/drawing-files";
-import type { FileTreeNode } from "@/store";
 import type { SearchFilter } from "./nav";
 
 /** How long typing pauses before Search runs. */
@@ -46,13 +45,6 @@ export function useSearch(query: string): SearchState {
   }, [trimmed]);
 
   return state;
-}
-
-/** Every shard and drawing in `tree`, at any depth. */
-export function allFiles(tree: FileTreeNode[]): FileTreeNode[] {
-  return tree.flatMap((node) =>
-    node.kind === "directory" ? allFiles(node.children ?? []) : [node],
-  );
 }
 
 /** Whether `path` passes `filter`, given the pinned and tagged paths. */

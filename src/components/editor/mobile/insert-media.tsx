@@ -13,6 +13,7 @@ import { insertManagedMediaFiles } from "@/components/editor/lib/media-insert";
 import type { InsertGroup } from "@/components/ui/insert-toolbar-button";
 import { insertBlock } from "@/components/transforms";
 import { pickFiles, type PickKind } from "@/lib/pick-files";
+import { errorText } from "@/lib/utils";
 
 const NODE_TYPE: Record<PickKind, string> = {
   image: KEYS.img,
@@ -21,10 +22,7 @@ const NODE_TYPE: Record<PickKind, string> = {
   file: KEYS.file,
 };
 
-/**
- * Lets the person pick files of `kind` (or take a picture with the camera),
- * copies them into the vault and puts them at the caret.
- */
+/** Picks files of `kind`, copies them into the vault and inserts them at the caret. */
 async function insertPickedMedia(
   editor: PlateEditor,
   kind: PickKind,
@@ -42,15 +40,12 @@ async function insertPickedMedia(
     });
   } catch (error) {
     toast.error("Couldn't add it to the shard", {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
   }
 }
 
-/**
- * The phone's Media group of Insert: pictures, the camera, video, sound and
- * other files come from the phone and are copied into the vault.
- */
+/** The phone's Media group of Insert, copying files from the phone into the vault. */
 export const phoneMediaGroup: InsertGroup = {
   group: "Media",
   items: [

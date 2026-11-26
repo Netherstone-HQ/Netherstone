@@ -29,26 +29,10 @@ import { useVaultStore } from "@/store";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
 import { copy } from "./copy";
-import { addStartHere } from "./start-here";
+import { createEmptyVault, vaultErrorText, type VaultChoice } from "./create-vault";
 import { ChoiceCard, FieldLabel, Hint, Step } from "./StepLayout";
 
-export type VaultChoice = {
-  path: string;
-  kind: "kept" | "created" | "opened" | "restored";
-  /** The guide written into a new vault, opened when onboarding ends. */
-  startHerePath?: string;
-};
-
 type Option = "create" | "restore";
-
-/** Turns a failure from `create_vault` into a sentence from copy.ts. */
-export function vaultErrorText(error: unknown) {
-  const code = errorMessage(error);
-  const errors: Record<string, string> = copy.vault.errors;
-  if (code in errors) return errors[code];
-  console.error("[Netherstone] Couldn't set up the vault:", error);
-  return copy.vault.errors.unknown;
-}
 
 export function VaultStep({
   onBack,
@@ -124,7 +108,6 @@ export function VaultStep({
       </Step>
     );
   }
-
 
   return (
     <Step title={copy.vault.title} body={copy.vault.body} onBack={onBack}>
@@ -287,14 +270,6 @@ function LocationRow({
   );
 }
 
-/** Makes an empty vault with the Start here guide. */
-export async function createEmptyVault(location: string, name: string): Promise<VaultChoice> {
-  const path = await createVault(location, name);
-  await openVault(path);
-  const startHerePath = await addStartHere(path);
-  return { path, kind: "created", startHerePath };
-}
-
 export function CreateVaultForm({
   location,
   onLocationChange,
@@ -391,11 +366,7 @@ export function CreateVaultForm({
   );
 }
 
-/**
- * Brings a synced vault down from GitHub into `location`. On a phone, with
- * no `onLocationChange`, it goes in the app's own storage like a new vault,
- * and where isn't asked.
- */
+/** Brings a synced vault down from GitHub; on a phone, into app storage. */
 function RestoreVault({
   location,
   onLocationChange,

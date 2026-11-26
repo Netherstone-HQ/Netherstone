@@ -6,7 +6,7 @@ import { useThemeMode } from "@/components/theme/theme-provider";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useNearScreen } from "@/hooks/useNearScreen";
 import { renderDiagram } from "@/lib/mermaid-diagram";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 import { useSettingsStore } from "@/store/settings";
 
 type Drawn = { svg: string; error?: undefined } | { svg?: undefined; error: string };
@@ -53,7 +53,7 @@ export function DiagramPreview({
       (error: unknown) => {
         if (!current) return;
         drawnFrom.current = from;
-        setDrawn({ error: error instanceof Error ? error.message : String(error) });
+        setDrawn({ error: errorText(error) });
       },
     );
     return () => {

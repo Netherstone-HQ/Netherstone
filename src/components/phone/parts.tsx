@@ -3,10 +3,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePhoneNav } from "./nav";
 
-/**
- * A full phone screen: room for the status bar on top and the system's
- * gesture or button bar below, with the screen's own parts between.
- */
+/** A full phone screen, clear of the status bar and the system's bottom bar. */
 export function PhoneFrame({
   className,
   children,
@@ -62,6 +59,38 @@ export function PhoneTopBar({
   return (
     <div className={cn("flex h-16 shrink-0 items-center px-1", className)}>
       {children}
+    </div>
+  );
+}
+
+/** A word button in a top bar, such as Select. */
+export function PhoneTextButton({
+  className,
+  ...props
+}: React.ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "h-12 shrink-0 rounded-full px-3 font-medium outline-none active:bg-accent",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** The bar at the bottom of a screen, above the system's own bar. */
+export function PhoneBottomBar({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="shrink-0 border-t bg-sidebar pb-safe-bottom">
+      <div className={cn("flex", className)}>{children}</div>
     </div>
   );
 }

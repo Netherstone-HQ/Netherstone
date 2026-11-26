@@ -11,10 +11,7 @@ import { usePhonePrefs } from "./prefs";
 const ITEM_CLASS =
   "flex h-13 w-full items-center gap-4 px-4 text-left outline-none active:bg-accent [&_svg]:size-5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
 
-/**
- * The ⋮ menu of home and folders, under the top bar's right end. A tap
- * outside or Back closes it.
- */
+/** The ⋮ menu of home and folders. */
 export function MoreMenu({
   folder,
   onClose,

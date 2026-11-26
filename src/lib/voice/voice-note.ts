@@ -21,6 +21,7 @@ import {
 import { useEditorStore } from "@/store/editor";
 import { useSettingsStore } from "@/store/settings";
 import { useVaultStore } from "@/store/vault";
+import { fileName } from "@/lib/drawing-files";
 
 import {
   type FinishedHead,
@@ -171,7 +172,7 @@ function insertBlock(editor: PlateEditor, at?: Path) {
 }
 
 function shardName(path: string): string {
-  const file = path.split(/[\\/]/).pop() ?? path;
+  const file = fileName(path);
   return file.replace(/\.md$/i, "");
 }
 

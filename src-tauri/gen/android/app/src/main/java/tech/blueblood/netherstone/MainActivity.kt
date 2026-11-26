@@ -5,7 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
+import android.print.PageRange
 import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
 import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
@@ -18,7 +22,6 @@ import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
-import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -48,13 +51,41 @@ private fun printAttributes(geometry: JSONObject): PrintAttributes {
   return PrintAttributes.Builder().setMediaSize(size).setMinMargins(margins).build()
 }
 
+/** `adapter`, calling `finished` once printing ends. */
+private class ReleasingAdapter(
+  private val adapter: PrintDocumentAdapter,
+  private val finished: () -> Unit,
+) : PrintDocumentAdapter() {
+  override fun onStart() = adapter.onStart()
+
+  override fun onLayout(
+    old: PrintAttributes?,
+    new: PrintAttributes,
+    cancel: CancellationSignal?,
+    callback: LayoutResultCallback,
+    extras: Bundle?,
+  ) = adapter.onLayout(old, new, cancel, callback, extras)
+
+  override fun onWrite(
+    pages: Array<out PageRange>,
+    destination: ParcelFileDescriptor,
+    cancel: CancellationSignal?,
+    callback: WriteResultCallback,
+  ) = adapter.onWrite(pages, destination, cancel, callback)
+
+  override fun onFinish() {
+    adapter.onFinish()
+    finished()
+  }
+}
+
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     if (savedInstanceState == null) {
       // What the page took in the app's last run has been imported or saved.
-      File(cacheDir, "${Incoming.FOLDER}/taken").deleteRecursively()
+      File(cacheDir, "${Incoming.FOLDER}/${Incoming.TAKEN}").deleteRecursively()
       takeIn(intent)
     }
   }
@@ -65,35 +96,24 @@ class MainActivity : TauriActivity() {
     takeIn(intent)
   }
 
-  /**
-   * Copies what another app opened or shared with Netherstone into the
-   * cache, then tells the page with an `opened` or `shared` event. A page
-   * that starts later looks for it itself.
-   */
+  /** Copies what another app opened or shared into the cache, then tells the page. */
   private fun takeIn(intent: Intent?) {
     val incoming = intent?.let { Incoming.of(it) } ?: return
     Thread {
       incoming.saveTo(cacheDir, contentResolver)
       runOnUiThread {
-        page?.evaluateJavascript("window.dispatchEvent(new Event('${incoming.kind}'))", null)
+        page?.dispatch(incoming.kind)
       }
     }.start()
   }
 
-  /**
-   * The app's page, once there is one, told when the app goes out of sight
-   * and when something comes in from another app.
-   */
+  /** The app's page, once there is one. */
   private var page: WebView? = null
 
-  /**
-   * The WebView keeps its page "visible" while the app is in the background,
-   * so the page is told itself: an `apphidden` event once the app is out of
-   * sight, when Android may stop it at any time. src/hooks/useAutosave.ts
-   * saves then.
-   */
+  // The WebView keeps its page "visible" in the background, so the page is
+  // told itself, to save before Android may stop the app (useAutosave.ts).
   override fun onStop() {
-    page?.evaluateJavascript("window.dispatchEvent(new Event('apphidden'))", null)
+    page?.dispatch("apphidden")
     super.onStop()
   }
 
@@ -106,9 +126,8 @@ class MainActivity : TauriActivity() {
     }
     webView.addJavascriptInterface(PageBridge(webView), "NetherstoneAndroid")
     fitAboveKeyboard(webView)
-    // Once wry has set its chrome client, files picked for the page go
-    // through PickerChromeClient. Before Android 8 the client can't be read,
-    // so wry's stays.
+    // Picked files go through PickerChromeClient. Before Android 8 wry's
+    // client can't be read, so it stays.
     webView.post {
       val wry = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) webView.webChromeClient else null
       if (wry != null && wry !is PickerChromeClient) webView.webChromeClient = PickerChromeClient(wry, this)
@@ -143,20 +162,15 @@ class MainActivity : TauriActivity() {
   }
 
   /**
-   * The folder picker for a vault in shared storage. What it picked is left
-   * for src-tauri (see SharedFolders.kt), and the page hears `folderpicked`,
-   * its `detail` "picked", "cancelled", or "unusable" for a folder with no
-   * path, such as a cloud app's.
+   * The folder picker for a vault in shared storage (see SharedFolders.kt).
+   * "unusable" is a folder with no path, such as a cloud app's.
    */
   private val folderPicker =
     registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
       val path = tree?.let { SharedFolders.pathOf(it) }
       if (path != null) SharedFolders.keep(cacheDir, path)
       val outcome = if (tree == null) "cancelled" else if (path == null) "unusable" else "picked"
-      page?.evaluateJavascript(
-        "window.dispatchEvent(new CustomEvent('folderpicked',{detail:'$outcome'}))",
-        null,
-      )
+      page?.dispatch("folderpicked", "'$outcome'")
     }
 
   /** The latest system insets, as `window.NetherstoneAndroid.insets()` returns them. */
@@ -171,16 +185,12 @@ class MainActivity : TauriActivity() {
     fun openAppSettings() {
       runOnUiThread {
         startActivity(
-          Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+          Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri()),
         )
       }
     }
 
-    /**
-     * Offers a file to other apps through Android's share sheet. Only an
-     * export in the app's cache folder for sharing (`share_export_path`)
-     * is handed on, so a page script can't send any other file.
-     */
+    /** Offers an export to other apps. Only the share folder's files, so a page can't send others. */
     @JavascriptInterface
     fun shareFile(path: String, mimeType: String) {
       val shared = File(cacheDir, SHARE_FOLDER).canonicalFile
@@ -189,7 +199,7 @@ class MainActivity : TauriActivity() {
         Log.w("Netherstone", "Not shared: $path isn't an export to share")
         return
       }
-      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", file)
+      val uri = providedUri(file)
       val send = Intent(Intent.ACTION_SEND).apply {
         type = mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -199,22 +209,13 @@ class MainActivity : TauriActivity() {
       runOnUiThread { startActivity(Intent.createChooser(send, null)) }
     }
 
-    /**
-     * Opens Android's print screen with an export's print page, where it can
-     * be printed or saved as a PDF. `geometry` is the page as the export
-     * look says it: JSON with `pageSize` (`a4` or `letter`) and the four margins.
-     */
+    /** Opens the print screen with an export's page; `geometry` is its size and margins as JSON. */
     @JavascriptInterface
     fun printPage(html: String, jobName: String, geometry: String) {
       runOnUiThread { printHtml(html, jobName, JSONObject(geometry)) }
     }
 
-    /**
-     * Shows a web page over the app, in the phone's browser as a custom tab:
-     * its title and site, a Close button that comes back here, and a menu
-     * to go back, forward, reload, copy, share or open it in the browser.
-     * Only http and https pages: anything else is left alone.
-     */
+    /** Shows an http(s) page over the app in a custom tab. */
     @JavascriptInterface
     fun openInApp(url: String) {
       val uri = Uri.parse(url)
@@ -230,21 +231,20 @@ class MainActivity : TauriActivity() {
     }
 
     /**
-     * Hands the update phone_updater.rs downloaded to Android's installer.
-     * The first time, Android must let Netherstone install apps: that
-     * setting opens instead, and this returns false to try again after.
+     * Hands the downloaded update to the installer. Until Netherstone may
+     * install apps, opens that setting instead and returns false.
      */
     @JavascriptInterface
     fun installUpdate(): Boolean {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
         runOnUiThread {
-          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.fromParts("package", packageName, null)))
+          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri()))
         }
         return false
       }
       val apk = File(cacheDir, "$UPDATE_FOLDER/$UPDATE_FILE")
       if (!apk.isFile) return false
-      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", apk)
+      val uri = providedUri(apk)
       val install = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "application/vnd.android.package-archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -278,15 +278,10 @@ class MainActivity : TauriActivity() {
     }
   }
 
-  /** The page being printed, kept until the print screen has it. */
+  /** The page being printed, kept until printing ends. */
   private var printView: WebView? = null
 
-  /**
-   * Loads `html` in a WebView of its own and, once the page says its fonts
-   * and pictures are ready (it asks for `ready`, as for the desktop's PDF),
-   * hands it to the print screen on a page of the export's size, with its
-   * margins.
-   */
+  /** Loads `html` in its own WebView and prints it once the page asks for `ready`. */
   private fun printHtml(html: String, jobName: String, geometry: JSONObject) {
     val view = WebView(this)
     view.settings.javaScriptEnabled = true
@@ -295,7 +290,8 @@ class MainActivity : TauriActivity() {
         if (request.url.toString() != "$PRINT_ORIGIN/ready") return null
         runOnUiThread {
           val manager = getSystemService(PRINT_SERVICE) as PrintManager
-          manager.print(jobName, page.createPrintDocumentAdapter(jobName), printAttributes(geometry))
+          val adapter = ReleasingAdapter(page.createPrintDocumentAdapter(jobName)) { printView = null }
+          manager.print(jobName, adapter, printAttributes(geometry))
         }
         return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
       }
@@ -305,13 +301,9 @@ class MainActivity : TauriActivity() {
   }
 
   /**
-   * Edge to edge, the keyboard covers the page instead of shrinking it, so
-   * the caret ends up under it. The page's frame is padded by the keyboard's
-   * height instead, and the page is told, in CSS px: the keyboard's height
-   * (0 while it's down) and the status and navigation bars it draws under
-   * (bottom 0 while the keyboard is up, since the frame then ends above
-   * them). src/lib/system-insets.ts reads them at start through
-   * `NetherstoneAndroid` and on each change through a `systeminsets` event.
+   * Edge to edge, the keyboard covers the page, so the frame is padded by its
+   * height instead. The page gets the keyboard and bar sizes in CSS px
+   * (system-insets.ts).
    */
   private fun fitAboveKeyboard(webView: WebView) {
     val frame = findViewById<View>(android.R.id.content)
@@ -326,10 +318,7 @@ class MainActivity : TauriActivity() {
           "\"bottom\":${if (keyboard > 0) 0 else Math.round(bars.bottom / density)}}"
       if (json != insetsJson) {
         insetsJson = json
-        webView.evaluateJavascript(
-          "window.dispatchEvent(new CustomEvent('systeminsets',{detail:$json}))",
-          null,
-        )
+        webView.dispatch("systeminsets", json)
       }
       insets
     }

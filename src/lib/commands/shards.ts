@@ -32,10 +32,7 @@ export async function saveMarkdownFile(
   return invoke("save_markdown_file", { filePath, content, ...options });
 }
 
-/**
- * Creates an empty shard in `directory`, named "Untitled" or the next free
- * "Untitled 2", "Untitled 3"... Returns the new file's path.
- */
+/** Creates an empty "Untitled" shard ("Untitled 2"… when taken) and returns its path. */
 export async function createShardFile(directory: string): Promise<string> {
   assertTauri();
   return invoke<string>("create_shard_file", { directory });
@@ -70,10 +67,7 @@ export async function moveFile(
   return invoke<string>("move_file", { sourcePath, destinationDir });
 }
 
-/**
- * Sends a file or folder in the vault to the trash. On a phone, returns its
- * id in the app's trash.
- */
+/** Sends a vault file or folder to the trash. On a phone, returns its trash id. */
 export async function deleteVaultPath(
   targetPath: string,
 ): Promise<string | null> {

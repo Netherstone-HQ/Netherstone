@@ -62,6 +62,7 @@ import { hasInlineAsk, openInlineAsk } from "@/lib/inline-ask";
 import { useKeyboard } from "@/lib/system-insets";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
+import { androidBridge } from "@/lib/android-bridge";
 
 const BULLETS = [
   ListStyleType.Disc,
@@ -70,10 +71,7 @@ const BULLETS = [
 ];
 const NUMBERS = [ListStyleType.Decimal];
 
-/**
- * Keeps the editor's focus (and with it the keyboard and the caret) when a
- * button is pressed: without this, a tap moves focus to the button.
- */
+/** Keeps the editor's focus, and so the keyboard and caret, when a button is tapped. */
 const keepFocus = {
   onPointerDown: (event: React.PointerEvent) => event.preventDefault(),
   onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
@@ -292,10 +290,7 @@ function StylePanel({ height }: { height: number }) {
   );
 }
 
-/**
- * What the desktop Insert menu offers, with media picked from the phone or
- * taken with its camera.
- */
+/** The desktop Insert menu, with media picked from the phone or its camera. */
 const phoneInsertGroups = insertGroups.map((group) =>
   group.group === phoneMediaGroup.group ? phoneMediaGroup : group,
 );
@@ -342,24 +337,20 @@ function InsertSheet({
 }
 
 /**
- * Shows or hides the keyboard while the editor keeps focus. Android does it
- * itself; elsewhere moving focus out and back makes the browser pick up the
- * editor's `inputmode`.
+ * Shows or hides the keyboard while the editor keeps focus. Elsewhere than
+ * Android, refocusing makes the browser pick up the new `inputmode`.
  */
 function setKeyboard(editor: PlateEditor, shown: boolean) {
-  if (window.NetherstoneAndroid) {
-    window.NetherstoneAndroid.setKeyboard(shown);
+  const android = androidBridge();
+  if (android) {
+    android.setKeyboard(shown);
     return;
   }
   editor.api.toDOMNode(editor)?.blur();
   editor.tf.focus();
 }
 
-/**
- * The bar above the phone's keyboard while typing in a shard: undo, redo,
- * text style, the assistant, lists, link and insert, then Hide keyboard.
- * Text style swaps the keyboard for the style panel, keeping the caret.
- */
+/** The bar above the phone's keyboard while typing in a shard. */
 export function KeyboardBar() {
   const editor = useEditorRef();
   const readOnly = useEditorReadOnly();

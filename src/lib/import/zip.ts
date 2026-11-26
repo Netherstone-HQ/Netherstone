@@ -1,3 +1,4 @@
+import { errorText } from "@/lib/utils";
 import type { ImportIO, ImportSource } from "./engine";
 import { ImportError } from "./types";
 
@@ -129,7 +130,7 @@ export async function openArchives(sources: ImportSource[], io: ImportIO): Promi
         continue;
       }
     } catch (error) {
-      failed.push({ source: source.relativePath, error: error instanceof Error ? error.message : String(error) });
+      failed.push({ source: source.relativePath, error: errorText(error) });
       continue;
     }
     unpacked += size;

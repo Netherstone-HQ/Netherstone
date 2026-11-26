@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
 import {
+  displayNameOf,
   getFolderInVault,
   getVaultFileDisplayName,
   isDrawingPath,
@@ -26,7 +27,6 @@ import {
 } from "@/lib/drawing-files";
 import { type SearchResult, searchFiles } from "@/lib/commands/shards";
 import { openFileHistory, openVaultFile } from "@/lib/open-vault-file";
-import { fileName } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor";
 import { useUIStore } from "@/store/ui";
@@ -416,7 +416,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
           const selected = !askSelected && index === selectedIndex;
           // For "Show history", the file it's for.
           const folder = row.isHistory
-            ? getVaultFileDisplayName(fileName(row.path))
+            ? displayNameOf(row.path)
             : currentVaultPath
               ? getFolderInVault(row.path, currentVaultPath)
               : "";

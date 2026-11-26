@@ -106,12 +106,15 @@ function getLocalMediaNodeTypeForFile(
     return preferredType;
   }
 
-  const mime = file.type.toLowerCase();
+  return mediaNodeTypeForMime(file.type);
+}
 
-  if (mime.startsWith("image/")) return KEYS.img;
-  if (mime.startsWith("video/")) return KEYS.video;
-  if (mime.startsWith("audio/")) return KEYS.audio;
-
+/** The block a file of MIME type `mime` becomes. */
+export function mediaNodeTypeForMime(mime: string): LocalMediaNodeType {
+  const type = mime.toLowerCase();
+  if (type.startsWith("image/")) return KEYS.img;
+  if (type.startsWith("video/")) return KEYS.video;
+  if (type.startsWith("audio/")) return KEYS.audio;
   return KEYS.file;
 }
 

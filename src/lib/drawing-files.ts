@@ -59,6 +59,23 @@ function normalizePath(filePath: string) {
   return filePath.replace(/\\/g, "/");
 }
 
+/** `Folder/Note.md` → `Note.md`. */
+export function fileName(path: string) {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+/** The name a file at `path` shows under: "Note" for `Folder/Note.md`. */
+export function displayNameOf(path: string) {
+  return getVaultFileDisplayName(fileName(path));
+}
+
+/** The folder holding `path`, or "" when it has none. */
+export function getParentFolder(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return slash === -1 ? "" : trimmed.slice(0, slash);
+}
+
 /**
  * True when both paths name the same file. Paths reach the app with either
  * separator (the tree uses the OS's, links and new shards use `/`), so plain

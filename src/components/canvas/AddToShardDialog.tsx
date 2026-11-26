@@ -34,6 +34,7 @@ import { openVaultFile } from "@/lib/open-vault-file";
 import { useUIStore, useVaultStore } from "@/store";
 import type { FileTreeNode } from "@/store";
 import type { RecentFileEntry } from "@/store/ui";
+import { errorText } from "@/lib/utils";
 
 /**
  * Whether `scene` has something to add to a shard. Says so when it hasn't.
@@ -146,7 +147,7 @@ export function AddToShardDialog({
     } catch (error) {
       console.error("[Netherstone] Failed to add drawing to shard:", error);
       toast.error(`Couldn't add ${drawingName} to ${shard.name}`, {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setIsAdding(false);

@@ -19,7 +19,6 @@ import {
   type BackupSummary,
   describeBackupContents,
   describeSkipReason,
-  fileName,
   formatBytes,
   type SyncConflict,
   type SyncPlanSummary,
@@ -29,6 +28,7 @@ import { leaveSettings } from "@/lib/leave-settings";
 import { cn } from "@/lib/utils";
 import { useGitHubStore } from "@/store/github";
 import { useSyncStore } from "@/store/sync";
+import { fileName } from "@/lib/drawing-files";
 
 /** Sync status and controls for the open vault (sidebar popover, Settings). */
 export function BackupPanel({

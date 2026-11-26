@@ -13,11 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  formatBytes,
-  getAssetLabel,
-  getFileName,
-} from "@/components/settings/attachment-format";
+import { formatBytes, getAssetLabel } from "@/components/settings/attachment-format";
 import { flushPendingAutosave } from "@/hooks/useAutosave";
 import {
   CLEANUP_GRACE_DAYS,
@@ -26,9 +22,9 @@ import {
   type UnusedAttachment,
 } from "@/lib/commands/attachments";
 import { missingFileRows, type BrokenLink } from "@/lib/data";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
+import { displayNameOf, fileName, getVaultFileDisplayName } from "@/lib/drawing-files";
 import { replaceAttachmentPath, rewriteShards } from "@/lib/shard-rewrite";
-import { cn } from "@/lib/utils";
+import { cn, errorText } from "@/lib/utils";
 import { useAttachmentReportStore } from "@/store";
 import {
   Card,
@@ -42,10 +38,6 @@ import {
 const DAY_SECONDS = 24 * 60 * 60;
 /** Fits a button in a row without making it taller. */
 const ROW_BUTTON_CLASS = "h-7 shrink-0 text-ui-sm";
-
-function shardName(shardPath: string) {
-  return getVaultFileDisplayName(getFileName(shardPath));
-}
 
 /**
  * A file a shard embeds that isn't in the vault. Relink points every shard
@@ -76,7 +68,7 @@ function MissingFileRow({
       await rewriteShards(shardPaths, (markdown) =>
         replaceAttachmentPath(markdown, assetPath, found),
       );
-      toast.success(`Relinked to ${getFileName(found)}`);
+      toast.success(`Relinked to ${fileName(found)}`);
       await check(vaultPath);
     } catch (error) {
       console.error("[Netherstone] Relink failed:", error);
@@ -96,7 +88,7 @@ function MissingFileRow({
       >
         <span className="min-w-0 truncate">{name}</span>
         <span className="min-w-0 shrink truncate text-muted-foreground text-ui-sm">
-          in {shardName(shardPath)}
+          in {displayNameOf(shardPath)}
         </span>
       </button>
       {foundAssetPath ? (
@@ -187,7 +179,7 @@ function UnusedFiles({
     } catch (error) {
       console.error("[Netherstone] Attachment cleanup failed:", error);
       toast.error("Couldn't clean up attachments", {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     } finally {
       setIsCleaning(false);

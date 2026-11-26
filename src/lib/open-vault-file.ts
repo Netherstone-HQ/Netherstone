@@ -1,6 +1,8 @@
 import { toast } from "sonner";
 import {
+  fileName,
   finishDrawingSession,
+  getParentFolder,
   isDrawingPath,
   isPathWithin,
   isSamePath,
@@ -15,6 +17,7 @@ import { useHistoryStore } from "@/store/history";
 import { useSettingsStore } from "@/store/settings";
 import { useUIStore } from "@/store/ui";
 import { useVaultStore } from "@/store/vault";
+import { errorText } from "@/lib/utils";
 
 /** Opens a `.excalidraw` drawing in Canvas. */
 export async function openDrawingFile(filePath: string) {
@@ -28,7 +31,7 @@ export async function openDrawingFile(filePath: string) {
   ui.openMode("canvas");
   ui.pushRecentFile({
     path: filePath,
-    name: filePath.split(/[\\/]/).pop() ?? filePath,
+    name: fileName(filePath),
   });
 }
 
@@ -72,10 +75,7 @@ export function openDeletedShardHistory(filePath: string) {
   useHistoryStore.getState().openDeletedHistory(filePath);
 }
 
-/**
- * Creates an untitled drawing in `folder` (the vault's root by default) and
- * opens it, saying so if that fails. Returns its path, or null then.
- */
+/** Creates and opens an untitled drawing in `folder`. Returns its path, or null on failure. */
 export async function createDrawing(
   vaultPath: string,
   folder = vaultPath,
@@ -88,7 +88,7 @@ export async function createDrawing(
   } catch (error) {
     console.error("[Netherstone] Failed to create drawing:", error);
     toast.error("Couldn't create drawing", {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
     return null;
   }
@@ -104,14 +104,11 @@ function newShardFolder(vaultPath: string): string {
   ) {
     return vaultPath;
   }
-  const folder = openPath.replace(/[\\/][^\\/]*$/, "");
+  const folder = getParentFolder(openPath);
   return folder || vaultPath;
 }
 
-/**
- * Puts the cursor in the shard at `filePath` once its editor is on screen.
- * Gives up when another shard opens first.
- */
+/** Focuses the shard at `filePath` once it shows, unless another opens first. */
 function focusWhenShown(filePath: string) {
   const shown = useEditorStore.getState().plateEditor;
   const unsubscribe = useEditorStore.subscribe((state) => {
@@ -127,10 +124,7 @@ function focusWhenShown(filePath: string) {
   });
 }
 
-/**
- * Creates an empty "Untitled" shard in `folder` and opens it ready to type,
- * saying so if that fails. Without `folder`, Settings decides where it goes.
- */
+/** Creates and opens an "Untitled" shard; without `folder`, Settings says where. */
 export async function createShard(vaultPath: string, folder?: string) {
   try {
     const filePath = await createShardFile(folder ?? newShardFolder(vaultPath));
@@ -142,7 +136,7 @@ export async function createShard(vaultPath: string, folder?: string) {
   } catch (error) {
     console.error("[Netherstone] Failed to create shard:", error);
     toast.error("Couldn't create shard", {
-      description: error instanceof Error ? error.message : String(error),
+      description: errorText(error),
     });
   }
 }

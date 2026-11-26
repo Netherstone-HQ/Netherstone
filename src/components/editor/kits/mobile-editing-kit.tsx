@@ -5,11 +5,7 @@ import { KeyboardBar } from "@/components/editor/mobile/keyboard-bar";
 
 import { BlockSelectionKit } from "./block-selection-kit";
 
-/**
- * Editing on a phone, in place of the toolbars and the right-click menu: the
- * bar above the keyboard with its style panel, and the block menu a long
- * press opens.
- */
+/** Phone editing: the keyboard bar and the long-press block menu, in place of toolbars. */
 export const MobileEditingKit = [
   ...BlockSelectionKit,
   createPlatePlugin({

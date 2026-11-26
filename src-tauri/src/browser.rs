@@ -373,7 +373,7 @@ pub fn browser_set_visible(
     }
 }
 
-/// Phones can't place a second webview over the app; their browser panel
-/// is built later as its own screen.
+/// Phones can't place a second webview over the app; they show web pages in
+/// the browser's custom tab instead (MainActivity.kt).
 #[cfg(mobile)]
-const NO_PANEL_ON_MOBILE: &str = "The browser panel isn't available on this device yet.";
+const NO_PANEL_ON_MOBILE: &str = "The browser panel isn't available on this device.";

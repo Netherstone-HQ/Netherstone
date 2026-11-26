@@ -1,16 +1,12 @@
 import { useSyncExternalStore } from "react";
 
+import { androidBridge } from "@/lib/android-bridge";
 import { IS_ANDROID, IS_MOBILE } from "@/lib/platform";
 
 /**
- * What the phone's own screen parts cover, in CSS px. On Android the app's
- * frame shrinks above the keyboard and MainActivity.kt reports the sizes:
- * `NetherstoneAndroid.insets()` at start, a `systeminsets` event on each change.
- * Elsewhere the page stays full height and the keyboard covers the bottom of
- * the visual viewport.
- *
- * Also set on the root element for CSS: `--keyboard-inset`,
- * `--safe-area-top`, `--safe-area-bottom`.
+ * What the keyboard and system bars cover, in CSS px, also set as
+ * `--keyboard-inset`, `--safe-area-top` and `--safe-area-bottom`. Android
+ * reports them (MainActivity.kt); elsewhere the visual viewport says.
  */
 export type KeyboardState = {
   /** How much of the screen the keyboard covers now, 0 while it's down. */
@@ -22,32 +18,6 @@ export type KeyboardState = {
 };
 
 type Reported = { keyboard?: number; top?: number; bottom?: number };
-
-declare global {
-  interface Window {
-    /** Set by MainActivity.kt on Android. */
-    NetherstoneAndroid?: {
-      insets(): string;
-      openAppSettings(): void;
-      /** Shows or hides the keyboard; focus and the caret stay. */
-      setKeyboard(shown: boolean): void;
-      /** Offers an export to share (see `shareExportPath`) to other apps. */
-      shareFile(path: string, mimeType: string): void;
-      /** Opens the print screen with an export's print page; geometry is JSON. */
-      printPage(html: string, jobName: string, geometry: string): void;
-      /** Shows a web page over the app, in the browser's custom tab. */
-      openInApp(url: string): void;
-      /** Hands the downloaded update to the installer; false when it can't yet. */
-      installUpdate(): boolean;
-      /** Whether vaults may live in the phone's shared storage. */
-      hasAllFilesAccess(): boolean;
-      /** Asks for that access, in its settings screen or a prompt. */
-      askAllFilesAccess(): void;
-      /** Shows the folder picker; the page hears `folderpicked`. */
-      pickFolder(): void;
-    };
-  }
-}
 
 let state: KeyboardState = {
   inset: 0,
@@ -93,7 +63,7 @@ if (typeof window !== "undefined") {
       apply((event as CustomEvent<Reported>).detail ?? {}),
     );
     try {
-      const reported = window.NetherstoneAndroid?.insets();
+      const reported = androidBridge()?.insets();
       if (reported) apply(JSON.parse(reported) as Reported);
     } catch {
       // An app built before the insets were reported: CSS falls back to env().

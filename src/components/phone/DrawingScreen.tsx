@@ -18,13 +18,13 @@ import type { SaveState } from "@/components/SaveStatus";
 import { useThemeMode } from "@/components/theme/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Dot } from "@/components/ui/dot";
-import { getVaultFileDisplayName } from "@/lib/drawing-files";
-import { openFileHistory } from "@/lib/open-vault-file";
+import { displayNameOf, getParentFolder } from "@/lib/drawing-files";
 import { folderName } from "@/lib/open-vault";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
 import { useShownVersion } from "@/store/history";
 import { usePhoneNav } from "./nav";
+import { openHistoryScreen } from "./open-file";
 import { PhoneBackButton, PhoneFrame, PhoneIconButton, PhoneTopBar } from "./parts";
 
 const ExcalidrawCanvas = lazy(() =>
@@ -56,15 +56,10 @@ const SAVE_TEXT: Record<SaveState, string> = {
 
 /** "Drawings" for a drawing in that folder: where it is, under its name. */
 function folderOf(path: string) {
-  const parent = path.replace(/[\\/][^\\/]*$/, "");
-  return folderName(parent);
+  return folderName(getParentFolder(path));
 }
 
-/**
- * A drawing on a phone: looked at first, moved and zoomed with the fingers,
- * then edited after Edit, with a bar of tools under it. A new, empty
- * drawing opens ready to draw.
- */
+/** A drawing on a phone: viewed first, edited after Edit. A new one opens ready to draw. */
 export function DrawingScreen() {
   const drawingPath = useUIStore((s) => s.activeDrawingPath);
   const sessionKey = useUIStore((s) => s.drawingSessionKey);
@@ -88,7 +83,7 @@ export function DrawingScreen() {
   }, [api]);
 
   const name = drawingPath
-    ? getVaultFileDisplayName(drawingPath.split(/[\\/]/).pop() ?? "")
+    ? displayNameOf(drawingPath)
     : "";
 
   /** Excalidraw's own Undo, hidden with the rest of its tools. */
@@ -138,12 +133,7 @@ export function DrawingScreen() {
         ) : drawingPath ? (
           <PhoneIconButton
             label="History"
-            onClick={() => {
-              push({ kind: "history" });
-              void openFileHistory(drawingPath).catch((error: unknown) =>
-                console.error("[Netherstone] Couldn't show history:", error),
-              );
-            }}
+            onClick={() => openHistoryScreen(drawingPath)}
           >
             <HistoryIcon />
           </PhoneIconButton>

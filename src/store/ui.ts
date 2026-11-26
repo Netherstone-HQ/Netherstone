@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  fileName,
   isPathWithin,
   isSamePath,
   remapPathAfterMove,
@@ -320,7 +321,7 @@ export const useUIStore = create<UIState>()(
           const remap = (entry: RecentFileEntry) => {
             const path = remapPathAfterMove(entry.path, previousPath, nextPath);
             return path
-              ? { path, name: path.split(/[\\/]/).pop() ?? entry.name }
+              ? { path, name: fileName(path) }
               : entry;
           };
           return {

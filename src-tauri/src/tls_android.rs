@@ -1,8 +1,5 @@
-//! Gives libgit2 Android's trusted certificates, so GitHub backups can check
-//! who they talk to. libgit2's OpenSSL looks for a certificate file or
-//! folder that Android doesn't have in a form it reads: the system folder
-//! names its files by an older hash, and a bundle built from it fails to load.
-//! Each certificate is handed over in memory instead, once a run.
+//! Gives libgit2 Android's trusted certificates in memory, once a run: its
+//! OpenSSL can't read Android's certificate folder, which uses an older hash.
 
 use foreign_types::ForeignType;
 use openssl::x509::X509;

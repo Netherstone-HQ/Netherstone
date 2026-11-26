@@ -1,11 +1,9 @@
 package tech.blueblood.netherstone
 
-import android.content.ContentResolver
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Message
-import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
@@ -16,21 +14,15 @@ import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
-import androidx.core.content.FileProvider
 import java.io.File
 
 /** The cache folder picked files are copied into for the page. */
 private const val PICKED_FOLDER = "picked"
 
 /**
- * Wry's chrome client, except for files picked from the phone (not taken
- * with the camera). Those are copied into the app's cache as soon as the
- * picker returns, and the page gets the copies.
- *
- * Handed the picker's own links, the WebView reads a file later, against
- * what it noted of it when picked; on a slow phone that note can be out of
- * date by then, and the read fails ("could not be read"). Copies the app
- * owns don't change.
+ * Wry's chrome client, except that picked files are copied into the cache
+ * and the page gets the copies. With the picker's own links, a slow phone's
+ * WebView can fail to read the file later ("could not be read").
  */
 class PickerChromeClient(
   private val wry: WebChromeClient,
@@ -64,10 +56,7 @@ class PickerChromeClient(
     return true
   }
 
-  /**
-   * Copies `picked` into a new folder of the cache, the last pick's copies
-   * cleared out, and returns the file provider's links to the copies.
-   */
+  /** Copies `picked` into the cache, clearing the last pick's, and returns links to the copies. */
   private fun copyForPage(picked: List<Uri>): List<Uri> {
     val all = File(activity.cacheDir, PICKED_FOLDER)
     all.deleteRecursively()
@@ -77,38 +66,16 @@ class PickerChromeClient(
     val taken = mutableSetOf<String>()
     return picked.mapNotNull { uri ->
       try {
-        val file = File(folder, freeName(displayName(resolver, uri), taken))
+        val file = File(folder, freeName(resolver.displayName(uri, "picked file"), taken))
         resolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } }
           ?: return@mapNotNull null
         taken.add(file.name.lowercase())
-        FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
+        activity.providedUri(file)
       } catch (error: Exception) {
         Log.w("Netherstone", "Couldn't read a picked file: $uri", error)
         null
       }
     }
-  }
-
-  private fun displayName(resolver: ContentResolver, uri: Uri): String {
-    val named =
-      try {
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-          if (cursor.moveToFirst()) cursor.getString(0) else null
-        }
-      } catch (error: Exception) {
-        null
-      } ?: uri.lastPathSegment
-    val safe = named?.substringAfterLast('/')?.replace(Regex("[\\\\:*?\"<>|\\u0000-\\u001f]"), "_")?.trim()
-    return if (safe.isNullOrEmpty() || safe.startsWith(".")) "picked file" else safe
-  }
-
-  /** `name`, or "name 2.ext" and so on when another copy here has it. */
-  private fun freeName(name: String, taken: Set<String>): String {
-    if (name.lowercase() !in taken) return name
-    val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
-    var count = 2
-    while ("${name.substring(0, dot)} $count${name.substring(dot)}".lowercase() in taken) count += 1
-    return "${name.substring(0, dot)} $count${name.substring(dot)}"
   }
 
   // Everything else is wry's.

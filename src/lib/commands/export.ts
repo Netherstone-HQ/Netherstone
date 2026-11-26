@@ -21,10 +21,7 @@ export async function chooseExportPath(
   });
 }
 
-/**
- * On a phone, a path in the app's cache for an export to share rather than
- * save. What was shared before is cleared out.
- */
+/** On a phone, a cache path for an export to share, clearing the last one. */
 export async function shareExportPath(
   defaultName: string,
   format: ExportFileFormat,

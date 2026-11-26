@@ -41,6 +41,7 @@ import {
 } from "@/lib/chart";
 import { blobToDataUrl, chartPng, drawingWithImage } from "@/lib/chart-image";
 import { createDrawingFile, saveDrawingFile } from "@/lib/commands/drawings";
+import { getParentFolder } from "@/lib/drawing-files";
 import { scanVault } from "@/lib/commands/vault";
 import { openDrawingFile } from "@/lib/open-vault-file";
 import type { TRawBlockElement } from "@/lib/markdown-raw-blocks";
@@ -250,7 +251,7 @@ export function ChartBlock({
     if (!shardPath || !vaultPath) return;
     try {
       const { blob, width, height } = await picture();
-      const folder = shardPath.replace(/[\\/][^\\/]*$/, "");
+      const folder = getParentFolder(shardPath);
       const drawingPath = await createDrawingFile(folder, title);
       await saveDrawingFile(
         drawingPath,

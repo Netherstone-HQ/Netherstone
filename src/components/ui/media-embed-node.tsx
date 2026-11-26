@@ -12,6 +12,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { LinkIcon } from "lucide-react";
 import { PlateElement, useEditorMounted, withHOC } from "platejs/react";
 
+import { siteOf } from "@/lib/open-web-link";
 import { cn } from "@/lib/utils";
 
 import { Caption, CaptionTextarea } from "./caption";
@@ -23,14 +24,6 @@ import {
   ResizeHandle,
 } from "./resize-handle";
 import { useMediaState } from "./use-media-state";
-
-function siteOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
 
 /**
  * A video or page shown in the shard. Sites with an embeddable player

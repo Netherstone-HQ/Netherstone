@@ -1,3 +1,4 @@
+import { errorText } from "@/lib/utils";
 import { ImportError, type Importer } from "../../types";
 import { IMPORT_FORMATS } from "../list";
 import type { FromWorker, ToWorker } from "./protocol";
@@ -72,7 +73,7 @@ export const docxImporter: Importer = {
               try {
                 send({ type: "stored", id: data.id, link: await context.addAttachment(data.name, data.bytes) });
               } catch (error) {
-                send({ type: "notStored", id: data.id, error: error instanceof Error ? error.message : String(error) });
+                send({ type: "notStored", id: data.id, error: errorText(error) });
               }
               break;
             case "done":

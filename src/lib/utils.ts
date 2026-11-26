@@ -15,3 +15,8 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+/** What went wrong, as text: an Error's message or the value itself. */
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}

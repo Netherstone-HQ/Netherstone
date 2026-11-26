@@ -11,11 +11,7 @@ import {
 import { DrawingIcon } from "@/components/icons";
 import { Dot } from "@/components/ui/dot";
 import type { ShardPreview } from "@/lib/commands/shards";
-import {
-  getVaultFileDisplayName,
-  isDrawingPath,
-  isSamePath,
-} from "@/lib/drawing-files";
+import { displayNameOf, isDrawingPath, isSamePath } from "@/lib/drawing-files";
 import { formatModified } from "@/lib/tags";
 import { cn } from "@/lib/utils";
 import { useUIStore, type FileTreeNode } from "@/store";
@@ -28,20 +24,13 @@ import { countFiles, fileKindLabel } from "./vault-tree";
 /** How far a finger moves sideways before a row follows it, in px. */
 const DRAG_SLOP_PX = 8;
 
-function fileName(path: string) {
-  return getVaultFileDisplayName(path.split(/[\\/]/).pop() ?? path);
-}
-
 /** The row whose swipe actions are showing; one at a time. */
 const useOpenSwipe = create<{
   path: string | null;
   setPath: (path: string | null) => void;
 }>((set) => ({ path: null, setPath: (path) => set({ path }) }));
 
-/**
- * A row that slides left under a finger to show `actions` behind it. A tap
- * on a slid row slides it back instead of opening it.
- */
+/** A row that slides left to show `actions`; a tap slides it back. */
 function SwipeRow({
   path,
   actions,
@@ -161,8 +150,8 @@ function SwipeAction({
   );
 }
 
-/** The box a row shows in its icon's place while picking shards. */
-function SelectBox({ checked }: { checked: boolean }) {
+/** The box a row shows in its icon's place while picking. */
+export function SelectBox({ checked }: { checked: boolean }) {
   return (
     <span
       aria-hidden="true"
@@ -178,11 +167,7 @@ function SelectBox({ checked }: { checked: boolean }) {
   );
 }
 
-/**
- * A shard or drawing: its name, then when it was edited and either the
- * folder it's in or its first line. Swipe left for Pin and Delete, press
- * and hold for its menu; while picking shards a tap picks it.
- */
+/** A shard or drawing. Swipe left for Pin and Delete, hold for its menu. */
 export function FileRow({
   path,
   detail,
@@ -233,7 +218,7 @@ export function FileRow({
           <Icon className="size-5 shrink-0 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium">
-          {fileName(path)}
+          {displayNameOf(path)}
         </span>
       </span>
       {date || second ? (

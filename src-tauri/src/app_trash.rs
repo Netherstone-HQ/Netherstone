@@ -1,10 +1,6 @@
-//! Deleting files: the OS trash on desktop. Phones have none, so there a
-//! deleted file moves to a trash folder in the app's data, where it can be
-//! brought back.
-//!
-//! Each delete gets its own folder in the trash, `trash/<batch>/`, holding
-//! what was deleted under its own name. Beside it, `trash/<batch>.json`
-//! records where each one came from, so it can go back there.
+//! Deleting files: the OS trash on desktop. Phones have none, so there each
+//! delete moves to `trash/<batch>/` in the app's data, with
+//! `trash/<batch>.json` recording where it came from.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -15,7 +11,7 @@ pub use trash::{delete, delete_all};
 
 #[cfg(mobile)]
 pub fn delete(path: impl AsRef<Path>) -> Result<(), String> {
-    move_to_trash(&trash_dir()?, path.as_ref(), &unique_name()).map(|_| ())
+    delete_vault_item(path.as_ref()).map(|_| ())
 }
 
 #[cfg(mobile)]
@@ -93,10 +89,8 @@ fn write_record(trash: &Path, batch: &str, record: &Record) -> Result<(), String
     std::fs::write(&path, text).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
-/// Moves `path` into `trash/<batch>/`, keeping its name, and records where
-/// it came from. Returns its id in the trash. A vault on another storage
-/// volume than the app's data can't be renamed across, so it is copied and
-/// then removed.
+/// Moves `path` into `trash/<batch>/` and returns its id. Across storage
+/// volumes it's copied, then removed.
 #[cfg(any(mobile, test))]
 fn move_to_trash(trash: &Path, path: &Path, batch: &str) -> Result<String, String> {
     let name = path
@@ -196,6 +190,23 @@ fn history_name(trash: &Path, batch: &str, name: &str) -> Option<String> {
         })
 }
 
+/// Whether `from` is in `vault` or among the vault histories in `histories`.
+fn belongs(vault: &Path, histories: &Path, from: &Path) -> bool {
+    crate::vault_access::is_within(vault, from) || crate::vault_access::is_within(histories, from)
+}
+
+/// Whether `list` would show the item `id`.
+fn is_listed(trash: &Path, id: &str, vault: &Path, histories: &Path) -> bool {
+    let Ok((batch, name)) = parse_id(id) else {
+        return false;
+    };
+    read_record(trash, batch)
+        .and_then(|record| record.from.get(name).cloned())
+        .is_some_and(|from| {
+            trash.join(batch).join(name).exists() && belongs(vault, histories, &from)
+        })
+}
+
 /// What's in the trash from `vault`, and the vault histories kept in
 /// `histories` (they belong to no vault), most recently deleted first.
 fn list(trash: &Path, vault: &Path, histories: &Path) -> Vec<TrashedItem> {
@@ -214,11 +225,7 @@ fn list(trash: &Path, vault: &Path, histories: &Path) -> Vec<TrashedItem> {
                 (batch.clone(), name, from, kept, deleted_at)
             })
         })
-        .filter(|(_, _, from, kept, _)| {
-            kept.exists()
-                && (crate::vault_access::is_within(vault, from)
-                    || crate::vault_access::is_within(histories, from))
-        })
+        .filter(|(_, _, from, kept, _)| kept.exists() && belongs(vault, histories, from))
         .map(|(batch, name, from, kept, deleted_at)| TrashedItem {
             id: format!("{batch}/{name}"),
             is_folder: kept.is_dir(),
@@ -251,33 +258,8 @@ fn parse_id(id: &str) -> Result<(&str, &str), String> {
     }
 }
 
-/// A free path for `wanted`: itself, or with " 2", " 3" and so on before
-/// its extension while that name is taken.
-fn free_path(wanted: &Path) -> PathBuf {
-    if !wanted.exists() {
-        return wanted.to_path_buf();
-    }
-    let parent = wanted.parent().unwrap_or(Path::new(""));
-    let stem = wanted
-        .file_stem()
-        .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
-    let extension = wanted
-        .extension()
-        .map(|extension| format!(".{}", extension.to_string_lossy()));
-    (2..)
-        .map(|count| {
-            parent.join(format!(
-                "{stem} {count}{}",
-                extension.as_deref().unwrap_or("")
-            ))
-        })
-        .find(|candidate| !candidate.exists())
-        .expect("some count is free")
-}
-
-/// Puts the item `id` back where it was, under a free name if that one has
-/// been taken since, and returns where it went. `allowed` says whether a
-/// path may be restored to.
+/// Puts the item `id` back where it was, under a free name if needed, and
+/// returns where it went. `allowed` checks the path.
 fn restore(
     trash: &Path,
     id: &str,
@@ -296,7 +278,7 @@ fn restore(
         .ok_or_else(|| format!("{} has no folder to go back to", from.display()))?;
     std::fs::create_dir_all(parent)
         .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
-    let to = free_path(&from);
+    let to = crate::vault::free_path(&from);
     move_path(&trash.join(batch).join(name), &to)?;
     record.from.remove(name);
     forget_batch_if_empty(trash, batch, &record)?;
@@ -344,9 +326,7 @@ pub(crate) fn restore_app_trash(ids: Vec<String>) -> Result<Vec<String>, String>
     ids.iter()
         .map(|id| {
             restore(&trash, id, |path| {
-                if crate::vault_access::is_within(&vault, path)
-                    || crate::vault_access::is_within(&histories, path)
-                {
+                if belongs(&vault, &histories, path) {
                     Ok(())
                 } else {
                     Err(format!("{} isn't in the open vault", path.display()))
@@ -361,10 +341,10 @@ pub(crate) fn restore_app_trash(ids: Vec<String>) -> Result<Vec<String>, String>
 #[tauri::command(async)]
 pub(crate) fn delete_app_trash(ids: Vec<String>) -> Result<(), String> {
     let vault = crate::vault_access::get().open_vault()?;
+    let histories = crate::sync::sync_root()?;
     let trash = trash_dir()?;
-    let listed = list(&trash, &vault, &crate::sync::sync_root()?);
     ids.iter().try_for_each(|id| {
-        if !listed.iter().any(|item| &item.id == id) {
+        if !is_listed(&trash, id, &vault, &histories) {
             return Err(format!("{id} isn't in this vault's trash"));
         }
         delete_forever(&trash, id)
@@ -485,6 +465,10 @@ mod tests {
                 },
             ]
         );
+        let sync = root.join("sync");
+        assert!(is_listed(&trash, "3/new.md", &vault, &sync));
+        assert!(!is_listed(&trash, "2/elsewhere.md", &vault, &sync));
+        assert!(!is_listed(&trash, "3/gone.md", &vault, &sync));
     }
 
     #[test]

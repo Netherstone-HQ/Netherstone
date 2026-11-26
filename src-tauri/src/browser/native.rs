@@ -42,8 +42,7 @@ pub fn history_action<R: Runtime>(
     })
 }
 
-/// Where a browser webview sits in its window, in physical pixels. Phones
-/// have no panel to place yet.
+/// Where a browser webview sits in its window, in physical pixels.
 #[derive(Clone, Copy)]
 #[cfg_attr(mobile, allow(dead_code))]
 pub struct Bounds {

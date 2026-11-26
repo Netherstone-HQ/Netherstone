@@ -18,6 +18,7 @@ import {
 import { setMcpVaultAllowed } from "@/lib/commands/mcp";
 import { folderName } from "@/lib/open-vault";
 import { useAssistantStore } from "@/store/assistant";
+import { errorText } from "@/lib/utils";
 import { copy } from "./copy";
 import { Hint, Step } from "./StepLayout";
 
@@ -27,7 +28,7 @@ async function turnAssistant(enabled: boolean) {
 }
 
 function showError(error: unknown) {
-  toast.error(error instanceof Error ? error.message : String(error));
+  toast.error(errorText(error));
 }
 
 /**

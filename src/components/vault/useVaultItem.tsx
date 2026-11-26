@@ -59,6 +59,7 @@ import {
   useVaultStore,
 } from "@/store";
 import type { FileTreeNode } from "@/store";
+import { errorText } from "@/lib/utils";
 
 function getDisplayName(node: FileTreeNode) {
   return node.kind === "file" ? getVaultFileDisplayName(node.name) : node.name;
@@ -158,7 +159,7 @@ export function useVaultItem(
     try {
       await renameTo(trimmedName);
     } catch (error) {
-      alert(error instanceof Error ? error.message : String(error));
+      alert(errorText(error));
     } finally {
       cancelRename();
       isRenameSubmittingRef.current = false;
@@ -169,7 +170,7 @@ export function useVaultItem(
     try {
       await deleteItem(node);
     } catch (error) {
-      alert(error instanceof Error ? error.message : String(error));
+      alert(errorText(error));
     }
   };
 
@@ -178,7 +179,7 @@ export function useVaultItem(
       await revealItemInDir(node.path);
     } catch (error) {
       console.error("Failed to open file location:", error);
-      alert(error instanceof Error ? error.message : String(error));
+      alert(errorText(error));
     }
   };
 
@@ -186,7 +187,7 @@ export function useVaultItem(
     try {
       await moveItem(node, destinationPath);
     } catch (error) {
-      alert(error instanceof Error ? error.message : String(error));
+      alert(errorText(error));
       throw error;
     }
   };
@@ -216,7 +217,7 @@ export function useVaultItem(
     } catch (error) {
       console.error("[Netherstone] Failed to read drawing:", error);
       toast.error(`Couldn't open ${displayName}`, {
-        description: error instanceof Error ? error.message : String(error),
+        description: errorText(error),
       });
     }
   };
@@ -395,7 +396,6 @@ export function useVaultItem(
     renameInputProps,
     renameTo,
     startMove: () => setIsMoving(true),
-    trash: handleTrash,
     isPinned,
     togglePin: () => togglePinnedFile({ name: node.name, path: node.path }),
     moveToFolder,

@@ -1,29 +1,26 @@
 #!/usr/bin/env node
-// Drives the Android app on an emulator the way a person would: goes through
-// the welcome tour, creates a shard from home, types into it, checks the
-// file on disk, goes back home with the system Back key, then restarts the
-// app, opens the shard from Recent and checks the text is back. Then it
-// exports, uses the trash, saves a link and a picture another app shares,
-// and imports a document another app opens with Netherstone.
+// Drives the Android app on an emulator the way a person would, from the
+// welcome tour through shards, export, trash, shares and Open with.
 //
 //   APK=app.apk node scripts/android-ui-check.mjs out
 //
 // The APK must be built with ORG_GRADLE_PROJECT_netherstoneInspectable=true.
-// Playwright's Android support attaches to the app's WebView over DevTools:
-// elements are found by role and name, and clicks and keys are sent as input
-// events at the element, so nothing depends on screen coordinates. Every
-// wait is on a condition and has a limit. When a step fails, the output
-// folder gets the page and the whole screen as pictures, the page's text,
-// and the device log.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { _android as android, expect as baseExpect } from "@playwright/test";
-import { closeNotResponding, startAndAttach } from "./android-webview.mjs";
+import {
+  ACTIVITY,
+  adb,
+  closeNotResponding,
+  connectDevice,
+  expect,
+  log,
+  PACKAGE,
+  startAndAttach,
+  WAIT_LIMIT_MS,
+  within,
+} from "./android-webview.mjs";
 
-const PACKAGE = "tech.blueblood.netherstone";
-const ACTIVITY = `${PACKAGE}/.MainActivity`;
 const OUT = process.argv[2] ?? "android-ui-check";
 const APK = process.env.APK;
 // What + calls a new shard in a vault that has none by that name.
@@ -43,45 +40,12 @@ const SHARED_VAULT = "Netherstone check";
 const SHARED_VAULT_DIR = `/sdcard/Documents/${SHARED_VAULT}`;
 const SHARED_SHARD = "Kept in Documents";
 
-// How long one wait may take. Far above any step on a CI emulator, so only a
-// stuck step reaches it.
-const WAIT_LIMIT_MS = Number(process.env.WAIT_LIMIT_MS ?? 60_000);
-
 if (!APK) throw new Error("Set APK to the APK to install");
 fs.mkdirSync(OUT, { recursive: true });
-// configure returns a new expect; the imported one keeps its 5 s limit.
-const expect = baseExpect.configure({ timeout: WAIT_LIMIT_MS });
-
-const log = (...parts) => console.log(new Date().toISOString().slice(11, 23), ...parts);
-function adb(...args) {
-  try {
-    return execFileSync("adb", args, { encoding: "utf8", maxBuffer: 64 << 20, timeout: WAIT_LIMIT_MS }).trim();
-  } catch (error) {
-    throw new Error(`adb ${args.join(" ")} failed: ${String(error.stderr || error.message).trim()}`);
-  }
-}
-
-/** Waits for `promise`, failing once the wait limit has passed. */
-async function within(promise, what) {
-  let timer;
-  const limit = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Waited ${WAIT_LIMIT_MS} ms for ${what}`)), WAIT_LIMIT_MS);
-  });
-  try {
-    return await Promise.race([promise, limit]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 // ---- The app ----
 
-const [device] = await android.devices({ omitDriverInstall: true });
-if (!device) throw new Error("No Android device or emulator is connected");
-device.setDefaultTimeout(WAIT_LIMIT_MS);
-
-const shell = async (command) =>
-  (await within(device.shell(command), `adb shell ${command}`)).toString().trim();
+const { device, shell } = await connectDevice();
 
 /** Reads a file in the app's private storage (the emulator image allows root). */
 const readAppFile = (file) => shell(`su 0 cat '${file}'`);
@@ -96,7 +60,7 @@ async function launch() {
     await shell(`am force-stop ${PACKAGE}`);
     await within(closed, "the old WebView to close");
   }
-  ({ webView, page } = await startAndAttach({ device, pkg: PACKAGE, activity: ACTIVITY, shell, within, timeout: WAIT_LIMIT_MS }));
+  ({ webView, page } = await startAndAttach({ device, shell }));
   page.setDefaultTimeout(WAIT_LIMIT_MS);
   page.on("pageerror", (error) => log("page error:", error.message));
 }
@@ -118,21 +82,14 @@ const appFileExists = async (file) =>
 
 const keyboardUp = async () => /mInputShown=true/.test(await shell("dumpsys input_method"));
 
-/**
- * Android's Back key. An "isn't responding" dialog over the app would take
- * it, and would also take one pressed while it comes up: it's closed first,
- * and closed again and the key pressed again when it took the press.
- */
+/** Android's Back key, pressed again if an "isn't responding" dialog took it. */
 async function pressBack() {
   await closeNotResponding(shell);
   await shell("input keyevent KEYCODE_BACK");
   if (await closeNotResponding(shell)) await shell("input keyevent KEYCODE_BACK");
 }
 
-/**
- * Android's own Back key, as a thumb would press it, from a shard to home.
- * While the keyboard is up, the first press only puts it away.
- */
+/** Back from a shard to home; with the keyboard up, the first press only hides it. */
 async function backToHome() {
   if (await keyboardUp()) {
     await pressBack();
@@ -166,10 +123,7 @@ async function trashFromHome() {
   await expect.poll(() => appFileExists(shardFile), { message: `${shardFile} gone` }).toBe(false);
 }
 
-/**
- * Puts `file` in the app's cache for sharing and returns the content link
- * its file provider gives it, as another app would hand over its own files.
- */
+/** Puts `file` in the app's cache and returns its content link, as another app would share it. */
 async function providedFile(name, file) {
   const folder = `/data/data/${PACKAGE}/cache/shared`;
   const owner = await shell(`su 0 stat -c %u:%g /data/data/${PACKAGE}`);
@@ -178,10 +132,7 @@ async function providedFile(name, file) {
   return `content://${PACKAGE}.fileprovider/my_cache_images/shared/${name}`;
 }
 
-/**
- * Taps the text `label` in a system window, such as the folder picker,
- * found in the screen's layout as Android describes it.
- */
+/** Taps the text `label` in a system window, such as the folder picker. */
 async function tapSystemText(label) {
   const layout = "/data/local/tmp/layout.xml";
   let bounds = null;

@@ -162,11 +162,8 @@ jobs:
           includeUpdaterJson: false
           args: ${{ matrix.args }}
 
-  # The Android app for people who install it from GitHub, one APK per
-  # kind of phone, signed with the release key so each update installs over
-  # the last. Until the key's secrets are set (ANDROID_KEYSTORE as base64,
-  # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD),
-  # releases go out without it.
+  # One APK per kind of phone, signed with the release key so updates
+  # install over the last. Skipped while the ANDROID_* secrets aren't set.
   build-android:
     name: Build (Android ${{ matrix.target }})
     needs: check-version

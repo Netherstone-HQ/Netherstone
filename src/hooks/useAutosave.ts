@@ -118,11 +118,7 @@ export async function flushPendingAutosave(): Promise<void> {
 
 /**
  * On a phone, saves a recording and the open shard when the app goes out of
- * sight: Android may stop it then without warning, and a phone switches
- * apps far more often than a computer closes a window. The writes are sent
- * first, since Android may freeze the page soon after. Android's WebView
- * keeps the page "visible" meanwhile, so MainActivity.kt sends `apphidden`.
- * Returns a cleanup.
+ * sight, since Android may stop it then. MainActivity.kt sends `apphidden`.
  */
 export function saveWhenHidden(): () => void {
   const onHidden = () => {

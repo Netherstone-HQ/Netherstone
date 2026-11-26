@@ -47,10 +47,7 @@ function blockName(block: TElement) {
   return turnIntoItems.find((item) => item.value === type)?.label ?? "Block";
 }
 
-/**
- * The block menu on a phone. A long press on a block while the keyboard is
- * down opens it; while typing, a long press selects text as usual.
- */
+/** The block menu on a phone, opened by a long press while the keyboard is down. */
 export function BlockSheet() {
   const editor = useEditorRef();
   const readOnly = useEditorReadOnly();

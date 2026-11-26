@@ -9,12 +9,9 @@ import {
   rememberOffer,
 } from "@/lib/commands/assistant";
 import { useAssistantStore } from "@/store/assistant";
+import { errorText } from "@/lib/utils";
 
 const store = useAssistantStore;
-
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Reads the chat's memory items again, as Apply or Undo left them. */
 async function reloadMemories(chat: string) {

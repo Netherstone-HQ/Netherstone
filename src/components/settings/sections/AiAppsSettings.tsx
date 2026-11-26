@@ -19,6 +19,7 @@ import {
   setMcpVaultAllowed,
 } from "@/lib/commands/mcp";
 import { useAssistantStore } from "@/store/assistant";
+import { errorText } from "@/lib/utils";
 
 export function AiAppsSettings() {
   const switchId = useId();
@@ -230,5 +231,5 @@ function AppButton({
 }
 
 function showError(error: unknown) {
-  toast.error(error instanceof Error ? error.message : String(error));
+  toast.error(errorText(error));
 }

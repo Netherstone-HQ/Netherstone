@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.print.PageRange
 import android.print.PrintAttributes
@@ -36,6 +37,10 @@ private const val SHARE_FOLDER = "shared"
 /** Where phone_updater.rs downloads an update, in the cache. */
 private const val UPDATE_FOLDER = "updates"
 private const val UPDATE_FILE = "Netherstone.apk"
+
+/** How wry names the photos the camera takes for the page, in the pictures folder. */
+private const val CAMERA_PHOTO_PREFIX = "JPEG_"
+private const val CAMERA_PHOTO_SUFFIX = ".jpg"
 
 /** Where a page being printed seems to come from; nothing is served from it. */
 private const val PRINT_ORIGIN = "https://print.netherstone.invalid"
@@ -86,8 +91,16 @@ class MainActivity : TauriActivity() {
     if (savedInstanceState == null) {
       // What the page took in the app's last run has been imported or saved.
       File(cacheDir, "${Incoming.FOLDER}/${Incoming.TAKEN}").deleteRecursively()
+      removeCameraPhotos()
       takeIn(intent)
     }
+  }
+
+  /** The camera's photos from earlier runs: the page saved each where it belongs. */
+  private fun removeCameraPhotos() {
+    getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+      ?.listFiles { file -> file.isFile && file.name.startsWith(CAMERA_PHOTO_PREFIX) && file.name.endsWith(CAMERA_PHOTO_SUFFIX) }
+      ?.forEach { it.delete() }
   }
 
   override fun onNewIntent(intent: Intent) {

@@ -24,7 +24,7 @@ import {
   PhoneSection,
   PhoneTopBar,
 } from "./parts";
-import { FileRow, FolderRow } from "./rows";
+import { FileRow, FolderRow, useGrowingRows } from "./rows";
 import { SelectActionBar, SelectTopBar } from "./SelectBars";
 import { SyncStrip, useSyncProblem } from "./SyncStrip";
 import { usePhonePrefs } from "./prefs";
@@ -61,16 +61,23 @@ export function HomeScreen() {
     ...files.map((f) => f.path),
   ]);
   const isEmpty = !isLoading && fileTree.length === 0;
-  const sortedFiles = sortByDate
-    ? newestFirst(files, (path) => previews.get(path)?.lastModified)
-    : files;
-  const fileRows = sortedFiles.map((file) => (
-    <FileRow
-      key={file.path}
-      path={file.path}
-      preview={previews.get(file.path)}
-    />
-  ));
+  const { rows, end } = useGrowingRows(
+    sortByDate
+      ? newestFirst(files, (path) => previews.get(path)?.lastModified)
+      : files,
+  );
+  const fileRows = (
+    <>
+      {rows.map((file) => (
+        <FileRow
+          key={file.path}
+          path={file.path}
+          preview={previews.get(file.path)}
+        />
+      ))}
+      {end}
+    </>
+  );
 
   return (
     <PhoneFrame bottomInset={false}>

@@ -111,6 +111,33 @@ test("select mode picks shards, pins them together, and Back leaves it", async (
   await expect(pinned.getByRole("button", { name: /^Overview/ })).toBeVisible();
 });
 
+test("a long folder draws its rows as they scroll into view, and Select all picks them all", async ({ page }) => {
+  // More shards than a list draws at first.
+  const names = Array.from({ length: 150 }, (_, i) => `Note ${String(i).padStart(3, "0")}`);
+  await mockVault(page, {
+    files: Object.fromEntries(names.map((name) => [`Long/${name}.md`, `${name}.\n`])),
+    nested: true,
+  });
+  await page.getByRole("button", { name: /^Long/ }).click();
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Select" }).click();
+  const last = page.getByRole("checkbox", { name: /^Note 149/ });
+  await expect(page.getByRole("checkbox", { name: /^Note 000/ })).toBeVisible();
+  await expect(last).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Select all" }).click();
+  await expect(page.getByRole("heading", { name: "150 selected" })).toBeVisible();
+
+  // Each scroll to the end draws the next rows, up to the last one.
+  await expect
+    .poll(async () => {
+      await page.getByRole("checkbox").last().scrollIntoViewIfNeeded();
+      return last.count();
+    })
+    .toBe(1);
+  await expect(last).toBeChecked();
+});
+
 const V = "/home/me/Vault";
 
 test("search finds shards with the words lit, and Back from a result keeps the search", async ({ page }) => {

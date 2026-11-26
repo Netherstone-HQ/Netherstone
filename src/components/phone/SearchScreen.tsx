@@ -24,7 +24,7 @@ import { usePhoneNav, type PhoneScreen, type SearchFilter } from "./nav";
 import { openFileScreen, openFileScreenAt } from "./open-file";
 import { PhoneFrame, PhoneIconButton, PhoneSection } from "./parts";
 import { usePhonePrefs } from "./prefs";
-import { FileRow } from "./rows";
+import { FileRow, useGrowingRows } from "./rows";
 import {
   countLine,
   inScope,
@@ -407,40 +407,44 @@ function ShardResults({
     : [];
   const listedPaths = listed.filter(keep);
   const previews = usePreviews(filter?.kind === "drawings" ? listedPaths : []);
+  const paths =
+    filter?.kind === "drawings"
+      ? newestFirst(
+          listedPaths.map((path) => ({ path })),
+          (path) => previews.get(path)?.lastModified,
+        ).map((file) => file.path)
+      : listedPaths;
+  const { rows, end } = useGrowingRows(paths);
 
   if (!vaultPath) return null;
 
   if (!query.trim()) {
-    const paths =
-      filter?.kind === "drawings"
-        ? newestFirst(
-            listedPaths.map((path) => ({ path })),
-            (path) => previews.get(path)?.lastModified,
-          ).map((file) => file.path)
-        : listedPaths;
     return (
       <List count={countLine(paths)}>
         {paths.length === 0 ? (
           <Nothing text={`No ${filterLabel(filter!).toLowerCase()} here yet`} />
         ) : (
-          paths.map((path) =>
-            filter?.kind === "tag" ? (
-              <FileRow
-                key={path}
-                path={path}
-                detail={getFolderInVault(path, vaultPath)}
-                preview={undefined}
-                onOpen={() => openFileScreenAt({ path, tag: filter.tag })}
-              />
-            ) : (
-              <FileRow
-                key={path}
-                path={path}
-                detail={getFolderInVault(path, vaultPath)}
-                preview={previews.get(path)}
-              />
-            ),
-          )
+          <>
+            {rows.map((path) =>
+              filter?.kind === "tag" ? (
+                <FileRow
+                  key={path}
+                  path={path}
+                  detail={getFolderInVault(path, vaultPath)}
+                  preview={undefined}
+                  onOpen={() => openFileScreenAt({ path, tag: filter.tag })}
+                />
+              ) : (
+                <FileRow
+                  key={path}
+                  path={path}
+                  detail={getFolderInVault(path, vaultPath)}
+                  preview={previews.get(path)}
+                />
+              ),
+            )}
+            {end}
+          </>
         )}
       </List>
     );

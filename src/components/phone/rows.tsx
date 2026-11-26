@@ -24,6 +24,7 @@ import {
   isSamePath,
   pathKey,
 } from "@/lib/drawing-files";
+import { findScrollableAncestor } from "@/lib/scroll-root";
 import { formatModified } from "@/lib/tags";
 import { cn } from "@/lib/utils";
 import { useUIStore, type FileTreeNode } from "@/store";
@@ -303,4 +304,38 @@ export function FolderRow({ folder }: { folder: FileTreeNode }) {
       </span>
     </button>
   );
+}
+
+/** Rows a long list draws at first, and adds each time its end comes near. */
+const ROWS_PER_BATCH = 50;
+
+/**
+ * The part of `items` a list draws, and the marker to put after it. Another
+ * batch is drawn whenever the marker comes within a screen of view, so a
+ * long list opens as fast as a short one.
+ */
+export function useGrowingRows<T>(items: readonly T[]) {
+  const [count, setCount] = useState(ROWS_PER_BATCH);
+  const [marker, setMarker] = useState<HTMLElement | null>(null);
+  const more = items.length > count;
+
+  // A new observer after each batch reports again if the end is still near.
+  useEffect(() => {
+    if (!marker) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setCount((shown) => shown + ROWS_PER_BATCH);
+        }
+      },
+      { root: findScrollableAncestor(marker), rootMargin: "100% 0px" },
+    );
+    observer.observe(marker);
+    return () => observer.disconnect();
+  }, [marker, count]);
+
+  return {
+    rows: more ? items.slice(0, count) : items,
+    end: more ? <div ref={setMarker} aria-hidden /> : null,
+  };
 }

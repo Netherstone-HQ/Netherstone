@@ -1,5 +1,6 @@
 # Android only: strip symbols from the app library, which Gradle leaves in.
-# Desktop builds keep theirs.
+# Desktop builds keep theirs. This sits at the root because the Gradle step
+# runs cargo from here, where a config under src-tauri isn't found.
 [target.aarch64-linux-android]
 rustflags = ["-C", "strip=symbols"]
 

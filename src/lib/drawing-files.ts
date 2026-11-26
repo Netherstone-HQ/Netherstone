@@ -82,10 +82,12 @@ export function getParentFolder(path: string): string {
  * string equality misses matches on Windows.
  */
 export function isSamePath(a: string, b: string) {
-  return (
-    normalizePath(a).replace(/\/+$/, "") ===
-    normalizePath(b).replace(/\/+$/, "")
-  );
+  return pathKey(a) === pathKey(b);
+}
+
+/** `path` the way isSamePath compares it, for keying sets and maps. */
+export function pathKey(path: string) {
+  return normalizePath(path).replace(/\/+$/, "");
 }
 
 /** True when `filePath` is `parentPath` itself or lies inside it. */

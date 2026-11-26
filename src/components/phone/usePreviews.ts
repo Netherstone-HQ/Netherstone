@@ -13,7 +13,18 @@ export function usePreviews(paths: string[]): Map<string, ShardPreview> {
     let current = true;
     getShardPreviews(key.split("\n"))
       .then((list) => {
-        if (current) setPreviews(new Map(list.map((p) => [p.path, p])));
+        if (!current) return;
+        // An unchanged preview keeps its object, so its row isn't drawn again.
+        setPreviews((old) => {
+          const kept = (p: ShardPreview) => {
+            const before = old.get(p.path);
+            return before?.lastModified === p.lastModified &&
+              before.preview === p.preview
+              ? before
+              : p;
+          };
+          return new Map(list.map((p) => [p.path, kept(p)]));
+        });
       })
       .catch((error: unknown) =>
         console.error("[Netherstone] Failed to load shard previews:", error),

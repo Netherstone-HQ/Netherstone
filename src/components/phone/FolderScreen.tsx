@@ -9,7 +9,7 @@ import {
   PhoneTitle,
   PhoneTopBar,
 } from "./parts";
-import { FileRow, FolderRow } from "./rows";
+import { FileRow, FolderRow, useGrowingRows } from "./rows";
 import { SelectActionBar, SelectTopBar } from "./SelectBars";
 import { usePhonePrefs } from "./prefs";
 import { usePreviews } from "./usePreviews";
@@ -26,6 +26,11 @@ export function FolderScreen({ path }: { path: string }) {
   const previews = usePreviews(files.map((f) => f.path));
   const selecting = useSelecting();
   const shownFolders = selecting ? [] : folders;
+  const { rows, end } = useGrowingRows(
+    sortByDate
+      ? newestFirst(files, (path) => previews.get(path)?.lastModified)
+      : files,
+  );
 
   return (
     <PhoneFrame bottomInset={false}>
@@ -57,16 +62,14 @@ export function FolderScreen({ path }: { path: string }) {
         {shownFolders.length > 0 && files.length > 0 ? (
           <div role="separator" className="mx-4 my-1 h-px bg-border" />
         ) : null}
-        {(sortByDate
-          ? newestFirst(files, (path) => previews.get(path)?.lastModified)
-          : files
-        ).map((file) => (
+        {rows.map((file) => (
           <FileRow
             key={file.path}
             path={file.path}
             preview={previews.get(file.path)}
           />
         ))}
+        {end}
       </div>
 
       {selecting ? (

@@ -111,6 +111,30 @@ impl Blocks {
 /// items, tasks, code blocks and table cells. Link targets, emphasis marks,
 /// inline HTML and escapes are left out; link and image text stay.
 pub fn text_blocks(markdown: &str) -> Vec<TextBlock> {
+    let mut all = Vec::new();
+    each_block(markdown, |block| {
+        all.push(block);
+        false
+    });
+    all
+}
+
+/// The first of `markdown`'s text_blocks that `wanted` picks, reading no
+/// further than it.
+pub fn first_text_block(markdown: &str, wanted: impl Fn(&TextBlock) -> bool) -> Option<TextBlock> {
+    let mut found = None;
+    each_block(markdown, |block| {
+        let done = wanted(&block);
+        if done {
+            found = Some(block);
+        }
+        done
+    });
+    found
+}
+
+/// Hands `take` each block as it ends, and stops once `take` returns true.
+fn each_block(markdown: &str, mut take: impl FnMut(TextBlock) -> bool) {
     let mut blocks = Blocks::default();
     let mut kind = BlockKind::Paragraph;
     // One entry per open list item: Some(done) once it shows a task box.
@@ -159,8 +183,12 @@ pub fn text_blocks(markdown: &str) -> Vec<TextBlock> {
             }
             _ => {}
         }
+        for block in blocks.done.drain(..) {
+            if take(block) {
+                return;
+            }
+        }
     }
-    blocks.done
 }
 
 /// A stretch of text, highlighted or not.

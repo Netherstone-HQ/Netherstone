@@ -1,8 +1,7 @@
 import { toast } from "sonner";
 import { listImportSources, undoImport } from "@/lib/commands/import";
 import { fileName } from "@/lib/drawing-files";
-import { appImportIO } from "@/lib/import/app-io";
-import { runImport, type ImportReport } from "@/lib/import/engine";
+import type { ImportReport } from "@/lib/import/engine";
 import { waitingText } from "@/lib/launch";
 import { refreshVault } from "@/lib/refresh-vault";
 import { useEditorStore } from "@/store";
@@ -18,6 +17,10 @@ export async function importOpened(vaultPath: string, paths: string[]) {
   const since = Math.floor(Date.now() / 1000);
   let report: ImportReport;
   try {
+    const [{ runImport }, { appImportIO }] = await Promise.all([
+      import("@/lib/import/engine"),
+      import("@/lib/import/app-io"),
+    ]);
     report = await runImport({
       sources: await listImportSources(paths),
       targetDir: vaultPath,

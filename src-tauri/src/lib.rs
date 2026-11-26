@@ -123,6 +123,11 @@ pub fn run() {
             splash::show_main_window_eventually(app.handle());
             register_links(app);
             std::thread::spawn(open_source::remove_leftovers);
+            #[cfg(all(feature = "updater", target_os = "android"))]
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || updater::remove_spent_download(&handle));
+            }
             let handle = app.handle().clone();
             std::thread::spawn(move || integrations::turn_on_defaults(&handle));
             Ok(())

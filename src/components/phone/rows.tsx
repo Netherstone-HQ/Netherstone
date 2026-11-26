@@ -1,4 +1,11 @@
-import { useRef, useState, type PointerEvent, type ReactNode } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { create } from "zustand";
 import {
   CheckIcon,
@@ -11,7 +18,13 @@ import {
 import { DrawingIcon } from "@/components/icons";
 import { Dot } from "@/components/ui/dot";
 import type { ShardPreview } from "@/lib/commands/shards";
-import { displayNameOf, isDrawingPath, isSamePath } from "@/lib/drawing-files";
+import {
+  displayNameOf,
+  isDrawingPath,
+  isSamePath,
+  pathKey,
+} from "@/lib/drawing-files";
+import { findScrollableAncestor } from "@/lib/scroll-root";
 import { formatModified } from "@/lib/tags";
 import { cn } from "@/lib/utils";
 import { useUIStore, type FileTreeNode } from "@/store";
@@ -23,6 +36,10 @@ import { countFiles, fileKindLabel } from "./vault-tree";
 
 /** How far a finger moves sideways before a row follows it, in px. */
 const DRAG_SLOP_PX = 8;
+
+/** Off-screen rows skip layout and paint; 4rem is a file row's min-h-16. */
+const SKIP_OFF_SCREEN =
+  "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]";
 
 /** The row whose swipe actions are showing; one at a time. */
 const useOpenSwipe = create<{
@@ -47,12 +64,22 @@ function SwipeRow({
   // A drag ends in a click on the row; this keeps that click from opening it.
   const justDragged = useRef(false);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
+  // The actions mount on the first touch, so rows nobody swipes stay light.
+  const [touched, setTouched] = useState(false);
+  // A row that goes away closes, so it never comes back open without them.
+  useEffect(
+    () => () => {
+      if (useOpenSwipe.getState().path === path) setOpenPath(null);
+    },
+    [path, setOpenPath],
+  );
 
   const width = () => actionsRef.current?.offsetWidth ?? 0;
   const offset = dragOffset ?? (isOpen ? -width() : 0);
 
   const onPointerDown = (event: PointerEvent) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
+    setTouched(true);
     justDragged.current = false;
     drag.current = { x: event.clientX, from: offset, moved: false };
   };
@@ -78,7 +105,7 @@ function SwipeRow({
   };
 
   return (
-    <div className="relative overflow-hidden">
+    <div className={cn("relative overflow-hidden", SKIP_OFF_SCREEN)}>
       <div
         ref={actionsRef}
         aria-hidden={!isOpen}
@@ -89,7 +116,7 @@ function SwipeRow({
           !isOpen && dragOffset === null && "invisible",
         )}
       >
-        {actions}
+        {touched ? actions : null}
       </div>
       <div
         className={cn(
@@ -167,8 +194,30 @@ export function SelectBox({ checked }: { checked: boolean }) {
   );
 }
 
+/** Pin and Delete, under a file row. */
+function FileSwipeActions({ path }: { path: string }) {
+  const isPinned = useUIStore((s) =>
+    s.pinnedFiles.some((entry) => isSamePath(entry.path, path)),
+  );
+  return (
+    <>
+      <SwipeAction
+        label={isPinned ? "Unpin" : "Pin"}
+        icon={isPinned ? <PinOffIcon /> : <PinIcon />}
+        onClick={() => pinAll([path])}
+      />
+      <SwipeAction
+        danger
+        label="Delete"
+        icon={<TrashIcon />}
+        onClick={() => trashAll([path])}
+      />
+    </>
+  );
+}
+
 /** A shard or drawing. Swipe left for Pin and Delete, hold for its menu. */
-export function FileRow({
+export const FileRow = memo(function FileRow({
   path,
   detail,
   preview,
@@ -183,13 +232,8 @@ export function FileRow({
 }) {
   const push = usePhoneNav((s) => s.push);
   const selecting = useSelecting();
-  const checked = usePhoneSelection((s) =>
-    s.paths.some((p) => isSamePath(p, path)),
-  );
+  const checked = usePhoneSelection((s) => s.keys.has(pathKey(path)));
   const toggle = usePhoneSelection((s) => s.toggle);
-  const isPinned = useUIStore((s) =>
-    s.pinnedFiles.some((entry) => isSamePath(entry.path, path)),
-  );
 
   const Icon = isDrawingPath(path) ? DrawingIcon : FileTextIcon;
   const second = detail ?? preview?.preview ?? fileKindLabel(path) ?? undefined;
@@ -203,6 +247,7 @@ export function FileRow({
       aria-checked={selecting ? checked : undefined}
       className={cn(
         "flex min-h-16 w-full flex-col justify-center gap-0.5 px-4 text-left outline-none select-none active:bg-accent",
+        selecting && SKIP_OFF_SCREEN,
         selecting && checked && "bg-card",
       )}
       onClick={() => (selecting ? toggle(path) : void onOpen(path))}
@@ -233,28 +278,11 @@ export function FileRow({
 
   if (selecting) return row;
   return (
-    <SwipeRow
-      path={path}
-      actions={
-        <>
-          <SwipeAction
-            label={isPinned ? "Unpin" : "Pin"}
-            icon={isPinned ? <PinOffIcon /> : <PinIcon />}
-            onClick={() => pinAll([path])}
-          />
-          <SwipeAction
-            danger
-            label="Delete"
-            icon={<TrashIcon />}
-            onClick={() => trashAll([path])}
-          />
-        </>
-      }
-    >
+    <SwipeRow path={path} actions={<FileSwipeActions path={path} />}>
       {row}
     </SwipeRow>
   );
-}
+});
 
 /** A folder, with how many files are inside it. Press and hold for its menu. */
 export function FolderRow({ folder }: { folder: FileTreeNode }) {
@@ -276,4 +304,38 @@ export function FolderRow({ folder }: { folder: FileTreeNode }) {
       </span>
     </button>
   );
+}
+
+/** Rows a long list draws at first, and adds each time its end comes near. */
+const ROWS_PER_BATCH = 50;
+
+/**
+ * The part of `items` a list draws, and the marker to put after it. Another
+ * batch is drawn whenever the marker comes within a screen of view, so a
+ * long list opens as fast as a short one.
+ */
+export function useGrowingRows<T>(items: readonly T[]) {
+  const [count, setCount] = useState(ROWS_PER_BATCH);
+  const [marker, setMarker] = useState<HTMLElement | null>(null);
+  const more = items.length > count;
+
+  // A new observer after each batch reports again if the end is still near.
+  useEffect(() => {
+    if (!marker) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setCount((shown) => shown + ROWS_PER_BATCH);
+        }
+      },
+      { root: findScrollableAncestor(marker), rootMargin: "100% 0px" },
+    );
+    observer.observe(marker);
+    return () => observer.disconnect();
+  }, [marker, count]);
+
+  return {
+    rows: more ? items.slice(0, count) : items,
+    end: more ? <div ref={setMarker} aria-hidden /> : null,
+  };
 }

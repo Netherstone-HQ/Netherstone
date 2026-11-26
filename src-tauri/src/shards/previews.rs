@@ -1,7 +1,7 @@
 //! What a list of shards shows under each name: when it was last edited and
 //! the start of its text.
 
-use crate::markdown_text::{BlockKind, text_blocks};
+use crate::markdown_text::{BlockKind, first_text_block};
 use crate::vault_access::in_open_vault;
 use serde::Serialize;
 use std::path::Path;
@@ -23,10 +23,10 @@ pub(crate) struct ShardPreview {
 
 /// The first text of `markdown` that isn't a heading, cut at a whole word.
 fn preview_of(markdown: &str) -> Option<String> {
-    let text = text_blocks(markdown)
-        .into_iter()
-        .find(|block| !matches!(block.kind, BlockKind::Heading { .. }))?
-        .text;
+    let text = first_text_block(markdown, |block| {
+        !matches!(block.kind, BlockKind::Heading { .. })
+    })?
+    .text;
     if text.chars().count() <= PREVIEW_CHARS {
         return Some(text);
     }

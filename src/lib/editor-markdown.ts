@@ -619,7 +619,7 @@ function prepareSerializableMarkdownValue(
 // Plate writes a zero-width space wherever a paragraph is empty (an empty
 // table cell, the end of a line that ends in a mention). Empty lines are
 // saved as `<br>` instead, so no invisible character ever reaches a file.
-const ZERO_WIDTH_SPACE = /\u200B/g;
+export const ZERO_WIDTH_SPACE = /\u200B/g;
 
 function finalizeSerializedMarkdown(markdown: string): string {
   const clean = restoreDollars(markdown.replace(ZERO_WIDTH_SPACE, ""));

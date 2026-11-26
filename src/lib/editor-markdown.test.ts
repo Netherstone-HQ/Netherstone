@@ -165,7 +165,7 @@ describe("code and empty notes", () => {
     };
     const saved = saveValue([table, mention]);
     expect(saved).not.toContain("\u200B");
-    expect(saved).toContain("| 1 |  |");
+    expect(saved).toContain("| 1 |   |");
     expect(saved).toContain("see [Other](Other.md)\n");
   });
 

@@ -7,12 +7,14 @@ import {
   type MdRules,
 } from "@platejs/markdown";
 import remarkGfm from "remark-gfm";
+import type { Processor } from "unified";
 import { remarkDollarMath } from "@/lib/remark-dollar-math";
 
 import {
   DARK_SOURCE_ATTRIBUTE,
   DRAWING_LINK_ATTRIBUTE,
 } from "@/lib/drawing-files";
+import { ZERO_WIDTH_SPACE } from "@/lib/editor-markdown";
 import { calloutRules } from "@/lib/markdown-callouts";
 import { emptyLineRules } from "@/lib/markdown-empty-lines";
 import { fontStyleRules } from "@/lib/markdown-font-styles";
@@ -61,6 +63,16 @@ const imageRule: MdRules["img"] = {
   },
 };
 
+/**
+ * GFM, lining up table columns without the zero-width space Plate writes in
+ * an empty cell, since saving removes it.
+ */
+function remarkGfmTables(this: Processor) {
+  remarkGfm.call(this, {
+    stringLength: (value) => value.replace(ZERO_WIDTH_SPACE, "").length,
+  });
+}
+
 export const MarkdownKit = [
   MarkdownPlugin.configure({
     options: {
@@ -85,7 +97,7 @@ export const MarkdownKit = [
       },
       remarkPlugins: [
         remarkDollarMath,
-        remarkGfm,
+        remarkGfmTables,
         remarkMdx,
         remarkLiteralMdxExpressions,
         remarkMention,

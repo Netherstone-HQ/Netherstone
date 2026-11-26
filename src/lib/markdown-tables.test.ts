@@ -32,6 +32,12 @@ describe("table comment", () => {
     expect(roundTrip(markdown)).toBe(markdown);
   });
 
+  it("pads empty cells to their column's width", () => {
+    const markdown =
+      "| Name | Note      |\n| ---- | --------- |\n|      | long text |\n| two  |           |\n";
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
   it("saves column widths once set, and loads them back", () => {
     const table = {
       type: "table",
@@ -98,10 +104,10 @@ describe("table comment", () => {
       [
         "<!-- netherstone: merge A1:B1 A2:A3 -->",
         "",
-        "| Title |   | c  |",
+        "| Title |    | c  |",
         "| ----- | -- | -- |",
         "| tall  | b2 | c2 |",
-        "|      | b3 | c3 |",
+        "|       | b3 | c3 |",
         "",
       ].join("\n"),
     );

@@ -37,8 +37,14 @@ describe("a single $ when a file is read", () => {
     // A `$` that could open an equation of its own ends the one before.
     ["It costs $5 or $10, and the area is $r^2$.", "It costs $5 or $10, and the area is [r^2]."],
     ["$a $b$", "$a [b]"],
+    ["$\\text{cost} = \\$5$", "[\\text{cost} = \\$5]"],
   ])("reads case %# as an equation", (markdown, text) => {
     expect(shown(markdown)).toBe(text);
+  });
+
+  it("reads a long run of prices that never close, then an equation", () => {
+    const prices = "$1,".repeat(4000);
+    expect(shown(`${prices} area $r^2$`)).toBe(`${prices} area [r^2]`);
   });
 });
 

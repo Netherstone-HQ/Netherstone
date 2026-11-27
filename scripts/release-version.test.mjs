@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  androidVersionCode,
   cargoVersion,
   compareVersions,
   isVersionBump,
@@ -11,6 +12,8 @@ import {
   setCargoVersion,
   setJsonVersion,
   setLockVersion,
+  setTauriVersion,
+  tauriAndroidCode,
 } from "./release-version.mjs";
 
 describe("nextVersion", () => {
@@ -133,6 +136,8 @@ describe("file edits", () => {
 
 describe("isVersionBump", () => {
   const json = (version) => `{\n  "name": "x",\n  "version": "${version}"\n}\n`;
+  const conf = (version, code = androidVersionCode(version)) =>
+    `{\n  "version": "${version}",\n  "bundle": { "android": { "versionCode": ${code} } }\n}\n`;
   const toml = (version, serde = "1") =>
     `[package]\nname = "Netherstone"\nversion = "${version}"\n\n[dependencies.serde]\nversion = "${serde}"\n`;
   const lock = (version, serde = "1.0.0") =>
@@ -140,7 +145,7 @@ describe("isVersionBump", () => {
   const bump = (make, ...rest) => ({ before: make("0.5.0", ...rest), after: make("0.6.0-beta.1", ...rest) });
   const release = {
     "package.json": bump(json),
-    "src-tauri/tauri.conf.json": bump(json),
+    "src-tauri/tauri.conf.json": bump(conf),
     "src-tauri/Cargo.toml": bump(toml),
     "src-tauri/Cargo.lock": bump(lock),
   };
@@ -158,6 +163,11 @@ describe("isVersionBump", () => {
     expect(isVersionBump({ ...release, "src-tauri/Cargo.lock": locked })).toBe(false);
   });
 
+  it("refuses an Android version code that doesn't follow the version", () => {
+    const wrong = { before: conf("0.5.0"), after: conf("0.6.0-beta.1", 1) };
+    expect(isVersionBump({ ...release, "src-tauri/tauri.conf.json": wrong })).toBe(false);
+  });
+
   it("refuses files set to different versions", () => {
     const other = { before: json("0.5.0"), after: json("0.6.0") };
     expect(isVersionBump({ ...release, "package.json": other })).toBe(false);
@@ -172,5 +182,34 @@ describe("isVersionBump", () => {
   it("sets the package's version in Cargo.lock only", () => {
     expect(setLockVersion(lock("0.5.0"), "Netherstone", "0.5.0", "0.6.0")).toBe(lock("0.6.0"));
     expect(() => setLockVersion(lock("0.5.0"), "Netherstone", "0.4.0", "0.6.0")).toThrow();
+  });
+});
+
+describe("androidVersionCode", () => {
+  it.each([
+    ["0.8.0-beta.1", 800010],
+    ["0.8.0-beta.12", 800120],
+    ["0.8.0", 800990],
+    ["1.2.3", 10203990],
+  ])("gives %s the code %i", (version, code) => {
+    expect(androidVersionCode(version)).toBe(code);
+  });
+
+  it("orders betas below their stable release and the next version", () => {
+    const codes = ["0.8.0-beta.1", "0.8.0-beta.2", "0.8.0", "0.8.1-beta.1"].map(androidVersionCode);
+    expect([...codes].sort((a, b) => a - b)).toEqual(codes);
+  });
+
+  it("refuses beta 99 and versions it can't read", () => {
+    expect(() => androidVersionCode("0.8.0-beta.99")).toThrow();
+    expect(() => androidVersionCode("0.8")).toThrow();
+  });
+
+  it("is set with tauri.conf.json's version", () => {
+    const text = '{\n  "version": "0.8.0-beta.1",\n  "bundle": {\n    "android": { "versionCode": 800010 }\n  }\n}\n';
+    const next = setTauriVersion(text, "0.8.0-beta.1", "0.8.0-beta.2");
+    expect(tauriAndroidCode(next)).toBe(800020);
+    expect(next).toBe(text.replace("0.8.0-beta.1", "0.8.0-beta.2").replace("800010", "800020"));
+    expect(() => setTauriVersion('{ "version": "0.8.0-beta.1" }', "0.8.0-beta.1", "0.8.0-beta.2")).toThrow();
   });
 });

@@ -34,6 +34,7 @@ import {
   releaseNoteSubjects,
   setCargoVersion,
   setJsonVersion,
+  setTauriVersion,
 } from "./release-version.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -262,7 +263,7 @@ function restoreFiles() {
 
 function bumpFiles(from, to) {
   write(FILES.package, setJsonVersion(read(FILES.package), from, to));
-  write(FILES.tauri, setJsonVersion(read(FILES.tauri), from, to));
+  write(FILES.tauri, setTauriVersion(read(FILES.tauri), from, to));
   write(FILES.cargo, setCargoVersion(read(FILES.cargo), from, to));
 
   // Only the workspace's own entry changes; dependencies stay where they are.

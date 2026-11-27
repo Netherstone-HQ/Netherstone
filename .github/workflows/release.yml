@@ -47,6 +47,12 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match the app version in every file."
             exit 1
           fi
+          code=$(jq -r .bundle.android.versionCode src-tauri/tauri.conf.json)
+          expected=$(node --input-type=module -e "import { androidVersionCode } from './scripts/release-version.mjs'; console.log(androidVersionCode('$tag'))")
+          if [ "$code" != "$expected" ]; then
+            echo "::error::tauri.conf.json has Android version code $code; $tag needs $expected."
+            exit 1
+          fi
           if [[ "$tag" == *-* ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else

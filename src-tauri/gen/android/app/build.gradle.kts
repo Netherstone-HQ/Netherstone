@@ -17,6 +17,8 @@ val tauriProperties = Properties().apply {
 // The release key stays off this repository. keystore.properties (beside
 // settings.gradle, ignored by git) names it; without that file release builds
 // are signed with the debug key, which phones accept for testing only.
+// -PnetherstoneUnsigned=true leaves them unsigned, for stores that sign
+// their own copy.
 val keystoreProperties = Properties().apply {
     val propFile = rootProject.file("keystore.properties")
     if (propFile.exists()) {
@@ -24,18 +26,10 @@ val keystoreProperties = Properties().apply {
     }
 }
 
-// Tauri's version code leaves out the beta number, so two betas of one
-// version would share a code and app stores couldn't order them. Here a beta
-// counts below its stable release, and the last digit is free for stores
-// that build one APK per architecture (-PnetherstoneAbi=1..4).
-fun versionCodeOf(name: String, fallback: Int): Int {
-    val match = Regex("""^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$""").matchEntire(name)
-        ?: return fallback
-    val (major, minor, patch, beta) = match.destructured
-    val release = if (beta.isEmpty()) 99 else beta.toInt().also { require(it < 99) { "Beta $it is past 98" } }
-    val abi = findProperty("netherstoneAbi")?.toString()?.toInt() ?: 0
-    return ((major.toInt() * 100 + minor.toInt()) * 100 + patch.toInt()) * 1000 + release * 10 + abi
-}
+// bundle.android.versionCode in tauri.conf.json (see androidVersionCode in
+// scripts/release-version.mjs) leaves the last digit free for stores that
+// build one APK per architecture (-PnetherstoneAbi=1..4).
+val abiDigit = findProperty("netherstoneAbi")?.toString()?.toInt() ?: 0
 
 android {
     compileSdk = 37
@@ -46,10 +40,7 @@ android {
         minSdk = 24
         targetSdk = 37
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
-        versionCode = versionCodeOf(
-            versionName!!,
-            tauriProperties.getProperty("tauri.android.versionCode", "1").toInt(),
-        )
+        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt() + abiDigit
         // Lets the emulator checks drive the page over DevTools. Only the CI
         // test build turns it on (ORG_GRADLE_PROJECT_netherstoneInspectable).
         buildConfigField(
@@ -82,7 +73,8 @@ android {
             }
         }
         getByName("release") {
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = if (findProperty("netherstoneUnsigned") == "true") null
+                else signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             // Compressed native libraries: a smaller download, unpacked on install.
             packaging {
                 jniLibs.useLegacyPackaging = true

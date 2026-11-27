@@ -169,12 +169,49 @@ export function setLockVersion(text, name, from, to) {
   return next;
 }
 
+/** Betas count below their stable release; the last digit is left for -PnetherstoneAbi. */
+export function androidVersionCode(text) {
+  const version = parseVersion(text);
+  if (!version) throw new Error(`${text} isn't a version like 0.2.0 or 0.2.0-beta.1.`);
+  const { major, minor, patch, beta } = version;
+  if (beta !== null && beta > 98) throw new Error(`Beta ${beta} is past 98.`);
+  const release = beta ?? 99;
+  return ((major * 100 + minor) * 100 + patch) * 1000 + release * 10;
+}
+
+/** bundle.android.versionCode in tauri.conf.json. */
+export function tauriAndroidCode(text) {
+  return JSON.parse(text).bundle?.android?.versionCode;
+}
+
+/** tauri.conf.json's version, marked when its Android version code doesn't match it. */
+export function tauriVersion(text) {
+  const version = jsonVersion(text);
+  if (!parseVersion(version)) return version;
+  const code = tauriAndroidCode(text);
+  const expected = androidVersionCode(version);
+  return code === expected ? version : `${version} (Android version code ${code}, needs ${expected})`;
+}
+
+/** Sets tauri.conf.json's version and the Android version code that goes with it. */
+export function setTauriVersion(text, from, to) {
+  const code = androidVersionCode(to);
+  const next = setJsonVersion(text, from, to).replace(
+    /("versionCode"\s*:\s*)\d+/,
+    (_, key) => `${key}${code}`,
+  );
+  if (tauriAndroidCode(next) !== code) {
+    throw new Error("Couldn't find bundle.android.versionCode in tauri.conf.json.");
+  }
+  return next;
+}
+
 export const CARGO_PACKAGE = "Netherstone";
 
 /** The files that hold the app's version, with how each one reads and sets it. */
 export const VERSION_FILES = {
   package: { path: "package.json", read: jsonVersion, set: setJsonVersion },
-  tauri: { path: "src-tauri/tauri.conf.json", read: jsonVersion, set: setJsonVersion },
+  tauri: { path: "src-tauri/tauri.conf.json", read: tauriVersion, set: setTauriVersion },
   cargo: { path: "src-tauri/Cargo.toml", read: cargoVersion, set: setCargoVersion },
   lock: {
     path: "src-tauri/Cargo.lock",
